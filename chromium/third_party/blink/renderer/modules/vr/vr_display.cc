@@ -14,6 +14,7 @@
 #include "third_party/blink/renderer/core/dom/frame_request_callback_collection.h"
 #include "third_party/blink/renderer/core/dom/scripted_animation_controller.h"
 #include "third_party/blink/renderer/core/dom/user_gesture_indicator.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
@@ -38,7 +39,6 @@
 #include "third_party/blink/renderer/platform/wtf/time.h"
 
 #include <array>
-#include "third_party/blink/renderer/core/execution_context/execution_context.h"
 
 namespace blink {
 
@@ -49,6 +49,15 @@ namespace {
 // a fresh pose is received.
 constexpr WTF::TimeDelta kNonImmersivePoseAgeThreshold =
     WTF::TimeDelta::FromMilliseconds(250);
+
+device::mojom::blink::XRFrameDataPtr CreateIdentityFrameData() {
+  auto data = device::mojom::blink::XRFrameData::New();
+  data->pose = device::mojom::blink::VRPose::New();
+  data->pose->orientation.emplace({0.0f, 0.0f, 0.0f, 1.0f});
+  data->pose->position.emplace({0.0f, 0.0f, 0.0f});
+
+  return data;
+}
 
 VREye StringToVREye(const String& which_eye) {
   if (which_eye == "left")
@@ -95,11 +104,12 @@ class VRDisplayFrameRequestCallback
 
 SessionClientBinding::SessionClientBinding(
     VRDisplay* display,
-    bool is_immersive,
+    SessionClientBinding::SessionBindingType immersive,
     device::mojom::blink::XRSessionClientRequest request)
     : display_(display),
-      is_immersive_(is_immersive),
-      client_binding_(this, std::move(request)){};
+      is_immersive_(immersive ==
+                    SessionClientBinding::SessionBindingType::kImmersive),
+      client_binding_(this, std::move(request)) {}
 
 SessionClientBinding::~SessionClientBinding() = default;
 
@@ -110,29 +120,27 @@ void SessionClientBinding::Close() {
 void SessionClientBinding::OnChanged(
     device::mojom::blink::VRDisplayInfoPtr ptr) {
   display_->OnChanged(std::move(ptr), is_immersive_);
-};
+}
 void SessionClientBinding::OnExitPresent() {
   display_->OnExitPresent(is_immersive_);
-};
+}
 void SessionClientBinding::OnBlur() {
   display_->OnBlur(is_immersive_);
-};
+}
 void SessionClientBinding::OnFocus() {
   display_->OnFocus(is_immersive_);
-};
+}
 void SessionClientBinding::Trace(blink::Visitor* visitor) {
   visitor->Trace(display_);
 }
 
 VRDisplay::VRDisplay(NavigatorVR* navigator_vr,
                      device::mojom::blink::XRDevicePtr device)
-    : PausableObject(navigator_vr->GetDocument()),
+    : ContextLifecycleStateObserver(navigator_vr->GetDocument()),
       navigator_vr_(navigator_vr),
-      capabilities_(new VRDisplayCapabilities()),
+      capabilities_(MakeGarbageCollected<VRDisplayCapabilities>()),
       device_ptr_(std::move(device)),
       display_client_binding_(this) {
-  PauseIfNeeded();  // Initialize SuspendabaleObject.
-
   // Request a non-immersive session immediately as WebVR 1.1 expects to be able
   // to get non-immersive poses as soon as the display is returned.
   device::mojom::blink::XRSessionOptionsPtr options =
@@ -150,10 +158,9 @@ VRDisplay::VRDisplay(NavigatorVR* navigator_vr,
 
 VRDisplay::~VRDisplay() = default;
 
-void VRDisplay::Pause() {}
-
-void VRDisplay::Unpause() {
-  RequestVSync();
+void VRDisplay::ContextLifecycleStateChanged(mojom::FrameLifecycleState state) {
+  if (state == mojom::FrameLifecycleState::kRunning)
+    RequestVSync();
 }
 
 VRController* VRDisplay::Controller() {
@@ -179,9 +186,9 @@ void VRDisplay::Update(const device::mojom::blink::VRDisplayInfoPtr& display) {
     DCHECK_GT(display->leftEye->renderWidth, 0u);
     is_valid = true;
 
-    eye_parameters_left_ = new VREyeParameters(
+    eye_parameters_left_ = MakeGarbageCollected<VREyeParameters>(
         display->leftEye, display->webvr_default_framebuffer_scale);
-    eye_parameters_right_ = new VREyeParameters(
+    eye_parameters_right_ = MakeGarbageCollected<VREyeParameters>(
         display->rightEye, display->webvr_default_framebuffer_scale);
   }
 
@@ -193,7 +200,7 @@ void VRDisplay::Update(const device::mojom::blink::VRDisplayInfoPtr& display) {
 
   if (!display->stageParameters.is_null()) {
     if (!stage_parameters_)
-      stage_parameters_ = new VRStageParameters();
+      stage_parameters_ = MakeGarbageCollected<VRStageParameters>();
     stage_parameters_->Update(display->stageParameters);
   } else {
     stage_parameters_ = nullptr;
@@ -223,10 +230,10 @@ bool VRDisplay::getFrameData(VRFrameData* frame_data) {
   if (!in_animation_frame_) {
     Document* doc = navigator_vr_->GetDocument();
     if (doc) {
-      doc->AddConsoleMessage(
-          ConsoleMessage::Create(kRenderingMessageSource, kWarningMessageLevel,
-                                 "getFrameData must be called within a "
-                                 "VRDisplay.requestAnimationFrame callback."));
+      doc->AddConsoleMessage(ConsoleMessage::Create(
+          kRenderingMessageSource, mojom::ConsoleMessageLevel::kWarning,
+          "getFrameData must be called within a "
+          "VRDisplay.requestAnimationFrame callback."));
     }
     return false;
   }
@@ -281,21 +288,31 @@ void VRDisplay::RequestVSync() {
     DVLOG(2) << __FUNCTION__ << " done: pending_presenting_vsync_="
              << pending_presenting_vsync_;
   } else {
-    // Check if non_immersive_provider_, if not then we are not fully
-    // initialized, or we do not support non-immersive, so don't request the
-    // vsync. If and when non_immersive_provider_ is set it will run this code
-    // again.
-    if (!non_immersive_provider_)
+    // If we haven't been fully initialized yet, then we need to keep waiting
+    // so that we know if we have a non immersive provider or if we need to
+    // pass out identity poses.  When the callback from initialization happens
+    // it will run this code again.
+    if (!non_immersive_session_initialized_)
       return;
     if (pending_non_immersive_vsync_)
       return;
     non_immersive_vsync_waiting_for_pose_.Reset();
     non_immersive_pose_request_time_ = WTF::CurrentTimeTicks();
-    non_immersive_provider_->GetFrameData(WTF::Bind(
-        &VRDisplay::OnNonImmersiveFrameData, WrapWeakPersistent(this)));
+
+    if (non_immersive_provider_) {
+      non_immersive_provider_->GetFrameData(WTF::Bind(
+          &VRDisplay::OnNonImmersiveFrameData, WrapWeakPersistent(this)));
+    } else {
+      // If we don't have a non immersive provider, we should just return
+      // an identity pose.  We're not worried about re-entrant calls right now
+      // because we should end up waiting for the RAF callback which we request
+      // below. If we start to see errors with this, we'll want to do this as a
+      // posted task.
+      OnNonImmersiveFrameData(CreateIdentityFrameData());
+    }
     pending_non_immersive_vsync_ = true;
-    pending_non_immersive_vsync_id_ =
-        doc->RequestAnimationFrame(new VRDisplayFrameRequestCallback(this));
+    pending_non_immersive_vsync_id_ = doc->RequestAnimationFrame(
+        MakeGarbageCollected<VRDisplayFrameRequestCallback>(this));
     DVLOG(2) << __FUNCTION__ << " done: pending_non_immersive_vsync_="
              << pending_non_immersive_vsync_;
   }
@@ -331,7 +348,7 @@ void VRDisplay::OnBlur(bool is_immersive) {
   DVLOG(1) << __FUNCTION__;
   display_blurred_ = true;
   navigator_vr_->EnqueueVREvent(
-      VRDisplayEvent::Create(EventTypeNames::vrdisplayblur, this, ""));
+      VRDisplayEvent::Create(event_type_names::kVrdisplayblur, this, ""));
 }
 
 void VRDisplay::OnFocus(bool is_immersive) {
@@ -343,7 +360,7 @@ void VRDisplay::OnFocus(bool is_immersive) {
   RequestVSync();
 
   navigator_vr_->EnqueueVREvent(
-      VRDisplayEvent::Create(EventTypeNames::vrdisplayfocus, this, ""));
+      VRDisplayEvent::Create(event_type_names::kVrdisplayfocus, this, ""));
 }
 
 void ReportPresentationResult(PresentationResult result) {
@@ -357,8 +374,9 @@ void ReportPresentationResult(PresentationResult result) {
   vr_presentation_result_histogram.Count(static_cast<int>(result));
 }
 
-ScriptPromise VRDisplay::requestPresent(ScriptState* script_state,
-                                        const HeapVector<VRLayerInit>& layers) {
+ScriptPromise VRDisplay::requestPresent(
+    ScriptState* script_state,
+    const HeapVector<Member<VRLayerInit>>& layers) {
   DVLOG(1) << __FUNCTION__;
   ExecutionContext* execution_context = ExecutionContext::From(script_state);
   UseCounter::Count(execution_context, WebFeature::kVRRequestPresent);
@@ -398,7 +416,8 @@ ScriptPromise VRDisplay::requestPresent(ScriptState* script_state,
   // allowed outside a user gesture so that the presented content may be
   // updated.
   if (first_present) {
-    if (!Frame::HasTransientUserActivation(doc ? doc->GetFrame() : nullptr)) {
+    if (!LocalFrame::HasTransientUserActivation(doc ? doc->GetFrame()
+                                                    : nullptr)) {
       DOMException* exception =
           DOMException::Create(DOMExceptionCode::kInvalidStateError,
                                "API can only be initiated by a user gesture.");
@@ -425,7 +444,7 @@ ScriptPromise VRDisplay::requestPresent(ScriptState* script_state,
 
   // If what we were given has an invalid source, need to exit fullscreen with
   // previous, valid source, so delay m_layer reassignment
-  if (layers[0].source().IsNull()) {
+  if (layers[0]->source().IsNull()) {
     ForceExitPresent();
     DOMException* exception = DOMException::Create(
         DOMExceptionCode::kInvalidStateError, "Invalid layer source.");
@@ -436,13 +455,13 @@ ScriptPromise VRDisplay::requestPresent(ScriptState* script_state,
   layer_ = layers[0];
 
   CanvasRenderingContext* rendering_context;
-  if (layer_.source().IsHTMLCanvasElement()) {
+  if (layer_->source().IsHTMLCanvasElement()) {
     rendering_context =
-        layer_.source().GetAsHTMLCanvasElement()->RenderingContext();
+        layer_->source().GetAsHTMLCanvasElement()->RenderingContext();
   } else {
-    DCHECK(layer_.source().IsOffscreenCanvas());
+    DCHECK(layer_->source().IsOffscreenCanvas());
     rendering_context =
-        layer_.source().GetAsOffscreenCanvas()->RenderingContext();
+        layer_->source().GetAsOffscreenCanvas()->RenderingContext();
   }
 
   if (!rendering_context || !rendering_context->Is3d()) {
@@ -460,8 +479,9 @@ ScriptPromise VRDisplay::requestPresent(ScriptState* script_state,
   rendering_context_ = ToWebGLRenderingContextBase(rendering_context);
   context_gl_ = rendering_context_->ContextGL();
 
-  if ((layer_.leftBounds().size() != 0 && layer_.leftBounds().size() != 4) ||
-      (layer_.rightBounds().size() != 0 && layer_.rightBounds().size() != 4)) {
+  if ((layer_->leftBounds().size() != 0 && layer_->leftBounds().size() != 4) ||
+      (layer_->rightBounds().size() != 0 &&
+       layer_->rightBounds().size() != 4)) {
     ForceExitPresent();
     DOMException* exception = DOMException::Create(
         DOMExceptionCode::kInvalidStateError,
@@ -471,7 +491,7 @@ ScriptPromise VRDisplay::requestPresent(ScriptState* script_state,
     return promise;
   }
 
-  for (float value : layer_.leftBounds()) {
+  for (float value : layer_->leftBounds()) {
     if (std::isnan(value)) {
       ForceExitPresent();
       DOMException* exception =
@@ -483,7 +503,7 @@ ScriptPromise VRDisplay::requestPresent(ScriptState* script_state,
     }
   }
 
-  for (float value : layer_.rightBounds()) {
+  for (float value : layer_->rightBounds()) {
     if (std::isnan(value)) {
       ForceExitPresent();
       DOMException* exception =
@@ -556,7 +576,7 @@ void VRDisplay::OnRequestImmersiveSessionReturned(
         WTF::Bind(&VRDisplay::OnPresentationProviderConnectionError,
                   WrapWeakPersistent(this)));
 
-    frame_transport_ = new XRFrameTransport();
+    frame_transport_ = MakeGarbageCollected<XRFrameTransport>();
     frame_transport_->BindSubmitFrameClient(
         std::move(session->submit_frame_sink->client_request));
     frame_transport_->SetTransportOptions(
@@ -564,8 +584,9 @@ void VRDisplay::OnRequestImmersiveSessionReturned(
 
     if (immersive_client_binding_)
       immersive_client_binding_->Close();
-    immersive_client_binding_ = new SessionClientBinding(
-        this, false, std::move(session->client_request));
+    immersive_client_binding_ = MakeGarbageCollected<SessionClientBinding>(
+        this, SessionClientBinding::SessionBindingType::kImmersive,
+        std::move(session->client_request));
 
     Update(std::move(session->display_info));
 
@@ -584,13 +605,20 @@ void VRDisplay::OnRequestImmersiveSessionReturned(
 
 void VRDisplay::OnNonImmersiveSessionRequestReturned(
     device::mojom::blink::XRSessionPtr session) {
-  if (!session) {
-    // System does not support any kind of session.
-    return;
+  non_immersive_session_initialized_ = true;
+
+  // Only create the non immersive provider if we actually got a session.
+  // If we didn't get a session, we will just hand out identity poses.
+  if (session) {
+    non_immersive_provider_.Bind(std::move(session->data_provider));
+    non_immersive_client_binding_ = MakeGarbageCollected<SessionClientBinding>(
+        this, SessionClientBinding::SessionBindingType::kNonImmersive,
+        std::move(session->client_request));
   }
-  non_immersive_provider_.Bind(std::move(session->data_provider));
-  non_immersive_client_binding_ =
-      new SessionClientBinding(this, false, std::move(session->client_request));
+
+  // Now that we're initialized, we need to ensure that the data is flowing
+  // by requesting a VSync, since it may have skipped requesting one because
+  // we weren't yet initialized.
   RequestVSync();
 }
 
@@ -632,14 +660,14 @@ void VRDisplay::BeginPresent() {
                              "VRDisplay presentation path not configured.");
   }
 
-  if (layer_.source().IsOffscreenCanvas()) {
+  if (layer_->source().IsOffscreenCanvas()) {
     // TODO(junov, crbug.com/695497): Implement OffscreenCanvas presentation
     exception =
         DOMException::Create(DOMExceptionCode::kInvalidStateError,
                              "OffscreenCanvas presentation not implemented.");
   } else {
     // A canvas must be either Offscreen or plain HTMLCanvas.
-    DCHECK(layer_.source().IsHTMLCanvasElement());
+    DCHECK(layer_->source().IsHTMLCanvasElement());
   }
 
   if (exception) {
@@ -683,10 +711,11 @@ void VRDisplay::BeginPresent() {
   // For GVR, we shut down normal vsync processing during VR presentation.
   // Run window.rAF once manually so that applications get a chance to
   // schedule a VRDisplay.rAF in case they do so only while presenting.
-  if (!pending_vrdisplay_raf_ && !capabilities_->hasExternalDisplay()) {
+  if (doc && !pending_vrdisplay_raf_ && !capabilities_->hasExternalDisplay()) {
     TimeTicks timestamp = WTF::CurrentTimeTicks();
-    Platform::Current()->CurrentThread()->GetTaskRunner()->PostTask(
-        FROM_HERE, WTF::Bind(&VRDisplay::ProcessScheduledWindowAnimations,
+    doc->GetTaskRunner(blink::TaskType::kInternalMedia)
+        ->PostTask(FROM_HERE,
+                   WTF::Bind(&VRDisplay::ProcessScheduledWindowAnimations,
                              WrapWeakPersistent(this), timestamp));
   }
 }
@@ -704,14 +733,14 @@ void VRDisplay::UpdateLayerBounds() {
     return;
 
   // Left eye defaults
-  if (layer_.leftBounds().size() != 4)
-    layer_.setLeftBounds({0.0f, 0.0f, 0.5f, 1.0f});
+  if (layer_->leftBounds().size() != 4)
+    layer_->setLeftBounds({0.0f, 0.0f, 0.5f, 1.0f});
   // Right eye defaults
-  if (layer_.rightBounds().size() != 4)
-    layer_.setRightBounds({0.5f, 0.0f, 0.5f, 1.0f});
+  if (layer_->rightBounds().size() != 4)
+    layer_->setRightBounds({0.5f, 0.0f, 0.5f, 1.0f});
 
-  const Vector<float>& left = layer_.leftBounds();
-  const Vector<float>& right = layer_.rightBounds();
+  const Vector<float>& left = layer_->leftBounds();
+  const Vector<float>& right = layer_->rightBounds();
 
   vr_presentation_provider_->UpdateLayerBounds(
       vr_frame_id_, WebFloatRect(left[0], left[1], left[2], left[3]),
@@ -719,8 +748,8 @@ void VRDisplay::UpdateLayerBounds() {
       WebSize(source_width_, source_height_));
 }
 
-HeapVector<VRLayerInit> VRDisplay::getLayers() {
-  HeapVector<VRLayerInit> layers;
+HeapVector<Member<VRLayerInit>> VRDisplay::getLayers() {
+  HeapVector<Member<VRLayerInit>> layers;
 
   if (is_presenting_) {
     layers.push_back(layer_);
@@ -743,7 +772,7 @@ scoped_refptr<Image> VRDisplay::GetFrameImage(
   // path.
   if (!image_ref.get() || !image_ref->IsTextureBacked()) {
     TRACE_EVENT0("gpu", "VRDisplay::GetImage_SlowFallback");
-    // We get a non-texture-backed image when running layout tests
+    // We get a non-texture-backed image when running web tests
     // on desktop builds. Add a slow fallback so that these continue
     // working.
     image_ref = rendering_context_->GetImage(kPreferAcceleration);
@@ -769,16 +798,16 @@ void VRDisplay::submitFrame() {
 
   if (!is_presenting_) {
     doc->AddConsoleMessage(ConsoleMessage::Create(
-        kRenderingMessageSource, kWarningMessageLevel,
+        kRenderingMessageSource, mojom::ConsoleMessageLevel::kWarning,
         "submitFrame has no effect when the VRDisplay is not presenting."));
     return;
   }
 
   if (!in_animation_frame_) {
-    doc->AddConsoleMessage(
-        ConsoleMessage::Create(kRenderingMessageSource, kWarningMessageLevel,
-                               "submitFrame must be called within a "
-                               "VRDisplay.requestAnimationFrame callback."));
+    doc->AddConsoleMessage(ConsoleMessage::Create(
+        kRenderingMessageSource, mojom::ConsoleMessageLevel::kWarning,
+        "submitFrame must be called within a "
+        "VRDisplay.requestAnimationFrame callback."));
     return;
   }
 
@@ -849,7 +878,11 @@ Document* VRDisplay::GetDocument() {
 device::mojom::blink::VRDisplayClientPtr VRDisplay::GetDisplayClient() {
   display_client_binding_.Close();
   device::mojom::blink::VRDisplayClientPtr client;
-  display_client_binding_.Bind(mojo::MakeRequest(&client));
+  // See https://bit.ly/2S0zRAS for task types.
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+      GetExecutionContext()->GetTaskRunner(TaskType::kMiscPlatformAPI);
+  display_client_binding_.Bind(mojo::MakeRequest(&client, task_runner),
+                               task_runner);
   return client;
 }
 
@@ -862,8 +895,8 @@ void VRDisplay::OnPresentChange() {
     DVLOG(1) << __FUNCTION__ << ": device not valid, not sending event";
     return;
   }
-  navigator_vr_->EnqueueVREvent(
-      VRDisplayEvent::Create(EventTypeNames::vrdisplaypresentchange, this, ""));
+  navigator_vr_->EnqueueVREvent(VRDisplayEvent::Create(
+      event_type_names::kVrdisplaypresentchange, this, ""));
 }
 
 void VRDisplay::OnChanged(device::mojom::blink::VRDisplayInfoPtr display,
@@ -886,18 +919,18 @@ void VRDisplay::OnExitPresent(bool is_immersive) {
 
 void VRDisplay::OnConnected() {
   navigator_vr_->EnqueueVREvent(VRDisplayEvent::Create(
-      EventTypeNames::vrdisplayconnect, this, "connect"));
+      event_type_names::kVrdisplayconnect, this, "connect"));
 }
 
 void VRDisplay::OnDisconnected() {
   navigator_vr_->EnqueueVREvent(VRDisplayEvent::Create(
-      EventTypeNames::vrdisplaydisconnect, this, "disconnect"));
+      event_type_names::kVrdisplaydisconnect, this, "disconnect"));
 }
 
 void VRDisplay::StopPresenting() {
   if (is_presenting_) {
     if (!capabilities_->hasExternalDisplay()) {
-      if (layer_.source().IsHTMLCanvasElement()) {
+      if (layer_->source().IsHTMLCanvasElement()) {
         // TODO(klausw,crbug.com/698923): If compositor updates are
         // suppressed, restore them here.
       } else {
@@ -933,19 +966,19 @@ void VRDisplay::OnActivate(device::mojom::blink::VRDisplayEventReason reason,
 
   std::unique_ptr<UserGestureIndicator> gesture_indicator;
   if (reason == device::mojom::blink::VRDisplayEventReason::MOUNTED)
-    gesture_indicator = Frame::NotifyUserActivation(doc->GetFrame());
+    gesture_indicator = LocalFrame::NotifyUserActivation(doc->GetFrame());
 
   base::AutoReset<bool> in_activate(&in_display_activate_, true);
 
-  navigator_vr_->DispatchVREvent(
-      VRDisplayEvent::Create(EventTypeNames::vrdisplayactivate, this, reason));
+  navigator_vr_->DispatchVREvent(VRDisplayEvent::Create(
+      event_type_names::kVrdisplayactivate, this, reason));
   std::move(on_handled).Run(!pending_present_request_ && !is_presenting_);
 }
 
 void VRDisplay::OnDeactivate(
     device::mojom::blink::VRDisplayEventReason reason) {
   navigator_vr_->EnqueueVREvent(VRDisplayEvent::Create(
-      EventTypeNames::vrdisplaydeactivate, this, reason));
+      event_type_names::kVrdisplaydeactivate, this, reason));
 }
 
 void VRDisplay::ProcessScheduledWindowAnimations(TimeTicks timestamp) {
@@ -1051,6 +1084,20 @@ void VRDisplay::OnPresentingVSync(
     NOTIMPLEMENTED();
   }
 
+  Document* doc = GetDocument();
+  if (!doc)
+    return;
+
+  if (frame_data->left_eye) {
+    eye_parameters_left_ =
+        MakeGarbageCollected<VREyeParameters>(frame_data->left_eye, 1);
+  }
+
+  if (frame_data->right_eye) {
+    eye_parameters_right_ =
+        MakeGarbageCollected<VREyeParameters>(frame_data->right_eye, 1);
+  }
+
   // Post a task to handle scheduled animations after the current
   // execution context finishes, so that we yield to non-mojo tasks in
   // between frames. Executing mojo tasks back to back within the same
@@ -1059,10 +1106,13 @@ void VRDisplay::OnPresentingVSync(
   // this is due to WaitForIncomingMethodCall receiving the OnVSync
   // but queueing it for immediate execution since it doesn't match
   // the interface being waited on.
-  Platform::Current()->CurrentThread()->GetTaskRunner()->PostTask(
-      FROM_HERE, WTF::Bind(&VRDisplay::ProcessScheduledAnimations,
-                           WrapWeakPersistent(this),
-                           TimeTicks() + frame_data->time_delta));
+  //
+  // Used kInternalMedia since 1) this is not spec-ed and 2) this is media
+  // related then tasks should not be throttled or frozen in background tabs.
+  doc->GetTaskRunner(blink::TaskType::kInternalMedia)
+      ->PostTask(FROM_HERE, WTF::Bind(&VRDisplay::ProcessScheduledAnimations,
+                                      WrapWeakPersistent(this),
+                                      TimeTicks() + frame_data->time_delta));
 }
 
 void VRDisplay::OnNonImmersiveVSync(TimeTicks timestamp) {
@@ -1140,11 +1190,11 @@ ExecutionContext* VRDisplay::GetExecutionContext() const {
 }
 
 const AtomicString& VRDisplay::InterfaceName() const {
-  return EventTargetNames::VRDisplay;
+  return event_target_names::kVRDisplay;
 }
 
 void VRDisplay::ContextDestroyed(ExecutionContext* context) {
-  PausableObject::ContextDestroyed(context);
+  ContextLifecycleStateObserver::ContextDestroyed(context);
   ForceExitPresent();
   scripted_animation_controller_.Clear();
 }

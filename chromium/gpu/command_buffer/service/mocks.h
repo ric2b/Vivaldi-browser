@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "base/logging.h"
+#include "gpu/command_buffer/common/cmd_buffer_common.h"
 #include "gpu/command_buffer/service/async_api_interface.h"
 #include "gpu/command_buffer/service/memory_tracking.h"
 #include "gpu/command_buffer/service/program_cache.h"
@@ -155,8 +156,7 @@ class MockMemoryTracker : public MemoryTracker {
   uint64_t GetSize() const override { return 0; }
   MOCK_CONST_METHOD0(ClientTracingId, uint64_t());
   MOCK_CONST_METHOD0(ClientId, int());
-  MOCK_CONST_METHOD0(ShareGroupTracingGUID, uint64_t());
-
+  MOCK_CONST_METHOD0(ContextGroupTracingId, uint64_t());
 };
 
 }  // namespace gles2

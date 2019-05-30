@@ -110,7 +110,7 @@
 
 #include "base/base_export.h"
 #include "base/compiler_specific.h"
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
 #include "build/build_config.h"
@@ -124,13 +124,20 @@
 #define FILE_PATH_USES_WIN_SEPARATORS
 #endif  // OS_WIN
 
-// To print path names portably use PRIsFP (based on PRIuS and friends from
+// To print path names portably use PRFilePath (based on PRIuS and friends from
 // C99 and format_macros.h) like this:
-// base::StringPrintf("Path is %" PRIsFP ".\n", path.value().c_str());
+// base::StringPrintf("Path is %" PRFilePath ".\n", path.value().c_str());
 #if defined(OS_WIN)
-#define PRIsFP "ls"
+#define PRFilePath "ls"
 #elif defined(OS_POSIX) || defined(OS_FUCHSIA)
-#define PRIsFP "s"
+#define PRFilePath "s"
+#endif  // OS_WIN
+
+// Macros for string literal initialization of FilePath::CharType[].
+#if defined(OS_WIN)
+#define FILE_PATH_LITERAL(x) L##x
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
+#define FILE_PATH_LITERAL(x) x
 #endif  // OS_WIN
 
 namespace base {
@@ -145,7 +152,7 @@ class BASE_EXPORT FilePath {
 #if defined(OS_WIN)
   // On Windows, for Unicode-aware applications, native pathnames are wchar_t
   // arrays encoded in UTF-16.
-  typedef std::wstring StringType;
+  typedef base::string16 StringType;
 #elif defined(OS_POSIX) || defined(OS_FUCHSIA)
   // On most platforms, native pathnames are char arrays, and the encoding
   // may or may not be specified.  On Mac OS X, native pathnames are encoded
@@ -162,7 +169,7 @@ class BASE_EXPORT FilePath {
   // when composing pathnames.
   static const CharType kSeparators[];
 
-  // arraysize(kSeparators).
+  // base::size(kSeparators).
   static const size_t kSeparatorsLength;
 
   // A special path component meaning "this directory."
@@ -217,11 +224,12 @@ class BASE_EXPORT FilePath {
   // Windows:  "C:\foo\bar"  ->  [ "C:", "\\", "foo", "bar" ]
   void GetComponents(std::vector<FilePath::StringType>* components) const;
 
-  // Returns true if this FilePath is a strict parent of the |child|. Absolute
-  // and relative paths are accepted i.e. is /foo parent to /foo/bar and
-  // is foo parent to foo/bar. Does not convert paths to absolute, follow
-  // symlinks or directory navigation (e.g. ".."). A path is *NOT* its own
-  // parent.
+  // Returns true if this FilePath is a parent or ancestor of the |child|.
+  // Absolute and relative paths are accepted i.e. /foo is a parent to /foo/bar,
+  // and foo is a parent to foo/bar. Any ancestor is considered a parent i.e. /a
+  // is a parent to both /a/b and /a/b/c.  Does not convert paths to absolute,
+  // follow symlinks or directory navigation (e.g. ".."). A path is *NOT* its
+  // own parent.
   bool IsParent(const FilePath& child) const;
 
   // If IsParent(child) holds, appends to path (if non-NULL) the
@@ -293,6 +301,10 @@ class BASE_EXPORT FilePath {
   // Adds |extension| to |file_name|. Returns the current FilePath if
   // |extension| is empty. Returns "" if BaseName() == "." or "..".
   FilePath AddExtension(StringPieceType extension) const WARN_UNUSED_RESULT;
+
+  // Like above, but takes the extension as an ASCII string. See AppendASCII for
+  // details on how this is handled.
+  FilePath AddExtensionASCII(StringPiece extension) const WARN_UNUSED_RESULT;
 
   // Replaces the extension of |file_name| with |extension|.  If |file_name|
   // does not have an extension, then |extension| is added.  If |extension| is
@@ -454,16 +466,6 @@ BASE_EXPORT std::ostream& operator<<(std::ostream& out,
                                      const FilePath& file_path);
 
 }  // namespace base
-
-// Macros for string literal initialization of FilePath::CharType[], and for
-// using a FilePath::CharType[] in a printf-style format string.
-#if defined(OS_WIN)
-#define FILE_PATH_LITERAL(x) L ## x
-#define PRFilePath "ls"
-#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
-#define FILE_PATH_LITERAL(x) x
-#define PRFilePath "s"
-#endif  // OS_WIN
 
 namespace std {
 

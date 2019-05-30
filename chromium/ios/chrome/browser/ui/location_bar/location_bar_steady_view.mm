@@ -5,9 +5,12 @@
 #import "ios/chrome/browser/ui/location_bar/location_bar_steady_view.h"
 
 #include "components/strings/grit/components_strings.h"
+#import "ios/chrome/browser/ui/infobars/infobar_feature.h"
 #import "ios/chrome/browser/ui/location_bar/extended_touch_target_button.h"
-#import "ios/chrome/browser/ui/toolbar/buttons/toolbar_constants.h"
-#import "ios/chrome/browser/ui/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/omnibox/omnibox_constants.h"
+#import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
+#import "ios/chrome/browser/ui/util/dynamic_type_util.h"
+#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui_util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -26,7 +29,8 @@ const CGFloat kLocationImageToLabelSpacing = -4.0;
 // Minimal horizontal padding between the leading edge of the location bar and
 // the content of the location bar.
 const CGFloat kLocationBarLeadingPadding = 5.0;
-// Trailing space between the button and the trailing edge of the location bar.
+// Trailing space between the trailing button and the trailing edge of the
+// location bar.
 const CGFloat kButtonTrailingSpacing = 10;
 
 }  // namespace
@@ -39,14 +43,6 @@ const CGFloat kButtonTrailingSpacing = 10;
 // The view containing the location label, and (sometimes) the location image
 // view.
 @property(nonatomic, strong) UIView* locationContainerView;
-
-// Constraints to hide the trailing button.
-@property(nonatomic, strong)
-    NSArray<NSLayoutConstraint*>* hideButtonConstraints;
-
-// Constraints to show the trailing button.
-@property(nonatomic, strong)
-    NSArray<NSLayoutConstraint*>* showButtonConstraints;
 
 // Constraints to hide the location image view.
 @property(nonatomic, strong)
@@ -73,7 +69,8 @@ const CGFloat kButtonTrailingSpacing = 10;
       [[LocationBarSteadyViewColorScheme alloc] init];
 
   scheme.fontColor = [UIColor colorWithWhite:0 alpha:0.7];
-  scheme.placeholderColor = [UIColor colorWithWhite:0 alpha:0.3];
+  scheme.placeholderColor = [UIColor colorWithWhite:0
+                                              alpha:kOmniboxPlaceholderAlpha];
   scheme.trailingButtonColor = [UIColor colorWithWhite:0 alpha:0.7];
 
   return scheme;
@@ -92,6 +89,37 @@ const CGFloat kButtonTrailingSpacing = 10;
 
 @end
 
+#pragma mark - LocationBarSteadyButton
+
+// Buttons with a darker background in highlighted state.
+@interface LocationBarSteadyButton : UIButton
+@end
+
+@implementation LocationBarSteadyButton
+
+- (void)layoutSubviews {
+  [super layoutSubviews];
+  self.layer.cornerRadius = self.bounds.size.height / 2.0;
+}
+
+- (void)setHighlighted:(BOOL)highlighted {
+  [super setHighlighted:highlighted];
+  CGFloat duration = highlighted ? 0.1 : 0.2;
+  [UIView animateWithDuration:duration
+                        delay:0
+                      options:UIViewAnimationOptionBeginFromCurrentState
+                   animations:^{
+                     CGFloat alpha = 0;
+                     if (highlighted)
+                       alpha += 0.07;
+                     self.backgroundColor =
+                         [UIColor colorWithWhite:0 alpha:alpha];
+                   }
+                   completion:nil];
+}
+
+@end
+
 #pragma mark - LocationBarSteadyView
 
 @implementation LocationBarSteadyView
@@ -99,8 +127,6 @@ const CGFloat kButtonTrailingSpacing = 10;
 @synthesize locationLabel = _locationLabel;
 @synthesize locationIconImageView = _locationIconImageView;
 @synthesize trailingButton = _trailingButton;
-@synthesize hideButtonConstraints = _hideButtonConstraints;
-@synthesize showButtonConstraints = _showButtonConstraints;
 @synthesize hideLocationImageConstraints = _hideLocationImageConstraints;
 @synthesize showLocationImageConstraints = _showLocationImageConstraints;
 @synthesize locationContainerView = _locationContainerView;
@@ -135,6 +161,7 @@ const CGFloat kButtonTrailingSpacing = 10;
     [_locationLabel
         setContentCompressionResistancePriority:UILayoutPriorityDefaultLow
                                         forAxis:UILayoutConstraintAxisVertical];
+    _locationLabel.font = [self locationLabelFont];
 
     // Container for location label and icon.
     _locationContainerView = [[UIView alloc] init];
@@ -164,7 +191,7 @@ const CGFloat kButtonTrailingSpacing = 10;
 
     [NSLayoutConstraint activateConstraints:_showLocationImageConstraints];
 
-    _locationButton = [[UIButton alloc] init];
+    _locationButton = [[LocationBarSteadyButton alloc] init];
     _locationButton.translatesAutoresizingMaskIntoConstraints = NO;
     [_locationButton addSubview:_trailingButton];
     [_locationButton addSubview:_locationContainerView];
@@ -182,6 +209,7 @@ const CGFloat kButtonTrailingSpacing = 10;
         constraintEqualToAnchor:self.centerXAnchor];
     centerX.priority = UILayoutPriorityDefaultHigh;
 
+    // Setup and activate constraints.
     [NSLayoutConstraint activateConstraints:@[
       [_locationContainerView.leadingAnchor
           constraintGreaterThanOrEqualToAnchor:self.leadingAnchor
@@ -193,26 +221,32 @@ const CGFloat kButtonTrailingSpacing = 10;
       [_trailingButton.leadingAnchor
           constraintGreaterThanOrEqualToAnchor:_locationContainerView
                                                    .trailingAnchor],
-      centerX,
-    ]];
-
-    // Setup hiding constraints.
-    _hideButtonConstraints = @[
-      [_trailingButton.widthAnchor constraintEqualToConstant:0],
-      [_trailingButton.heightAnchor constraintEqualToConstant:0],
-      [self.trailingButton.trailingAnchor
-          constraintEqualToAnchor:self.trailingAnchor]
-    ];
-
-    // Setup and activate the show button constraints.
-    _showButtonConstraints = @[
       [_trailingButton.widthAnchor constraintEqualToConstant:kButtonSize],
       [_trailingButton.heightAnchor constraintEqualToConstant:kButtonSize],
       [self.trailingButton.trailingAnchor
           constraintEqualToAnchor:self.trailingAnchor
                          constant:-kButtonTrailingSpacing],
-    ];
-    [NSLayoutConstraint activateConstraints:_showButtonConstraints];
+      centerX,
+    ]];
+
+    if (IsInfobarUIRebootEnabled()) {
+      // Setup leading button.
+      _leadingButton =
+          [ExtendedTouchTargetButton buttonWithType:UIButtonTypeSystem];
+      _leadingButton.translatesAutoresizingMaskIntoConstraints = NO;
+      [_locationButton addSubview:_leadingButton];
+
+      // Setup and activate the leading button constraints.
+      [NSLayoutConstraint activateConstraints:@[
+        [_leadingButton.widthAnchor constraintEqualToConstant:kButtonSize],
+        [_leadingButton.heightAnchor constraintEqualToConstant:kButtonSize],
+        [_leadingButton.leadingAnchor
+            constraintEqualToAnchor:self.leadingAnchor
+                           constant:kButtonTrailingSpacing],
+        [_leadingButton.centerYAnchor
+            constraintEqualToAnchor:self.centerYAnchor],
+      ]];
+    }
   }
 
   // Setup accessibility.
@@ -263,18 +297,6 @@ const CGFloat kButtonTrailingSpacing = 10;
   }
 }
 
-- (void)hideButton:(BOOL)hidden {
-  if (hidden) {
-    [NSLayoutConstraint deactivateConstraints:self.showButtonConstraints];
-    [NSLayoutConstraint activateConstraints:self.hideButtonConstraints];
-    [self.accessibleElements removeObject:self.trailingButton];
-  } else {
-    [NSLayoutConstraint deactivateConstraints:self.hideButtonConstraints];
-    [NSLayoutConstraint activateConstraints:self.showButtonConstraints];
-    [self.accessibleElements addObject:self.trailingButton];
-  }
-}
-
 - (void)setLocationLabelText:(NSString*)string {
   if ([self.locationLabel.text isEqualToString:string]) {
     return;
@@ -302,8 +324,10 @@ const CGFloat kButtonTrailingSpacing = 10;
 
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
   [super traitCollectionDidChange:previousTraitCollection];
-  self.locationLabel.font =
-      [UIFont systemFontOfSize:kLocationBarSteadyFontSize];
+  if (previousTraitCollection.preferredContentSizeCategory !=
+      self.traitCollection.preferredContentSizeCategory) {
+    self.locationLabel.font = [self locationLabelFont];
+  }
 }
 
 #pragma mark - UIAccessibilityContainer
@@ -335,6 +359,13 @@ const CGFloat kButtonTrailingSpacing = 10;
     self.locationButton.accessibilityValue =
         [NSString stringWithFormat:@"%@", self.locationLabel.text];
   }
+}
+
+// Returns the font size for the location label.
+- (UIFont*)locationLabelFont {
+  return PreferredFontForTextStyleWithMaxCategory(
+      UIFontTextStyleBody, self.traitCollection.preferredContentSizeCategory,
+      UIContentSizeCategoryAccessibilityExtraLarge);
 }
 
 @end

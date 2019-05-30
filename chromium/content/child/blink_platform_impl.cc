@@ -12,21 +12,18 @@
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
-#include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
 #include "base/sequence_checker.h"
 #include "base/single_thread_task_runner.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
-#include "base/synchronization/waitable_event.h"
-#include "base/sys_info.h"
-#include "base/threading/platform_thread.h"
-#include "base/threading/thread.h"
+#include "base/system/sys_info.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/memory_allocator_dump_guid.h"
@@ -44,7 +41,6 @@
 #include "content/public/common/service_names.mojom.h"
 #include "net/base/net_errors.h"
 #include "services/network/public/cpp/features.h"
-#include "third_party/blink/public/platform/scheduler/child/webthread_base.h"
 #include "third_party/blink/public/platform/web_data.h"
 #include "third_party/blink/public/platform/web_float_point.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
@@ -52,11 +48,9 @@
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/resources/grit/blink_image_resources.h"
 #include "third_party/blink/public/resources/grit/blink_resources.h"
-#include "third_party/blink/public/resources/grit/media_controls_resources.h"
 #include "third_party/zlib/google/compression_utils.h"
 #include "ui/base/layout.h"
 #include "ui/events/gestures/blink/web_gesture_curve_impl.h"
-#include "ui/events/keycodes/dom/keycode_converter.h"
 
 using blink::WebData;
 using blink::WebLocalizedString;
@@ -113,10 +107,12 @@ static int ToMessageID(WebLocalizedString::Name name) {
       return IDS_AX_MEDIA_ENTER_PICTURE_IN_PICTURE_BUTTON;
     case WebLocalizedString::kAXMediaExitPictureInPictureButton:
       return IDS_AX_MEDIA_EXIT_PICTURE_IN_PICTURE_BUTTON;
-    case WebLocalizedString::kAXMediaShowClosedCaptionsButton:
-      return IDS_AX_MEDIA_SHOW_CLOSED_CAPTIONS_BUTTON;
-    case WebLocalizedString::kAXMediaHideClosedCaptionsButton:
-      return IDS_AX_MEDIA_HIDE_CLOSED_CAPTIONS_BUTTON;
+    case WebLocalizedString::kAXMediaShowClosedCaptionsMenuButton:
+      return IDS_AX_MEDIA_SHOW_CLOSED_CAPTIONS_MENU_BUTTON;
+    case WebLocalizedString::kAXMediaHideClosedCaptionsMenuButton:
+      return IDS_AX_MEDIA_HIDE_CLOSED_CAPTIONS_MENU_BUTTON;
+    case WebLocalizedString::kAXMediaLoadingPanel:
+      return IDS_AX_MEDIA_LOADING_PANEL;
     case WebLocalizedString::kAXMediaCastOffButton:
       return IDS_AX_MEDIA_CAST_OFF_BUTTON;
     case WebLocalizedString::kAXMediaCastOnButton:
@@ -129,40 +125,16 @@ static int ToMessageID(WebLocalizedString::Name name) {
       return IDS_AX_MEDIA_AUDIO_ELEMENT_HELP;
     case WebLocalizedString::kAXMediaVideoElementHelp:
       return IDS_AX_MEDIA_VIDEO_ELEMENT_HELP;
-    case WebLocalizedString::kAXMediaMuteButtonHelp:
-      return IDS_AX_MEDIA_MUTE_BUTTON_HELP;
-    case WebLocalizedString::kAXMediaUnMuteButtonHelp:
-      return IDS_AX_MEDIA_UNMUTE_BUTTON_HELP;
-    case WebLocalizedString::kAXMediaPlayButtonHelp:
-      return IDS_AX_MEDIA_PLAY_BUTTON_HELP;
-    case WebLocalizedString::kAXMediaPauseButtonHelp:
-      return IDS_AX_MEDIA_PAUSE_BUTTON_HELP;
     case WebLocalizedString::kAXMediaAudioSliderHelp:
       return IDS_AX_MEDIA_AUDIO_SLIDER_HELP;
     case WebLocalizedString::kAXMediaVideoSliderHelp:
       return IDS_AX_MEDIA_VIDEO_SLIDER_HELP;
+    case WebLocalizedString::kAXMediaVolumeSliderHelp:
+      return IDS_AX_MEDIA_VOLUME_SLIDER_HELP;
     case WebLocalizedString::kAXMediaCurrentTimeDisplayHelp:
       return IDS_AX_MEDIA_CURRENT_TIME_DISPLAY_HELP;
     case WebLocalizedString::kAXMediaTimeRemainingDisplayHelp:
       return IDS_AX_MEDIA_TIME_REMAINING_DISPLAY_HELP;
-    case WebLocalizedString::kAXMediaEnterFullscreenButtonHelp:
-      return IDS_AX_MEDIA_ENTER_FULL_SCREEN_BUTTON_HELP;
-    case WebLocalizedString::kAXMediaExitFullscreenButtonHelp:
-      return IDS_AX_MEDIA_EXIT_FULL_SCREEN_BUTTON_HELP;
-    case WebLocalizedString::kAXMediaDisplayCutoutFullscreenButtonHelp:
-      return IDS_AX_MEDIA_DISPLAY_CUT_OUT_FULL_SCREEN_BUTTON_HELP;
-    case WebLocalizedString::kAXMediaEnterPictureInPictureButtonHelp:
-      return IDS_AX_MEDIA_ENTER_PICTURE_IN_PICTURE_BUTTON_HELP;
-    case WebLocalizedString::kAXMediaExitPictureInPictureButtonHelp:
-      return IDS_AX_MEDIA_EXIT_PICTURE_IN_PICTURE_BUTTON_HELP;
-    case WebLocalizedString::kAXMediaShowClosedCaptionsButtonHelp:
-      return IDS_AX_MEDIA_SHOW_CLOSED_CAPTIONS_BUTTON_HELP;
-    case WebLocalizedString::kAXMediaHideClosedCaptionsButtonHelp:
-      return IDS_AX_MEDIA_HIDE_CLOSED_CAPTIONS_BUTTON_HELP;
-    case WebLocalizedString::kAXMediaCastOffButtonHelp:
-      return IDS_AX_MEDIA_CAST_OFF_BUTTON_HELP;
-    case WebLocalizedString::kAXMediaCastOnButtonHelp:
-      return IDS_AX_MEDIA_CAST_ON_BUTTON_HELP;
     case WebLocalizedString::kAXMediaOverflowButtonHelp:
       return IDS_AX_MEDIA_OVERFLOW_BUTTON_HELP;
     case WebLocalizedString::kAXMillisecondFieldText:
@@ -193,6 +165,8 @@ static int ToMessageID(WebLocalizedString::Name name) {
       return IDS_FORM_INPUT_ALT;
     case WebLocalizedString::kMissingPluginText:
       return IDS_PLUGIN_INITIALIZATION_ERROR;
+    case WebLocalizedString::kAXMediaPlaybackError:
+      return IDS_MEDIA_PLAYBACK_ERROR;
     case WebLocalizedString::kMediaRemotingCastText:
       return IDS_MEDIA_REMOTING_CAST_TEXT;
     case WebLocalizedString::kMediaRemotingCastToUnknownDeviceText:
@@ -359,53 +333,7 @@ BlinkPlatformImpl::BlinkPlatformImpl(
     : main_thread_task_runner_(std::move(main_thread_task_runner)),
       io_thread_task_runner_(std::move(io_thread_task_runner)) {}
 
-void BlinkPlatformImpl::WaitUntilWebThreadTLSUpdate(
-    blink::scheduler::WebThreadBase* thread) {
-  base::WaitableEvent event(base::WaitableEvent::ResetPolicy::AUTOMATIC,
-                            base::WaitableEvent::InitialState::NOT_SIGNALED);
-  thread->GetTaskRunner()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&BlinkPlatformImpl::UpdateWebThreadTLS,
-                     base::Unretained(this), base::Unretained(thread),
-                     base::Unretained(&event)));
-  event.Wait();
-}
-
-void BlinkPlatformImpl::UpdateWebThreadTLS(blink::WebThread* thread,
-                                           base::WaitableEvent* event) {
-  DCHECK(!current_thread_slot_.Get());
-  current_thread_slot_.Set(thread);
-  event->Signal();
-}
-
 BlinkPlatformImpl::~BlinkPlatformImpl() {
-}
-
-std::unique_ptr<blink::WebThread> BlinkPlatformImpl::CreateThread(
-    const blink::WebThreadCreationParams& params) {
-  std::unique_ptr<blink::scheduler::WebThreadBase> thread =
-      blink::scheduler::WebThreadBase::CreateWorkerThread(params);
-  thread->Init();
-  WaitUntilWebThreadTLSUpdate(thread.get());
-  return std::move(thread);
-}
-
-std::unique_ptr<blink::WebThread> BlinkPlatformImpl::CreateWebAudioThread() {
-  blink::WebThreadCreationParams params(blink::WebThreadType::kWebAudioThread);
-  // WebAudio uses a thread with |DISPLAY| priority to avoid glitch when the
-  // system is under the high pressure. Note that the main browser thread also
-  // runs with same priority. (see: crbug.com/734539)
-  params.thread_options.priority = base::ThreadPriority::DISPLAY;
-
-  std::unique_ptr<blink::scheduler::WebThreadBase> thread =
-      blink::scheduler::WebThreadBase::CreateWorkerThread(params);
-  thread->Init();
-  WaitUntilWebThreadTLSUpdate(thread.get());
-  return std::move(thread);
-}
-
-blink::WebThread* BlinkPlatformImpl::CurrentThread() {
-  return static_cast<blink::WebThread*>(current_thread_slot_.Get());
 }
 
 void BlinkPlatformImpl::RecordAction(const blink::UserMetricsAction& name) {
@@ -496,21 +424,21 @@ const DataResource kDataResources[] = {
     {"view-source.css", IDR_UASTYLE_VIEW_SOURCE_CSS, ui::SCALE_FACTOR_NONE,
      true},
     // Not limited to Android since it's used for mobile layouts in inspector.
-    {"themeChromiumAndroid.css", IDR_UASTYLE_THEME_CHROMIUM_ANDROID_CSS,
+    {"android.css", IDR_UASTYLE_THEME_CHROMIUM_ANDROID_CSS,
      ui::SCALE_FACTOR_NONE, true},
     // Not limited to Android since it's used for mobile layouts in inspector.
     {"fullscreenAndroid.css", IDR_UASTYLE_FULLSCREEN_ANDROID_CSS,
      ui::SCALE_FACTOR_NONE, true},
     // Not limited to Linux since it's used for mobile layouts in inspector.
-    {"themeChromiumLinux.css", IDR_UASTYLE_THEME_CHROMIUM_LINUX_CSS,
+    {"linux.css", IDR_UASTYLE_THEME_CHROMIUM_LINUX_CSS,
      ui::SCALE_FACTOR_NONE, true},
-    {"themeInputMultipleFields.css",
+    {"input_multiple_fields.css",
      IDR_UASTYLE_THEME_INPUT_MULTIPLE_FIELDS_CSS, ui::SCALE_FACTOR_NONE, true},
 #if defined(OS_MACOSX)
-    {"themeMac.css", IDR_UASTYLE_THEME_MAC_CSS, ui::SCALE_FACTOR_NONE, true},
+    {"mac.css", IDR_UASTYLE_THEME_MAC_CSS, ui::SCALE_FACTOR_NONE, true},
 #endif
-    {"themeWin.css", IDR_UASTYLE_THEME_WIN_CSS, ui::SCALE_FACTOR_NONE, true},
-    {"themeWinQuirks.css", IDR_UASTYLE_THEME_WIN_QUIRKS_CSS,
+    {"win.css", IDR_UASTYLE_THEME_WIN_CSS, ui::SCALE_FACTOR_NONE, true},
+    {"win_quirks.css", IDR_UASTYLE_THEME_WIN_QUIRKS_CSS,
      ui::SCALE_FACTOR_NONE, true},
     {"svg.css", IDR_UASTYLE_SVG_CSS, ui::SCALE_FACTOR_NONE, true},
     {"mathml.css", IDR_UASTYLE_MATHML_CSS, ui::SCALE_FACTOR_NONE, true},
@@ -599,7 +527,7 @@ WebData BlinkPlatformImpl::GetDataResource(const char* name) {
 
   // TODO(flackr): We should use a better than linear search here, a trie would
   // be ideal.
-  for (size_t i = 0; i < arraysize(kDataResources); ++i) {
+  for (size_t i = 0; i < base::size(kDataResources); ++i) {
     if (!strcmp(name, kDataResources[i].name)) {
       base::StringPiece resource = GetContentClient()->GetDataResource(
           kDataResources[i].id, kDataResources[i].scale_factor);
@@ -623,12 +551,6 @@ WebString BlinkPlatformImpl::QueryLocalizedString(
     return WebString();
   return WebString::FromUTF16(
       GetContentClient()->GetLocalizedString(message_id));
-}
-
-WebString BlinkPlatformImpl::queryLocalizedString(
-    WebLocalizedString::Name name, int numeric_value) {
-  return QueryLocalizedString(
-      name, WebString::FromUTF16(base::IntToString16(numeric_value)));
 }
 
 WebString BlinkPlatformImpl::QueryLocalizedString(WebLocalizedString::Name name,
@@ -669,8 +591,9 @@ WebString BlinkPlatformImpl::QueryLocalizedString(WebLocalizedString::Name name,
 }
 
 bool BlinkPlatformImpl::AllowScriptExtensionForServiceWorker(
-    const blink::WebURL& scriptUrl) {
-  return GetContentClient()->AllowScriptExtensionForServiceWorker(scriptUrl);
+    const blink::WebSecurityOrigin& script_origin) {
+  return GetContentClient()->AllowScriptExtensionForServiceWorker(
+      script_origin);
 }
 
 blink::WebCrypto* BlinkPlatformImpl::Crypto() {
@@ -759,36 +682,6 @@ size_t BlinkPlatformImpl::MaxDecodedImageBytes() {
 
 bool BlinkPlatformImpl::IsLowEndDevice() {
   return base::SysInfo::IsLowEndDevice();
-}
-
-bool BlinkPlatformImpl::IsMainThread() const {
-  return main_thread_task_runner_.get() &&
-         main_thread_task_runner_->BelongsToCurrentThread();
-}
-
-WebString BlinkPlatformImpl::DomCodeStringFromEnum(int dom_code) {
-  return WebString::FromUTF8(ui::KeycodeConverter::DomCodeToCodeString(
-      static_cast<ui::DomCode>(dom_code)));
-}
-
-int BlinkPlatformImpl::DomEnumFromCodeString(const WebString& code) {
-  return static_cast<int>(
-      ui::KeycodeConverter::CodeStringToDomCode(code.Utf8()));
-}
-
-WebString BlinkPlatformImpl::DomKeyStringFromEnum(int dom_key) {
-  return WebString::FromUTF8(ui::KeycodeConverter::DomKeyToKeyString(
-      static_cast<ui::DomKey>(dom_key)));
-}
-
-int BlinkPlatformImpl::DomKeyEnumFromString(const WebString& key_string) {
-  return static_cast<int>(
-      ui::KeycodeConverter::KeyStringToDomKey(key_string.Utf8()));
-}
-
-bool BlinkPlatformImpl::IsDomKeyForModifier(int dom_key) {
-  return ui::KeycodeConverter::IsDomKeyForModifier(
-      static_cast<ui::DomKey>(dom_key));
 }
 
 scoped_refptr<base::SingleThreadTaskRunner> BlinkPlatformImpl::GetIOTaskRunner()

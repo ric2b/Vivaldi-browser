@@ -2,9 +2,15 @@
 # package is governed by a BSD-style license that can be found in the LICENSE
 # file. Other works are governed by their original licensing terms.
 
-# Build instructions on Linux:
+# Tool installation instructions for your platform can be found at
+# https://www.chromium.org/developers/how-tos/get-the-code
 
-./chromium/build/install-build-deps.sh --no-syms --no-arm --no-chromeos-fonts --no-nacl --no-prompt
+# Build instructions (bash shell assumed):
+
+# Uncomment for Linux
+#./chromium/build/install-build-deps.sh --no-syms --no-arm --no-chromeos-fonts --no-nacl --no-prompt
+# Uncomment for Windows
+#export DEPOT_TOOLS_WIN_TOOLCHAIN=0
 export PATH="$PATH":$PWD/chromium/third_party/depot_tools/
 # Uncomment for proprietary media codecs support.
 #export GN_DEFINES="ffmpeg_branding=Chrome"

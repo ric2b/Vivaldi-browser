@@ -9,6 +9,7 @@ import android.content.ComponentName;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.os.Build;
+import android.support.annotation.Nullable;
 import android.util.Pair;
 import android.view.ContextMenu;
 import android.view.ContextMenu.ContextMenuInfo;
@@ -16,21 +17,20 @@ import android.view.View;
 import android.view.View.OnCreateContextMenuListener;
 
 import org.chromium.base.Callback;
-import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.base.task.PostTask;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.share.ShareHelper;
 import org.chromium.chrome.browser.share.ShareParams;
+import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.MenuSourceType;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.base.WindowAndroid.OnCloseContextMenuListener;
 
 import java.util.List;
-
-import javax.annotation.Nullable;
 
 /**
  * A helper class that handles generating context menus for {@link WebContents}s.
@@ -127,7 +127,7 @@ public class ContextMenuHelper implements OnCreateContextMenuListener {
             List<Pair<Integer, List<ContextMenuItem>>> items =
                     mPopulator.buildContextMenu(null, mActivity, mCurrentContextMenuParams);
             if (items.isEmpty()) {
-                ThreadUtils.postOnUiThread(mOnMenuClosed);
+                PostTask.postTask(UiThreadTaskTraits.DEFAULT, mOnMenuClosed);
                 return;
             }
 
@@ -206,8 +206,10 @@ public class ContextMenuHelper implements OnCreateContextMenuListener {
 
     /**
      * Share the image that triggered the current context menu.
+     * Package-private, allowing access only from the context menu item to ensure that
+     * it will use the right activity set when the menu was displayed.
      */
-    public void shareImage() {
+    void shareImage() {
         shareImageDirectly(null);
     }
 
@@ -215,17 +217,14 @@ public class ContextMenuHelper implements OnCreateContextMenuListener {
      * Share image triggered with the current context menu directly with a specific app.
      * @param name The {@link ComponentName} of the app to share the image directly with.
      */
-    public void shareImageDirectly(@Nullable final ComponentName name) {
+    private void shareImageDirectly(@Nullable final ComponentName name) {
         if (mNativeContextMenuHelper == 0) return;
         Callback<byte[]> callback = new Callback<byte[]>() {
             @Override
             public void onResult(byte[] result) {
-                WindowAndroid windowAndroid = mWebContents.getTopLevelNativeWindow();
+                if (mActivity == null) return;
 
-                Activity activity = windowAndroid.getActivity().get();
-                if (activity == null) return;
-
-                ShareHelper.shareImage(activity, result, name);
+                ShareHelper.shareImage(mActivity, result, name);
             }
         };
         nativeRetrieveImageForShare(
@@ -261,7 +260,7 @@ public class ContextMenuHelper implements OnCreateContextMenuListener {
                 mPopulator.buildContextMenu(menu, v.getContext(), mCurrentContextMenuParams);
 
         if (items.isEmpty()) {
-            ThreadUtils.postOnUiThread(mOnMenuClosed);
+            PostTask.postTask(UiThreadTaskTraits.DEFAULT, mOnMenuClosed);
             return;
         }
         ContextMenuUi menuUi = new PlatformContextMenuUi(menu);

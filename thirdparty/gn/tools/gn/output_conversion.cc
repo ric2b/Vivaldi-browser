@@ -135,6 +135,10 @@ void DoConvertValueToOutput(const Value& output,
   if (output_conversion == "") {
     OutputDefault(output, out);
   } else if (output_conversion == "list lines") {
+    if (output.type() != Value::LIST) {
+      *err = Err(original_output_conversion, "Not a valid list.");
+      return;
+    }
     OutputListLines(output, out);
   } else if (output_conversion == "string") {
     OutputString(output, out);

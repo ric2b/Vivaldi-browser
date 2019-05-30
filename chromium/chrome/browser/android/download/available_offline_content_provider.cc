@@ -4,36 +4,50 @@
 
 #include "chrome/browser/android/download/available_offline_content_provider.h"
 
+#include <memory>
+#include <utility>
+
 #include "base/base64.h"
+#include "base/bind.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "chrome/browser/android/download/download_manager_service.h"
 #include "chrome/browser/offline_items_collection/offline_content_aggregator_factory.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_features.h"
+#include "components/ntp_snippets/pref_names.h"
 #include "components/offline_items_collection/core/offline_content_aggregator.h"
 #include "components/offline_items_collection/core/offline_item.h"
+#include "components/offline_items_collection/core/offline_item_state.h"
+#include "components/prefs/pref_service.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "ui/base/l10n/time_format.h"
 
 namespace android {
 using chrome::mojom::AvailableContentType;
 using offline_items_collection::OfflineItem;
+using offline_items_collection::OfflineItemState;
 
 namespace {
-bool ItemHasBeenOpened(const OfflineItem& item) {
-  // Typically, items are initialized with an accessed_time equal to the
-  // creation_time.
-  return !item.last_accessed_time.is_null() &&
-         item.last_accessed_time > item.creation_time;
-}
+
+// Minimum number of interesting offline items required to be available for any
+// content card to be presented in the dino page.
+const int kMinInterestingItemCount = 4;
+// Maximum number of items that should be presented in the list of offline
+// items.
+const int kMaxListItemsToReturn = 3;
+static_assert(
+    kMaxListItemsToReturn <= kMinInterestingItemCount,
+    "The number of items to list must be less or equal to the minimum number "
+    "of items that allow offline content to be presented");
 
 // Returns a value that represents the priority of the content type.
 // Smaller priority values are more important.
 int ContentTypePriority(AvailableContentType type) {
   switch (type) {
-    case AvailableContentType::kPrefetchedUnopenedPage:
+    case AvailableContentType::kPrefetchedPage:
       return 0;
     case AvailableContentType::kVideo:
       return 1;
@@ -48,13 +62,14 @@ int ContentTypePriority(AvailableContentType type) {
 }
 
 AvailableContentType ContentType(const OfflineItem& item) {
+  if (item.is_transient || item.is_off_the_record ||
+      item.state != OfflineItemState::COMPLETE || item.is_dangerous) {
+    return AvailableContentType::kUninteresting;
+  }
   switch (item.filter) {
-    case offline_items_collection::FILTER_PAGE:  // fallthrough
-    case offline_items_collection::FILTER_DOCUMENT:
+    case offline_items_collection::FILTER_PAGE:
       if (item.is_suggested)
-        return ItemHasBeenOpened(item)
-                   ? AvailableContentType::kUninteresting
-                   : AvailableContentType::kPrefetchedUnopenedPage;
+        return AvailableContentType::kPrefetchedPage;
       return AvailableContentType::kOtherPage;
       break;
     case offline_items_collection::FILTER_VIDEO:
@@ -171,7 +186,7 @@ chrome::mojom::AvailableOfflineContentPtr CreateAvailableOfflineContent(
     const GURL& thumbnail_url) {
   return chrome::mojom::AvailableOfflineContent::New(
       item.id.id, item.id.name_space, item.title, item.description,
-      base::UTF16ToASCII(ui::TimeFormat::Simple(
+      base::UTF16ToUTF8(ui::TimeFormat::Simple(
           ui::TimeFormat::FORMAT_ELAPSED, ui::TimeFormat::LENGTH_SHORT,
           base::Time::Now() - item.creation_time)),
       "",  // TODO(crbug.com/852872): Add attribution
@@ -180,14 +195,14 @@ chrome::mojom::AvailableOfflineContentPtr CreateAvailableOfflineContent(
 }  // namespace
 
 AvailableOfflineContentProvider::AvailableOfflineContentProvider(
-    content::BrowserContext* browser_context)
-    : browser_context_(browser_context), weak_ptr_factory_(this) {}
+    Profile* profile)
+    : profile_(profile), weak_ptr_factory_(this) {}
 
 AvailableOfflineContentProvider::~AvailableOfflineContentProvider() = default;
 
 void AvailableOfflineContentProvider::Summarize(SummarizeCallback callback) {
   offline_items_collection::OfflineContentAggregator* aggregator =
-      OfflineContentAggregatorFactory::GetForBrowserContext(browser_context_);
+      OfflineContentAggregatorFactory::GetForBrowserContext(profile_);
   aggregator->GetAllItems(
       base::BindOnce(&AvailableOfflineContentProvider::SummarizeFinalize,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
@@ -195,16 +210,16 @@ void AvailableOfflineContentProvider::Summarize(SummarizeCallback callback) {
 
 void AvailableOfflineContentProvider::List(ListCallback callback) {
   if (!base::FeatureList::IsEnabled(features::kNewNetErrorPageUI)) {
-    std::move(callback).Run({});
+    std::move(callback).Run(true, {});
     return;
   }
   offline_items_collection::OfflineContentAggregator* aggregator =
-      OfflineContentAggregatorFactory::GetForBrowserContext(browser_context_);
+      OfflineContentAggregatorFactory::GetForBrowserContext(profile_);
   aggregator->GetAllItems(
       base::BindOnce(&AvailableOfflineContentProvider::ListFinalize,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback),
                      // aggregator is a keyed service, and is alive as long as
-                     // browser_context_, which outlives this.
+                     // profile_, which outlives this.
                      base::Unretained(aggregator)));
 }
 
@@ -212,25 +227,32 @@ void AvailableOfflineContentProvider::LaunchItem(
     const std::string& item_id,
     const std::string& name_space) {
   offline_items_collection::OfflineContentAggregator* aggregator =
-      OfflineContentAggregatorFactory::GetForBrowserContext(browser_context_);
+      OfflineContentAggregatorFactory::GetForBrowserContext(profile_);
   aggregator->OpenItem(
       offline_items_collection::LaunchLocation::NET_ERROR_SUGGESTION,
       offline_items_collection::ContentId(name_space, item_id));
 }
 
-void AvailableOfflineContentProvider::LaunchDownloadsPage() {
+void AvailableOfflineContentProvider::LaunchDownloadsPage(
+    bool open_prefetched_articles_tab) {
   DownloadManagerService::GetInstance()->ShowDownloadManager(
-      has_prefetched_content_);
+      open_prefetched_articles_tab);
 }
 
+void AvailableOfflineContentProvider::ListVisibilityChanged(bool is_visible) {
+  profile_->GetPrefs()->SetBoolean(ntp_snippets::prefs::kArticlesListVisible,
+                                   is_visible);
+}
+
+// static
 void AvailableOfflineContentProvider::Create(
-    content::BrowserContext* browser_context,
+    Profile* profile,
     chrome::mojom::AvailableOfflineContentProviderRequest request) {
   // Strong bindings remain as long as the pipe is error free. The renderer is
-  // on the other side of the pipe, and the browser_context outlives the
-  // RenderProcessHost, so the browser_context will outlive the Mojo pipe.
+  // on the other side of the pipe, and the profile outlives the
+  // RenderProcessHost, so the profile will outlive the Mojo pipe.
   mojo::MakeStrongBinding(
-      std::make_unique<AvailableOfflineContentProvider>(browser_context),
+      std::make_unique<AvailableOfflineContentProvider>(profile),
       std::move(request));
 }
 
@@ -239,20 +261,32 @@ void AvailableOfflineContentProvider::SummarizeFinalize(
     const std::vector<OfflineItem>& all_items) {
   auto summary = chrome::mojom::AvailableOfflineContentSummary::New();
   summary->total_items = base::saturated_cast<uint32_t>(all_items.size());
+  // Decrement the total item count to find the interesting item count.
+  size_t interesting_items = all_items.size();
   for (const OfflineItem& item : all_items) {
-    if (item.filter == offline_items_collection::FILTER_PAGE) {
-      if (item.is_suggested)
+    switch (ContentType(item)) {
+      case AvailableContentType::kPrefetchedPage:
         summary->has_prefetched_page = true;
-      summary->has_offline_page = true;
-    }
-    if (item.filter == offline_items_collection::FILTER_VIDEO) {
-      summary->has_video = true;
-    }
-    if (item.filter == offline_items_collection::FILTER_AUDIO) {
-      summary->has_audio = true;
+        break;
+      case AvailableContentType::kVideo:
+        summary->has_video = true;
+        break;
+      case AvailableContentType::kAudio:
+        summary->has_audio = true;
+        break;
+      case AvailableContentType::kOtherPage:
+        summary->has_offline_page = true;
+        break;
+      case AvailableContentType::kUninteresting:
+        interesting_items--;
+        break;
     }
   }
-  has_prefetched_content_ = summary->has_prefetched_page;
+
+  // If the number of interesting items is lower then the minimum required then
+  // reset all summary data so avoid presenting the card.
+  if (interesting_items < kMinInterestingItemCount)
+    summary = chrome::mojom::AvailableOfflineContentSummary::New();
   std::move(callback).Run(std::move(summary));
 }
 
@@ -261,24 +295,31 @@ void AvailableOfflineContentProvider::ListFinalize(
     AvailableOfflineContentProvider::ListCallback callback,
     offline_items_collection::OfflineContentAggregator* aggregator,
     const std::vector<OfflineItem>& all_items) {
-  // Save the best 3 or fewer times to |selected|.
-  const int kMaxItemsToReturn = 3;
-  std::vector<OfflineItem> selected(kMaxItemsToReturn);
+  std::vector<OfflineItem> selected(kMinInterestingItemCount);
   const auto end = std::partial_sort_copy(all_items.begin(), all_items.end(),
                                           selected.begin(), selected.end(),
                                           CompareItemsByUsefulness);
-  selected.resize(end - selected.begin());
-
-  while (!selected.empty() &&
-         ContentType(selected.back()) == AvailableContentType::kUninteresting)
-    selected.pop_back();
+  // If the number of interesting items is lower then the minimum don't show any
+  // suggestions. Otherwise trim it down to the number of expected items.
+  size_t copied_count = end - selected.begin();
+  DCHECK(copied_count <= kMinInterestingItemCount);
+  if (copied_count < kMinInterestingItemCount ||
+      ContentType(selected.back()) == AvailableContentType::kUninteresting) {
+    selected.clear();
+  } else {
+    selected.resize(kMaxListItemsToReturn);
+  }
 
   std::vector<offline_items_collection::ContentId> selected_ids;
   for (const OfflineItem& item : selected)
     selected_ids.push_back(item.id);
 
+  bool list_visible_by_prefs = profile_->GetPrefs()->GetBoolean(
+      ntp_snippets::prefs::kArticlesListVisible);
+
   auto complete = [](AvailableOfflineContentProvider::ListCallback callback,
                      std::vector<OfflineItem> selected,
+                     bool list_visible_by_prefs,
                      std::vector<GURL> thumbnail_data_uris) {
     // Translate OfflineItem to AvailableOfflineContentPtr.
     std::vector<chrome::mojom::AvailableOfflineContentPtr> result;
@@ -286,12 +327,14 @@ void AvailableOfflineContentProvider::ListFinalize(
       result.push_back(
           CreateAvailableOfflineContent(selected[i], thumbnail_data_uris[i]));
     }
-    std::move(callback).Run(std::move(result));
+
+    std::move(callback).Run(list_visible_by_prefs, std::move(result));
   };
 
   ThumbnailFetch::Start(
       aggregator, selected_ids,
-      base::BindOnce(complete, std::move(callback), std::move(selected)));
+      base::BindOnce(complete, std::move(callback), std::move(selected),
+                     list_visible_by_prefs));
 }
 
 }  // namespace android

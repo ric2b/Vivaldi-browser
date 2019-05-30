@@ -209,6 +209,7 @@ BluetoothDeviceClient::Properties::Properties(
   RegisterProperty(bluetooth_device::kAdvertisingDataFlagsProperty,
                    &advertising_data_flags);
   RegisterProperty(bluetooth_device::kMTUProperty, &mtu);
+  RegisterProperty(bluetooth_device::kEIRProperty, &eir);
 }
 
 BluetoothDeviceClient::Properties::~Properties() = default;
@@ -221,8 +222,12 @@ class BluetoothDeviceClientImpl : public BluetoothDeviceClient,
       : object_manager_(NULL), weak_ptr_factory_(this) {}
 
   ~BluetoothDeviceClientImpl() override {
-    object_manager_->UnregisterInterface(
-        bluetooth_device::kBluetoothDeviceInterface);
+    // There is an instance of this client that is created but not initialized
+    // on Linux. See 'Alternate D-Bus Client' note in bluez_dbus_manager.h.
+    if (object_manager_) {
+      object_manager_->UnregisterInterface(
+          bluetooth_adapter::kBluetoothAdapterInterface);
+    }
   }
 
   // BluetoothDeviceClient override.
@@ -255,8 +260,7 @@ class BluetoothDeviceClientImpl : public BluetoothDeviceClient,
     std::vector<dbus::ObjectPath> object_paths, device_paths;
     device_paths = object_manager_->GetObjectsWithInterface(
         bluetooth_device::kBluetoothDeviceInterface);
-    for (std::vector<dbus::ObjectPath>::iterator iter = device_paths.begin();
-         iter != device_paths.end(); ++iter) {
+    for (auto iter = device_paths.begin(); iter != device_paths.end(); ++iter) {
       Properties* properties = GetProperties(*iter);
       if (properties->adapter.value() == adapter_path)
         object_paths.push_back(*iter);

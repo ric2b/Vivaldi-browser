@@ -13,7 +13,9 @@
 
   * Example usage:
 
-  gn gen out/coverage --args='use_clang_coverage=true is_component_build=false'
+  gn gen out/coverage \\
+      --args='use_clang_coverage=true is_component_build=false \\
+              dcheck_always_on=true'
   gclient runhooks
   python tools/code_coverage/coverage.py crypto_unittests url_unittests \\
       -b out/coverage -o out/report -c 'out/coverage/crypto_unittests' \\
@@ -40,13 +42,14 @@
 
   python tools/code_coverage/coverage.py pdfium_fuzzer \\
       -b out/coverage -o out/report \\
-      -c 'out/coverage/pdfium_fuzzer -runs=<runs> <corpus_dir>' \\
+      -c 'out/coverage/pdfium_fuzzer -runs=0 <corpus_dir>' \\
       -f third_party/pdfium
 
   where:
     <corpus_dir> - directory containing samples files for this format.
-    <runs> - number of times to fuzz target function. Should be 0 when you just
-             want to see the coverage on corpus and don't want to fuzz at all.
+
+  To learn more about generating code coverage reports for fuzz targets, see
+  https://chromium.googlesource.com/chromium/src/+/master/testing/libfuzzer/efficient_fuzzer.md#Code-Coverage
 
   * Sample workflow for running Blink web tests:
 
@@ -55,10 +58,6 @@
 
   If you need to pass arguments to run_web_tests.py, use
     -wt='arguments to run_web_tests.py e.g. test directories'
-
-  Note: Generating coverage over entire suite can take minimum of 3 hours due to
-  --batch-size=1 argument added by default. This is needed since otherwise any
-  crash will cause us to lose coverage from prior successful test runs.
 
   For more options, please refer to tools/code_coverage/coverage.py -h.
 
@@ -85,7 +84,7 @@ sys.path.append(
     os.path.join(
         os.path.dirname(__file__), os.path.pardir, os.path.pardir, 'tools',
         'clang', 'scripts'))
-import update as clang_update
+from update import LLVM_BUILD_DIR
 
 sys.path.append(
     os.path.join(
@@ -94,10 +93,10 @@ sys.path.append(
 from collections import defaultdict
 
 import coverage_utils
+import update_clang_coverage_tools
 
 # Absolute path to the code coverage tools binary. These paths can be
 # overwritten by user specified coverage tool paths.
-LLVM_BUILD_DIR = clang_update.LLVM_BUILD_DIR
 LLVM_BIN_DIR = os.path.join(LLVM_BUILD_DIR, 'bin')
 LLVM_COV_PATH = os.path.join(LLVM_BIN_DIR, 'llvm-cov')
 LLVM_PROFDATA_PATH = os.path.join(LLVM_BIN_DIR, 'llvm-profdata')
@@ -111,9 +110,6 @@ BUILD_DIR = None
 # Output directory for generated artifacts, the value is parsed from command
 # line arguemnts.
 OUTPUT_DIR = None
-
-# Default number of jobs used to build when goma is configured and enabled.
-DEFAULT_GOMA_JOBS = 100
 
 # Name of the file extension for profraw data files.
 PROFRAW_FILE_EXTENSION = 'profraw'
@@ -162,14 +158,13 @@ def _ConfigureLLVMCoverageTools(args):
     LLVM_COV_PATH = os.path.join(llvm_bin_dir, 'llvm-cov')
     LLVM_PROFDATA_PATH = os.path.join(llvm_bin_dir, 'llvm-profdata')
   else:
-    DownloadCoverageToolsIfNeeded()
+    update_clang_coverage_tools.DownloadCoverageToolsIfNeeded()
 
   coverage_tools_exist = (
       os.path.exists(LLVM_COV_PATH) and os.path.exists(LLVM_PROFDATA_PATH))
   assert coverage_tools_exist, ('Cannot find coverage tools, please make sure '
                                 'both \'%s\' and \'%s\' exist.') % (
                                     LLVM_COV_PATH, LLVM_PROFDATA_PATH)
-
 
 def _GetPathWithLLVMSymbolizerDir():
   """Add llvm-symbolizer directory to path for symbolized stacks."""
@@ -194,74 +189,6 @@ def _IsIOS():
   """Returns true if the target_os specified in args.gn file is ios"""
   return _GetTargetOS() == 'ios'
 
-
-# TODO(crbug.com/759794): remove this function once tools get included to
-# Clang bundle:
-# https://chromium-review.googlesource.com/c/chromium/src/+/688221
-def DownloadCoverageToolsIfNeeded():
-  """Temporary solution to download llvm-profdata and llvm-cov tools."""
-
-  def _GetRevisionFromStampFile(stamp_file_path):
-    """Returns a pair of revision number by reading the build stamp file.
-
-    Args:
-      stamp_file_path: A path the build stamp file created by
-                       tools/clang/scripts/update.py.
-    Returns:
-      A pair of integers represeting the main and sub revision respectively.
-    """
-    if not os.path.exists(stamp_file_path):
-      return 0, 0
-
-    with open(stamp_file_path) as stamp_file:
-      stamp_file_line = stamp_file.readline()
-      if ',' in stamp_file_line:
-        package_version = stamp_file_line.rstrip().split(',')[0]
-      else:
-        package_version = stamp_file_line.rstrip()
-
-      clang_revision_str, clang_sub_revision_str = package_version.split('-')
-      return int(clang_revision_str), int(clang_sub_revision_str)
-
-  host_platform = coverage_utils.GetHostPlatform()
-  clang_revision, clang_sub_revision = _GetRevisionFromStampFile(
-      clang_update.STAMP_FILE)
-
-  coverage_revision_stamp_file = os.path.join(
-      os.path.dirname(clang_update.STAMP_FILE), 'cr_coverage_revision')
-  coverage_revision, coverage_sub_revision = _GetRevisionFromStampFile(
-      coverage_revision_stamp_file)
-
-  has_coverage_tools = (
-      os.path.exists(LLVM_COV_PATH) and os.path.exists(LLVM_PROFDATA_PATH))
-
-  if (has_coverage_tools and coverage_revision == clang_revision and
-      coverage_sub_revision == clang_sub_revision):
-    # LLVM coverage tools are up to date, bail out.
-    return
-
-  package_version = '%d-%d' % (clang_revision, clang_sub_revision)
-  coverage_tools_file = 'llvm-code-coverage-%s.tgz' % package_version
-
-  # The code bellow follows the code from tools/clang/scripts/update.py.
-  if host_platform == 'mac':
-    coverage_tools_url = clang_update.CDS_URL + '/Mac/' + coverage_tools_file
-  elif host_platform == 'linux':
-    coverage_tools_url = (
-        clang_update.CDS_URL + '/Linux_x64/' + coverage_tools_file)
-  else:
-    assert host_platform == 'win'
-    coverage_tools_url = (clang_update.CDS_URL + '/Win/' + coverage_tools_file)
-
-  try:
-    clang_update.DownloadAndUnpack(coverage_tools_url,
-                                   clang_update.LLVM_BUILD_DIR)
-    with open(coverage_revision_stamp_file, 'w') as file_handle:
-      file_handle.write('%s,%s' % (package_version, host_platform))
-      file_handle.write('\n')
-  except urllib2.URLError:
-    raise Exception(
-        'Failed to download coverage tools: %s.' % coverage_tools_url)
 
 
 def _GeneratePerFileLineByLineCoverageInHtml(binary_paths, profdata_file_path,
@@ -357,21 +284,9 @@ def _BuildTargets(targets, jobs_count):
     jobs_count: Number of jobs to run in parallel for compilation. If None, a
                 default value is derived based on CPUs availability.
   """
-
-  def _IsGomaConfigured():
-    """Returns True if goma is enabled in the gn build args.
-
-    Returns:
-      A boolean indicates whether goma is configured for building or not.
-    """
-    build_args = _GetBuildArgs()
-    return 'use_goma' in build_args and build_args['use_goma'] == 'true'
-
   logging.info('Building %s.', str(targets))
-  if jobs_count is None and _IsGomaConfigured():
-    jobs_count = DEFAULT_GOMA_JOBS
 
-  subprocess_cmd = ['ninja', '-C', BUILD_DIR]
+  subprocess_cmd = ['autoninja', '-C', BUILD_DIR]
   if jobs_count is not None:
     subprocess_cmd.append('-j' + str(jobs_count))
 
@@ -728,7 +643,7 @@ def _GetBinaryPath(command):
   if _IsIOSCommand(command):
     # For a given application bundle, the binary resides in the bundle and has
     # the same name with the application without the .app extension.
-    app_path = command_parts[-1].rstrip(os.path.sep)
+    app_path = command_parts[1].rstrip(os.path.sep)
     app_name = os.path.splitext(os.path.basename(app_path))[0]
     return os.path.join(app_path, app_name)
 
@@ -851,7 +766,7 @@ def _GetCommandForWebTests(arguments):
       'third_party/blink/tools/run_web_tests.py',
       '--additional-driver-flag=--no-sandbox',
       '--additional-env-var=LLVM_PROFILE_FILE=%s' %
-      LLVM_PROFILE_FILE_PATH_SUBSTITUTION, '--batch-size=1',
+      LLVM_PROFILE_FILE_PATH_SUBSTITUTION,
       '--child-processes=%d' % max(1, int(multiprocessing.cpu_count() / 2)),
       '--disable-breakpad', '--no-show-results', '--skip-failing-tests',
       '--target=%s' % os.path.basename(BUILD_DIR), '--time-out-ms=30000'
@@ -882,6 +797,16 @@ def _SetupOutputDir():
 
   # Creates |OUTPUT_DIR| and its platform sub-directory.
   os.makedirs(coverage_utils.GetCoverageReportRootDirPath(OUTPUT_DIR))
+
+
+def _SetMacXcodePath():
+  """Set DEVELOPER_DIR to the path to hermetic Xcode.app on Mac OS X."""
+  if sys.platform != 'darwin':
+    return
+
+  xcode_path = os.path.join(SRC_ROOT_PATH, 'build', 'mac_files', 'Xcode.app')
+  if os.path.exists(xcode_path):
+    os.environ['DEVELOPER_DIR'] = xcode_path
 
 
 def _ParseCommandArguments():
@@ -979,8 +904,8 @@ def _ParseCommandArguments():
       type=int,
       default=None,
       help='Run N jobs to build in parallel. If not specified, a default value '
-      'will be derived based on CPUs availability. Please refer to '
-      '\'ninja -h\' for more details.')
+      'will be derived based on CPUs and goma availability. Please refer to '
+      '\'autoninja -h\' for more details.')
 
   arg_parser.add_argument(
       '-v',
@@ -1007,7 +932,7 @@ def Main():
   # Setup coverage binaries even when script is called with empty params. This
   # is used by coverage bot for initial setup.
   if len(sys.argv) == 1:
-    DownloadCoverageToolsIfNeeded()
+    update_clang_coverage_tools.DownloadCoverageToolsIfNeeded()
     print(__doc__)
     return
 
@@ -1070,6 +995,11 @@ def Main():
     # An input prof-data file is already provided. Just calculate binary paths.
     profdata_file_path = args.profdata_file
     binary_paths = _GetBinaryPathsFromTargets(args.targets, args.build_dir)
+
+  # DEVELOPER_DIR needs to be set when Xcode isn't in a standard location
+  # and xcode-select wasn't run.  This path needs to be set prior to calling
+  # otool which happens on mac in coverage_utils.GetSharedLibraries().
+  _SetMacXcodePath()
 
   binary_paths.extend(
       coverage_utils.GetSharedLibraries(binary_paths, BUILD_DIR))

@@ -5,6 +5,7 @@
 #ifndef UI_BASE_IME_INPUT_METHOD_BASE_H_
 #define UI_BASE_IME_INPUT_METHOD_BASE_H_
 
+#include <memory>
 #include <vector>
 
 #include "base/compiler_specific.h"
@@ -71,9 +72,13 @@ class UI_BASE_IME_EXPORT InputMethodBase
   InputMethodKeyboardController* GetInputMethodKeyboardController() override;
 
  protected:
-  explicit InputMethodBase(internal::InputMethodDelegate* delegate = nullptr);
+  // See InputMethodDelegate for details on this.
+  using ResultCallback = base::OnceCallback<void(bool, bool)>;
+
+  explicit InputMethodBase(internal::InputMethodDelegate* delegate);
   InputMethodBase(internal::InputMethodDelegate* delegate,
                   std::unique_ptr<InputMethodKeyboardController> controller);
+
   virtual void OnWillChangeFocusedClient(TextInputClient* focused_before,
                                          TextInputClient* focused) {}
   virtual void OnDidChangeFocusedClient(TextInputClient* focused_before,
@@ -106,14 +111,11 @@ class UI_BASE_IME_EXPORT InputMethodBase
   // input type is not TEXT_INPUT_TYPE_NONE.
   void OnInputMethodChanged() const;
 
-  // Convenience method to call delegate_->DispatchKeyEventPostIME().
-  // Returns true if the event was processed
-  ui::EventDispatchDetails DispatchKeyEventPostIME(ui::KeyEvent* event) const
-      WARN_UNUSED_RESULT;
-
+  // See InputMethodDelegate::DispatchKeyEventPostIME(() for details on
+  // callback.
   virtual ui::EventDispatchDetails DispatchKeyEventPostIME(
       ui::KeyEvent* event,
-      base::OnceCallback<void(bool)> ack_callback) const WARN_UNUSED_RESULT;
+      ResultCallback result_callback) const WARN_UNUSED_RESULT;
 
   // Convenience method to notify all observers of TextInputClient changes.
   void NotifyTextInputStateChanged(const TextInputClient* client);
@@ -125,15 +127,15 @@ class UI_BASE_IME_EXPORT InputMethodBase
   // Gets the bounds of the composition text or cursor in |client|.
   std::vector<gfx::Rect> GetCompositionBounds(const TextInputClient* client);
 
-  bool sending_key_event() const { return sending_key_event_; };
-  internal::InputMethodDelegate* delegate() const { return delegate_; };
+  bool sending_key_event() const { return sending_key_event_; }
+  internal::InputMethodDelegate* delegate() const { return delegate_; }
 
   static IMEEngineHandlerInterface* GetEngine();
 
  private:
   // Indicates whether the IME extension is currently sending a fake key event.
   // This is used in SendKeyEvent.
-  bool sending_key_event_;
+  bool sending_key_event_ = false;
 
   internal::InputMethodDelegate* delegate_;
 
@@ -143,7 +145,7 @@ class UI_BASE_IME_EXPORT InputMethodBase
 
   void SetFocusedTextInputClientInternal(TextInputClient* client);
 
-  TextInputClient* text_input_client_;
+  TextInputClient* text_input_client_ = nullptr;
 
   base::ObserverList<InputMethodObserver>::Unchecked observer_list_;
 
@@ -152,7 +154,7 @@ class UI_BASE_IME_EXPORT InputMethodBase
   // Screen bounds of a on-screen keyboard.
   gfx::Rect keyboard_bounds_;
 
-  std::unique_ptr<InputMethodKeyboardController> keyboard_controller_;
+  std::unique_ptr<InputMethodKeyboardController> const keyboard_controller_;
 
   DISALLOW_COPY_AND_ASSIGN(InputMethodBase);
 };

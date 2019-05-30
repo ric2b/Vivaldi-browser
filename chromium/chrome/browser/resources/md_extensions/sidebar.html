@@ -11,7 +11,8 @@
   <template>
     <style include="cr-icons">
       :host {
-        color: #5a5a5a;
+        --sidebar-inactive-color: #5a5a5a;
+        color: var(--sidebar-inactive-color);
         display: flex;
         flex-direction: column;
         height: 100%;
@@ -21,8 +22,12 @@
         width: 256px;
       }
 
+      :host-context([dark]) {
+        --sidebar-inactive-color: var(--cr-primary-text-color);
+      }
+
       iron-selector .iron-selected {
-        color: var(--google-blue-700);
+        color: var(--cr-link-color);
       }
 
       #sectionMenu {

@@ -123,13 +123,13 @@ void WriteMetaDataToDiskCache(
   ServiceWorkerResponseMetadataWriter* writer_rawptr = writer.get();
   writer_rawptr->WriteMetadata(
       meta_data_buffer.get(), meta_data.size(),
-      base::Bind(
+      base::BindOnce(
           [](std::unique_ptr<ServiceWorkerResponseMetadataWriter> /* unused */,
              base::OnceClosure callback, int expected, int result) {
             EXPECT_EQ(expected, result);
             std::move(callback).Run();
           },
-          base::Passed(&writer), base::Passed(&callback), meta_data.size()));
+          std::move(writer), std::move(callback), meta_data.size()));
 }
 
 }  // namespace
@@ -143,8 +143,8 @@ ServiceWorkerRemoteProviderEndpoint::ServiceWorkerRemoteProviderEndpoint(
 ServiceWorkerRemoteProviderEndpoint::~ServiceWorkerRemoteProviderEndpoint() {}
 
 void ServiceWorkerRemoteProviderEndpoint::BindWithProviderHostInfo(
-    mojom::ServiceWorkerProviderHostInfoPtr* info) {
-  mojom::ServiceWorkerContainerAssociatedPtr client_ptr;
+    blink::mojom::ServiceWorkerProviderHostInfoPtr* info) {
+  blink::mojom::ServiceWorkerContainerAssociatedPtr client_ptr;
   client_request_ = mojo::MakeRequestAssociatedWithDedicatedPipe(&client_ptr);
   (*info)->client_ptr_info = client_ptr.PassInterface();
   (*info)->host_request =
@@ -152,33 +152,36 @@ void ServiceWorkerRemoteProviderEndpoint::BindWithProviderHostInfo(
 }
 
 void ServiceWorkerRemoteProviderEndpoint::BindWithProviderInfo(
-    mojom::ServiceWorkerProviderInfoForStartWorkerPtr info) {
+    blink::mojom::ServiceWorkerProviderInfoForStartWorkerPtr info) {
   client_request_ = std::move(info->client_request);
   host_ptr_.Bind(std::move(info->host_ptr_info));
 }
 
-mojom::ServiceWorkerProviderHostInfoPtr CreateProviderHostInfoForWindow(
+blink::mojom::ServiceWorkerProviderHostInfoPtr CreateProviderHostInfoForWindow(
     int provider_id,
     int route_id) {
-  return mojom::ServiceWorkerProviderHostInfo::New(
+  return blink::mojom::ServiceWorkerProviderHostInfo::New(
       provider_id, route_id,
       blink::mojom::ServiceWorkerProviderType::kForWindow,
       true /* is_parent_frame_secure */, nullptr /* host_request */,
       nullptr /* client_ptr_info */);
 }
 
-std::unique_ptr<ServiceWorkerProviderHost> CreateProviderHostForWindow(
+base::WeakPtr<ServiceWorkerProviderHost> CreateProviderHostForWindow(
     int process_id,
-    int provider_id,
     bool is_parent_frame_secure,
     base::WeakPtr<ServiceWorkerContextCore> context,
     ServiceWorkerRemoteProviderEndpoint* output_endpoint) {
-  mojom::ServiceWorkerProviderHostInfoPtr info =
-      CreateProviderHostInfoForWindow(provider_id, 1 /* route_id */);
+  base::WeakPtr<ServiceWorkerProviderHost> host =
+      ServiceWorkerProviderHost::PreCreateNavigationHost(
+          context, is_parent_frame_secure, base::NullCallback());
+  blink::mojom::ServiceWorkerProviderHostInfoPtr info =
+      CreateProviderHostInfoForWindow(host->provider_id(), 1 /* route_id */);
   info->is_parent_frame_secure = is_parent_frame_secure;
   output_endpoint->BindWithProviderHostInfo(&info);
-  return ServiceWorkerProviderHost::Create(process_id, std::move(info),
-                                           std::move(context));
+
+  host->CompleteNavigationInitialized(process_id, std::move(info));
+  return host;
 }
 
 base::WeakPtr<ServiceWorkerProviderHost>
@@ -188,13 +191,12 @@ CreateProviderHostForServiceWorkerContext(
     ServiceWorkerVersion* hosted_version,
     base::WeakPtr<ServiceWorkerContextCore> context,
     ServiceWorkerRemoteProviderEndpoint* output_endpoint) {
-  auto provider_info = mojom::ServiceWorkerProviderInfoForStartWorker::New();
+  auto provider_info =
+      blink::mojom::ServiceWorkerProviderInfoForStartWorker::New();
   base::WeakPtr<ServiceWorkerProviderHost> host =
       ServiceWorkerProviderHost::PreCreateForController(
           std::move(context), base::WrapRefCounted(hosted_version),
           &provider_info);
-
-  host->SetDocumentUrl(hosted_version->script_url());
 
   scoped_refptr<network::SharedURLLoaderFactory> loader_factory;
   if (blink::ServiceWorkerUtils::IsServicificationEnabled()) {
@@ -279,6 +281,177 @@ WriteToDiskCacheWithCustomResponseInfoAsync(
                            std::move(barrier));
   return ServiceWorkerDatabase::ResourceRecord(resource_id, script_url,
                                                body.size());
+}
+
+MockServiceWorkerResponseReader::MockServiceWorkerResponseReader()
+    : ServiceWorkerResponseReader(/* resource_id=*/0, /*disk_cache=*/nullptr) {}
+
+MockServiceWorkerResponseReader::~MockServiceWorkerResponseReader() {}
+
+void MockServiceWorkerResponseReader::ReadInfo(
+    HttpResponseInfoIOBuffer* info_buf,
+    OnceCompletionCallback callback) {
+  DCHECK(!expected_reads_.empty());
+  ExpectedRead expected = expected_reads_.front();
+  EXPECT_TRUE(expected.info);
+  if (expected.async) {
+    pending_info_ = info_buf;
+    pending_callback_ = std::move(callback);
+  } else {
+    expected_reads_.pop();
+    info_buf->response_data_size = expected.len;
+    std::move(callback).Run(expected.result);
+  }
+}
+
+void MockServiceWorkerResponseReader::ReadData(
+    net::IOBuffer* buf,
+    int buf_len,
+    OnceCompletionCallback callback) {
+  DCHECK(!expected_reads_.empty());
+  ExpectedRead expected = expected_reads_.front();
+  EXPECT_FALSE(expected.info);
+  if (expected.async) {
+    pending_callback_ = std::move(callback);
+    pending_buffer_ = buf;
+    pending_buffer_len_ = static_cast<size_t>(buf_len);
+  } else {
+    expected_reads_.pop();
+    if (expected.len > 0) {
+      size_t to_read = std::min(static_cast<size_t>(buf_len), expected.len);
+      memcpy(buf->data(), expected.data, to_read);
+    }
+    std::move(callback).Run(expected.result);
+  }
+}
+
+void MockServiceWorkerResponseReader::ExpectReadInfo(size_t len,
+                                                     bool async,
+                                                     int result) {
+  expected_reads_.push(ExpectedRead(len, async, result));
+}
+
+void MockServiceWorkerResponseReader::ExpectReadInfoOk(size_t len, bool async) {
+  expected_reads_.push(ExpectedRead(len, async, len));
+}
+
+void MockServiceWorkerResponseReader::ExpectReadData(const char* data,
+                                                     size_t len,
+                                                     bool async,
+                                                     int result) {
+  expected_reads_.push(ExpectedRead(data, len, async, result));
+}
+
+void MockServiceWorkerResponseReader::ExpectReadDataOk(const std::string& data,
+                                                       bool async) {
+  expected_reads_.push(
+      ExpectedRead(data.data(), data.size(), async, data.size()));
+}
+
+void MockServiceWorkerResponseReader::ExpectReadOk(
+    const std::vector<std::string>& stored_data,
+    const size_t bytes_stored,
+    const bool async) {
+  ExpectReadInfoOk(bytes_stored, async);
+  for (const auto& data : stored_data)
+    ExpectReadDataOk(data, async);
+}
+
+void MockServiceWorkerResponseReader::CompletePendingRead() {
+  DCHECK(!expected_reads_.empty());
+  ExpectedRead expected = expected_reads_.front();
+  expected_reads_.pop();
+  EXPECT_TRUE(expected.async);
+  if (expected.info) {
+    pending_info_->response_data_size = expected.len;
+  } else {
+    size_t to_read = std::min(pending_buffer_len_, expected.len);
+    if (to_read > 0)
+      memcpy(pending_buffer_->data(), expected.data, to_read);
+  }
+  pending_info_ = nullptr;
+  pending_buffer_ = nullptr;
+  OnceCompletionCallback callback = std::move(pending_callback_);
+  pending_callback_.Reset();
+  std::move(callback).Run(expected.result);
+}
+
+MockServiceWorkerResponseWriter::MockServiceWorkerResponseWriter()
+    : ServiceWorkerResponseWriter(/*resource_id=*/0, /*disk_cache=*/nullptr),
+      info_written_(0),
+      data_written_(0) {}
+
+MockServiceWorkerResponseWriter::~MockServiceWorkerResponseWriter() = default;
+
+void MockServiceWorkerResponseWriter::WriteInfo(
+    HttpResponseInfoIOBuffer* info_buf,
+    OnceCompletionCallback callback) {
+  DCHECK(!expected_writes_.empty());
+  ExpectedWrite write = expected_writes_.front();
+  EXPECT_TRUE(write.is_info);
+  if (write.result > 0) {
+    EXPECT_EQ(write.length, static_cast<size_t>(info_buf->response_data_size));
+    info_written_ += info_buf->response_data_size;
+  }
+  if (!write.async) {
+    expected_writes_.pop();
+    std::move(callback).Run(write.result);
+  } else {
+    pending_callback_ = std::move(callback);
+  }
+}
+
+void MockServiceWorkerResponseWriter::WriteData(
+    net::IOBuffer* buf,
+    int buf_len,
+    OnceCompletionCallback callback) {
+  DCHECK(!expected_writes_.empty());
+  ExpectedWrite write = expected_writes_.front();
+  EXPECT_FALSE(write.is_info);
+  if (write.result > 0) {
+    EXPECT_EQ(write.length, static_cast<size_t>(buf_len));
+    data_written_ += buf_len;
+  }
+  if (!write.async) {
+    expected_writes_.pop();
+    std::move(callback).Run(write.result);
+  } else {
+    pending_callback_ = std::move(callback);
+  }
+}
+
+void MockServiceWorkerResponseWriter::ExpectWriteInfoOk(size_t length,
+                                                        bool async) {
+  ExpectWriteInfo(length, async, length);
+}
+
+void MockServiceWorkerResponseWriter::ExpectWriteDataOk(size_t length,
+                                                        bool async) {
+  ExpectWriteData(length, async, length);
+}
+
+void MockServiceWorkerResponseWriter::ExpectWriteInfo(size_t length,
+                                                      bool async,
+                                                      int result) {
+  DCHECK_NE(net::ERR_IO_PENDING, result);
+  ExpectedWrite expected(true, length, async, result);
+  expected_writes_.push(expected);
+}
+
+void MockServiceWorkerResponseWriter::ExpectWriteData(size_t length,
+                                                      bool async,
+                                                      int result) {
+  DCHECK_NE(net::ERR_IO_PENDING, result);
+  ExpectedWrite expected(false, length, async, result);
+  expected_writes_.push(expected);
+}
+
+void MockServiceWorkerResponseWriter::CompletePendingWrite() {
+  DCHECK(!expected_writes_.empty());
+  ExpectedWrite write = expected_writes_.front();
+  DCHECK(write.async);
+  expected_writes_.pop();
+  std::move(pending_callback_).Run(write.result);
 }
 
 }  // namespace content

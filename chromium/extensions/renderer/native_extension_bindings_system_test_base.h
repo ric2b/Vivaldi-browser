@@ -86,10 +86,8 @@ class TestIPCMessageSender : public IPCMessageSender {
                void(int routing_id, const PortId& port_id));
   MOCK_METHOD3(SendCloseMessagePort,
                void(int routing_id, const PortId& port_id, bool close_channel));
-  MOCK_METHOD3(SendPostMessageToPort,
-               void(int routing_id,
-                    const PortId& port_id,
-                    const Message& message));
+  MOCK_METHOD2(SendPostMessageToPort,
+               void(const PortId& port_id, const Message& message));
 
   const ExtensionHostMsg_Request_Params* last_params() const {
     return last_params_.get();
@@ -118,7 +116,7 @@ class NativeExtensionBindingsSystemUnittest : public APIBindingTest {
   std::unique_ptr<TestJSRunner::Scope> CreateTestJSRunner() override;
 
   ScriptContext* CreateScriptContext(v8::Local<v8::Context> v8_context,
-                                     Extension* extension,
+                                     const Extension* extension,
                                      Feature::Context context_type);
 
   void RegisterExtension(scoped_refptr<const Extension> extension);

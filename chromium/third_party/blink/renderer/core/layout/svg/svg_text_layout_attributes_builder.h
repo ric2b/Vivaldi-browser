@@ -50,7 +50,7 @@ class SVGTextLayoutAttributesBuilder {
   void BuildLayoutAttributes();
 
   struct TextPosition {
-    DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+    DISALLOW_NEW();
 
    public:
     TextPosition(SVGTextPositioningElement* new_element = nullptr,
@@ -82,6 +82,6 @@ class SVGTextLayoutAttributesBuilder {
 }  // namespace blink
 
 WTF_ALLOW_MOVE_AND_INIT_WITH_MEM_FUNCTIONS(
-    blink::SVGTextLayoutAttributesBuilder::TextPosition);
+    blink::SVGTextLayoutAttributesBuilder::TextPosition)
 
 #endif

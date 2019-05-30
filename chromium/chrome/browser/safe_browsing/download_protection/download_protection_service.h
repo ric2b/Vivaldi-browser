@@ -23,6 +23,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/supports_user_data.h"
+#include "chrome/browser/download/download_commands.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
 #include "chrome/browser/safe_browsing/safe_browsing_navigation_observer_manager.h"
 #include "chrome/browser/safe_browsing/ui_manager.h"
@@ -37,10 +38,6 @@ class PageNavigator;
 namespace download {
 class DownloadItem;
 }
-
-namespace net {
-class X509Certificate;
-}  // namespace net
 
 namespace network {
 class SharedURLLoaderFactory;
@@ -121,9 +118,12 @@ class DownloadProtectionService {
     return download_request_timeout_ms_;
   }
 
-  DownloadFeedbackService* feedback_service() {
-    return feedback_service_.get();
-  }
+  // Checks the user permissions, and submits the downloaded file if
+  // appropriate. Returns whether the submission was successful.
+  bool MaybeBeginFeedbackForDownload(
+      Profile* profile,
+      download::DownloadItem* download,
+      DownloadCommands::Command download_command);
 
   // Registers a callback that will be run when a ClientDownloadRequest has
   // been formed.
@@ -157,7 +157,6 @@ class DownloadProtectionService {
       bool show_download_in_folder);
 
  private:
-  // todo(jialiul): Remove the need for non-test friending.
   friend class PPAPIDownloadRequest;
   friend class DownloadUrlSBClient;
   friend class DownloadProtectionServiceTest;
@@ -165,37 +164,15 @@ class DownloadProtectionService {
   friend class CheckClientDownloadRequest;
 
   FRIEND_TEST_ALL_PREFIXES(DownloadProtectionServiceTest,
-                           CheckClientDownloadWhitelistedUrlWithoutSampling);
-  FRIEND_TEST_ALL_PREFIXES(DownloadProtectionServiceTest,
-                           CheckClientDownloadWhitelistedUrlWithSampling);
-  FRIEND_TEST_ALL_PREFIXES(DownloadProtectionServiceTest,
-                           CheckClientDownloadValidateRequest);
-  FRIEND_TEST_ALL_PREFIXES(DownloadProtectionServiceTest,
-                           CheckClientDownloadSuccess);
-  FRIEND_TEST_ALL_PREFIXES(DownloadProtectionServiceTest,
-                           CheckClientDownloadHTTPS);
-  FRIEND_TEST_ALL_PREFIXES(DownloadProtectionServiceTest,
-                           CheckClientDownloadBlob);
-  FRIEND_TEST_ALL_PREFIXES(DownloadProtectionServiceTest,
-                           CheckClientDownloadData);
-  FRIEND_TEST_ALL_PREFIXES(DownloadProtectionServiceTest,
-                           CheckClientDownloadZip);
-  FRIEND_TEST_ALL_PREFIXES(DownloadProtectionServiceTest,
-                           CheckClientDownloadFetchFailed);
-  FRIEND_TEST_ALL_PREFIXES(DownloadProtectionServiceTest,
                            TestDownloadRequestTimeout);
-  FRIEND_TEST_ALL_PREFIXES(DownloadProtectionServiceTest,
-                           CheckClientCrxDownloadSuccess);
   FRIEND_TEST_ALL_PREFIXES(DownloadProtectionServiceTest,
                            PPAPIDownloadRequest_InvalidResponse);
   FRIEND_TEST_ALL_PREFIXES(DownloadProtectionServiceTest,
                            PPAPIDownloadRequest_Timeout);
   FRIEND_TEST_ALL_PREFIXES(DownloadProtectionServiceTest,
                            VerifyReferrerChainWithEmptyNavigationHistory);
-  FRIEND_TEST_ALL_PREFIXES(DownloadProtectionServiceFlagTest,
-                           CheckClientDownloadOverridenByFlag);
   FRIEND_TEST_ALL_PREFIXES(DownloadProtectionServiceTest,
-                           VerifyMaybeSendDangerousDownloadOpenedReport);
+                           VerifyReferrerChainLengthForExtendedReporting);
 
   static const void* const kDownloadPingTokenKey;
 
@@ -222,14 +199,6 @@ class DownloadProtectionService {
   void RequestFinished(CheckClientDownloadRequest* request);
 
   void PPAPIDownloadCheckRequestFinished(PPAPIDownloadRequest* request);
-
-  // Given a certificate and its immediate issuer certificate, generates the
-  // list of strings that need to be checked against the download whitelist to
-  // determine whether the certificate is whitelisted.
-  static void GetCertificateWhitelistStrings(
-      const net::X509Certificate& certificate,
-      const net::X509Certificate& issuer,
-      std::vector<std::string>* whitelist_strings);
 
   // Identify referrer chain info of a download. This function also records UMA
   // stats of download attribution result.
@@ -261,7 +230,9 @@ class DownloadProtectionService {
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
 
   // Set of pending server requests for DownloadManager mediated downloads.
-  std::set<scoped_refptr<CheckClientDownloadRequest>> download_requests_;
+  std::unordered_map<CheckClientDownloadRequest*,
+                     std::unique_ptr<CheckClientDownloadRequest>>
+      download_requests_;
 
   // Set of pending server requests for PPAPI mediated downloads. Using a map
   // because heterogeneous lookups aren't available yet in std::unordered_map.

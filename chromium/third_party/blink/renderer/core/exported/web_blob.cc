@@ -42,18 +42,18 @@ namespace blink {
 
 WebBlob WebBlob::CreateFromUUID(const WebString& uuid,
                                 const WebString& type,
-                                long long size) {
+                                uint64_t size) {
   return Blob::Create(BlobDataHandle::Create(uuid, type, size));
 }
 
-WebBlob WebBlob::CreateFromFile(const WebString& path, long long size) {
+WebBlob WebBlob::CreateFromFile(const WebString& path, uint64_t size) {
   std::unique_ptr<BlobData> blob_data = BlobData::Create();
   blob_data->AppendFile(path, 0, size, InvalidFileTime());
   return Blob::Create(BlobDataHandle::Create(std::move(blob_data), size));
 }
 
 WebBlob WebBlob::FromV8Value(v8::Local<v8::Value> value) {
-  if (V8Blob::hasInstance(value, v8::Isolate::GetCurrent())) {
+  if (V8Blob::HasInstance(value, v8::Isolate::GetCurrent())) {
     v8::Local<v8::Object> object = v8::Local<v8::Object>::Cast(value);
     Blob* blob = V8Blob::ToImpl(object);
     DCHECK(blob);

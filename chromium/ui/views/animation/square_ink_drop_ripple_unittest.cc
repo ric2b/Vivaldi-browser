@@ -6,7 +6,8 @@
 
 #include <memory>
 
-#include "base/macros.h"
+#include "base/stl_util.h"
+#include "base/time/time.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/size.h"
@@ -158,7 +159,7 @@ TEST_F(SquareInkDropRippleCalculateTransformsTest,
        gfx::Point(0, 0), gfx::Point(0, -kHalfTransformedSize),
        gfx::Point(0, kHalfTransformedSize)}};
 
-  for (size_t i = 0; i < arraysize(test_cases); ++i) {
+  for (size_t i = 0; i < base::size(test_cases); ++i) {
     PaintedShape shape = test_cases[i].shape;
     SCOPED_TRACE(testing::Message() << "i=" << i << " shape=" << shape);
     gfx::Transform transform = transforms_[shape];
@@ -221,7 +222,7 @@ TEST_F(SquareInkDropRippleCalculateTransformsTest,
        gfx::Point(x_offset, 0), gfx::Point(0, -kHalfTransformedSize),
        gfx::Point(0, kHalfTransformedSize)}};
 
-  for (size_t i = 0; i < arraysize(test_cases); ++i) {
+  for (size_t i = 0; i < base::size(test_cases); ++i) {
     PaintedShape shape = test_cases[i].shape;
     SCOPED_TRACE(testing::Message() << "i=" << i << " shape=" << shape);
     gfx::Transform transform = transforms_[shape];
@@ -266,7 +267,7 @@ TEST_F(SquareInkDropRippleCalculateTransformsTest, RippleIsPixelAligned) {
       SCOPED_TRACE(testing::Message()
                    << "target_size=" << target_size << " dsf=" << dsf);
       host_view->layer()->GetCompositor()->SetScaleAndSize(
-          dsf, gfx::Size(100, 100), viz::LocalSurfaceId());
+          dsf, gfx::Size(100, 100), viz::LocalSurfaceIdAllocation());
 
       SquareInkDropRippleTestApi::InkDropTransforms transforms;
       test_api.CalculateRectTransforms(gfx::Size(target_size, target_size), 0,

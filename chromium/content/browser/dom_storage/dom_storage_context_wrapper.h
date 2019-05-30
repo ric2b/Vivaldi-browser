@@ -9,11 +9,11 @@
 #include <string>
 
 #include "base/macros.h"
-#include "base/memory/memory_coordinator_client.h"
 #include "base/memory/memory_pressure_listener.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/synchronization/lock.h"
+#include "base/thread_annotations.h"
 #include "components/services/leveldb/public/interfaces/leveldb.mojom.h"
 #include "content/browser/dom_storage/dom_storage_context_impl.h"
 #include "content/common/content_export.h"
@@ -21,7 +21,6 @@
 #include "mojo/public/cpp/bindings/message.h"
 #include "third_party/blink/public/mojom/dom_storage/session_storage_namespace.mojom.h"
 #include "third_party/blink/public/mojom/dom_storage/storage_area.mojom.h"
-#include "url/origin.h"
 
 namespace base {
 class FilePath;
@@ -46,23 +45,31 @@ class SessionStorageNamespaceImpl;
 // state.
 class CONTENT_EXPORT DOMStorageContextWrapper
     : public DOMStorageContext,
-      public base::RefCountedThreadSafe<DOMStorageContextWrapper>,
-      public base::MemoryCoordinatorClient {
+      public base::RefCountedThreadSafe<DOMStorageContextWrapper> {
  public:
   // If |data_path| is empty, nothing will be saved to disk.
-  DOMStorageContextWrapper(
+  static scoped_refptr<DOMStorageContextWrapper> Create(
       service_manager::Connector* connector,
-      const base::FilePath& data_path,
+      const base::FilePath& profile_path,
       const base::FilePath& local_partition_path,
       storage::SpecialStoragePolicy* special_storage_policy);
 
+  DOMStorageContextWrapper(
+      base::FilePath legacy_local_storage_path,
+      scoped_refptr<DOMStorageContextImpl> context_impl,
+      scoped_refptr<base::SequencedTaskRunner> mojo_task_runner,
+      LocalStorageContextMojo* mojo_local_storage_context,
+      SessionStorageContextMojo* mojo_session_storage_context);
+
   // DOMStorageContext implementation.
-  void GetLocalStorageUsage(
-      const GetLocalStorageUsageCallback& callback) override;
+  void GetLocalStorageUsage(GetLocalStorageUsageCallback callback) override;
   void GetSessionStorageUsage(GetSessionStorageUsageCallback callback) override;
-  void DeleteLocalStorage(const GURL& origin,
+  void DeleteLocalStorage(const url::Origin& origin,
                           base::OnceClosure callback) override;
-  void DeleteSessionStorage(const SessionStorageUsageInfo& usage_info) override;
+  void PerformLocalStorageCleanup(base::OnceClosure callback) override;
+  void DeleteSessionStorage(const SessionStorageUsageInfo& usage_info,
+                            base::OnceClosure callback) override;
+  void PerformSessionStorageCleanup(base::OnceClosure callback) override;
   void SetSaveSessionStorageOnDisk() override;
   scoped_refptr<SessionStorageNamespace> RecreateSessionStorage(
       const std::string& namespace_id) override;
@@ -121,9 +128,6 @@ class CONTENT_EXPORT DOMStorageContextWrapper
   void OnMemoryPressure(
       base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level);
 
-  // base::MemoryCoordinatorClient implementation:
-  void OnPurgeMemory() override;
-
   void PurgeMemory(DOMStorageContextImpl::PurgeOption purge_option);
 
   // Keep all mojo-ish details together and not bleed them through the public
@@ -143,7 +147,8 @@ class CONTENT_EXPORT DOMStorageContextWrapper
   // Profile wasn't destructed. This map allows the restored session to re-use
   // the SessionStorageNamespaceImpl objects that are still alive thanks to the
   // sessions component.
-  std::map<std::string, SessionStorageNamespaceImpl*> alive_namespaces_;
+  std::map<std::string, SessionStorageNamespaceImpl*> alive_namespaces_
+      GUARDED_BY(alive_namespaces_lock_);
   mutable base::Lock alive_namespaces_lock_;
 
   base::FilePath legacy_localstorage_path_;

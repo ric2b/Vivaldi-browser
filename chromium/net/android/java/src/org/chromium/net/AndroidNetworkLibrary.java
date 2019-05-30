@@ -4,10 +4,12 @@
 
 package org.chromium.net;
 
+import android.Manifest;
 import android.annotation.TargetApi;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
 import android.net.ConnectivityManager;
 import android.net.LinkProperties;
 import android.net.Network;
@@ -19,15 +21,19 @@ import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Build.VERSION_CODES;
 import android.os.ParcelFileDescriptor;
+import android.os.Process;
 import android.security.NetworkSecurityPolicy;
 import android.telephony.TelephonyManager;
 import android.util.Log;
 
-import org.chromium.base.BuildInfo;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.CalledByNativeUnchecked;
+import org.chromium.base.annotations.MainDex;
+import org.chromium.base.compat.ApiHelperForM;
+import org.chromium.base.compat.ApiHelperForP;
+import org.chromium.base.metrics.RecordHistogram;
 
 import java.io.FileDescriptor;
 import java.io.IOException;
@@ -42,18 +48,64 @@ import java.net.SocketAddress;
 import java.net.SocketException;
 import java.net.SocketImpl;
 import java.net.URLConnection;
+import java.net.UnknownHostException;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateException;
 import java.util.Enumeration;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 /**
  * This class implements net utilities required by the net component.
  */
+@MainDex
 class AndroidNetworkLibrary {
-
     private static final String TAG = "AndroidNetworkLibrary";
+
+    // Cached value indicating if app has ACCESS_NETWORK_STATE permission.
+    private static Boolean sHaveAccessNetworkState;
+
+    // Set of public DNS servers supporting DNS-over-HTTPS.
+    private static final Set<InetAddress> sAutoDohServers = new HashSet<>();
+    // Set of public DNS-over-TLS servers supporting DNS-over-HTTPS.
+    private static final Set<String> sAutoDohDotServers = new HashSet<>();
+
+    static {
+        try {
+            // Populate set of public DNS servers supporting DNS-over-HTTPS.
+
+            // Google Public DNS
+            sAutoDohServers.add(InetAddress.getByName("8.8.8.8"));
+            sAutoDohServers.add(InetAddress.getByName("8.8.4.4"));
+            sAutoDohServers.add(InetAddress.getByName("2001:4860:4860::8888"));
+            sAutoDohServers.add(InetAddress.getByName("2001:4860:4860::8844"));
+            // Cloudflare DNS
+            sAutoDohServers.add(InetAddress.getByName("1.1.1.1"));
+            sAutoDohServers.add(InetAddress.getByName("1.0.0.1"));
+            sAutoDohServers.add(InetAddress.getByName("2606:4700:4700::1111"));
+            sAutoDohServers.add(InetAddress.getByName("2606:4700:4700::1001"));
+            // Quad9 DNS
+            sAutoDohServers.add(InetAddress.getByName("9.9.9.9"));
+            sAutoDohServers.add(InetAddress.getByName("149.112.112.112"));
+            sAutoDohServers.add(InetAddress.getByName("2620:fe::fe"));
+            sAutoDohServers.add(InetAddress.getByName("2620:fe::9"));
+        } catch (UnknownHostException e) {
+            throw new RuntimeException("Failed to parse IP addresses", e);
+        }
+
+        // Populate set of public DNS-over-TLS servers supporting DNS-over-HTTPS.
+
+        // Google Public DNS
+        sAutoDohDotServers.add("dns.google");
+        // Cloudflare DNS
+        sAutoDohDotServers.add("1dot1dot1dot1.cloudflare-dns.com");
+        sAutoDohDotServers.add("cloudflare-dns.com");
+        // Quad9 DNS
+        sAutoDohDotServers.add("dns.quad9.net");
+    }
 
     /**
      * @return the mime type (if any) that is associated with the file
@@ -205,7 +257,7 @@ class AndroidNetworkLibrary {
                         Context.CONNECTIVITY_SERVICE);
         if (connectivityManager == null) return false;
 
-        Network network = connectivityManager.getActiveNetwork();
+        Network network = ApiHelperForM.getActiveNetwork(connectivityManager);
         if (network == null) return false;
 
         NetworkCapabilities capabilities = connectivityManager.getNetworkCapabilities(network);
@@ -283,19 +335,55 @@ class AndroidNetworkLibrary {
     }
 
     /**
+     * @returns result of linkProperties.isPrivateDnsActive().
+     */
+    static boolean isPrivateDnsActive(LinkProperties linkProperties) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && linkProperties != null) {
+            return ApiHelperForP.isPrivateDnsActive(linkProperties);
+        }
+        return false;
+    }
+
+    /**
+     * @returns result of linkProperties.getPrivateDnsServerName().
+     */
+    private static String getPrivateDnsServerName(LinkProperties linkProperties) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && linkProperties != null) {
+            return ApiHelperForP.getPrivateDnsServerName(linkProperties);
+        }
+        return null;
+    }
+
+    private static boolean haveAccessNetworkState() {
+        // This could be racy if called on multiple threads, but races will
+        // end in the same result so it's not a problem.
+        if (sHaveAccessNetworkState == null) {
+            sHaveAccessNetworkState =
+                    Boolean.valueOf(ContextUtils.getApplicationContext().checkPermission(
+                                            Manifest.permission.ACCESS_NETWORK_STATE,
+                                            Process.myPid(), Process.myUid())
+                            == PackageManager.PERMISSION_GRANTED);
+        }
+        return sHaveAccessNetworkState;
+    }
+
+    /**
      * Returns list of IP addresses of DNS servers.
      * If private DNS is active, then returns a 1x1 array.
      */
     @TargetApi(Build.VERSION_CODES.M)
     @CalledByNative
     private static byte[][] getDnsServers() {
+        if (!haveAccessNetworkState()) {
+            return new byte[0][0];
+        }
         ConnectivityManager connectivityManager =
                 (ConnectivityManager) ContextUtils.getApplicationContext().getSystemService(
                         Context.CONNECTIVITY_SERVICE);
         if (connectivityManager == null) {
             return new byte[0][0];
         }
-        Network network = connectivityManager.getActiveNetwork();
+        Network network = ApiHelperForM.getActiveNetwork(connectivityManager);
         if (network == null) {
             return new byte[0][0];
         }
@@ -303,20 +391,28 @@ class AndroidNetworkLibrary {
         if (linkProperties == null) {
             return new byte[0][0];
         }
-        if (BuildInfo.isAtLeastP()) {
-            // TODO(pauljensen): When Android P SDK is available, remove reflection.
-            try {
-                if (((Boolean) linkProperties.getClass()
-                                    .getMethod("isPrivateDnsActive")
-                                    .invoke(linkProperties))
-                                .booleanValue()) {
-                    return new byte[1][1];
-                }
-            } catch (Exception e) {
-                Log.e(TAG, "Can not call LinkProperties.isPrivateDnsActive():", e);
+        List<InetAddress> dnsServersList = linkProperties.getDnsServers();
+        // Determine if any DNS servers could be auto-upgraded to DNS-over-HTTPS.
+        boolean autoDoh = false;
+        for (InetAddress dnsServer : dnsServersList) {
+            if (sAutoDohServers.contains(dnsServer)) {
+                autoDoh = true;
+                break;
             }
         }
-        List<InetAddress> dnsServersList = linkProperties.getDnsServers();
+        if (isPrivateDnsActive(linkProperties)) {
+            String privateDnsServerName = getPrivateDnsServerName(linkProperties);
+            // If user explicitly selected a DNS-over-TLS server...
+            if (privateDnsServerName != null) {
+                // ...their DNS-over-HTTPS support depends on the DNS-over-TLS server name.
+                autoDoh = sAutoDohDotServers.contains(privateDnsServerName.toLowerCase(Locale.US));
+            }
+            RecordHistogram.recordBooleanHistogram(
+                    "Net.DNS.Android.DotExplicit", privateDnsServerName != null);
+            RecordHistogram.recordBooleanHistogram("Net.DNS.Android.AutoDohPrivate", autoDoh);
+            return new byte[1][1];
+        }
+        RecordHistogram.recordBooleanHistogram("Net.DNS.Android.AutoDohPublic", autoDoh);
         byte[][] dnsServers = new byte[dnsServersList.size()][];
         for (int i = 0; i < dnsServersList.size(); i++) {
             dnsServers[i] = dnsServersList.get(i).getAddress();

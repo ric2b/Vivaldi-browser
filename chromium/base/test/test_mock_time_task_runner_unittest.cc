@@ -4,6 +4,8 @@
 
 #include "base/test/test_mock_time_task_runner.h"
 
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/cancelable_callback.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
@@ -32,28 +34,30 @@ TEST(TestMockTimeTaskRunnerTest, Basic) {
     int counter = 0;
 
     mock_time_task_runner->PostTask(
-        FROM_HERE,
-        base::Bind([](int* counter) { *counter += 1; }, Unretained(&counter)));
+        FROM_HERE, base::BindOnce([](int* counter) { *counter += 1; },
+                                  Unretained(&counter)));
     mock_time_task_runner->PostTask(
-        FROM_HERE,
-        base::Bind([](int* counter) { *counter += 32; }, Unretained(&counter)));
+        FROM_HERE, base::BindOnce([](int* counter) { *counter += 32; },
+                                  Unretained(&counter)));
     mock_time_task_runner->PostDelayedTask(
         FROM_HERE,
-        base::Bind([](int* counter) { *counter += 256; }, Unretained(&counter)),
+        base::BindOnce([](int* counter) { *counter += 256; },
+                       Unretained(&counter)),
         TimeDelta::FromSeconds(3));
     mock_time_task_runner->PostDelayedTask(
         FROM_HERE,
-        base::Bind([](int* counter) { *counter += 64; }, Unretained(&counter)),
+        base::BindOnce([](int* counter) { *counter += 64; },
+                       Unretained(&counter)),
         TimeDelta::FromSeconds(1));
     mock_time_task_runner->PostDelayedTask(
         FROM_HERE,
-        base::Bind([](int* counter) { *counter += 1024; },
-                   Unretained(&counter)),
+        base::BindOnce([](int* counter) { *counter += 1024; },
+                       Unretained(&counter)),
         TimeDelta::FromMinutes(20));
     mock_time_task_runner->PostDelayedTask(
         FROM_HERE,
-        base::Bind([](int* counter) { *counter += 4096; },
-                   Unretained(&counter)),
+        base::BindOnce([](int* counter) { *counter += 4096; },
+                       Unretained(&counter)),
         TimeDelta::FromDays(20));
 
     int expected_value = 0;
@@ -95,26 +99,30 @@ TEST(TestMockTimeTaskRunnerTest, RunLoopDriveableWhenBound) {
 
   int counter = 0;
   ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::Bind([](int* counter) { *counter += 1; }, Unretained(&counter)));
+      FROM_HERE, base::BindOnce([](int* counter) { *counter += 1; },
+                                Unretained(&counter)));
   ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::Bind([](int* counter) { *counter += 32; }, Unretained(&counter)));
+      FROM_HERE, base::BindOnce([](int* counter) { *counter += 32; },
+                                Unretained(&counter)));
   ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
-      base::Bind([](int* counter) { *counter += 256; }, Unretained(&counter)),
+      base::BindOnce([](int* counter) { *counter += 256; },
+                     Unretained(&counter)),
       TimeDelta::FromSeconds(3));
   ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
-      base::Bind([](int* counter) { *counter += 64; }, Unretained(&counter)),
+      base::BindOnce([](int* counter) { *counter += 64; },
+                     Unretained(&counter)),
       TimeDelta::FromSeconds(1));
   ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
-      base::Bind([](int* counter) { *counter += 1024; }, Unretained(&counter)),
+      base::BindOnce([](int* counter) { *counter += 1024; },
+                     Unretained(&counter)),
       TimeDelta::FromMinutes(20));
   ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
-      base::Bind([](int* counter) { *counter += 4096; }, Unretained(&counter)),
+      base::BindOnce([](int* counter) { *counter += 4096; },
+                     Unretained(&counter)),
       TimeDelta::FromDays(20));
 
   int expected_value = 0;
@@ -133,8 +141,8 @@ TEST(TestMockTimeTaskRunnerTest, RunLoopDriveableWhenBound) {
         FROM_HERE, run_loop.QuitClosure(), TimeDelta::FromSeconds(1));
     ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE,
-        base::Bind([](int* counter) { *counter += 8192; },
-                   Unretained(&counter)),
+        base::BindOnce([](int* counter) { *counter += 8192; },
+                       Unretained(&counter)),
         TimeDelta::FromSeconds(1));
 
     // The QuitClosure() should be ordered between the 64 and the 8192
@@ -156,8 +164,8 @@ TEST(TestMockTimeTaskRunnerTest, RunLoopDriveableWhenBound) {
         FROM_HERE, run_loop.QuitWhenIdleClosure(), TimeDelta::FromSeconds(5));
     ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE,
-        base::Bind([](int* counter) { *counter += 16384; },
-                   Unretained(&counter)),
+        base::BindOnce([](int* counter) { *counter += 16384; },
+                       Unretained(&counter)),
         TimeDelta::FromSeconds(5));
 
     // The QuitWhenIdleClosure() shouldn't preempt equally delayed tasks and as
@@ -227,7 +235,7 @@ TEST(TestMockTimeTaskRunnerTest, RunLoopQuitFromIdle) {
 
 TEST(TestMockTimeTaskRunnerTest, TakePendingTasks) {
   auto task_runner = MakeRefCounted<TestMockTimeTaskRunner>();
-  task_runner->PostTask(FROM_HERE, Bind([]() {}));
+  task_runner->PostTask(FROM_HERE, DoNothing());
   EXPECT_TRUE(task_runner->HasPendingTask());
   EXPECT_EQ(1u, task_runner->TakePendingTasks().size());
   EXPECT_FALSE(task_runner->HasPendingTask());

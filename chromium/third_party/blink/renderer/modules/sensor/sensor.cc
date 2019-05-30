@@ -6,6 +6,7 @@
 
 #include "services/device/public/cpp/generic_sensor/sensor_traits.h"
 #include "services/device/public/mojom/sensor.mojom-blink.h"
+#include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom-blink.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
@@ -14,26 +15,26 @@
 #include "third_party/blink/renderer/core/timing/window_performance.h"
 #include "third_party/blink/renderer/modules/sensor/sensor_error_event.h"
 #include "third_party/blink/renderer/modules/sensor/sensor_provider_proxy.h"
-#include "third_party/blink/renderer/platform/feature_policy/feature_policy.h"
-#include "third_party/blink/renderer/platform/layout_test_support.h"
+#include "third_party/blink/renderer/platform/web_test_support.h"
 
 namespace blink {
 
 namespace {
 const double kWaitingIntervalThreshold = 0.01;
 
-bool AreFeaturesEnabled(LocalFrame* frame,
+bool AreFeaturesEnabled(Document* document,
                         const Vector<mojom::FeaturePolicyFeature>& features) {
   return std::all_of(features.begin(), features.end(),
-                     [frame](mojom::FeaturePolicyFeature feature) {
-                       return frame->IsFeatureEnabled(feature);
+                     [document](mojom::FeaturePolicyFeature feature) {
+                       return document->IsFeatureEnabled(
+                           feature, ReportOptions::kReportOnFailure);
                      });
 }
 
 }  // namespace
 
 Sensor::Sensor(ExecutionContext* execution_context,
-               const SensorOptions& sensor_options,
+               const SensorOptions* sensor_options,
                ExceptionState& exception_state,
                device::mojom::blink::SensorType type,
                const Vector<mojom::FeaturePolicyFeature>& features)
@@ -45,17 +46,17 @@ Sensor::Sensor(ExecutionContext* execution_context,
   // [SecureContext] in idl.
   DCHECK(execution_context->IsSecureContext());
   DCHECK(!features.IsEmpty());
-  LocalFrame* frame = ToDocument(execution_context)->GetFrame();
+  Document* document = To<Document>(execution_context);
 
-  if (!frame || !AreFeaturesEnabled(frame, features)) {
+  if (!AreFeaturesEnabled(document, features)) {
     exception_state.ThrowSecurityError(
         "Access to sensor features is disallowed by feature policy");
     return;
   }
 
   // Check the given frequency value.
-  if (sensor_options.hasFrequency()) {
-    frequency_ = sensor_options.frequency();
+  if (sensor_options->hasFrequency()) {
+    frequency_ = sensor_options->frequency();
     const double max_allowed_frequency =
         device::GetSensorMaxAllowedFrequency(type_);
     if (frequency_ > max_allowed_frequency) {
@@ -64,23 +65,24 @@ Sensor::Sensor(ExecutionContext* execution_context,
           "Maximum allowed frequency value for this sensor type is %.0f Hz.",
           max_allowed_frequency);
       ConsoleMessage* console_message = ConsoleMessage::Create(
-          kJSMessageSource, kInfoMessageLevel, std::move(message));
+          kJSMessageSource, mojom::ConsoleMessageLevel::kInfo,
+          std::move(message));
       execution_context->AddConsoleMessage(console_message);
     }
   }
 }
 
 Sensor::Sensor(ExecutionContext* execution_context,
-               const SpatialSensorOptions& options,
+               const SpatialSensorOptions* options,
                ExceptionState& exception_state,
                device::mojom::blink::SensorType sensor_type,
                const Vector<mojom::FeaturePolicyFeature>& features)
     : Sensor(execution_context,
-             static_cast<const SensorOptions&>(options),
+             static_cast<const SensorOptions*>(options),
              exception_state,
              sensor_type,
              features) {
-  use_screen_coords_ = (options.referenceFrame() == "screen");
+  use_screen_coords_ = (options->referenceFrame() == "screen");
 }
 
 Sensor::~Sensor() = default;
@@ -129,13 +131,14 @@ DOMHighResTimeStamp Sensor::timestamp(ScriptState* script_state,
   DCHECK(sensor_proxy_);
   is_null = false;
 
-  if (LayoutTestSupport::IsRunningLayoutTest()) {
-    // In layout tests performance.now() * 0.001 is passed to the shared buffer.
+  if (WebTestSupport::IsRunningWebTest()) {
+    // In web tests performance.now() * 0.001 is passed to the shared buffer.
     return sensor_proxy_->GetReading().timestamp() * 1000;
   }
 
   return performance->MonotonicTimeToDOMHighResTimeStamp(
-      TimeTicksFromSeconds(sensor_proxy_->GetReading().timestamp()));
+      base::TimeTicks() +
+      base::TimeDelta::FromSecondsD(sensor_proxy_->GetReading().timestamp()));
 }
 
 void Sensor::Trace(blink::Visitor* visitor) {
@@ -173,11 +176,11 @@ void Sensor::InitSensorProxyIfNeeded() {
   if (sensor_proxy_)
     return;
 
-  Document* document = ToDocument(GetExecutionContext());
+  Document* document = To<Document>(GetExecutionContext());
   if (!document || !document->GetFrame())
     return;
 
-  auto* provider = SensorProviderProxy::From(document->GetFrame());
+  auto* provider = SensorProviderProxy::From(document);
   sensor_proxy_ = provider->GetSensorProxy(type_);
 
   if (!sensor_proxy_)
@@ -338,7 +341,7 @@ void Sensor::HandleError(DOMExceptionCode code,
 void Sensor::NotifyReading() {
   DCHECK_EQ(state_, SensorState::kActivated);
   last_reported_timestamp_ = sensor_proxy_->GetReading().timestamp();
-  DispatchEvent(*Event::Create(EventTypeNames::reading));
+  DispatchEvent(*Event::Create(event_type_names::kReading));
 }
 
 void Sensor::NotifyActivated() {
@@ -354,13 +357,13 @@ void Sensor::NotifyActivated() {
         WTF::Bind(&Sensor::NotifyReading, WrapWeakPersistent(this)));
   }
 
-  DispatchEvent(*Event::Create(EventTypeNames::activate));
+  DispatchEvent(*Event::Create(event_type_names::kActivate));
 }
 
 void Sensor::NotifyError(DOMException* error) {
   DCHECK_NE(state_, SensorState::kIdle);
   state_ = SensorState::kIdle;
-  DispatchEvent(*SensorErrorEvent::Create(EventTypeNames::error, error));
+  DispatchEvent(*SensorErrorEvent::Create(event_type_names::kError, error));
 }
 
 bool Sensor::IsIdleOrErrored() const {

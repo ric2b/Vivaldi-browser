@@ -16,15 +16,14 @@
 #include "build/build_config.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/omnibox/browser/autocomplete_match.h"
+#include "components/omnibox/browser/location_bar_model.h"
 #include "components/omnibox/browser/omnibox_edit_controller.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
-#include "components/omnibox/browser/omnibox_field_trial.h"
-#include "components/toolbar/toolbar_model.h"
+#include "components/omnibox/common/omnibox_features.h"
 #include "extensions/common/constants.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/material_design/material_design_controller.h"
 
-#if !defined(OS_IOS)
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
 #include "ui/gfx/paint_vector_icon.h"
 #endif
 
@@ -89,12 +88,13 @@ void OmniboxView::OpenMatch(const AutocompleteMatch& match,
                             WindowOpenDisposition disposition,
                             const GURL& alternate_nav_url,
                             const base::string16& pasted_text,
-                            size_t selected_line) {
+                            size_t selected_line,
+                            base::TimeTicks match_selection_timestamp) {
   // Invalid URLs such as chrome://history can end up here.
   if (!match.destination_url.is_valid() || !model_)
     return;
-  model_->OpenMatch(
-      match, disposition, alternate_nav_url, pasted_text, selected_line);
+  model_->OpenMatch(match, disposition, alternate_nav_url, pasted_text,
+                    selected_line, match_selection_timestamp);
 }
 
 bool OmniboxView::IsEditingOrEmpty() const {
@@ -106,64 +106,79 @@ bool OmniboxView::IsEditingOrEmpty() const {
 // OmniboxPopupModel::GetMatchIcon. They contain certain inconsistencies
 // concerning what flags are required to display url favicons and bookmark star
 // icons. OmniboxPopupModel::GetMatchIcon also doesn't display default search
-// provider icons. It's possible they have other inconsistencies as well. In the
-// future, once the Material and Favicon flags are always enabled, we may want
-// to consider reusing the same code for both the popup and omnibox icons.
+// provider icons. It's possible they have other inconsistencies as well. We may
+// want to consider reusing the same code for both the popup and omnibox icons.
 gfx::ImageSkia OmniboxView::GetIcon(int dip_size,
                                     SkColor color,
+                                    SkColor search_alternate_color,
                                     IconFetchedCallback on_icon_fetched) const {
-#if defined(OS_IOS)
-  // OmniboxViewIOS provides its own icon logic. The iOS build also does not
-  // link in the vector icon rendering code.
+#if defined(OS_ANDROID) || defined(OS_IOS)
+  // This is used on desktop only.
+  NOTREACHED();
   return gfx::ImageSkia();
-#else   // !defined(OS_IOS)
-  if (!IsEditingOrEmpty()) {
-    return gfx::CreateVectorIcon(
-        controller_->GetToolbarModel()->GetVectorIcon(), dip_size, color);
-  }
+#else
 
   // For tests, model_ will be null.
   if (!model_) {
-    const gfx::VectorIcon& vector_icon = AutocompleteMatch::TypeToVectorIcon(
-        AutocompleteMatchType::URL_WHAT_YOU_TYPED, false /*is_bookmark*/,
-        false /*is_tab_match*/, AutocompleteMatch::DocumentType::NONE);
+    AutocompleteMatch fake_match;
+    fake_match.type = AutocompleteMatchType::URL_WHAT_YOU_TYPED;
+    const gfx::VectorIcon& vector_icon = fake_match.GetVectorIcon(false);
     return gfx::CreateVectorIcon(vector_icon, dip_size, color);
   }
 
-  AutocompleteMatch match = model_->CurrentMatch(nullptr);
-  bool is_bookmarked = false;
-
-  if (ui::MaterialDesignController::IsNewerMaterialUi()) {
-    gfx::Image favicon;
-
-    if (AutocompleteMatch::IsSearchType(match.type)) {
-      // For search queries, display default search engine's favicon.
-      favicon = model_->client()->GetFaviconForDefaultSearchProvider(
+  if (model_->ShouldShowCurrentPageIcon()) {
+    // Query in Omnibox.
+    LocationBarModel* location_bar_model = controller_->GetLocationBarModel();
+    if (location_bar_model->GetDisplaySearchTerms(nullptr /* search_terms */)) {
+      gfx::Image icon = model_->client()->GetFaviconForDefaultSearchProvider(
           std::move(on_icon_fetched));
-
-    } else if (OmniboxFieldTrial::IsShowSuggestionFaviconsEnabled()) {
-      // For site suggestions, display site's favicon.
-      favicon = model_->client()->GetFaviconForPageUrl(
-          match.destination_url, std::move(on_icon_fetched));
+      if (!icon.IsEmpty())
+        return model_->client()->GetSizedIcon(icon).AsImageSkia();
     }
 
-    if (!favicon.IsEmpty())
-      return model_->client()->GetSizedIcon(favicon).AsImageSkia();
-    // If the client returns an empty favicon, fall through to provide the
-    // generic vector icon. |on_icon_fetched| may or may not be called later.
-    // If it's never called, the vector icon we provide below should remain.
-
-    // For bookmarked suggestions, display bookmark icon.
-    bookmarks::BookmarkModel* bookmark_model =
-        model_->client()->GetBookmarkModel();
-    is_bookmarked =
-        bookmark_model && bookmark_model->IsBookmarked(match.destination_url);
+    return gfx::CreateVectorIcon(location_bar_model->GetVectorIcon(), dip_size,
+                                 color);
   }
 
-  const gfx::VectorIcon& vector_icon = AutocompleteMatch::TypeToVectorIcon(
-      match.type, is_bookmarked, false /*is_tab_match*/, match.document_type);
+  gfx::Image favicon;
+  AutocompleteMatch match = model_->CurrentMatch(nullptr);
+  if (AutocompleteMatch::IsSearchType(match.type)) {
+    // For search queries, display default search engine's favicon.
+    favicon = model_->client()->GetFaviconForDefaultSearchProvider(
+        std::move(on_icon_fetched));
+
+  } else if (base::FeatureList::IsEnabled(
+                 omnibox::kUIExperimentShowSuggestionFavicons)) {
+    // For site suggestions, display site's favicon.
+    favicon = model_->client()->GetFaviconForPageUrl(
+        match.destination_url, std::move(on_icon_fetched));
+  }
+
+  if (!favicon.IsEmpty())
+    return model_->client()->GetSizedIcon(favicon).AsImageSkia();
+  // If the client returns an empty favicon, fall through to provide the
+  // generic vector icon. |on_icon_fetched| may or may not be called later.
+  // If it's never called, the vector icon we provide below should remain.
+
+  // For bookmarked suggestions, display bookmark icon.
+  bookmarks::BookmarkModel* bookmark_model =
+      model_->client()->GetBookmarkModel();
+  const bool is_bookmarked =
+      bookmark_model && bookmark_model->IsBookmarked(match.destination_url);
+
+  const gfx::VectorIcon& vector_icon = match.GetVectorIcon(is_bookmarked);
+
+  // When the blue search loop experiment is enabled, the in-omnibox vector
+  // icon for search type matches should be blue as well. This icon is used if
+  // the default search engine favicon has not yet been fetched, or is disabled.
+  if (base::FeatureList::IsEnabled(
+          omnibox::kUIExperimentBlueSearchLoopAndSearchQuery) &&
+      AutocompleteMatch::IsSearchType(match.type)) {
+    return gfx::CreateVectorIcon(vector_icon, dip_size, search_alternate_color);
+  }
+
   return gfx::CreateVectorIcon(vector_icon, dip_size, color);
-#endif  // defined(OS_IOS)
+#endif  // defined(OS_ANDROID) || defined(OS_IOS)
 }
 
 void OmniboxView::SetUserText(const base::string16& text) {
@@ -262,10 +277,15 @@ void OmniboxView::TextChanged() {
     model_->OnChanged();
 }
 
-void OmniboxView::UpdateTextStyle(
+bool OmniboxView::UpdateTextStyle(
     const base::string16& display_text,
     const bool text_is_url,
     const AutocompleteSchemeClassifier& classifier) {
+  if (!text_is_url) {
+    SetEmphasis(true, gfx::Range::InvalidRange());
+    return false;  // Path not eligible for fading if it's not even a URL.
+  }
+
   enum DemphasizeComponents {
     EVERYTHING,
     ALL_BUT_SCHEME,
@@ -277,21 +297,19 @@ void OmniboxView::UpdateTextStyle(
   AutocompleteInput::ParseForEmphasizeComponents(display_text, classifier,
                                                  &scheme, &host);
 
-  if (text_is_url) {
-    const base::string16 url_scheme =
-        display_text.substr(scheme.begin, scheme.len);
-    // Extension IDs are not human-readable, so deemphasize everything to draw
-    // attention to the human-readable name in the location icon text.
-    // Data URLs are rarely human-readable and can be used for spoofing, so draw
-    // attention to the scheme to emphasize "this is just a bunch of data".
-    // For normal URLs, the host is the best proxy for "identity".
-    if (url_scheme == base::UTF8ToUTF16(extensions::kExtensionScheme))
-      deemphasize = EVERYTHING;
-    else if (url_scheme == base::UTF8ToUTF16(url::kDataScheme))
-      deemphasize = ALL_BUT_SCHEME;
-    else if (host.is_nonempty())
-      deemphasize = ALL_BUT_HOST;
-  }
+  const base::string16 url_scheme =
+      display_text.substr(scheme.begin, scheme.len);
+  // Extension IDs are not human-readable, so deemphasize everything to draw
+  // attention to the human-readable name in the location icon text.
+  // Data URLs are rarely human-readable and can be used for spoofing, so draw
+  // attention to the scheme to emphasize "this is just a bunch of data".
+  // For normal URLs, the host is the best proxy for "identity".
+  if (url_scheme == base::UTF8ToUTF16(extensions::kExtensionScheme))
+    deemphasize = EVERYTHING;
+  else if (url_scheme == base::UTF8ToUTF16(url::kDataScheme))
+    deemphasize = ALL_BUT_SCHEME;
+  else if (host.is_nonempty())
+    deemphasize = ALL_BUT_HOST;
 
   gfx::Range scheme_range = scheme.is_nonempty()
                                 ? gfx::Range(scheme.begin, scheme.end())
@@ -317,4 +335,7 @@ void OmniboxView::UpdateTextStyle(
   // Emphasize the scheme for security UI display purposes (if necessary).
   if (!model()->user_input_in_progress() && scheme_range.IsValid())
     UpdateSchemeStyle(scheme_range);
+
+  // Path is eligible for fading only when the host is the only emphasized part.
+  return deemphasize == ALL_BUT_HOST;
 }

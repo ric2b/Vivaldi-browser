@@ -159,3 +159,20 @@ TEST(CIncludeIterator, CStyleComments) {
   EXPECT_TRUE(iter.GetNextIncludeString(&contents, &range));
   EXPECT_EQ("foo/bar.h", contents);
 }
+
+// Tests that spaces between the hash and directive are ignored.
+TEST(CIncludeIterator, SpacesAfterHash) {
+  std::string buffer("#     include \"foo/bar.h\"\n");
+
+  InputFile file(SourceFile("//foo.cc"));
+  file.SetContents(buffer);
+
+  base::StringPiece contents;
+  LocationRange range;
+
+  CIncludeIterator iter(&file);
+  EXPECT_TRUE(iter.GetNextIncludeString(&contents, &range));
+  EXPECT_EQ("foo/bar.h", contents);
+
+  EXPECT_FALSE(iter.GetNextIncludeString(&contents, &range));
+}

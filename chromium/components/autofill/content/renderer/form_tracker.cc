@@ -4,9 +4,9 @@
 
 #include "components/autofill/content/renderer/form_tracker.h"
 
+#include "base/bind.h"
 #include "components/autofill/content/renderer/form_autofill_util.h"
 #include "content/public/renderer/document_state.h"
-#include "content/public/renderer/navigation_state.h"
 #include "content/public/renderer/render_frame.h"
 #include "third_party/blink/public/web/modules/autofill/web_form_element_observer.h"
 #include "third_party/blink/public/web/modules/autofill/web_form_element_observer_callback.h"
@@ -145,8 +145,8 @@ void FormTracker::FormControlDidChangeImpl(
   }
 }
 
-void FormTracker::DidCommitProvisionalLoad(bool is_new_navigation,
-                                           bool is_same_document_navigation) {
+void FormTracker::DidCommitProvisionalLoad(bool is_same_document_navigation,
+                                           ui::PageTransition transition) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(form_tracker_sequence_checker_);
   if (!is_same_document_navigation) {
     ResetLastInteractedElements();
@@ -156,7 +156,9 @@ void FormTracker::DidCommitProvisionalLoad(bool is_new_navigation,
   FireSubmissionIfFormDisappear(SubmissionSource::SAME_DOCUMENT_NAVIGATION);
 }
 
-void FormTracker::DidStartProvisionalLoad(WebDocumentLoader* document_loader) {
+void FormTracker::DidStartNavigation(
+    const GURL& url,
+    base::Optional<blink::WebNavigationType> navigation_type) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(form_tracker_sequence_checker_);
   blink::WebLocalFrame* navigated_frame = render_frame()->GetWebFrame();
   // Ony handle main frame.
@@ -166,29 +168,12 @@ void FormTracker::DidStartProvisionalLoad(WebDocumentLoader* document_loader) {
   // Bug fix for crbug.com/368690. isProcessingUserGesture() is false when
   // the user is performing actions outside the page (e.g. typed url,
   // history navigation). We don't want to trigger saving in these cases.
-  content::DocumentState* document_state =
-      content::DocumentState::FromDocumentLoader(document_loader);
-  DCHECK(document_state);
-  if (!document_state)
-    return;
 
-  content::NavigationState* navigation_state =
-      document_state->navigation_state();
-
-  DCHECK(navigation_state);
-  if (!navigation_state)
-    return;
-
-  // We are interested only in content initiated navigations.  Explicit browser
-  // initiated navigations (e.g. via omnibox) are discarded here.  Similarly
-  // PlzNavigate navigations originating from the browser are discarded because
-  // they were already processed as a content initiated one
-  // (i.e. DidStartProvisionalLoad is called twice in this case).  The check for
-  // kWebNavigationTypeLinkClicked is reliable only for content initiated
-  // navigations.
-  if (navigation_state->IsContentInitiated() &&
-      document_loader->GetNavigationType() !=
-          blink::kWebNavigationTypeLinkClicked) {
+  // We are interested only in content-initiated navigations. Explicit browser
+  // initiated navigations (e.g. via omnibox) don't have a navigation type
+  // and are discarded here.
+  if (navigation_type.has_value() &&
+      navigation_type.value() != blink::kWebNavigationTypeLinkClicked) {
     FireProbablyFormSubmitted();
   }
 }

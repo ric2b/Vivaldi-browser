@@ -34,13 +34,13 @@ import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.DeferredStartupHandler;
 import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.ShortcutSource;
-import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabIdManager;
+import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.MultiActivityTestRule;
 import org.chromium.chrome.test.util.ApplicationTestUtils;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.common.ScreenOrientationValues;
 
 /**
@@ -83,8 +83,7 @@ public class WebappModeTest {
         if (addMac) {
             // Needed for security reasons.  If the MAC is excluded, the URL of the webapp is opened
             // in a browser window, instead.
-            String mac =
-                    ShortcutHelper.getEncodedMac(InstrumentationRegistry.getTargetContext(), url);
+            String mac = ShortcutHelper.getEncodedMac(url);
             intent.putExtra(ShortcutHelper.EXTRA_MAC, mac);
         }
 
@@ -92,7 +91,7 @@ public class WebappModeTest {
                 null, WebDisplayMode.STANDALONE, ScreenOrientationValues.PORTRAIT,
                 ShortcutSource.UNKNOWN, ShortcutHelper.MANIFEST_COLOR_INVALID_OR_MISSING,
                 ShortcutHelper.MANIFEST_COLOR_INVALID_OR_MISSING, null, false /* isIconGenerated */,
-                false /* forceNavigation */);
+                false /* isIconAdaptive */, false /* forceNavigation */);
         webappInfo.setWebappIntentExtras(intent);
 
         return intent;
@@ -208,7 +207,7 @@ public class WebappModeTest {
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
 
         // Bring the WebappActivity back via an Intent.
-        Intent intent = Tab.createBringTabToFrontIntent(webappTabId);
+        Intent intent = IntentUtils.createBringTabToFrontIntent(webappTabId);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         context.startActivity(intent);
 

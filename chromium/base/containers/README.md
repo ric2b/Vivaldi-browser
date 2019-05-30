@@ -14,6 +14,8 @@ is broad applicability.
 
 ### Design and naming
 
+Fundamental [//base principles](../README.md#design-and-naming) apply, i.e.:
+
 Containers should adhere as closely to STL as possible. Functions and behaviors
 not present in STL should only be added when they are related to the specific
 data structure implemented by the container.
@@ -65,7 +67,7 @@ container is mutated.
 | `base::flat_map`, `base::flat_set`         | 24 bytes              | 0 (see notes)     | No                |
 | `base::small_map`                          | 24 bytes (see notes)  | 32 bytes          | No                |
 
-**Takeaways:** `std::unordered_map` and `std::unordered_map` have high
+**Takeaways:** `std::unordered_map` and `std::unordered_set` have high
 overhead for small container sizes, so prefer these only for larger workloads.
 
 Code size comparisons for a block of code (see appendix) on Windows using

@@ -5,6 +5,7 @@
 #ifndef CHROME_COMMON_MEDIA_ROUTER_MEDIA_ROUTE_H_
 #define CHROME_COMMON_MEDIA_ROUTER_MEDIA_ROUTE_H_
 
+#include <iosfwd>
 #include <string>
 
 #include "base/logging.h"
@@ -28,6 +29,10 @@ enum class RouteControllerType { kNone, kGeneric, kHangouts, kMirroring };
 class MediaRoute {
  public:
   using Id = std::string;
+
+  static MediaRoute::Id GetMediaRouteId(const std::string& presentation_id,
+                                        const MediaSink::Id& sink_id,
+                                        const MediaSource& source);
 
   // |media_route_id|: ID of the route.
   // |media_source|: Description of source of the route.
@@ -94,9 +99,12 @@ class MediaRoute {
   }
   bool is_local_presentation() const { return is_local_presentation_; }
 
-  bool Equals(const MediaRoute& other) const;
+  bool operator==(const MediaRoute& other) const;
 
  private:
+  friend std::ostream& operator<<(std::ostream& stream,
+                                  const MediaRoute& route);
+
   // The media route identifier.
   MediaRoute::Id media_route_id_;
 

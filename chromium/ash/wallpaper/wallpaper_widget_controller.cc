@@ -105,6 +105,8 @@ class WallpaperWidgetController::WidgetHandler
     return true;
   }
 
+  float blur_sigma() const { return widget_->GetLayer()->layer_blur(); }
+
   void SetBlur(float blur_sigma) {
     widget_->GetLayer()->SetLayerBlur(blur_sigma);
 
@@ -189,8 +191,10 @@ void WallpaperWidgetController::AddAnimationEndCallback(
   animation_end_callbacks_.emplace_back(std::move(callback));
 }
 
-void WallpaperWidgetController::SetWallpaperWidget(views::Widget* widget,
-                                                   float blur_sigma) {
+void WallpaperWidgetController::SetWallpaperWidget(
+    views::Widget* widget,
+    WallpaperView* wallpaper_view,
+    float blur_sigma) {
   DCHECK(widget);
 
   // If there is a widget currently being shown, finish the animation and set it
@@ -203,6 +207,8 @@ void WallpaperWidgetController::SetWallpaperWidget(views::Widget* widget,
   animating_widget_ = std::make_unique<WidgetHandler>(this, widget);
   animating_widget_->SetBlur(blur_sigma);
   animating_widget_->Show();
+
+  wallpaper_view_ = wallpaper_view;
 }
 
 bool WallpaperWidgetController::Reparent(aura::Window* root_window,
@@ -220,6 +226,10 @@ void WallpaperWidgetController::SetWallpaperBlur(float blur_sigma) {
     animating_widget_->SetBlur(blur_sigma);
   if (active_widget_)
     active_widget_->SetBlur(blur_sigma);
+}
+
+float WallpaperWidgetController::GetWallpaperBlur() const {
+  return active_widget_ ? active_widget_->blur_sigma() : 0.f;
 }
 
 void WallpaperWidgetController::ResetWidgetsForTesting() {

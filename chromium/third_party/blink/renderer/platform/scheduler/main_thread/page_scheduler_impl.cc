@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/platform/scheduler/main_thread/page_scheduler_impl.h"
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
@@ -237,7 +238,7 @@ void PageSchedulerImpl::SetPageFrozenImpl(
   if (frozen) {
     page_lifecycle_state_tracker_->SetPageLifecycleState(
         PageLifecycleState::kFrozen);
-    Platform::Current()->RequestPurgeMemory();
+    main_thread_scheduler_->OnPageFrozen();
   } else {
     // The new state may have already been set if unfreezing through the
     // renderer, but that's okay - duplicate state changes won't be recorded.
@@ -251,6 +252,7 @@ void PageSchedulerImpl::SetPageFrozenImpl(
       page_lifecycle_state_tracker_->SetPageLifecycleState(
           PageLifecycleState::kHiddenForegrounded);
     }
+    main_thread_scheduler_->OnPageUnfrozen();
   }
 }
 
@@ -341,15 +343,6 @@ void PageSchedulerImpl::GrantVirtualTimeBudget(
   // so it's important this is called second.
   main_thread_scheduler_->GetVirtualTimeDomain()->SetVirtualTimeFence(
       main_thread_scheduler_->GetVirtualTimeDomain()->Now() + budget);
-}
-
-void PageSchedulerImpl::AddVirtualTimeObserver(VirtualTimeObserver* observer) {
-  main_thread_scheduler_->AddVirtualTimeObserver(observer);
-}
-
-void PageSchedulerImpl::RemoveVirtualTimeObserver(
-    VirtualTimeObserver* observer) {
-  main_thread_scheduler_->RemoveVirtualTimeObserver(observer);
 }
 
 void PageSchedulerImpl::AudioStateChanged(bool is_audio_playing) {

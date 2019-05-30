@@ -176,8 +176,11 @@ void MojoCdmService::OnCdmCreated(
         new MojoDecryptorService(cdm_context->GetDecryptor(), nullptr));
     decryptor_binding_ = std::make_unique<mojo::Binding<mojom::Decryptor>>(
         decryptor_.get(), MakeRequest(&decryptor_ptr));
+    // base::Unretained is safe because |decryptor_binding_| is owned by |this|.
+    // If |this| is destructed, |decryptor_binding_| will be destructed as well
+    // and the error handler should never be called.
     decryptor_binding_->set_connection_error_handler(base::BindOnce(
-        &MojoCdmService::OnDecryptorConnectionError, weak_this_));
+        &MojoCdmService::OnDecryptorConnectionError, base::Unretained(this)));
   }
 
   // If the |context_| is not null, we should support connecting the |cdm| with
@@ -206,11 +209,8 @@ void MojoCdmService::OnSessionKeysChange(const std::string& session_id,
   DVLOG(2) << __func__
            << " has_additional_usable_key = " << has_additional_usable_key;
 
-  std::vector<mojom::CdmKeyInformationPtr> keys_data;
-  for (auto& key : keys_info)
-    keys_data.push_back(mojom::CdmKeyInformation::From(*(key.get())));
   client_->OnSessionKeysChange(session_id, has_additional_usable_key,
-                               std::move(keys_data));
+                               std::move(keys_info));
 }
 
 void MojoCdmService::OnSessionExpirationUpdate(const std::string& session_id,

@@ -52,7 +52,7 @@ AccessibilityFocusRingGroup::AccessibilityFocusRingGroup() {
       base::TimeDelta::FromMilliseconds(kFocusFadeOutTimeMilliseconds);
 }
 
-AccessibilityFocusRingGroup::~AccessibilityFocusRingGroup(){};
+AccessibilityFocusRingGroup::~AccessibilityFocusRingGroup() {}
 
 void AccessibilityFocusRingGroup::SetColor(
     SkColor color,
@@ -64,6 +64,19 @@ void AccessibilityFocusRingGroup::SetColor(
 void AccessibilityFocusRingGroup::ResetColor(
     AccessibilityLayerDelegate* delegate) {
   focus_ring_color_.reset();
+  UpdateFocusRingsFromFocusRects(delegate);
+}
+
+void AccessibilityFocusRingGroup::EnableDoubleFocusRing(
+    SkColor color,
+    AccessibilityLayerDelegate* delegate) {
+  focus_ring_secondary_color_ = color;
+  UpdateFocusRingsFromFocusRects(delegate);
+}
+
+void AccessibilityFocusRingGroup::DisableDoubleFocusRing(
+    AccessibilityLayerDelegate* delegate) {
+  focus_ring_secondary_color_.reset();
   UpdateFocusRingsFromFocusRects(delegate);
 }
 
@@ -83,9 +96,10 @@ void AccessibilityFocusRingGroup::UpdateFocusRingsFromFocusRects(
   }
 
   if (focus_ring_behavior_ == mojom::FocusRingBehavior::PERSIST_FOCUS_RING &&
-      focus_layers_[0]->CanAnimate()) {
+      focus_layers_[0]->CanAnimate() && !no_fade_for_testing_) {
     // In PERSIST mode, animate the first ring to its destination
     // location, then set the rest of the rings directly.
+    // If no_fade_for_testing_ is set, don't wait for animation.
     for (size_t i = 1; i < focus_rings_.size(); ++i)
       focus_layers_[i]->Set(focus_rings_[i]);
   } else {
@@ -95,10 +109,15 @@ void AccessibilityFocusRingGroup::UpdateFocusRingsFromFocusRects(
   }
 
   for (size_t i = 0; i < focus_rings_.size(); ++i) {
-    if (focus_ring_color_) {
+    if (focus_ring_color_)
       focus_layers_[i]->SetColor(*(focus_ring_color_));
-    } else
+    else
       focus_layers_[i]->ResetColor();
+
+    if (focus_ring_secondary_color_)
+      focus_layers_[i]->EnableDoubleFocusRing(*(focus_ring_secondary_color_));
+    else
+      focus_layers_[i]->DisableDoubleFocusRing();
   }
 }
 

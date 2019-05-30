@@ -5,9 +5,14 @@
 #ifndef COMPONENTS_AUTOFILL_CORE_BROWSER_TEST_LOCAL_CARD_MIGRATION_MANAGER_H_
 #define COMPONENTS_AUTOFILL_CORE_BROWSER_TEST_LOCAL_CARD_MIGRATION_MANAGER_H_
 
+#include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "components/autofill/core/browser/local_card_migration_manager.h"
+#include "components/autofill/core/browser/sync_utils.h"
+#include "components/autofill/core/browser/test_personal_data_manager.h"
 
 namespace autofill {
 
@@ -17,14 +22,13 @@ class TestPaymentsClient;
 
 class AutofillClient;
 class AutofillDriver;
-class PersonalDataManager;
 
 class TestLocalCardMigrationManager : public LocalCardMigrationManager {
  public:
   TestLocalCardMigrationManager(AutofillDriver* driver,
                                 AutofillClient* client,
                                 payments::TestPaymentsClient* payments_client,
-                                PersonalDataManager* personal_data_manager);
+                                TestPersonalDataManager* personal_data_manager);
   ~TestLocalCardMigrationManager() override;
 
   // Override the base function. Checks the existnece of billing customer number
@@ -47,20 +51,28 @@ class TestLocalCardMigrationManager : public LocalCardMigrationManager {
 
   // Override the base function. When called, represent the main prompt is
   // shown. Set the |main_prompt_was_shown_|.
-  void OnUserAcceptedMainMigrationDialog() override;
+  void OnUserAcceptedMainMigrationDialog(
+      const std::vector<std::string>& selected_cards) override;
+
+  // Mock the Chrome Sync state in the LocalCardMigrationManager. If not set,
+  // default to AutofillSyncSigninState::kSignedInAndSyncFeature.
+  void ResetSyncState(AutofillSyncSigninState sync_state);
 
  private:
   void OnDidGetUploadDetails(
       bool is_from_settings_page,
       AutofillClient::PaymentsRpcResult result,
       const base::string16& context_token,
-      std::unique_ptr<base::DictionaryValue> legal_message) override;
+      std::unique_ptr<base::Value> legal_message,
+      std::vector<std::pair<int, int>> supported_bin_ranges) override;
 
   bool local_card_migration_was_triggered_ = false;
 
   bool intermediate_prompt_was_shown_ = false;
 
   bool main_prompt_was_shown_ = false;
+
+  TestPersonalDataManager* personal_data_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(TestLocalCardMigrationManager);
 };

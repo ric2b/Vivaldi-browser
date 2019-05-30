@@ -80,8 +80,6 @@ class DrmThread : public base::Thread,
                            const std::vector<gfx::NativePixmapPlane>& planes,
                            std::unique_ptr<GbmBuffer>* buffer,
                            scoped_refptr<DrmFramebuffer>* framebuffer);
-  void GetScanoutFormats(gfx::AcceleratedWidget widget,
-                         std::vector<gfx::BufferFormat>* scanout_formats);
   void AddBindingCursorDevice(ozone::mojom::DeviceCursorRequest request);
   void AddBindingDrmDevice(ozone::mojom::DrmDeviceRequest request);
 
@@ -90,9 +88,6 @@ class DrmThread : public base::Thread,
                         std::vector<DrmOverlayPlane> planes,
                         SwapCompletionOnceCallback submission_callback,
                         PresentationOnceCallback presentation_callback);
-  void GetVSyncParameters(
-      gfx::AcceleratedWidget widget,
-      const gfx::VSyncProvider::UpdateVSyncCallback& callback);
 
   void IsDeviceAtomic(gfx::AcceleratedWidget widget, bool* is_atomic);
 

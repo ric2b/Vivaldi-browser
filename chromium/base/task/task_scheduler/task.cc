@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/atomic_sequence_num.h"
-#include "base/critical_closure.h"
 
 namespace base {
 namespace internal {
@@ -18,26 +17,13 @@ AtomicSequenceNumber g_sequence_nums_for_tracing;
 
 }  // namespace
 
-Task::Task(const Location& posted_from,
-           OnceClosure task,
-           const TaskTraits& traits,
-           TimeDelta delay)
-    : PendingTask(
-          posted_from,
-          traits.shutdown_behavior() == TaskShutdownBehavior::BLOCK_SHUTDOWN
-              ? MakeCriticalClosure(std::move(task))
-              : std::move(task),
-          delay.is_zero() ? TimeTicks() : TimeTicks::Now() + delay,
-          Nestable::kNonNestable),
-      // Prevent a delayed BLOCK_SHUTDOWN task from blocking shutdown before it
-      // starts running by changing its shutdown behavior to SKIP_ON_SHUTDOWN.
-      traits(
-          (!delay.is_zero() &&
-           traits.shutdown_behavior() == TaskShutdownBehavior::BLOCK_SHUTDOWN)
-              ? TaskTraits::Override(traits,
-                                     {TaskShutdownBehavior::SKIP_ON_SHUTDOWN})
-              : traits),
-      delay(delay) {
+Task::Task() = default;
+
+Task::Task(const Location& posted_from, OnceClosure task, TimeDelta delay)
+    : PendingTask(posted_from,
+                  std::move(task),
+                  delay.is_zero() ? TimeTicks() : TimeTicks::Now() + delay,
+                  Nestable::kNonNestable) {
   // TaskScheduler doesn't use |sequence_num| but tracing (toplevel.flow) relies
   // on it being unique. While this subtle dependency is a bit overreaching,
   // TaskScheduler is the only task system that doesn't use |sequence_num| and
@@ -51,9 +37,6 @@ Task::Task(const Location& posted_from,
 // this case.
 Task::Task(Task&& other) noexcept
     : PendingTask(std::move(other)),
-      traits(other.traits),
-      delay(other.delay),
-      sequenced_time(other.sequenced_time),
       sequenced_task_runner_ref(std::move(other.sequenced_task_runner_ref)),
       single_thread_task_runner_ref(
           std::move(other.single_thread_task_runner_ref)) {}

@@ -12,6 +12,7 @@
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/component_export.h"
 #include "base/containers/queue.h"
 #include "base/containers/small_map.h"
 #include "base/logging.h"
@@ -23,7 +24,6 @@
 #include "base/sequenced_task_runner.h"
 #include "base/synchronization/lock.h"
 #include "mojo/public/cpp/bindings/associated_group_controller.h"
-#include "mojo/public/cpp/bindings/bindings_export.h"
 #include "mojo/public/cpp/bindings/connector.h"
 #include "mojo/public/cpp/bindings/filter_chain.h"
 #include "mojo/public/cpp/bindings/interface_id.h"
@@ -45,15 +45,14 @@ namespace internal {
 // single message pipe.
 //
 // It is created on the sequence where the master interface of the message pipe
-// lives. Although it is ref-counted, it is guarateed to be destructed on the
-// same sequence.
+// lives.
 // Some public methods are only allowed to be called on the creating sequence;
 // while the others are safe to call from any sequence. Please see the method
 // comments for more details.
 //
 // NOTE: CloseMessagePipe() or PassMessagePipe() MUST be called on |runner|'s
 // sequence before this object is destroyed.
-class MOJO_CPP_BINDINGS_EXPORT MultiplexRouter
+class COMPONENT_EXPORT(MOJO_CPP_BINDINGS) MultiplexRouter
     : public MessageReceiver,
       public AssociatedGroupController,
       public PipeControlMessageHandlerDelegate {
@@ -136,6 +135,9 @@ class MOJO_CPP_BINDINGS_EXPORT MultiplexRouter
 
   // Whether there are any associated interfaces running currently.
   bool HasAssociatedEndpoints() const;
+
+  // See comments on Binding::EnableBatchDispatch().
+  void EnableBatchDispatch();
 
   // Sets this object to testing mode.
   // In testing mode, the object doesn't disconnect the underlying message pipe

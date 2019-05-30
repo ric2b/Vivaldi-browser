@@ -35,7 +35,6 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.preferences.PreferenceUtils;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
-import org.chromium.chrome.browser.widget.TintedImageButton;
 import org.chromium.components.sync.AndroidSyncSettings;
 import org.chromium.ui.text.SpanApplier;
 import org.chromium.ui.widget.Toast;
@@ -103,8 +102,8 @@ public class PasswordEntryEditor extends Fragment {
         mExtras = getArguments();
         assert mExtras != null;
         mID = mExtras.getInt(SavePasswordsPreferences.PASSWORD_LIST_ID);
-        mFoundViaSearch = getActivity().getIntent().getBooleanExtra(
-                SavePasswordsPreferences.EXTRA_FOUND_VIA_SEARCH, false);
+        mFoundViaSearch =
+                mExtras.getBoolean(SavePasswordsPreferences.EXTRA_FOUND_VIA_SEARCH, false);
         final String name = mExtras.containsKey(SavePasswordsPreferences.PASSWORD_LIST_NAME)
                 ? mExtras.getString(SavePasswordsPreferences.PASSWORD_LIST_NAME)
                 : null;
@@ -201,7 +200,7 @@ public class PasswordEntryEditor extends Fragment {
 
     private boolean isPasswordSyncingUser() {
         ProfileSyncService syncService = ProfileSyncService.get();
-        return (AndroidSyncSettings.isSyncEnabled() && syncService.isEngineInitialized()
+        return (AndroidSyncSettings.get().isSyncEnabled() && syncService.isEngineInitialized()
                 && !syncService.isUsingSecondaryPassphrase());
     }
 
@@ -266,7 +265,7 @@ public class PasswordEntryEditor extends Fragment {
     }
 
     private void hookupCopyUsernameButton(View usernameView) {
-        final TintedImageButton copyUsernameButton =
+        final ImageButton copyUsernameButton =
                 usernameView.findViewById(R.id.password_entry_editor_copy);
         copyUsernameButton.setImageDrawable(
                 AppCompatResources.getDrawable(getActivity(), R.drawable.ic_content_copy_black));
@@ -288,8 +287,7 @@ public class PasswordEntryEditor extends Fragment {
     }
 
     private void hookupCopySiteButton(View siteView) {
-        final TintedImageButton copySiteButton =
-                siteView.findViewById(R.id.password_entry_editor_copy);
+        final ImageButton copySiteButton = siteView.findViewById(R.id.password_entry_editor_copy);
         copySiteButton.setContentDescription(
                 getActivity().getString(R.string.password_entry_editor_copy_stored_site));
         copySiteButton.setImageDrawable(
@@ -362,7 +360,7 @@ public class PasswordEntryEditor extends Fragment {
     }
 
     private void hookupPasswordButtons() {
-        final TintedImageButton copyPasswordButton =
+        final ImageButton copyPasswordButton =
                 mView.findViewById(R.id.password_entry_editor_copy_password);
         final ImageButton viewPasswordButton =
                 mView.findViewById(R.id.password_entry_editor_view_password);

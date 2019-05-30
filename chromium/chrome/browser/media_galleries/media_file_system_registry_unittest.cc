@@ -9,10 +9,12 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <functional>
 #include <memory>
 #include <set>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
@@ -141,8 +143,7 @@ void TestMediaFileSystemContext::RevokeFileSystem(const std::string& fs_name) {
 
 base::FilePath TestMediaFileSystemContext::GetRegisteredPath(
     const std::string& fs_name) const {
-  std::map<std::string /*fs_name*/, FSInfo>::const_iterator it =
-      file_systems_by_name_.find(fs_name);
+  auto it = file_systems_by_name_.find(fs_name);
   if (it == file_systems_by_name_.end())
     return base::FilePath();
   return it->second.path;
@@ -514,8 +515,7 @@ void ProfileState::CheckGalleries(
       single_web_contents_.get(), no_permissions_extension_.get(),
       base::Bind(&ProfileState::CompareResults, base::Unretained(this),
                  base::StringPrintf("%s (no permission)", test.c_str()),
-                 base::ConstRef(empty_names),
-                 base::ConstRef(empty_expectation)));
+                 std::cref(empty_names), std::cref(empty_expectation)));
   content::RunAllTasksUntilIdle();
   EXPECT_EQ(1, GetAndClearComparisonCount());
 
@@ -524,8 +524,8 @@ void ProfileState::CheckGalleries(
       single_web_contents_.get(), regular_permission_extension_.get(),
       base::Bind(&ProfileState::CompareResults, base::Unretained(this),
                  base::StringPrintf("%s (regular permission)", test.c_str()),
-                 base::ConstRef(compare_names_read_),
-                 base::ConstRef(regular_extension_galleries)));
+                 std::cref(compare_names_read_),
+                 std::cref(regular_extension_galleries)));
   content::RunAllTasksUntilIdle();
   EXPECT_EQ(1, GetAndClearComparisonCount());
 
@@ -534,8 +534,8 @@ void ProfileState::CheckGalleries(
       single_web_contents_.get(), all_permission_extension_.get(),
       base::Bind(&ProfileState::CompareResults, base::Unretained(this),
                  base::StringPrintf("%s (all permission)", test.c_str()),
-                 base::ConstRef(compare_names_all_),
-                 base::ConstRef(all_extension_galleries)));
+                 std::cref(compare_names_all_),
+                 std::cref(all_extension_galleries)));
   content::RunAllTasksUntilIdle();
   EXPECT_EQ(1, GetAndClearComparisonCount());
 }
@@ -696,9 +696,7 @@ void MediaFileSystemRegistryTest::AssertAllAutoAddedGalleries() {
 #if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
     ASSERT_GT(galleries.size(), 0U);
 #endif
-    for (MediaGalleriesPrefInfoMap::const_iterator it = galleries.begin();
-         it != galleries.end();
-         ++it) {
+    for (auto it = galleries.begin(); it != galleries.end(); ++it) {
       ASSERT_EQ(MediaGalleryPrefInfo::kAutoDetected, it->second.type);
     }
   }
@@ -752,9 +750,7 @@ MediaFileSystemRegistryTest::GetAutoAddedGalleries(
   const MediaGalleriesPrefInfoMap& galleries =
       profile_state->GetMediaGalleriesPrefs()->known_galleries();
   std::vector<MediaFileSystemInfo> result;
-  for (MediaGalleriesPrefInfoMap::const_iterator it = galleries.begin();
-       it != galleries.end();
-       ++it) {
+  for (auto it = galleries.begin(); it != galleries.end(); ++it) {
     if (it->second.type == MediaGalleryPrefInfo::kAutoDetected) {
       base::FilePath path = it->second.AbsolutePath();
       MediaFileSystemInfo info(path.BaseName().LossyDisplayName(), path,
@@ -769,10 +765,8 @@ MediaFileSystemRegistryTest::GetAutoAddedGalleries(
 size_t MediaFileSystemRegistryTest::GetExtensionGalleriesHostCount(
     const MediaFileSystemRegistry* registry) const {
   size_t extension_galleries_host_count = 0;
-  for (MediaFileSystemRegistry::ExtensionGalleriesHostMap::const_iterator it =
-           registry->extension_hosts_map_.begin();
-       it != registry->extension_hosts_map_.end();
-       ++it) {
+  for (auto it = registry->extension_hosts_map_.begin();
+       it != registry->extension_hosts_map_.end(); ++it) {
     extension_galleries_host_count += it->second.size();
   }
   return extension_galleries_host_count;
@@ -905,8 +899,7 @@ TEST_F(MediaFileSystemRegistryTest,
   bool forget_gallery = false;
   MediaGalleriesPreferences* prefs = GetPreferences(profile_state->profile());
   const MediaGalleriesPrefInfoMap& galleries = prefs->known_galleries();
-  for (MediaGalleriesPrefInfoMap::const_iterator it = galleries.begin();
-       it != galleries.end(); ++it) {
+  for (auto it = galleries.begin(); it != galleries.end(); ++it) {
     if (it->second.device_id == device_id) {
       prefs->ForgetGalleryById(it->first);
       forget_gallery = true;

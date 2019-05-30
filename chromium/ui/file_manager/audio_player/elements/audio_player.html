@@ -4,7 +4,7 @@
   -- found in the LICENSE file.
   -->
 
-<link rel="import" href="chrome://resources/polymer/v1_0/polymer/polymer.html">
+<link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="track_info_panel.html">
 <link rel="import" href="track_list.html">
 <link rel="import" href="control_panel.html">
@@ -22,13 +22,14 @@
         on-play="onPlayCurrentTrack"></track-list>
     <control-panel id="audioController"
         playing="{{playing}}"
-        time="{{time}}"
+        time="[[time]]"
         duration="[[duration]]"
         shuffle="{{shuffle}}"
         repeat-mode="{{repeatMode}}"
         volume="{{volume}}"
         playlist-expanded="{{playlistExpanded}}"
         aria-labels="[[ariaLabels]]"
+        on-update-time="onUpdateTime_"
         on-next-clicked="onControllerNextClicked"
         on-previous-clicked="onControllerPreviousClicked"></control-panel>
     <audio id="audio"

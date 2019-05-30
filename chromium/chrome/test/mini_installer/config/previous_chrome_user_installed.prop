@@ -2,6 +2,7 @@
   "Files": {
     "$LOCAL_APPDATA\\$CHROME_DIR\\Application\\chrome.exe": {"exists": true},
     "$LOCAL_APPDATA\\$CHROME_DIR\\Application\\chrome.VisualElementsManifest.xml": {"exists": true},
+    "$LOCAL_APPDATA\\$CHROME_DIR\\Application\\chrome_proxy.exe": {"exists": true},
     "$LOCAL_APPDATA\\$CHROME_DIR\\Application\\$PREVIOUS_VERSION_MINI_INSTALLER_FILE_VERSION\\chrome.dll":
         {"exists": true},
     "$LOCAL_APPDATA\\$CHROME_DIR\\Application\\$PREVIOUS_VERSION_MINI_INSTALLER_FILE_VERSION\\chrome_elf.dll":
@@ -55,6 +56,18 @@
         "type": "SZ",
         "data": "$LOCAL_APPDATA\\$CHROME_DIR\\Application\\$PREVIOUS_VERSION_MINI_INSTALLER_FILE_VERSION\\notification_helper.exe"
       }
+    },
+    "HKEY_CURRENT_USER\\Software\\Classes\\CLSID\\$CHROME_ELEVATOR_CLSID": {
+      "exists": "forbidden"
+    },
+    "HKEY_CURRENT_USER\\Software\\Classes\\AppID\\$CHROME_ELEVATOR_CLSID": {
+      "exists": "forbidden"
+    },
+    "HKEY_CURRENT_USER\\Software\\Classes\\Interface\\$CHROME_ELEVATOR_IID": {
+      "exists": "forbidden"
+    },
+    "HKEY_CURRENT_USER\\Software\\Classes\\TypeLib\\$CHROME_ELEVATOR_IID": {
+      "exists": "forbidden"
     },
     "HKEY_CURRENT_USER\\Software\\Classes\\$CHROME_SHORT_NAME$USER_SPECIFIC_REGISTRY_SUFFIX": {
       "exists": "forbidden"

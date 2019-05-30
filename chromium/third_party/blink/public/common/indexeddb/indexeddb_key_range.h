@@ -5,7 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_PUBLIC_COMMON_INDEXEDDB_INDEXEDDB_KEY_RANGE_H_
 #define THIRD_PARTY_BLINK_PUBLIC_COMMON_INDEXEDDB_INDEXEDDB_KEY_RANGE_H_
 
-#include "third_party/blink/common/common_export.h"
+#include "third_party/blink/public/common/common_export.h"
 #include "third_party/blink/public/common/indexeddb/indexeddb_key.h"
 
 namespace blink {
@@ -31,8 +31,8 @@ class BLINK_COMMON_EXPORT IndexedDBKeyRange {
   bool IsEmpty() const;
 
  private:
-  blink::IndexedDBKey lower_ = blink::IndexedDBKey(blink::kWebIDBKeyTypeNull);
-  blink::IndexedDBKey upper_ = blink::IndexedDBKey(blink::kWebIDBKeyTypeNull);
+  blink::IndexedDBKey lower_ = blink::IndexedDBKey(mojom::IDBKeyType::Null);
+  blink::IndexedDBKey upper_ = blink::IndexedDBKey(mojom::IDBKeyType::Null);
   bool lower_open_ = false;
   bool upper_open_ = false;
 };

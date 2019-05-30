@@ -10,8 +10,11 @@
         "export_header": "content/common/content_export.h",
         "options": [
             {
+                "domain": "BackgroundService"
+            },
+            {
                 "domain": "Browser",
-                "include": ["getVersion", "getHistograms", "getHistogram", "getBrowserCommandLine", "grantPermissions", "resetPermissions"]
+                "include": ["getVersion", "getHistograms", "getHistogram", "getBrowserCommandLine", "grantPermissions", "resetPermissions", "crash", "crashGpuProcess"]
             },
             {
                 "domain": "DOM",
@@ -47,11 +50,11 @@
             },
             {
                 "domain": "Page",
-                "include": ["enable", "disable", "reload", "navigate", "stopLoading", "getNavigationHistory", "navigateToHistoryEntry", "captureScreenshot",
-                    "startScreencast", "stopScreencast", "screencastFrameAck", "handleJavaScriptDialog", "setColorPickerEnabled", "requestAppBanner",
-                    "printToPDF", "bringToFront", "setDownloadBehavior", "getAppManifest", "crash", "close", "setWebLifecycleState"],
+                "include": ["enable", "disable", "reload", "navigate", "stopLoading", "getNavigationHistory", "navigateToHistoryEntry", "resetNavigationHistory", "captureScreenshot",
+                    "startScreencast", "stopScreencast", "screencastFrameAck", "handleJavaScriptDialog", "setColorPickerEnabled",
+                    "printToPDF", "bringToFront", "setDownloadBehavior", "getAppManifest", "crash", "close", "setWebLifecycleState", "captureSnapshot"],
                 "include_events": ["colorPicked", "interstitialShown", "interstitialHidden", "javascriptDialogOpening", "javascriptDialogClosed", "screencastVisibilityChanged", "screencastFrame"],
-                "async": ["captureScreenshot", "printToPDF", "navigate", "getAppManifest", "reload"]
+                "async": ["captureScreenshot", "printToPDF", "navigate", "getAppManifest", "reload", "captureSnapshot"]
             },
             {
                 "domain": "Runtime",
@@ -74,11 +77,11 @@
             },
             {
                 "domain": "SystemInfo",
-                "async": ["getInfo"]
+                "async": ["getInfo", "getProcessInfo"]
             },
             {
                 "domain": "Target",
-                "async": ["disposeBrowserContext"]
+                "async": ["disposeBrowserContext", "setAutoAttach"]
             },
             {
                 "domain": "Tethering",
@@ -87,6 +90,10 @@
             {
                 "domain": "Tracing",
                 "async": ["start", "getCategories", "requestMemoryDump"]
+            },
+            {
+                "domain": "Fetch",
+                "async": ["continueRequest", "failRequest", "fulfillRequest", "continueWithAuth", "getResponseBody", "takeResponseBodyAsStream"]
             }
         ]
     },
@@ -94,7 +101,7 @@
     "lib": {
         "package": "content/browser/devtools/protocol",
         "output": "protocol",
-        "string_header": "content/browser/devtools/protocol_string.h",
+        "string_header": "content/browser/devtools/protocol/base_string_adapter.h",
         "export_macro": "CONTENT_EXPORT",
         "export_header": "content/common/content_export.h"
     }

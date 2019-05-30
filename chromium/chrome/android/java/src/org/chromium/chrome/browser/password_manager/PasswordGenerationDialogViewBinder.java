@@ -5,13 +5,15 @@
 package org.chromium.chrome.browser.password_manager;
 
 import org.chromium.base.Callback;
-import org.chromium.chrome.browser.modaldialog.ModalDialogView;
+import org.chromium.ui.modaldialog.ModalDialogProperties;
+import org.chromium.ui.modelutil.PropertyModel;
 
 /** Class responsible for binding the model and the view. On bind, it lazily initializes the view
  * since all the needed data was made available at this point.
  */
 public class PasswordGenerationDialogViewBinder {
-    private static class PasswordGenerationDialogController implements ModalDialogView.Controller {
+    private static class PasswordGenerationDialogController
+            implements ModalDialogProperties.Controller {
         private final Callback<Boolean> mPasswordActionCallback;
 
         public PasswordGenerationDialogController(Callback<Boolean> passwordActionCallback) {
@@ -19,12 +21,12 @@ public class PasswordGenerationDialogViewBinder {
         }
 
         @Override
-        public void onClick(int buttonType) {
+        public void onClick(PropertyModel model, int buttonType) {
             switch (buttonType) {
-                case ModalDialogView.ButtonType.POSITIVE:
+                case ModalDialogProperties.ButtonType.POSITIVE:
                     mPasswordActionCallback.onResult(true);
                     break;
-                case ModalDialogView.ButtonType.NEGATIVE:
+                case ModalDialogProperties.ButtonType.NEGATIVE:
                     mPasswordActionCallback.onResult(false);
                     break;
                 default:
@@ -33,24 +35,16 @@ public class PasswordGenerationDialogViewBinder {
         }
 
         @Override
-        public void onCancel() {
-            mPasswordActionCallback.onResult(false);
-        }
-
-        @Override
-        public void onDismiss() {
+        public void onDismiss(PropertyModel model, int dismissalCause) {
             mPasswordActionCallback.onResult(false);
         }
     }
 
     public static void bind(
-            PasswordGenerationDialogModel model, PasswordGenerationDialogViewHolder viewHolder) {
-        viewHolder.setController(new PasswordGenerationDialogController(
-                model.getValue(PasswordGenerationDialogModel.PASSWORD_ACTION_CALLBACK)));
+            PasswordGenerationDialogModel model, PasswordGenerationDialogCustomView viewHolder) {
         viewHolder.setGeneratedPassword(
-                model.getValue(PasswordGenerationDialogModel.GENERATED_PASSWORD));
+                model.get(PasswordGenerationDialogModel.GENERATED_PASSWORD));
         viewHolder.setSaveExplanationText(
-                model.getValue(PasswordGenerationDialogModel.SAVE_EXPLANATION_TEXT));
-        viewHolder.initializeView();
+                model.get(PasswordGenerationDialogModel.SAVE_EXPLANATION_TEXT));
     }
 }

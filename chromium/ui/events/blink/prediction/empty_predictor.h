@@ -15,6 +15,8 @@ class EmptyPredictor : public InputPredictor {
   EmptyPredictor();
   ~EmptyPredictor() override;
 
+  const char* GetName() const override;
+
   void Reset() override;
 
   // store the cur_input in last_input_
@@ -25,6 +27,7 @@ class EmptyPredictor : public InputPredictor {
 
   // Returns the last_input_ for testing.
   bool GeneratePrediction(base::TimeTicks frame_time,
+                          bool is_resampling,
                           InputData* result) const override;
 
  private:

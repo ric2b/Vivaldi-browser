@@ -14,8 +14,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "remoting/protocol/authenticator.h"
-
-typedef struct spake2_ctx_st SPAKE2_CTX;
+#include "third_party/boringssl/src/include/openssl/base.h"
 
 namespace remoting {
 
@@ -47,9 +46,9 @@ class Spake2Authenticator : public Authenticator {
   State state() const override;
   bool started() const override;
   RejectionReason rejection_reason() const override;
-  void ProcessMessage(const buzz::XmlElement* message,
+  void ProcessMessage(const jingle_xmpp::XmlElement* message,
                       const base::Closure& resume_callback) override;
-  std::unique_ptr<buzz::XmlElement> GetNextMessage() override;
+  std::unique_ptr<jingle_xmpp::XmlElement> GetNextMessage() override;
   const std::string& GetAuthKey() const override;
   std::unique_ptr<ChannelAuthenticator> CreateChannelAuthenticator()
       const override;
@@ -63,7 +62,7 @@ class Spake2Authenticator : public Authenticator {
                       bool is_host,
                       State initial_state);
 
-  virtual void ProcessMessageInternal(const buzz::XmlElement* message);
+  virtual void ProcessMessageInternal(const jingle_xmpp::XmlElement* message);
 
   std::string CalculateVerificationHash(bool from_host,
                                         const std::string& local_id,

@@ -75,7 +75,7 @@ Sources.DebuggerPlugin = class extends Sources.UISourceCodeFrame.Plugin {
     this._boundBlur = this._onBlur.bind(this);
     this._textEditor.element.addEventListener('focusout', this._boundBlur, false);
     this._boundWheel = event => {
-      if (UI.KeyboardShortcut.eventHasCtrlOrMeta(event))
+      if (this._executionLocation && UI.KeyboardShortcut.eventHasCtrlOrMeta(event))
         event.preventDefault();
     };
     this._textEditor.element.addEventListener('wheel', this._boundWheel, true);
@@ -149,21 +149,6 @@ Sources.DebuggerPlugin = class extends Sources.UISourceCodeFrame.Plugin {
    */
   static accepts(uiSourceCode) {
     return uiSourceCode.contentType().hasScripts();
-  }
-
-  /**
-   * @override
-   * @return {!Array<!UI.ToolbarItem>}
-   */
-  rightToolbarItems() {
-    const originURL = Bindings.CompilerScriptMapping.uiSourceCodeOrigin(this._uiSourceCode);
-    if (originURL) {
-      const parsedURL = originURL.asParsedURL();
-      if (parsedURL)
-        return [new UI.ToolbarText(Common.UIString('(source mapped from %s)', parsedURL.displayName))];
-    }
-
-    return [];
   }
 
   _showBlackboxInfobarIfNeeded() {
@@ -253,6 +238,9 @@ Sources.DebuggerPlugin = class extends Sources.UISourceCodeFrame.Plugin {
         contextMenu.debugSection().appendItem(
             Common.UIString('Add conditional breakpoint\u2026'),
             this._editBreakpointCondition.bind(this, editorLineNumber, null, null));
+        contextMenu.debugSection().appendItem(
+            ls`Add logpoint\u2026`,
+            this._editBreakpointCondition.bind(this, editorLineNumber, null, null, true /* preferLogpoint */));
         contextMenu.debugSection().appendItem(
             Common.UIString('Never pause here'), this._createNewBreakpoint.bind(this, editorLineNumber, 'false', true));
       } else {
@@ -632,65 +620,25 @@ Sources.DebuggerPlugin = class extends Sources.UISourceCodeFrame.Plugin {
    * @param {number} editorLineNumber
    * @param {?Bindings.BreakpointManager.Breakpoint} breakpoint
    * @param {?{lineNumber: number, columnNumber: number}} location
+   * @param {boolean=} preferLogpoint
    */
-  async _editBreakpointCondition(editorLineNumber, breakpoint, location) {
-    const conditionElement = createElementWithClass('div', 'source-frame-breakpoint-condition');
-
-    const labelElement = conditionElement.createChild('label', 'source-frame-breakpoint-message');
-    labelElement.htmlFor = 'source-frame-breakpoint-condition';
-    labelElement.createTextChild(
-        Common.UIString('The breakpoint on line %d will stop only if this expression is true:', editorLineNumber + 1));
-
-
-    this._textEditor.addDecoration(conditionElement, editorLineNumber);
-
-    /** @type {!UI.TextEditorFactory} */
-    const factory = await self.runtime.extension(UI.TextEditorFactory).instance();
-    const editor =
-        factory.createEditor({lineNumbers: false, lineWrapping: true, mimeType: 'javascript', autoHeight: true});
-    editor.widget().show(conditionElement);
-    if (breakpoint)
-      editor.setText(breakpoint.condition());
-    editor.setSelection(editor.fullRange());
-    editor.configureAutocomplete(ObjectUI.JavaScriptAutocompleteConfig.createConfigForEditor(editor));
-    editor.widget().element.addEventListener('keydown', async event => {
-      if (isEnterKey(event) && !event.shiftKey) {
-        event.consume(true);
-        const expression = editor.text();
-        if (event.ctrlKey || await ObjectUI.JavaScriptAutocomplete.isExpressionComplete(expression))
-          finishEditing.call(this, true);
-        else
-          editor.newlineAndIndent();
-      }
-      if (isEscKey(event))
-        finishEditing.call(this, false);
-    }, true);
-    editor.widget().focus();
-    editor.widget().element.id = 'source-frame-breakpoint-condition';
-    editor.widget().element.addEventListener('blur', event => {
-      if (event.relatedTarget && !event.relatedTarget.isSelfOrDescendant(editor.widget().element))
-        finishEditing.call(this, true);
-    }, true);
-    let finished = false;
-    /**
-     * @this {Sources.DebuggerPlugin}
-     */
-    function finishEditing(committed) {
-      if (finished)
+  async _editBreakpointCondition(editorLineNumber, breakpoint, location, preferLogpoint) {
+    const oldCondition = breakpoint ? breakpoint.condition() : '';
+    const decorationElement = createElement('div');
+    const dialog = new Sources.BreakpointEditDialog(editorLineNumber, oldCondition, !!preferLogpoint, result => {
+      dialog.detach();
+      this._textEditor.removeDecoration(decorationElement, editorLineNumber);
+      if (!result.committed)
         return;
-      finished = true;
-      editor.widget().detach();
-      this._textEditor.removeDecoration(/** @type {!Element} */ (conditionElement), editorLineNumber);
-      if (!committed)
-        return;
-
       if (breakpoint)
-        breakpoint.setCondition(editor.text().trim());
+        breakpoint.setCondition(result.condition);
       else if (location)
-        this._setBreakpoint(location.lineNumber, location.columnNumber, editor.text().trim(), true);
+        this._setBreakpoint(location.lineNumber, location.columnNumber, result.condition, true);
       else
-        this._createNewBreakpoint(editorLineNumber, editor.text().trim(), true);
-    }
+        this._createNewBreakpoint(editorLineNumber, result.condition, true);
+    });
+    this._textEditor.addDecoration(decorationElement, editorLineNumber);
+    dialog.show(decorationElement);
   }
 
   /**
@@ -732,7 +680,8 @@ Sources.DebuggerPlugin = class extends Sources.UISourceCodeFrame.Plugin {
     const functionLocation = callFrame.functionLocation();
     if (localScope && functionLocation) {
       Sources.SourceMapNamesResolver.resolveScopeInObject(localScope)
-          .getAllProperties(false, false, this._prepareScopeVariables.bind(this, callFrame));
+          .getAllProperties(false, false)
+          .then(this._prepareScopeVariables.bind(this, callFrame));
     }
   }
 
@@ -913,10 +862,10 @@ Sources.DebuggerPlugin = class extends Sources.UISourceCodeFrame.Plugin {
 
   /**
    * @param {!SDK.DebuggerModel.CallFrame} callFrame
-   * @param {?Array.<!SDK.RemoteObjectProperty>} properties
-   * @param {?Array.<!SDK.RemoteObjectProperty>} internalProperties
+   * @param {!SDK.GetPropertiesResult} allProperties
    */
-  _prepareScopeVariables(callFrame, properties, internalProperties) {
+  _prepareScopeVariables(callFrame, allProperties) {
+    const properties = allProperties.properties;
     this._clearValueWidgets();
     if (!properties || !properties.length || properties.length > 500 || !this._textEditor.isShowing())
       return;
@@ -1250,6 +1199,10 @@ Sources.DebuggerPlugin = class extends Sources.UISourceCodeFrame.Plugin {
       contextMenu.debugSection().appendItem(
           Common.UIString('Add conditional breakpoint\u2026'),
           this._editBreakpointCondition.bind(this, editorLocation.lineNumber, null, editorLocation));
+      contextMenu.debugSection().appendItem(
+          ls`Add logpoint\u2026`,
+          this._editBreakpointCondition.bind(
+              this, editorLocation.lineNumber, null, editorLocation, true /* preferLogpoint */));
       contextMenu.debugSection().appendItem(
           Common.UIString('Never pause here'), this._setBreakpoint.bind(this, location[0], location[1], 'false', true));
     }

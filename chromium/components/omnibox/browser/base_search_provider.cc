@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <memory>
 
+#include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/i18n/case_conversion.h"
 #include "base/macros.h"
@@ -103,11 +104,11 @@ SuggestionDeletionHandler::SuggestionDeletionHandler(
         })");
   auto request = std::make_unique<network::ResourceRequest>();
   request->url = url;
-  variations::AppendVariationHeadersUnknownSignedIn(
+  variations::AppendVariationsHeaderUnknownSignedIn(
       request->url,
       client->IsOffTheRecord() ? variations::InIncognito::kYes
                                : variations::InIncognito::kNo,
-      &request->headers);
+      request.get());
   // TODO(https://crbug.com/808498) re-add data use measurement once
   // SimpleURLLoader supports it.
   // data_use_measurement::DataUseUserData::OMNIBOX
@@ -151,7 +152,7 @@ bool BaseSearchProvider::ShouldPrefetch(const AutocompleteMatch& match) {
 AutocompleteMatch BaseSearchProvider::CreateSearchSuggestion(
     const base::string16& suggestion,
     AutocompleteMatchType::Type type,
-    bool from_keyword_provider,
+    bool from_keyword,
     const TemplateURL* template_url,
     const SearchTermsData& search_terms_data) {
   // These calls use a number of default values.  For instance, they assume
@@ -159,13 +160,30 @@ AutocompleteMatch BaseSearchProvider::CreateSearchSuggestion(
   // mode.  They also assume the caller knows what it's doing and we set
   // this match to look as if it was received/created synchronously.
   SearchSuggestionParser::SuggestResult suggest_result(
-      suggestion, type, /*subtype_identifier=*/0, from_keyword_provider,
+      suggestion, type, /*subtype_identifier=*/0, from_keyword,
       /*relevance=*/0, /*relevance_from_server=*/false,
       /*input_text=*/base::string16());
   suggest_result.set_received_after_last_keystroke(false);
-  return CreateSearchSuggestion(nullptr, AutocompleteInput(),
-                                from_keyword_provider, suggest_result,
-                                template_url, search_terms_data, 0, false);
+  return CreateSearchSuggestion(nullptr, AutocompleteInput(), from_keyword,
+                                suggest_result, template_url, search_terms_data,
+                                0, false);
+}
+
+// static
+void BaseSearchProvider::AppendSuggestClientToAdditionalQueryParams(
+    const TemplateURL* template_url,
+    const SearchTermsData& search_terms_data,
+    metrics::OmniboxEventProto::PageClassification page_classification,
+    TemplateURLRef::SearchTermsArgs* search_terms_args) {
+  // Only append the suggest client query param for Google template URL.
+  if (template_url->GetEngineType(search_terms_data) != SEARCH_ENGINE_GOOGLE)
+    return;
+
+  if (page_classification == metrics::OmniboxEventProto::CHROMEOS_APP_LIST) {
+    if (!search_terms_args->additional_query_params.empty())
+      search_terms_args->additional_query_params.append("&");
+    search_terms_args->additional_query_params.append("sclient=cros-launcher");
+  }
 }
 
 void BaseSearchProvider::DeleteMatch(const AutocompleteMatch& match) {
@@ -249,8 +267,6 @@ AutocompleteMatch BaseSearchProvider::CreateSearchSuggestion(
   match.image_url = suggestion.image_url();
   match.contents = suggestion.match_contents();
   match.contents_class = suggestion.match_contents_class();
-  match.answer_contents = suggestion.answer_contents();
-  match.answer_type = suggestion.answer_type();
   match.answer = suggestion.answer();
   match.subtype_identifier = suggestion.subtype_identifier();
   if (suggestion.type() == AutocompleteMatchType::SEARCH_SUGGEST_TAIL) {
@@ -274,17 +290,18 @@ AutocompleteMatch BaseSearchProvider::CreateSearchSuggestion(
   const base::string16 input_lower = base::i18n::ToLower(input.text());
   // suggestion.match_contents() should have already been collapsed.
   match.allowed_to_be_default_match =
-      (!in_keyword_mode || suggestion.from_keyword_provider()) &&
+      (!in_keyword_mode || suggestion.from_keyword()) &&
       (base::CollapseWhitespace(input_lower, false) ==
        base::i18n::ToLower(suggestion.match_contents()));
 
-  if (suggestion.from_keyword_provider())
-    match.fill_into_edit.append(match.keyword + base::char16(' '));
+  if (suggestion.from_keyword())
+    match.from_keyword = true;
+
   // We only allow inlinable navsuggestions that were received before the
   // last keystroke because we don't want asynchronous inline autocompletions.
   if (!input.prevent_inline_autocomplete() &&
       !suggestion.received_after_last_keystroke() &&
-      (!in_keyword_mode || suggestion.from_keyword_provider()) &&
+      (!in_keyword_mode || suggestion.from_keyword()) &&
       base::StartsWith(
           base::i18n::ToLower(suggestion.suggestion()), input_lower,
           base::CompareCase::SENSITIVE)) {
@@ -292,13 +309,19 @@ AutocompleteMatch BaseSearchProvider::CreateSearchSuggestion(
         suggestion.suggestion().substr(input.text().length());
     match.allowed_to_be_default_match = true;
   }
-  match.fill_into_edit.append(suggestion.suggestion());
 
   const TemplateURLRef& search_url = template_url->url_ref();
   DCHECK(search_url.SupportsReplacement(search_terms_data));
-  match.search_terms_args.reset(
-      new TemplateURLRef::SearchTermsArgs(suggestion.suggestion()));
-  match.search_terms_args->original_query = input.text();
+  base::string16 query(suggestion.suggestion());
+  base::string16 original_query(input.text());
+  if (suggestion.type() == AutocompleteMatchType::CALCULATOR) {
+    // Use query text, rather than the calculator answer suggestion, to search.
+    query = original_query;
+    original_query.clear();
+  }
+  match.fill_into_edit = GetFillIntoEdit(suggestion, template_url);
+  match.search_terms_args.reset(new TemplateURLRef::SearchTermsArgs(query));
+  match.search_terms_args->original_query = original_query;
   match.search_terms_args->accepted_suggestion = accepted_suggestion;
   match.search_terms_args->additional_query_params =
       suggestion.additional_query_params();
@@ -311,10 +334,24 @@ AutocompleteMatch BaseSearchProvider::CreateSearchSuggestion(
       *match.search_terms_args, search_terms_data));
 
   // Search results don't look like URLs.
-  match.transition = suggestion.from_keyword_provider() ?
-      ui::PAGE_TRANSITION_KEYWORD : ui::PAGE_TRANSITION_GENERATED;
+  match.transition = suggestion.from_keyword() ? ui::PAGE_TRANSITION_KEYWORD
+                                               : ui::PAGE_TRANSITION_GENERATED;
 
   return match;
+}
+
+// static
+base::string16 BaseSearchProvider::GetFillIntoEdit(
+    const SearchSuggestionParser::SuggestResult& suggest_result,
+    const TemplateURL* template_url) {
+  base::string16 fill_into_edit;
+
+  if (suggest_result.from_keyword())
+    fill_into_edit.append(template_url->keyword() + base::char16(' '));
+
+  fill_into_edit.append(suggest_result.suggestion());
+
+  return fill_into_edit;
 }
 
 // static
@@ -394,8 +431,8 @@ void BaseSearchProvider::AddMatchToMap(
     bool in_keyword_mode,
     MatchMap* map) {
   AutocompleteMatch match = CreateSearchSuggestion(
-      this, GetInput(result.from_keyword_provider()), in_keyword_mode, result,
-      GetTemplateURL(result.from_keyword_provider()),
+      this, GetInput(result.from_keyword()), in_keyword_mode, result,
+      GetTemplateURL(result.from_keyword()),
       client_->GetTemplateURLService()->search_terms_data(),
       accepted_suggestion, ShouldAppendExtraParams(result));
   if (!match.destination_url.is_valid())
@@ -466,8 +503,6 @@ void BaseSearchProvider::AddMatchToMap(
     const AutocompleteMatch& less_relevant_match =
         more_relevant_match.duplicate_matches.back();
     if (less_relevant_match.answer && !more_relevant_match.answer) {
-      more_relevant_match.answer_type = less_relevant_match.answer_type;
-      more_relevant_match.answer_contents = less_relevant_match.answer_contents;
       more_relevant_match.answer = less_relevant_match.answer;
     }
   }
@@ -490,7 +525,7 @@ bool BaseSearchProvider::ParseSuggestResults(
 
 void BaseSearchProvider::DeleteMatchFromMatches(
     const AutocompleteMatch& match) {
-  for (ACMatches::iterator i(matches_.begin()); i != matches_.end(); ++i) {
+  for (auto i(matches_.begin()); i != matches_.end(); ++i) {
     // Find the desired match to delete by checking the type and contents.
     // We can't check the destination URL, because the autocomplete controller
     // may have reformulated that. Not that while checking for matching

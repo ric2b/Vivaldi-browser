@@ -11,13 +11,11 @@
 #include "components/metrics/metrics_reporting_default_state.h"
 #include "components/prefs/pref_member.h"
 #include "components/prefs/pref_service.h"
-#include "components/signin/core/browser/signin_manager.h"
 #import "ios/chrome/app/main_controller.h"
 #include "ios/chrome/browser/application_context.h"
 #import "ios/chrome/browser/geolocation/omnibox_geolocation_controller+Testing.h"
 #import "ios/chrome/browser/geolocation/omnibox_geolocation_controller.h"
 #import "ios/chrome/browser/geolocation/test_location_manager.h"
-#include "ios/chrome/browser/signin/signin_manager_factory.h"
 #include "ios/chrome/browser/sync/sync_setup_service.h"
 #include "ios/chrome/browser/sync/sync_setup_service_factory.h"
 #import "ios/chrome/browser/ui/authentication/signin_earlgrey_utils.h"
@@ -131,8 +129,12 @@ void WaitForMatcher(id<GREYMatcher> matcher) {
                                           IDS_IOS_FIRSTRUN_PRIVACY_TITLE))]
       assertWithMatcher:grey_sufficientlyVisible()];
 
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
-      performAction:grey_tap()];
+  [[EarlGrey
+      selectElementWithMatcher:grey_allOf(
+                                   grey_accessibilityID(@"ic_arrow_back"),
+                                   grey_accessibilityTrait(
+                                       UIAccessibilityTraitButton),
+                                   nil)] performAction:grey_tap()];
 
   // Ensure we went back to the First Run screen.
   [[EarlGrey selectElementWithMatcher:privacyLink]
@@ -152,8 +154,12 @@ void WaitForMatcher(id<GREYMatcher> matcher) {
                                           IDS_IOS_FIRSTRUN_TERMS_TITLE))]
       assertWithMatcher:grey_sufficientlyVisible()];
 
-  [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
-      performAction:grey_tap()];
+  [[EarlGrey
+      selectElementWithMatcher:grey_allOf(
+                                   grey_accessibilityID(@"ic_arrow_back"),
+                                   grey_accessibilityTrait(
+                                       UIAccessibilityTraitButton),
+                                   nil)] performAction:grey_tap()];
 
   // Ensure we went back to the First Run screen.
   [[EarlGrey selectElementWithMatcher:termsOfServiceLink]
@@ -195,7 +201,7 @@ void WaitForMatcher(id<GREYMatcher> matcher) {
       performAction:grey_tap()];
 
   id<GREYMatcher> newTab =
-      grey_kindOfClass(NSClassFromString(@"NewTabPageView"));
+      grey_kindOfClass(NSClassFromString(@"ContentSuggestionsHeaderView"));
   [[EarlGrey selectElementWithMatcher:newTab]
       assertWithMatcher:grey_sufficientlyVisible()];
 }

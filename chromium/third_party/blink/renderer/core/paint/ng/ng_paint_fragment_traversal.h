@@ -11,16 +11,7 @@
 
 namespace blink {
 
-class LayoutObject;
 class NGPaintFragment;
-
-// Used for return value of traversing fragment tree.
-struct CORE_EXPORT NGPaintFragmentWithContainerOffset {
-  DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
-  NGPaintFragment* fragment;
-  // Offset relative to container fragment
-  NGPhysicalOffset container_offset;
-};
 
 // Represents an NGPaintFragment by its parent and its index in the parent's
 // |Children()| vector.
@@ -28,6 +19,12 @@ struct CORE_EXPORT NGPaintFragmentTraversalContext {
   STACK_ALLOCATED();
 
  public:
+  NGPaintFragmentTraversalContext() = default;
+  explicit NGPaintFragmentTraversalContext(const NGPaintFragment* fragment);
+  NGPaintFragmentTraversalContext(const NGPaintFragment* parent,
+                                  unsigned index);
+  // TODO(kojii): deprecated, prefer constructors to avoid unexpected
+  // instantiation.
   static NGPaintFragmentTraversalContext Create(const NGPaintFragment*);
 
   bool IsNull() const { return !parent; }
@@ -39,6 +36,7 @@ struct CORE_EXPORT NGPaintFragmentTraversalContext {
 
   const NGPaintFragment* parent = nullptr;
   unsigned index = 0;
+  Vector<NGPaintFragment*, 16> siblings;
 };
 
 // Utility class for traversing the paint fragment tree.
@@ -99,17 +97,93 @@ class CORE_EXPORT NGPaintFragmentTraversal {
   // functions are not as cheap as their DOM versions. When traversing more than
   // once, instace functions are recommended.
 
-  // Returns descendants without paint layer in preorder.
-  static Vector<NGPaintFragmentWithContainerOffset> DescendantsOf(
-      const NGPaintFragment&);
+  class AncestorRange final {
+    STACK_ALLOCATED();
 
-  // Returns inline descendants in preorder.
-  static Vector<NGPaintFragmentWithContainerOffset> InlineDescendantsOf(
-      const NGPaintFragment&);
+   public:
+    class Iterator final
+        : public std::iterator<std::forward_iterator_tag, NGPaintFragment*> {
+      STACK_ALLOCATED();
 
-  static Vector<NGPaintFragmentWithContainerOffset> SelfFragmentsOf(
-      const NGPaintFragment&,
-      const LayoutObject* target);
+     public:
+      explicit Iterator(NGPaintFragment* current) : current_(current) {}
+
+      NGPaintFragment* operator*() const { return operator->(); }
+      NGPaintFragment* operator->() const;
+
+      void operator++();
+
+      bool operator==(const Iterator& other) const {
+        return current_ == other.current_;
+      }
+      bool operator!=(const Iterator& other) const {
+        return !operator==(other);
+      }
+
+     private:
+      NGPaintFragment* current_;
+    };
+
+    explicit AncestorRange(const NGPaintFragment& start) : start_(&start) {}
+
+    Iterator begin() const {
+      return Iterator(const_cast<NGPaintFragment*>(start_));
+    }
+    Iterator end() const { return Iterator(nullptr); }
+
+   private:
+    const NGPaintFragment* const start_;
+  };
+
+  // Returns inclusive ancestors.
+  static AncestorRange InclusiveAncestorsOf(const NGPaintFragment&);
+
+  class CORE_EXPORT InlineDescendantsRange final {
+    STACK_ALLOCATED();
+
+   public:
+    class CORE_EXPORT Iterator final
+        : public std::iterator<std::forward_iterator_tag, NGPaintFragment*> {
+      STACK_ALLOCATED();
+
+     public:
+      explicit Iterator(const NGPaintFragment& container);
+      Iterator() = default;
+
+      NGPaintFragment* operator*() const { return operator->(); }
+      NGPaintFragment* operator->() const;
+
+      void operator++();
+
+      bool operator==(const Iterator& other) const {
+        return current_ == other.current_;
+      }
+      bool operator!=(const Iterator& other) const {
+        return !operator==(other);
+      }
+
+     private:
+      NGPaintFragment* Next(const NGPaintFragment& fragment) const;
+      static bool IsInlineFragment(const NGPaintFragment& fragment);
+      static bool ShouldTraverse(const NGPaintFragment& fragment);
+
+      const NGPaintFragment* container_ = nullptr;
+      NGPaintFragment* current_ = nullptr;
+    };
+
+    explicit InlineDescendantsRange(const NGPaintFragment& container)
+        : container_(&container) {}
+
+    Iterator begin() const { return Iterator(*container_); }
+    Iterator end() const { return Iterator(); }
+
+   private:
+    const NGPaintFragment* const container_;
+  };
+
+  // Returns inline descendants of |container| in preorder.
+  static InlineDescendantsRange InlineDescendantsOf(
+      const NGPaintFragment& container);
 
   // Returns the line box paint fragment of |line|. |line| itself must be the
   // paint fragment of a line box.
@@ -129,9 +203,6 @@ class CORE_EXPORT NGPaintFragmentTraversal {
       const NGPaintFragmentTraversalContext&);
 
  private:
-  void Push(const NGPaintFragment& parent, unsigned index);
-  void Push(const NGPaintFragment& fragment);
-
   // |current_| holds a |NGPaintFragment| specified by |index|th child of
   // |parent| of the last element of |stack_|.
   const NGPaintFragment* current_ = nullptr;
@@ -140,18 +211,12 @@ class CORE_EXPORT NGPaintFragmentTraversal {
   // from traversal. |current_| can't |root_|.
   const NGPaintFragment& root_;
 
-  // The stack of parent and its child index up to the root. Each stack entry
-  // represents the current node, and thus
-  // |stack_.back().parent->Children()[stack_.back().index] == current_|.
-  //
-  // Computing ancestors maybe deferred until |MoveToNextSiblingOrAncestor()|
-  // when |Moveto()| is used. In that case, the |stack_| does not contain all
-  // fragments to the |root_|.
-  struct ParentAndIndex {
-    const NGPaintFragment* parent;
-    unsigned index;
-  };
-  Vector<ParentAndIndex, 4> stack_;
+  // Keep a list of siblings for MoveToPrevious().
+  // TODO(kojii): We could keep a stack of this to avoid repetitive
+  // constructions of the list when we move up/down levels. Also can consider
+  // sharing with NGPaintFragmentTraversalContext.
+  unsigned current_index_ = 0;
+  Vector<NGPaintFragment*, 16> siblings_;
 
   DISALLOW_COPY_AND_ASSIGN(NGPaintFragmentTraversal);
 };

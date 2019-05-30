@@ -411,9 +411,7 @@ CSSTransitionData::TransitionProperty CSSToStyleMap::MapAnimationProperty(
 }
 
 scoped_refptr<TimingFunction> CSSToStyleMap::MapAnimationTimingFunction(
-    const CSSValue& value,
-    bool allow_step_middle,
-    Document* document) {
+    const CSSValue& value) {
   // FIXME: We should probably only call into this function with a valid
   // single timing function value which isn't initial or inherit. We can
   // currently get into here with initial since the parser expands unset
@@ -439,17 +437,6 @@ scoped_refptr<TimingFunction> CSSToStyleMap::MapAnimationTimingFunction(
       case CSSValueStepStart:
         return StepsTimingFunction::Preset(
             StepsTimingFunction::StepPosition::START);
-      case CSSValueStepMiddle:
-        if (allow_step_middle) {
-          DCHECK(document);
-          if (document) {
-            Deprecation::CountDeprecation(
-                *document, WebFeature::kDeprecatedTimingFunctionStepMiddle);
-          }
-          return StepsTimingFunction::Preset(
-              StepsTimingFunction::StepPosition::MIDDLE);
-        }
-        return CSSTimingData::InitialTimingFunction();
       case CSSValueStepEnd:
         return StepsTimingFunction::Preset(
             StepsTimingFunction::StepPosition::END);
@@ -479,17 +466,6 @@ scoped_refptr<TimingFunction> CSSToStyleMap::MapAnimationTimingFunction(
 
   const cssvalue::CSSStepsTimingFunctionValue& steps_timing_function =
       cssvalue::ToCSSStepsTimingFunctionValue(value);
-  if (steps_timing_function.GetStepPosition() ==
-      StepsTimingFunction::StepPosition::MIDDLE) {
-    if (!allow_step_middle) {
-      return CSSTimingData::InitialTimingFunction();
-    }
-    DCHECK(document);
-    if (document) {
-      Deprecation::CountDeprecation(
-          *document, WebFeature::kDeprecatedTimingFunctionStepMiddle);
-    }
-  }
   return StepsTimingFunction::Create(steps_timing_function.NumberOfSteps(),
                                      steps_timing_function.GetStepPosition());
 }
@@ -568,8 +544,8 @@ void CSSToStyleMap::MapNinePieceImage(StyleResolverState& state,
 
 static Length ConvertBorderImageSliceSide(const CSSPrimitiveValue& value) {
   if (value.IsPercentage())
-    return Length(value.GetDoubleValue(), kPercent);
-  return Length(round(value.GetDoubleValue()), kFixed);
+    return Length::Percent(value.GetDoubleValue());
+  return Length::Fixed(round(value.GetDoubleValue()));
 }
 
 void CSSToStyleMap::MapNinePieceImageSlice(StyleResolverState&,
@@ -597,35 +573,28 @@ void CSSToStyleMap::MapNinePieceImageSlice(StyleResolverState&,
   image.SetFill(border_image_slice.Fill());
 }
 
-static BorderImageLength ToBorderImageLength(
-    CSSValue& value,
-    const CSSToLengthConversionData& conversion_data) {
+static BorderImageLength ToBorderImageLength(const StyleResolverState& state,
+                                             const CSSValue& value) {
   if (value.IsPrimitiveValue()) {
     const CSSPrimitiveValue& primitive_value = ToCSSPrimitiveValue(value);
     if (primitive_value.IsNumber())
       return primitive_value.GetDoubleValue();
-    if (primitive_value.IsPercentage())
-      return Length(primitive_value.GetDoubleValue(), kPercent);
-    return primitive_value.ComputeLength<Length>(conversion_data);
   }
-  DCHECK_EQ(ToCSSIdentifierValue(value).GetValueID(), CSSValueAuto);
-  return Length(kAuto);
+  return StyleBuilderConverter::ConvertLengthOrAuto(state, value);
 }
 
 BorderImageLengthBox CSSToStyleMap::MapNinePieceImageQuad(
     StyleResolverState& state,
     const CSSValue& value) {
   if (!value.IsQuadValue())
-    return BorderImageLengthBox(Length(kAuto));
+    return BorderImageLengthBox(Length::Auto());
 
   const CSSQuadValue& slices = ToCSSQuadValue(value);
-
   // Set up a border image length box to represent our image slices.
-  return BorderImageLengthBox(
-      ToBorderImageLength(*slices.Top(), state.CssToLengthConversionData()),
-      ToBorderImageLength(*slices.Right(), state.CssToLengthConversionData()),
-      ToBorderImageLength(*slices.Bottom(), state.CssToLengthConversionData()),
-      ToBorderImageLength(*slices.Left(), state.CssToLengthConversionData()));
+  return BorderImageLengthBox(ToBorderImageLength(state, *slices.Top()),
+                              ToBorderImageLength(state, *slices.Right()),
+                              ToBorderImageLength(state, *slices.Bottom()),
+                              ToBorderImageLength(state, *slices.Left()));
 }
 
 void CSSToStyleMap::MapNinePieceImageRepeat(StyleResolverState&,

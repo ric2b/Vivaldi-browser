@@ -51,9 +51,6 @@ bool ShellExecuteFromExplorer(const base::FilePath& application_path,
                               const base::string16& operation,
                               int nShowCmd = SW_SHOWDEFAULT);
 
-// Returns the URL with parameters for the 'new features' page.
-// The new |version| is appended as a parameter in the URL.
-base::string16 GetNewFeaturesUrl(const base::Version& version);
 
 // Gets handles to all active processes on the system running from a given path,
 // that could be opened with the |desired_access|.

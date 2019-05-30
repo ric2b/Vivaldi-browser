@@ -5,6 +5,7 @@
 import unittest
 
 from blinkpy.common.host_mock import MockHost
+from blinkpy.common.path_finder import RELATIVE_WEB_TESTS
 from blinkpy.common.system.executive_mock import mock_git_commands
 from blinkpy.w3c.chromium_commit import ChromiumCommit
 from blinkpy.w3c.chromium_commit_mock import MockChromiumCommit
@@ -27,11 +28,11 @@ class ChromiumExportableCommitsTest(unittest.TestCase):
         host.executive = mock_git_commands({
             'show': 'fake message',
             'rev-list': 'add087a97844f4b9e307d9a216940582d96db306',
-            'rev-parse': 'add087a97844f4b9e307d9a216940582d96db306',
+            'rev-parse': '/mock-checkout/src',
             'crrev-parse': 'add087a97844f4b9e307d9a216940582d96db306',
             'diff': 'fake diff',
-            'diff-tree': 'third_party/WebKit/LayoutTests/external/wpt/some\n'
-                         'third_party/WebKit/LayoutTests/external/wpt/files',
+            'diff-tree': (RELATIVE_WEB_TESTS + 'external/wpt/some\n' +
+                          RELATIVE_WEB_TESTS + 'external/wpt/files'),
             'format-patch': 'hey I\'m a patch',
             'footers': 'cr-rev-position',
         }, strict=True)
@@ -42,20 +43,20 @@ class ChromiumExportableCommitsTest(unittest.TestCase):
         self.assertIsInstance(commits[0], ChromiumCommit)
         self.assertEqual(host.executive.calls, [
             ['git', 'rev-parse', '--show-toplevel'],
-            ['git', 'rev-list', 'beefcafe..HEAD', '--reverse', '--',
-             'add087a97844f4b9e307d9a216940582d96db306/third_party/WebKit/LayoutTests/external/wpt/'],
+            ['git', 'rev-list', 'beefcafe..HEAD', '^77578ccb4082ae20a9326d9e673225f1189ebb63',
+             '--reverse', '--', '/mock-checkout/src/' + RELATIVE_WEB_TESTS + 'external/wpt/'],
             ['git', 'footers', '--position', 'add087a97844f4b9e307d9a216940582d96db306'],
             ['git', 'show', '--format=%B', '--no-patch', 'add087a97844f4b9e307d9a216940582d96db306'],
             ['git', 'diff-tree', '--name-only', '--no-commit-id', '-r', 'add087a97844f4b9e307d9a216940582d96db306', '--',
-             '/mock-checkout/third_party/WebKit/LayoutTests/external/wpt'],
+             '/mock-checkout/' + RELATIVE_WEB_TESTS + 'external/wpt'],
             ['git', 'format-patch', '-1', '--stdout', 'add087a97844f4b9e307d9a216940582d96db306', '--',
-             'third_party/WebKit/LayoutTests/external/wpt/some', 'third_party/WebKit/LayoutTests/external/wpt/files'],
+             RELATIVE_WEB_TESTS + 'external/wpt/some', RELATIVE_WEB_TESTS + 'external/wpt/files'],
         ])
 
     def test_exportable_commits_since_require_clean_by_default(self):
         host = MockHost()
         host.executive = mock_git_commands({
-            'diff-tree': 'third_party/WebKit/LayoutTests/external/wpt/some_files',
+            'diff-tree': RELATIVE_WEB_TESTS + 'external/wpt/some_files',
             'footers': 'cr-rev-position',
             'format-patch': 'hey I\'m a patch',
             'rev-list': 'add087a97844f4b9e307d9a216940582d96db306\n'
@@ -75,7 +76,7 @@ class ChromiumExportableCommitsTest(unittest.TestCase):
     def test_exportable_commits_since_not_require_clean(self):
         host = MockHost()
         host.executive = mock_git_commands({
-            'diff-tree': 'third_party/WebKit/LayoutTests/external/wpt/some_files',
+            'diff-tree': RELATIVE_WEB_TESTS + 'external/wpt/some_files',
             'footers': 'cr-rev-position',
             'format-patch': 'hey I\'m a patch',
             'rev-list': 'add087a97844f4b9e307d9a216940582d96db306\n'
@@ -114,6 +115,22 @@ class ChromiumExportableCommitsTest(unittest.TestCase):
         self.assertEqual(get_commit_export_state(revert, MockLocalWPT(), github), (CommitExportState.IGNORED, ''))
         old_revert = MockChromiumCommit(MockHost(), body='Revert of Message\n> NOEXPORT=true')
         self.assertEqual(get_commit_export_state(old_revert, MockLocalWPT(), github), (CommitExportState.IGNORED, ''))
+
+    def test_commit_with_noexport_is_not_exportable_mixed_casing(self):
+        # Patch is not tested if the commit is ignored based on the message, hence empty MockLocalWPT.
+        # Make sure that the casing of the "No export" message isn't considered.
+
+        commit = MockChromiumCommit(MockHost(), body='Message\nno-EXPORT: true')
+        github = MockWPTGitHub(pull_requests=[])
+        self.assertEqual(get_commit_export_state(commit, MockLocalWPT(), github), (CommitExportState.IGNORED, ''))
+
+        commit = MockChromiumCommit(MockHost(), body='Message\nnoexport=TRUE')
+        github = MockWPTGitHub(pull_requests=[])
+        self.assertEqual(get_commit_export_state(commit, MockLocalWPT(), github), (CommitExportState.IGNORED, ''))
+
+        commit = MockChromiumCommit(MockHost(), body='Message\nNO-exPORT: trUE')
+        github = MockWPTGitHub(pull_requests=[])
+        self.assertEqual(get_commit_export_state(commit, MockLocalWPT(), github), (CommitExportState.IGNORED, ''))
 
     # "Import" in commit message doesn't by itself make a commit exportable,
     # see https://crbug.com/879128.

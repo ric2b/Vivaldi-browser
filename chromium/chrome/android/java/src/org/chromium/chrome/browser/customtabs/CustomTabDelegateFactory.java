@@ -16,6 +16,8 @@ import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.contextmenu.ChromeContextMenuPopulator;
 import org.chromium.chrome.browser.contextmenu.ContextMenuPopulator;
+import org.chromium.chrome.browser.dependency_injection.ActivityScope;
+import org.chromium.chrome.browser.externalauth.ExternalAuthUtils;
 import org.chromium.chrome.browser.externalnav.ExternalNavigationDelegateImpl;
 import org.chromium.chrome.browser.externalnav.ExternalNavigationHandler;
 import org.chromium.chrome.browser.fullscreen.ComposedBrowserControlsVisibilityDelegate;
@@ -27,8 +29,8 @@ import org.chromium.chrome.browser.tab.TabContextMenuItemDelegate;
 import org.chromium.chrome.browser.tab.TabDelegateFactory;
 import org.chromium.chrome.browser.tab.TabStateBrowserControlsVisibilityDelegate;
 import org.chromium.chrome.browser.tab.TabWebContentsDelegateAndroid;
+import org.chromium.chrome.browser.tabmodel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
-import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.document.AsyncTabCreationParams;
 import org.chromium.chrome.browser.tabmodel.document.TabDelegate;
 import org.chromium.chrome.browser.util.IntentUtils;
@@ -37,10 +39,13 @@ import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.common.ResourceRequestBody;
 import org.chromium.ui.mojom.WindowOpenDisposition;
 
+import javax.inject.Inject;
+
 /**
  * A {@link TabDelegateFactory} class to be used in all {@link Tab} owned
  * by a {@link CustomTabActivity}.
  */
+@ActivityScope
 public class CustomTabDelegateFactory extends TabDelegateFactory {
     /**
      * A custom external navigation delegate that forbids the intent picker from showing up.
@@ -48,14 +53,17 @@ public class CustomTabDelegateFactory extends TabDelegateFactory {
     static class CustomTabNavigationDelegate extends ExternalNavigationDelegateImpl {
         private static final String TAG = "customtabs";
         private final String mClientPackageName;
+        private final ExternalAuthUtils mExternalAuthUtils;
         private boolean mHasActivityStarted;
 
         /**
          * Constructs a new instance of {@link CustomTabNavigationDelegate}.
          */
-        public CustomTabNavigationDelegate(Tab tab, String clientPackageName) {
+        CustomTabNavigationDelegate(Tab tab, String clientPackageName,
+                ExternalAuthUtils authUtils) {
             super(tab);
             mClientPackageName = clientPackageName;
+            mExternalAuthUtils = authUtils;
         }
 
         @Override
@@ -126,6 +134,14 @@ public class CustomTabDelegateFactory extends TabDelegateFactory {
             return false;
         }
 
+        @Override
+        public boolean isIntentForTrustedCallingApp(Intent intent) {
+            if (TextUtils.isEmpty(mClientPackageName)) return false;
+            if (!mExternalAuthUtils.isGoogleSigned(mClientPackageName)) return false;
+
+            return isPackageSpecializedHandler(mClientPackageName, intent);
+        }
+
         /**
          * @return Whether an external activity has started to handle a url. For testing only.
          */
@@ -136,11 +152,13 @@ public class CustomTabDelegateFactory extends TabDelegateFactory {
     }
 
     private static class CustomTabWebContentsDelegate extends TabWebContentsDelegateAndroid {
+        private final MultiWindowUtils mMultiWindowUtils;
         /**
          * See {@link TabWebContentsDelegateAndroid}.
          */
-        public CustomTabWebContentsDelegate(Tab tab) {
+        public CustomTabWebContentsDelegate(Tab tab, MultiWindowUtils multiWindowUtils) {
             super(tab);
+            mMultiWindowUtils = multiWindowUtils;
         }
 
         @Override
@@ -168,7 +186,7 @@ public class CustomTabDelegateFactory extends TabDelegateFactory {
                 loadUrlParams.setIsRendererInitiated(isRendererInitiated);
 
                 Class<? extends ChromeTabbedActivity> tabbedClass =
-                        MultiWindowUtils.getInstance().getTabbedActivityForIntent(
+                        mMultiWindowUtils.getTabbedActivityForIntent(
                                 null, ContextUtils.getApplicationContext());
                 AsyncTabCreationParams tabParams = new AsyncTabCreationParams(loadUrlParams,
                         new ComponentName(ContextUtils.getApplicationContext(), tabbedClass));
@@ -183,7 +201,10 @@ public class CustomTabDelegateFactory extends TabDelegateFactory {
 
     private final boolean mShouldHideBrowserControls;
     private final boolean mIsOpenedByChrome;
+    private final boolean mShouldAllowAppBanners;
     private final BrowserControlsVisibilityDelegate mBrowserStateVisibilityDelegate;
+    private final ExternalAuthUtils mExternalAuthUtils;
+    private final MultiWindowUtils mMultiWindowUtils;
 
     private ExternalNavigationDelegateImpl mNavigationDelegate;
     private ExternalNavigationHandler mNavigationHandler;
@@ -191,14 +212,41 @@ public class CustomTabDelegateFactory extends TabDelegateFactory {
     /**
      * @param shouldHideBrowserControls Whether or not the browser controls may auto-hide.
      * @param isOpenedByChrome Whether the CustomTab was originally opened by Chrome.
+     * @param shouldAllowAppBanners Whether app install banners can be shown.
      * @param visibilityDelegate The delegate that handles browser control visibility associated
      *                           with browser actions (as opposed to tab state).
      */
-    public CustomTabDelegateFactory(boolean shouldHideBrowserControls, boolean isOpenedByChrome,
-            BrowserControlsVisibilityDelegate visibilityDelegate) {
+    private CustomTabDelegateFactory(boolean shouldHideBrowserControls, boolean isOpenedByChrome,
+            boolean shouldAllowAppBanners, BrowserControlsVisibilityDelegate visibilityDelegate,
+            ExternalAuthUtils authUtils, MultiWindowUtils multiWindowUtils) {
         mShouldHideBrowserControls = shouldHideBrowserControls;
         mIsOpenedByChrome = isOpenedByChrome;
+        mShouldAllowAppBanners = shouldAllowAppBanners;
         mBrowserStateVisibilityDelegate = visibilityDelegate;
+        mExternalAuthUtils = authUtils;
+        mMultiWindowUtils = multiWindowUtils;
+    }
+
+    @Inject
+    public CustomTabDelegateFactory(CustomTabIntentDataProvider intentDataProvider,
+            CustomTabBrowserControlsVisibilityDelegate visibilityDelegate,
+            ExternalAuthUtils authUtils, MultiWindowUtils multiWindowUtils) {
+        // Don't show an app install banner for the user of a Trusted Web Activity - they've already
+        // got an app installed!
+        this(intentDataProvider.shouldEnableUrlBarHiding(),
+                intentDataProvider.isOpenedByChrome(),
+                !intentDataProvider.isTrustedWebActivity(),
+                visibilityDelegate,
+                authUtils,
+                multiWindowUtils);
+    }
+
+    /**
+     * Creates a basic/empty CustomTabDelegateFactory for use when creating a hidden tab. It will
+     * be replaced when the hidden Tab becomes shown.
+     */
+    static CustomTabDelegateFactory createDummy() {
+        return new CustomTabDelegateFactory(false, false, false, null, null, null);
     }
 
     @Override
@@ -218,7 +266,7 @@ public class CustomTabDelegateFactory extends TabDelegateFactory {
 
     @Override
     public TabWebContentsDelegateAndroid createWebContentsDelegate(Tab tab) {
-        return new CustomTabWebContentsDelegate(tab);
+        return new CustomTabWebContentsDelegate(tab, mMultiWindowUtils);
     }
 
     @Override
@@ -226,7 +274,8 @@ public class CustomTabDelegateFactory extends TabDelegateFactory {
         if (mIsOpenedByChrome) {
             mNavigationDelegate = new ExternalNavigationDelegateImpl(tab);
         } else {
-            mNavigationDelegate = new CustomTabNavigationDelegate(tab, tab.getAppAssociatedWith());
+            mNavigationDelegate = new CustomTabNavigationDelegate(tab, tab.getAppAssociatedWith(),
+                    mExternalAuthUtils);
         }
         mNavigationHandler = new ExternalNavigationHandler(mNavigationDelegate);
         return new InterceptNavigationDelegateImpl(mNavigationHandler, tab);
@@ -236,6 +285,11 @@ public class CustomTabDelegateFactory extends TabDelegateFactory {
     public ContextMenuPopulator createContextMenuPopulator(Tab tab) {
         return new ChromeContextMenuPopulator(new TabContextMenuItemDelegate(tab),
                 ChromeContextMenuPopulator.ContextMenuMode.CUSTOM_TAB);
+    }
+
+    @Override
+    public boolean canShowAppBanners() {
+        return mShouldAllowAppBanners;
     }
 
     /**

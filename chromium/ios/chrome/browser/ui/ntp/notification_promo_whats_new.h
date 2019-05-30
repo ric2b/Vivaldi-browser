@@ -14,8 +14,12 @@
 #include "url/gurl.h"
 
 namespace base {
-class DictionaryValue;
+class Value;
 }
+
+// The What's New promo command for testing.
+extern const char kTestWhatsNewCommand[];
+extern const char kTestWhatsNewMessage[];
 
 // Helper class for NotificationPromo that deals with mobile_ntp promos.
 class NotificationPromoWhatsNew {
@@ -28,7 +32,7 @@ class NotificationPromoWhatsNew {
   bool Init();
 
   // Used by experimental setting to always show a promo.
-  bool ClearAndInitFromJson(const base::DictionaryValue& json);
+  bool ClearAndInitFromJson(base::Value json);
 
   // Return true if the promo is valid and can be shown.
   bool CanShow() const;

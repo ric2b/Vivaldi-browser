@@ -26,6 +26,7 @@
 #include "third_party/blink/renderer/core/html/html_element.h"
 #include "third_party/blink/renderer/core/html/html_html_element.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
+#include "third_party/blink/renderer/platform/geometry/float_quad.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 #include "third_party/blink/renderer/platform/wtf/compiler.h"
@@ -39,7 +40,7 @@ TEST_F(RangeTest, extractContentsWithDOMMutationEvent) {
   GetDocument().body()->SetInnerHTMLFromString("<span><b>abc</b>def</span>");
   GetDocument().GetSettings()->SetScriptEnabled(true);
   Element* const script_element =
-      GetDocument().CreateRawElement(HTMLNames::scriptTag);
+      GetDocument().CreateRawElement(html_names::kScriptTag);
   script_element->setTextContent(
       "let count = 0;"
       "const span = document.querySelector('span');"
@@ -53,7 +54,7 @@ TEST_F(RangeTest, extractContentsWithDOMMutationEvent) {
   Element* const span_element = GetDocument().QuerySelector("span");
   Range* const range =
       Range::Create(GetDocument(), span_element, 0, span_element, 1);
-  Element* const result = GetDocument().CreateRawElement(HTMLNames::divTag);
+  Element* const result = GetDocument().CreateRawElement(html_names::kDivTag);
   result->AppendChild(range->extractContents(ASSERT_NO_EXCEPTION));
 
   EXPECT_EQ("<b>abc</b>", result->InnerHTMLAsString())
@@ -301,7 +302,7 @@ TEST_F(RangeTest, BoundingRectMustIndependentFromSelection) {
       SelectionInDOMTree::Builder()
           .SetBaseAndExtent(EphemeralRange(range))
           .Build());
-  GetDocument().View()->UpdateAllLifecyclePhases();
+  UpdateAllLifecyclePhasesForTest();
   EXPECT_EQ(Selection().SelectedText(), "x x");
   const FloatRect rect_after = range->BoundingRect();
   EXPECT_EQ(rect_before, rect_after);
@@ -444,6 +445,59 @@ TEST_F(RangeTest, GetBorderAndTextQuadsWithFirstLetterThree) {
                 GetBorderAndTextQuads(Position(sample->firstChild(), 1),
                                       Position(sample->firstChild(), 4))))
       << "Partial first-letter part and remaining part";
+}
+
+TEST_F(RangeTest, CollapsedRangeGetBorderAndTextQuadsWithFirstLetter) {
+  GetDocument().body()->SetInnerHTMLFromString(R"HTML(
+    <style>
+      body { font-size: 20px; }
+      #sample::first-letter { font-size: 500%; }
+    </style>
+    <p id=sample>abc</p>
+    <p id=expected><span style='font-size: 500%'>a</span>bc</p>
+  )HTML");
+  GetDocument().UpdateStyleAndLayout();
+
+  Element* const expected = GetDocument().getElementById("expected");
+  Element* const sample = GetDocument().getElementById("sample");
+
+  const Vector<FloatQuad> expected_quads =
+      GetBorderAndTextQuads(Position(expected, 0), Position(expected, 2));
+  const Vector<FloatQuad> sample_quads =
+      GetBorderAndTextQuads(Position(sample, 0), Position(sample, 1));
+  ASSERT_EQ(2u, sample_quads.size());
+  ASSERT_EQ(3u, expected_quads.size())
+      << "expected_quads has SPAN, SPAN.firstChild and P.lastChild";
+  EXPECT_EQ(expected_quads[0].EnclosingBoundingBox().Size(),
+            sample_quads[0].EnclosingBoundingBox().Size())
+      << "Check size of first-letter part";
+  EXPECT_EQ(expected_quads[2].EnclosingBoundingBox().Size(),
+            sample_quads[1].EnclosingBoundingBox().Size())
+      << "Check size of first-letter part";
+
+  EXPECT_EQ(ComputeSizesOfQuads(GetBorderAndTextQuads(
+                Position(expected->firstChild()->firstChild(), 0),
+                Position(expected->firstChild()->firstChild(), 0))),
+            ComputeSizesOfQuads(
+                GetBorderAndTextQuads(Position(sample->firstChild(), 0),
+                                      Position(sample->firstChild(), 0))))
+      << "Collapsed range before first-letter part";
+
+  EXPECT_EQ(ComputeSizesOfQuads(GetBorderAndTextQuads(
+                Position(expected->firstChild()->firstChild(), 1),
+                Position(expected->firstChild()->firstChild(), 1))),
+            ComputeSizesOfQuads(
+                GetBorderAndTextQuads(Position(sample->firstChild(), 1),
+                                      Position(sample->firstChild(), 1))))
+      << "Collapsed range after first-letter part";
+
+  EXPECT_EQ(ComputeSizesOfQuads(GetBorderAndTextQuads(
+                Position(expected->firstChild()->nextSibling(), 1),
+                Position(expected->firstChild()->nextSibling(), 1))),
+            ComputeSizesOfQuads(
+                GetBorderAndTextQuads(Position(sample->firstChild(), 2),
+                                      Position(sample->firstChild(), 2))))
+      << "Collapsed range in remaining text part";
 }
 
 }  // namespace blink

@@ -15,8 +15,8 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/macros.h"
 #include "base/path_service.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/test/scoped_path_override.h"
 #include "base/test/test_reg_util_win.h"
@@ -24,9 +24,7 @@
 #include "base/win/registry.h"
 #include "chrome/install_static/install_util.h"
 #include "chrome/install_static/test/scoped_install_details.h"
-#include "chrome/installer/util/browser_distribution.h"
 #include "chrome/installer/util/google_update_constants.h"
-#include "chrome/installer/util/test_app_registration_data.h"
 #include "chrome/installer/util/work_item.h"
 #include "chrome/installer/util/work_item_list.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -101,12 +99,6 @@ void CreateDeleteOnlySecurity(ScopedSecurityData* sec_data,
 class MockRegistryValuePredicate : public InstallUtil::RegistryValuePredicate {
  public:
   MOCK_CONST_METHOD1(Evaluate, bool(const std::wstring&));
-};
-
-class TestBrowserDistribution : public BrowserDistribution {
- public:
-  TestBrowserDistribution()
-      : BrowserDistribution(std::make_unique<TestAppRegistrationData>()) {}
 };
 
 class InstallUtilTest : public testing::Test {
@@ -410,7 +402,7 @@ TEST_F(InstallUtilTest, ProgramCompare) {
   // Tests where the expected file exists.
   static const char data[] = "data";
   ASSERT_TRUE(base::CreateDirectory(some_long_dir));
-  ASSERT_NE(-1, base::WriteFile(expect, data, arraysize(data) - 1));
+  ASSERT_NE(-1, base::WriteFile(expect, data, base::size(data) - 1));
   // Paths don't match.
   EXPECT_FALSE(InstallUtil::ProgramCompare(expect).Evaluate(
       L"\"" + other.value() + L"\""));

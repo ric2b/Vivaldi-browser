@@ -23,7 +23,8 @@
 
 namespace chromeos {
 
-class CHROMEOS_EXPORT FakeCryptohomeClient : public CryptohomeClient {
+class COMPONENT_EXPORT(CHROMEOS_DBUS) FakeCryptohomeClient
+    : public CryptohomeClient {
  public:
   FakeCryptohomeClient();
   ~FakeCryptohomeClient() override;
@@ -35,7 +36,8 @@ class CHROMEOS_EXPORT FakeCryptohomeClient : public CryptohomeClient {
   void WaitForServiceToBeAvailable(
       WaitForServiceToBeAvailableCallback callback) override;
   void IsMounted(DBusMethodCallback<bool> callback) override;
-  void Unmount(DBusMethodCallback<bool> callback) override;
+  void UnmountEx(const cryptohome::UnmountRequest& request,
+                 DBusMethodCallback<cryptohome::BaseReply> callback) override;
   void MigrateKeyEx(
       const cryptohome::AccountIdentifier& account,
       const cryptohome::AuthorizationRequest& auth_request,
@@ -174,6 +176,9 @@ class CHROMEOS_EXPORT FakeCryptohomeClient : public CryptohomeClient {
                const cryptohome::AuthorizationRequest& auth,
                const cryptohome::MountRequest& request,
                DBusMethodCallback<cryptohome::BaseReply> callback) override;
+  void LockToSingleUserMountUntilReboot(
+      const cryptohome::LockToSingleUserMountUntilRebootRequest& request,
+      DBusMethodCallback<cryptohome::BaseReply> callback) override;
   void AddKeyEx(const cryptohome::AccountIdentifier& cryptohome_id,
                 const cryptohome::AuthorizationRequest& auth,
                 const cryptohome::AddKeyRequest& request,
@@ -194,6 +199,9 @@ class CHROMEOS_EXPORT FakeCryptohomeClient : public CryptohomeClient {
       DBusMethodCallback<cryptohome::BaseReply> callback) override;
   void FlushAndSignBootAttributes(
       const cryptohome::FlushAndSignBootAttributesRequest& request,
+      DBusMethodCallback<cryptohome::BaseReply> callback) override;
+  void GetTpmStatus(
+      const cryptohome::GetTpmStatusRequest& request,
       DBusMethodCallback<cryptohome::BaseReply> callback) override;
   void MigrateToDircrypto(const cryptohome::AccountIdentifier& cryptohome_id,
                           const cryptohome::MigrateToDircryptoRequest& request,
@@ -319,6 +327,10 @@ class CHROMEOS_EXPORT FakeCryptohomeClient : public CryptohomeClient {
     return last_migrate_to_dircrypto_request_.minimal_migration();
   }
 
+  int remove_firmware_management_parameters_from_tpm_call_count() const {
+    return remove_firmware_management_parameters_from_tpm_call_count_;
+  }
+
  private:
   void ReturnProtobufMethodCallback(
       const cryptohome::BaseReply& reply,
@@ -360,6 +372,8 @@ class CHROMEOS_EXPORT FakeCryptohomeClient : public CryptohomeClient {
 
   bool service_is_available_;
   base::ObserverList<Observer>::Unchecked observer_list_;
+
+  int remove_firmware_management_parameters_from_tpm_call_count_;
 
   int async_call_id_;
   bool unmount_result_;

@@ -102,11 +102,15 @@ function transportType(der) {
  * makeCertAndKey creates a new ECDSA keypair and returns the private key
  * and a cert containing the public key.
  *
- * @param {!Uint8Array} original The certificate being replaced, as DER bytes.
+ * @param {!Uint8Array=} opt_original The certificate being replaced, as DER
+ *     bytes.
  * @return {Promise<{privateKey: !webCrypto.CryptoKey, certDER: !Uint8Array}>}
  */
-async function makeCertAndKey(original) {
-  var transport = transportType(original);
+async function makeCertAndKey(opt_original) {
+  var transport = null;
+  if (opt_original) {
+    transport = transportType(opt_original);
+  }
   if (transport !== null) {
     if (transport.length != 2) {
       throw Error('bad extension length');
@@ -388,6 +392,12 @@ function handleU2fEnrollRequest(messageSender, request, sendResponse) {
     sendResponseOnce(sentResponse, closeable, response, sendResponse);
   }
 
+  var sender = createSenderFromMessageSender(messageSender);
+  if (!sender) {
+    sendErrorResponse({errorCode: ErrorCodes.BAD_REQUEST});
+    return null;
+  }
+
   async function getRegistrationData(
       appId, enrollChallenge, registrationData, opt_clientData) {
     var isDirect = true;
@@ -397,8 +407,22 @@ function handleU2fEnrollRequest(messageSender, request, sendResponse) {
     } else if (chrome.cryptotokenPrivate != null) {
       isDirect = await(new Promise((resolve, reject) => {
         chrome.cryptotokenPrivate.canAppIdGetAttestation(
-            {'appId': appId, 'tabId': messageSender.tab.id}, resolve);
+            {'appId': appId,
+             'tabId': messageSender.tab.id,
+             'origin': sender.origin,
+            }, resolve);
       }));
+    }
+
+    var decodedRegistrationData =
+        new ByteString(decodeWebSafeBase64ToArray(registrationData));
+    var magicValue = decodedRegistrationData.getBytes(1);
+    if (magicValue[0] == 4) {
+      // This is a gNubby with obsolete firmware. We can't parse the reply from
+      // this device and users need to be guided to reflashing them. Therefore
+      // let attestation data pass directly so that can happen on
+      // accounts.google.com.
+      isDirect = true;
     }
 
     if (isDirect) {
@@ -452,11 +476,6 @@ function handleU2fEnrollRequest(messageSender, request, sendResponse) {
     sendErrorResponse({errorCode: ErrorCodes.TIMEOUT});
   }
 
-  var sender = createSenderFromMessageSender(messageSender);
-  if (!sender) {
-    sendErrorResponse({errorCode: ErrorCodes.BAD_REQUEST});
-    return null;
-  }
   if (sender.origin.indexOf('http://') == 0 && !HTTP_ORIGINS_ALLOWED) {
     sendErrorResponse({errorCode: ErrorCodes.BAD_REQUEST});
     return null;
@@ -500,22 +519,27 @@ function handleU2fEnrollRequest(messageSender, request, sendResponse) {
  * @return {boolean} Whether the request appears valid.
  */
 function isValidEnrollRequest(request) {
-  if (!request.hasOwnProperty('registerRequests'))
+  if (!request.hasOwnProperty('registerRequests')) {
     return false;
+  }
   var enrollChallenges = request['registerRequests'];
-  if (!enrollChallenges.length)
+  if (!enrollChallenges.length) {
     return false;
+  }
   var hasAppId = request.hasOwnProperty('appId');
-  if (!isValidEnrollChallengeArray(enrollChallenges, !hasAppId))
+  if (!isValidEnrollChallengeArray(enrollChallenges, !hasAppId)) {
     return false;
+  }
   var signChallenges = getSignChallenges(request);
   // A missing sign challenge array is ok, in the case the user is not already
   // enrolled.
   // A challenge value need not necessarily be supplied with every challenge.
   var challengeRequired = false;
   if (signChallenges &&
-      !isValidSignChallengeArray(signChallenges, challengeRequired, !hasAppId))
+      !isValidSignChallengeArray(
+          signChallenges, challengeRequired, !hasAppId)) {
     return false;
+  }
   return true;
 }
 
@@ -699,8 +723,9 @@ Enroller.prototype.doEnroll = function(
   getTabIdWhenPossible(this.sender_)
       .then(
           function() {
-            if (self.done_)
+            if (self.done_) {
               return;
+            }
             self.approveOrigin_();
           },
           function() {
@@ -719,8 +744,9 @@ Enroller.prototype.approveOrigin_ = function() {
   FACTORY_REGISTRY.getApprovedOrigins()
       .isApprovedOrigin(this.sender_.origin, this.sender_.tabId)
       .then(function(result) {
-        if (self.done_)
+        if (self.done_) {
           return;
+        }
         if (!result) {
           // Origin not approved: rather than give an explicit indication to
           // the web page, let a timeout occur.
@@ -790,22 +816,270 @@ Enroller.prototype.sendEnrollRequestToHelper_ = function() {
     return;
   }
   var self = this;
-  this.checkAppIds_(enrollAppIds, function(result) {
-    if (self.done_)
+  this.checkAppIds_(enrollAppIds, async (result) => {
+    if (self.done_) {
       return;
+    }
     if (result) {
-      self.handler_ = FACTORY_REGISTRY.getRequestHelper().getHandler(request);
-      if (self.handler_) {
-        var helperComplete =
-            /** @type {function(HelperReply)} */
-            (self.helperComplete_.bind(self));
-        self.handler_.run(helperComplete);
-      } else {
-        self.notifyError_({errorCode: ErrorCodes.OTHER_ERROR});
-      }
+      // AppID is valid, so the request should be sent.
+      await new Promise(resolve => {
+        if (!chrome.cryptotokenPrivate || !window.PublicKeyCredential) {
+          resolve(false);
+        } else {
+          chrome.cryptotokenPrivate.canProxyToWebAuthn(resolve);
+        }
+      }).then(shouldUseWebAuthn => {
+        let v2Challenge;
+        for (let index = 0; index < self.enrollChallenges_.length; index++) {
+          if (self.enrollChallenges_[index]['version'] === 'U2F_V2') {
+            v2Challenge = self.enrollChallenges_[index]['challenge'];
+          }
+        }
+
+        if (v2Challenge && shouldUseWebAuthn) {
+          // If we can proxy to WebAuthn, send the request via WebAuthn.
+          console.log('Proxying registration request to WebAuthn');
+          this.doRegisterWebAuthn_(enrollAppIds[0], v2Challenge, request);
+        } else {
+          self.handler_ =
+              FACTORY_REGISTRY.getRequestHelper().getHandler(request);
+          if (self.handler_) {
+            var helperComplete =
+                /** @type {function(HelperReply)} */
+                (self.helperComplete_.bind(self));
+            self.handler_.run(helperComplete);
+          } else {
+            self.notifyError_({errorCode: ErrorCodes.OTHER_ERROR});
+          }
+        }
+      });
     } else {
       self.notifyError_({errorCode: ErrorCodes.BAD_REQUEST});
     }
+  });
+};
+
+const googleCorpAppId =
+    'https://www.gstatic.com/securitykey/a/google.com/origins.json';
+
+/**
+ * Proxies the registration request over the WebAuthn API.
+ * @private
+ */
+Enroller.prototype.doRegisterWebAuthn_ = function(appId, challenge, request) {
+  if (appId == googleCorpAppId) {
+    this.doRegisterWebAuthnContinue_(appId, challenge, request, true);
+    return;
+  }
+
+  if (!chrome.cryptotokenPrivate) {
+    this.doRegisterWebAuthnContinue_(appId, challenge, request, false);
+    return;
+  }
+
+  chrome.cryptotokenPrivate.isAppIdHashInEnterpriseContext(
+      decodeWebSafeBase64ToArray(B64_encode(sha256HashOfString(appId))),
+      this.doRegisterWebAuthnContinue_.bind(this, appId, challenge, request));
+};
+
+Enroller.prototype.doRegisterWebAuthnContinue_ = function(
+    appId, challenge, request, useIndividualAttestation) {
+  // Set a random ID.
+  const randomId = new Uint8Array(new ArrayBuffer(16));
+  crypto.getRandomValues(randomId);
+
+  const decodedChallenge = B64_decode(challenge);
+  if (decodedChallenge.length == 0) {
+    this.notifyError_({
+      errorCode: ErrorCodes.BAD_REQUEST,
+      errorMessage: 'challenge must be base64url encoded',
+    });
+    return;
+  }
+
+  const excludeList = [];
+  for (let index = 0; index < request['signData'].length; index++) {
+    const element = request['signData'][index];
+    const decodedKeyHandle = B64_decode(element['keyHandle']);
+    if (decodedKeyHandle.length == 0) {
+      this.notifyError_({
+        errorCode: ErrorCodes.BAD_REQUEST,
+        errorMessage: 'keyHandle must be base64url encoded',
+      });
+      return;
+    }
+    excludeList.push({
+      type: 'public-key',
+      id: new Uint8Array(decodedKeyHandle).buffer,
+      transports: ['usb'],
+    });
+  }
+
+  // Request enterprise attestation for the gstatic corp App ID and domains
+  // whitelisted via enterprise policy. Otherwise request 'direct' attestation
+  // (which might later get stripped).
+  const attestationMode = useIndividualAttestation ? 'enterprise' : 'direct';
+  const options = {
+    publicKey: {
+      rp: {
+        id: appId,
+        name: this.sender_.origin,
+      },
+      user: {
+        id: randomId.buffer,
+        displayName: this.sender_.origin,
+        name: this.sender_.origin,
+      },
+      challenge: new Uint8Array(decodedChallenge).buffer,
+      pubKeyCredParams: [{
+        type: 'public-key',
+        alg: -7,  // ES-256
+      }],
+      timeout: this.timer_.millisecondsUntilExpired(),
+      excludeCredentials: excludeList,
+      authenticatorSelection: {
+        authenticatorAttachment: 'cross-platform',
+        requireResidentKey: false,
+        userVerification: 'discouraged',
+      },
+      attestation: attestationMode,
+    },
+  };
+  navigator.credentials.create(options)
+      .then(response => {
+        this.onWebAuthnSuccess_(response, appId);
+      })
+      .catch(exception => {
+        this.onWebAuthnError_(exception);
+      });
+};
+
+/**
+ * Handles a successful credential response from WebAuthn's make credential
+ * request.
+ * @private
+ */
+Enroller.prototype.onWebAuthnSuccess_ =
+    async function(publicKeyCredential, appId) {
+  const clientData =
+      new Uint8Array(publicKeyCredential['response']['clientDataJSON']);
+  const browserData = B64_encode(Array.from(clientData));
+  const u2fResponseData = await this.parseU2fResponseFromAttestationObject_(
+      publicKeyCredential['response']['attestationObject'], appId, browserData);
+  this.notifySuccess_('U2F_V2', u2fResponseData, browserData);
+};
+
+/**
+ * Parses the attestation object received from a WebAuthn make credential call
+ * and converts it into a U2F response message formatted into Base64.
+ * @private
+ */
+Enroller.prototype.parseU2fResponseFromAttestationObject_ =
+    async function(attestationObject, appId, clientData) {
+  // The first byte of the registration response is always 0x5.
+  let u2fResponse = [0x5];
+
+  // Parse the attestation object from CBOR into a JavaScript object.
+  const attestationObjectCbor = new Cbor(attestationObject).getCBOR();
+  // Authenticator data must be at least 120 bytes in length.
+  // https://www.w3.org/TR/webauthn/#fig-attStructs
+  if (!attestationObjectCbor['authData'] ||
+      attestationObjectCbor['authData'].length < 120) {
+    console.warn('Received invalid authenticator response');
+    this.notifyError_({
+      errorCode: ErrorCodes.OTHER_ERROR,
+      errorMessage: 'Invalid response message',
+    });
+    return;
+  }
+
+  const authData = attestationObjectCbor['authData'];
+  // Attested credential data starts after a 32 byte RP ID hash, a 1 byte flag,
+  // and a 4 byte counter value.
+  // https://www.w3.org/TR/webauthn/#sctn-attestation
+  const attestedCredentialData = authData.slice(37, authData.length);
+  let index = 16;
+  let credentialIdLength = (attestedCredentialData[index++] & 0xFF) << 8;
+  credentialIdLength |= (attestedCredentialData[index++] & 0xFF);
+  const credentialId =
+      attestedCredentialData.slice(index, index + credentialIdLength);
+
+  index += credentialIdLength;
+  const encodedPublicKey =
+      attestedCredentialData.slice(index, attestedCredentialData.length);
+  // Parse public key and format it in X509 format [0x4, 32-byte X, 32-byte Y].
+  const coseKey = new Cbor(encodedPublicKey).getCBOR();
+  const publicKeyArray = ([0x4].concat(Array.from(coseKey['-2'])))
+                             .concat(Array.from(coseKey['-3']));
+
+  // Concatenate U2F registration response from the public key, key handle
+  // length, key handle, attestatation certificate, and signature.
+  u2fResponse = u2fResponse.concat(publicKeyArray);
+  u2fResponse.push(credentialIdLength);
+  u2fResponse = u2fResponse.concat(Array.from(credentialId));
+
+  const fmt = attestationObjectCbor['fmt'];
+  const attStatement = attestationObjectCbor['attStmt'];
+  let x5c;
+  let signature;
+  switch (new TextDecoder('utf-8').decode(fmt)) {
+    case 'fido-u2f':
+      x5c = attStatement['x5c'][0];
+      signature = attStatement['sig'];
+      break;
+    case 'none':
+      // Append empty x509 cert and signature to the registration message.
+      const emptySequence = new Uint8Array([0x30, 0]);  // empty ASN.1 SEQUENCE.
+      const registrationData =
+          B64_encode(u2fResponse.concat(Array.from(emptySequence))
+                         .concat(Array.from(emptySequence)));
+      const reg = new Registration(registrationData, appId, null, clientData);
+      const keypair = await makeCertAndKey();
+      signature = await reg.sign(keypair.privateKey);
+      x5c = keypair.certDER;
+      break;
+    default:
+      console.warn('Received unsupported non-U2F attestation');
+      this.notifyError_({
+        errorCode: ErrorCodes.OTHER_ERROR,
+        errorMessage: 'Invalid response message',
+      });
+      return;
+  }
+  u2fResponse = u2fResponse.concat(Array.from(x5c));
+  u2fResponse = u2fResponse.concat(Array.from(signature));
+
+  return B64_encode(u2fResponse);
+};
+
+/**
+ * Handles DOMExceptions returned as errors from the WebAuthn make credential
+ * call. Converts exceptions into U2F compatible exceptions.
+ * @param {*} exception Exception returned from the WebAuthn request.
+ * @private
+ */
+Enroller.prototype.onWebAuthnError_ = function(exception) {
+  const domError = /** @type {!DOMException} */ (exception);
+  let errorCode = ErrorCodes.OTHER_ERROR;
+  let errorDetails;
+
+  if (domError && domError.name) {
+    switch (domError.name) {
+      case 'NotAllowedError':
+        errorCode = ErrorCodes.TIMEOUT;
+        break;
+      case 'InvalidStateError':
+        errorCode = ErrorCodes.DEVICE_INELIGIBLE;
+        break;
+      default:
+        // Fall through
+        break;
+    }
+  }
+
+  this.notifyError_({
+    errorCode: errorCode,
+    errorMessage: domError.toString(),
   });
 };
 
@@ -937,8 +1211,9 @@ Enroller.prototype.close = function() {
  * @private
  */
 Enroller.prototype.notifyError_ = function(error) {
-  if (this.done_)
+  if (this.done_) {
     return;
+  }
   this.close();
   this.done_ = true;
   this.errorCb_(error);
@@ -953,8 +1228,9 @@ Enroller.prototype.notifyError_ = function(error) {
  */
 Enroller.prototype.notifySuccess_ = function(
     u2fVersion, info, opt_browserData) {
-  if (this.done_)
+  if (this.done_) {
     return;
+  }
   this.close();
   this.done_ = true;
   this.successCb_(u2fVersion, info, opt_browserData);
@@ -974,8 +1250,9 @@ Enroller.prototype.helperComplete_ = function(reply) {
     // Log non-expected reply codes if we have url to send them.
     if (reportedError.errorCode == ErrorCodes.OTHER_ERROR) {
       var logMsg = 'log=u2fenroll&rc=' + reply.code.toString(16);
-      if (this.logMsgUrl_)
+      if (this.logMsgUrl_) {
         logMessage(logMsg, this.logMsgUrl_);
+      }
     }
     this.notifyError_(reportedError);
   } else {

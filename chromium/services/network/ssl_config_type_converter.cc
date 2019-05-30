@@ -4,24 +4,6 @@
 
 #include "services/network/ssl_config_type_converter.h"
 
-namespace {
-
-net::TLS13Variant MojoTLS13VariantToNetTLS13Variant(
-    network::mojom::TLS13Variant tls13_variant) {
-  switch (tls13_variant) {
-    case network::mojom::TLS13Variant::kDraft23:
-      return net::kTLS13VariantDraft23;
-    case network::mojom::TLS13Variant::kDraft28:
-      return net::kTLS13VariantDraft28;
-    case network::mojom::TLS13Variant::kFinal:
-      return net::kTLS13VariantFinal;
-  }
-  NOTREACHED();
-  return net::kTLS13VariantDraft23;
-}
-
-}  // namespace
-
 namespace mojo {
 
 int MojoSSLVersionToNetSSLVersion(network::mojom::SSLVersion mojo_version) {
@@ -36,7 +18,7 @@ int MojoSSLVersionToNetSSLVersion(network::mojom::SSLVersion mojo_version) {
       return net::SSL_PROTOCOL_VERSION_TLS1_3;
   }
   NOTREACHED();
-  return net::SSL_PROTOCOL_VERSION_TLS1_2;
+  return net::SSL_PROTOCOL_VERSION_TLS1_3;
 }
 
 net::SSLConfig
@@ -51,9 +33,6 @@ TypeConverter<net::SSLConfig, network::mojom::SSLConfigPtr>::Convert(
   net_config.version_max =
       MojoSSLVersionToNetSSLVersion(mojo_config->version_max);
   DCHECK_LE(net_config.version_min, net_config.version_max);
-
-  net_config.tls13_variant =
-      MojoTLS13VariantToNetTLS13Variant(mojo_config->tls13_variant);
 
   for (uint16_t cipher_suite : mojo_config->disabled_cipher_suites) {
     net_config.disabled_cipher_suites.push_back(cipher_suite);

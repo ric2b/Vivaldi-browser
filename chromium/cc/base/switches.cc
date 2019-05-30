@@ -48,10 +48,6 @@ const char kCheckDamageEarly[] = "check-damage-early";
 // Enables the GPU benchmarking extension
 const char kEnableGpuBenchmarking[] = "enable-gpu-benchmarking";
 
-// Always asks the display compositor to send back presentation times.
-const char kAlwaysRequestPresentationTime[] =
-    "always-request-presentation-time";
-
 // Renders a border around compositor layers to help debug and study
 // layer compositing.
 const char kShowCompositedLayerBorders[] = "show-composited-layer-borders";
@@ -84,8 +80,7 @@ const char kUIShowSurfaceDamageRects[] = "ui-show-surface-damage-rects";
 const char kShowScreenSpaceRects[] = "show-screenspace-rects";
 const char kUIShowScreenSpaceRects[] = "ui-show-screenspace-rects";
 
-// Switches cc machinery to use layer lists instead of layer trees
-const char kEnableLayerLists[] = "enable-layer-lists";
+// Switches the ui compositor to use layer lists instead of layer trees.
 const char kUIEnableLayerLists[] = "ui-enable-layer-lists";
 
 // Prevents the layer tree unit tests from timing out.
@@ -96,6 +91,10 @@ const char kCCLayerTreeTestLongTimeout[] = "cc-layer-tree-test-long-timeout";
 
 // Makes pixel tests write their output instead of read it.
 const char kCCRebaselinePixeltests[] = "cc-rebaseline-pixeltests";
+
+// Controls the duration of the scroll animation curve.
+const char kCCScrollAnimationDurationForTesting[] =
+    "cc-scroll-animation-duration-in-seconds";
 
 }  // namespace switches
 }  // namespace cc

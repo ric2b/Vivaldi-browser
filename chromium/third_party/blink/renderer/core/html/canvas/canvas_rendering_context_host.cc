@@ -11,11 +11,29 @@
 #include "third_party/blink/renderer/platform/graphics/gpu/shared_gpu_context.h"
 #include "third_party/blink/renderer/platform/graphics/skia/skia_utils.h"
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
+#include "third_party/blink/renderer/platform/histogram.h"
 #include "third_party/skia/include/core/SkSurface.h"
 
 namespace blink {
 
 CanvasRenderingContextHost::CanvasRenderingContextHost() = default;
+
+void CanvasRenderingContextHost::RecordCanvasSizeToUMA(const IntSize& size,
+                                                       HostType hostType) {
+  if (did_record_canvas_size_to_uma_)
+    return;
+  did_record_canvas_size_to_uma_ = true;
+
+  if (hostType == kCanvasHost) {
+    UMA_HISTOGRAM_CUSTOM_COUNTS("Blink.Canvas.SqrtNumberOfPixels",
+                                std::sqrt(size.Area()), 1, 5000, 100);
+  } else if (hostType == kOffscreenCanvasHost) {
+    UMA_HISTOGRAM_CUSTOM_COUNTS("Blink.OffscreenCanvas.SqrtNumberOfPixels",
+                                std::sqrt(size.Area()), 1, 5000, 100);
+  } else {
+    NOTREACHED();
+  }
+}
 
 scoped_refptr<StaticBitmapImage>
 CanvasRenderingContextHost::CreateTransparentImage(const IntSize& size) const {
@@ -73,13 +91,19 @@ CanvasRenderingContextHost::GetOrCreateCanvasResourceProviderImpl(
           GetOrCreateResourceDispatcher()
               ? GetOrCreateResourceDispatcher()->GetWeakPtr()
               : nullptr;
-      if (Is3d()) {
-        const CanvasResourceProvider::ResourceUsage usage =
-            SharedGpuContext::IsGpuCompositingEnabled()
-                ? CanvasResourceProvider::kAcceleratedCompositedResourceUsage
-                : CanvasResourceProvider::kSoftwareCompositedResourceUsage;
 
-        CanvasResourceProvider::PresentationMode presentation_mode =
+      if (Is3d()) {
+        CanvasResourceProvider::ResourceUsage usage;
+        if (SharedGpuContext::IsGpuCompositingEnabled()) {
+          if (LowLatencyEnabled())
+            usage = CanvasResourceProvider::kAcceleratedDirect3DResourceUsage;
+          else
+            usage = CanvasResourceProvider::kAcceleratedCompositedResourceUsage;
+        } else {
+          usage = CanvasResourceProvider::kSoftwareCompositedResourceUsage;
+        }
+
+        const CanvasResourceProvider::PresentationMode presentation_mode =
             RuntimeEnabledFeatures::WebGLImageChromiumEnabled()
                 ? CanvasResourceProvider::kAllowImageChromiumPresentationMode
                 : CanvasResourceProvider::kDefaultPresentationMode;
@@ -96,13 +120,19 @@ CanvasRenderingContextHost::GetOrCreateCanvasResourceProviderImpl(
         const bool want_acceleration =
             hint == kPreferAcceleration && ShouldAccelerate2dContext();
 
-        const CanvasResourceProvider::ResourceUsage usage =
-            want_acceleration
-                ? CanvasResourceProvider::kAcceleratedCompositedResourceUsage
-                : CanvasResourceProvider::kSoftwareCompositedResourceUsage;
+        CanvasResourceProvider::ResourceUsage usage;
+        if (want_acceleration) {
+          if (LowLatencyEnabled())
+            usage = CanvasResourceProvider::kAcceleratedDirect2DResourceUsage;
+          else
+            usage = CanvasResourceProvider::kAcceleratedCompositedResourceUsage;
+        } else {
+          usage = CanvasResourceProvider::kSoftwareCompositedResourceUsage;
+        }
 
         const CanvasResourceProvider::PresentationMode presentation_mode =
-            RuntimeEnabledFeatures::Canvas2dImageChromiumEnabled()
+            (RuntimeEnabledFeatures::Canvas2dImageChromiumEnabled() ||
+             (LowLatencyEnabled() && want_acceleration))
                 ? CanvasResourceProvider::kAllowImageChromiumPresentationMode
                 : CanvasResourceProvider::kDefaultPresentationMode;
 
@@ -137,7 +167,7 @@ CanvasColorParams CanvasRenderingContextHost::ColorParams() const {
 
 ScriptPromise CanvasRenderingContextHost::convertToBlob(
     ScriptState* script_state,
-    const ImageEncodeOptions& options,
+    const ImageEncodeOptions* options,
     ExceptionState& exception_state) const {
   WTF::String object_name = "Canvas";
   if (this->IsOffscreenCanvas())
@@ -185,7 +215,7 @@ ScriptPromise CanvasRenderingContextHost::convertToBlob(
     CanvasAsyncBlobCreator* async_creator = CanvasAsyncBlobCreator::Create(
         image_bitmap, options, function_type, start_time,
         ExecutionContext::From(script_state), resolver);
-    async_creator->ScheduleAsyncBlobCreation(options.quality());
+    async_creator->ScheduleAsyncBlobCreation(options->quality());
     return resolver->Promise();
   }
   exception_state.ThrowDOMException(DOMExceptionCode::kNotReadableError,

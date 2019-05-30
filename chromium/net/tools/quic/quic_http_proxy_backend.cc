@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "build/build_config.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
@@ -136,8 +137,7 @@ void QuicHttpProxyBackend::CloseBackendResponseStream(
     base::AutoLock lock(backend_stream_mutex_);
     QuicHttpProxyBackendStream* proxy_backend_stream = nullptr;
 
-    ProxyBackendStreamMap::iterator it =
-        backend_stream_map_.find(quic_server_stream);
+    auto it = backend_stream_map_.find(quic_server_stream);
     if (it != backend_stream_map_.end()) {
       proxy_backend_stream = it->second.get();
       proxy_backend_stream->CancelRequest();
@@ -169,8 +169,8 @@ void QuicHttpProxyBackend::InitializeURLRequestContext() {
           ProxyConfigWithAnnotation::CreateDirect()));
 #endif
 
-  // Disable net::CookieStore and net::ChannelIDService.
-  context_builder.SetCookieAndChannelIdStores(nullptr, nullptr);
+  // Disable net::CookieStore.
+  context_builder.SetCookieStore(nullptr);
   context_ = context_builder.Build();
 }
 

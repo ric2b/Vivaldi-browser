@@ -39,8 +39,10 @@ const char kJsScreenPath[] = "login.TermsOfServiceScreen";
 namespace chromeos {
 
 TermsOfServiceScreenHandler::TermsOfServiceScreenHandler(
+    JSCallsContainer* js_calls_container,
     CoreOobeView* core_oobe_view)
-    : BaseScreenHandler(kScreenId), core_oobe_view_(core_oobe_view) {
+    : BaseScreenHandler(kScreenId, js_calls_container),
+      core_oobe_view_(core_oobe_view) {
   set_call_js_prefix(kJsScreenPath);
 }
 
@@ -177,7 +179,7 @@ void TermsOfServiceScreenHandler::DoShow() {
 
 void TermsOfServiceScreenHandler::UpdateDomainInUI() {
   if (page_is_ready())
-    CallJS("setDomain", domain_);
+    CallJS("login.TermsOfServiceScreen.setDomain", domain_);
 }
 
 void TermsOfServiceScreenHandler::UpdateTermsOfServiceInUI() {
@@ -189,9 +191,9 @@ void TermsOfServiceScreenHandler::UpdateTermsOfServiceInUI() {
   // download is still in progress and the UI will be updated when the
   // OnLoadError() or the OnLoadSuccess() callback is called.
   if (load_error_)
-    CallJS("setTermsOfServiceLoadError");
+    CallJS("login.TermsOfServiceScreen.setTermsOfServiceLoadError");
   else if (!terms_of_service_.empty())
-    CallJS("setTermsOfService", terms_of_service_);
+    CallJS("login.TermsOfServiceScreen.setTermsOfService", terms_of_service_);
 }
 
 void TermsOfServiceScreenHandler::HandleBack() {

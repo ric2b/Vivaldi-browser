@@ -6,18 +6,16 @@ package org.chromium.chrome.test.util.browser.signin;
 
 import android.accounts.Account;
 import android.annotation.SuppressLint;
-import android.app.Instrumentation;
-import android.content.Context;
 import android.support.annotation.WorkerThread;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
-import org.chromium.chrome.browser.init.ProcessInitializationHandler;
-import org.chromium.chrome.browser.signin.AccountTrackerService;
-import org.chromium.chrome.browser.signin.OAuth2TokenService;
+import org.chromium.chrome.browser.signin.IdentityServicesProvider;
+import org.chromium.chrome.browser.signin.SigninHelper;
 import org.chromium.components.signin.AccountIdProvider;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.ChromeSigninController;
+import org.chromium.components.signin.OAuth2TokenService;
 import org.chromium.components.signin.test.util.AccountHolder;
 import org.chromium.components.signin.test.util.FakeAccountManagerDelegate;
 
@@ -34,8 +32,6 @@ public final class SigninTestUtil {
     private static final String DEFAULT_ACCOUNT = "test@gmail.com";
 
     @SuppressLint("StaticFieldLeak")
-    private static Context sContext;
-    @SuppressLint("StaticFieldLeak")
     private static FakeAccountManagerDelegate sAccountManager;
     @SuppressLint("StaticFieldLeak")
     private static List<AccountHolder> sAddedAccounts = new ArrayList<>();
@@ -46,20 +42,13 @@ public final class SigninTestUtil {
      * This must be called before native is loaded.
      */
     @WorkerThread
-    public static void setUpAuthForTest(Instrumentation instrumentation) {
-        assert sContext == null;
-        sContext = instrumentation.getTargetContext();
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                ProcessInitializationHandler.getInstance().initializePreNative();
-            }
-        });
+    public static void setUpAuthForTest() {
         sAccountManager = new FakeAccountManagerDelegate(
                 FakeAccountManagerDelegate.DISABLE_PROFILE_DATA_SOURCE);
         AccountManagerFacade.overrideAccountManagerFacadeForTests(sAccountManager);
         overrideAccountIdProvider();
         resetSigninState();
+        SigninHelper.resetSharedPrefs();
     }
 
     /**
@@ -71,14 +60,14 @@ public final class SigninTestUtil {
             sAccountManager.removeAccountHolderBlocking(accountHolder);
         }
         sAddedAccounts.clear();
-        sContext = null;
+        resetSigninState();
+        SigninHelper.resetSharedPrefs();
     }
 
     /**
      * Returns the currently signed in account.
      */
     public static Account getCurrentAccount() {
-        assert sContext != null;
         return ChromeSigninController.get().getSignedInUser();
     }
 
@@ -97,8 +86,7 @@ public final class SigninTestUtil {
         AccountHolder accountHolder = AccountHolder.builder(account).alwaysAccept(true).build();
         sAccountManager.addAccountHolderBlocking(accountHolder);
         sAddedAccounts.add(accountHolder);
-        ThreadUtils.runOnUiThreadBlocking(
-                () -> AccountTrackerService.get().invalidateAccountSeedStatus(true));
+        ThreadUtils.runOnUiThreadBlocking(SigninTestUtil::seedAccounts);
         return account;
     }
 
@@ -109,27 +97,37 @@ public final class SigninTestUtil {
         Account account = addTestAccount();
         ThreadUtils.runOnUiThreadBlocking(() -> {
             ChromeSigninController.get().setSignedInAccountName(DEFAULT_ACCOUNT);
-            AccountTrackerService.get().invalidateAccountSeedStatus(true);
+            seedAccounts();
         });
         return account;
     }
 
-    private static void overrideAccountIdProvider() {
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                AccountIdProvider.setInstanceForTest(new AccountIdProvider() {
-                    @Override
-                    public String getAccountId(String accountName) {
-                        return "gaia-id-" + accountName;
-                    }
+    private static void seedAccounts() {
+        AccountIdProvider accountIdProvider = AccountIdProvider.getInstance();
+        Account[] accounts = sAccountManager.getAccountsSyncNoThrow();
+        String[] accountNames = new String[accounts.length];
+        String[] accountIds = new String[accounts.length];
+        for (int i = 0; i < accounts.length; i++) {
+            accountNames[i] = accounts[i].name;
+            accountIds[i] = accountIdProvider.getAccountId(accounts[i].name);
+        }
+        IdentityServicesProvider.getAccountTrackerService().syncForceRefreshForTest(
+                accountIds, accountNames);
+    }
 
-                    @Override
-                    public boolean canBeUsed() {
-                        return true;
-                    }
-                });
-            }
+    private static void overrideAccountIdProvider() {
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            AccountIdProvider.setInstanceForTest(new AccountIdProvider() {
+                @Override
+                public String getAccountId(String accountName) {
+                    return "gaia-id-" + accountName;
+                }
+
+                @Override
+                public boolean canBeUsed() {
+                    return true;
+                }
+            });
         });
     }
 
@@ -142,7 +140,7 @@ public final class SigninTestUtil {
         ChromeSigninController.get().setSignedInAccountName(null);
         ContextUtils.getAppSharedPreferences()
                 .edit()
-                .putStringSet(OAuth2TokenService.STORED_ACCOUNTS_KEY, new HashSet<String>())
+                .putStringSet(OAuth2TokenService.STORED_ACCOUNTS_KEY, new HashSet<>())
                 .apply();
     }
 

@@ -21,26 +21,58 @@
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/network/http_names.h"
 
+namespace mojo {
+
+using blink::mojom::blink::CacheQueryOptions;
+using blink::mojom::blink::CacheQueryOptionsPtr;
+using blink::mojom::blink::MultiCacheQueryOptions;
+using blink::mojom::blink::MultiCacheQueryOptionsPtr;
+
+template <>
+struct TypeConverter<MultiCacheQueryOptionsPtr,
+                     const blink::MultiCacheQueryOptions*> {
+  static MultiCacheQueryOptionsPtr Convert(
+      const blink::MultiCacheQueryOptions* input) {
+    CacheQueryOptionsPtr query_options = CacheQueryOptions::New();
+    query_options->ignore_search = input->ignoreSearch();
+    query_options->ignore_method = input->ignoreMethod();
+    query_options->ignore_vary = input->ignoreVary();
+
+    MultiCacheQueryOptionsPtr output = MultiCacheQueryOptions::New();
+    output->query_options = std::move(query_options);
+    output->cache_name = input->cacheName();
+    return output;
+  }
+};
+
+}  // namespace mojo
+
 namespace blink {
 
 CacheStorage* CacheStorage::Create(ExecutionContext* context,
                                    GlobalFetch::ScopedFetcher* fetcher) {
-  return new CacheStorage(context, fetcher);
+  return MakeGarbageCollected<CacheStorage>(context, fetcher);
 }
 
 ScriptPromise CacheStorage::open(ScriptState* script_state,
                                  const String& cache_name) {
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
 
+  // Make sure to bind the CacheStorage object to keep the mojo interface
+  // pointer alive during the operation.  Otherwise GC might prevent the
+  // callback from ever being executed.
   cache_storage_ptr_->Open(
       cache_name,
       WTF::Bind(
           [](ScriptPromiseResolver* resolver,
-             GlobalFetch::ScopedFetcher* fetcher, TimeTicks start_time,
-             mojom::blink::OpenResultPtr result) {
+             GlobalFetch::ScopedFetcher* fetcher, base::TimeTicks start_time,
+             CacheStorage* cache_storage, mojom::blink::OpenResultPtr result) {
+            UMA_HISTOGRAM_TIMES("ServiceWorkerCache.CacheStorage.Renderer.Open",
+                                base::TimeTicks::Now() - start_time);
             if (!resolver->GetExecutionContext() ||
-                resolver->GetExecutionContext()->IsContextDestroyed())
+                resolver->GetExecutionContext()->IsContextDestroyed()) {
               return;
+            }
             if (result->is_status()) {
               switch (result->get_status()) {
                 case mojom::blink::CacheStorageError::kErrorNotFound:
@@ -53,14 +85,15 @@ ScriptPromise CacheStorage::open(ScriptState* script_state,
                   break;
               }
             } else {
-              UMA_HISTOGRAM_TIMES("ServiceWorkerCache.CacheStorage.Open",
-                                  TimeTicks::Now() - start_time);
-              resolver->Resolve(
-                  Cache::Create(fetcher, std::move(result->get_cache())));
+              // See https://bit.ly/2S0zRAS for task types.
+              resolver->Resolve(Cache::Create(
+                  fetcher, cache_storage, std::move(result->get_cache()),
+                  resolver->GetExecutionContext()->GetTaskRunner(
+                      blink::TaskType::kMiscPlatformAPI)));
             }
           },
           WrapPersistent(resolver), WrapPersistent(scoped_fetcher_.Get()),
-          TimeTicks::Now()));
+          TimeTicks::Now(), WrapPersistent(this)));
 
   return resolver->Promise();
 }
@@ -69,18 +102,21 @@ ScriptPromise CacheStorage::has(ScriptState* script_state,
                                 const String& cache_name) {
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
 
+  // Make sure to bind the CacheStorage object to keep the mojo interface
+  // pointer alive during the operation.  Otherwise GC might prevent the
+  // callback from ever being executed.
   cache_storage_ptr_->Has(
       cache_name,
       WTF::Bind(
-          [](ScriptPromiseResolver* resolver, TimeTicks start_time,
-             mojom::blink::CacheStorageError result) {
+          [](ScriptPromiseResolver* resolver, base::TimeTicks start_time,
+             CacheStorage* _, mojom::blink::CacheStorageError result) {
+            UMA_HISTOGRAM_TIMES("ServiceWorkerCache.CacheStorage.Renderer.Has",
+                                base::TimeTicks::Now() - start_time);
             if (!resolver->GetExecutionContext() ||
                 resolver->GetExecutionContext()->IsContextDestroyed())
               return;
             switch (result) {
               case mojom::blink::CacheStorageError::kSuccess:
-                UMA_HISTOGRAM_TIMES("ServiceWorkerCache.CacheStorage.Has",
-                                    TimeTicks::Now() - start_time);
                 resolver->Resolve(true);
                 break;
               case mojom::blink::CacheStorageError::kErrorNotFound:
@@ -91,7 +127,7 @@ ScriptPromise CacheStorage::has(ScriptState* script_state,
                 break;
             }
           },
-          WrapPersistent(resolver), TimeTicks::Now()));
+          WrapPersistent(resolver), TimeTicks::Now(), WrapPersistent(this)));
 
   return resolver->Promise();
 }
@@ -100,18 +136,22 @@ ScriptPromise CacheStorage::Delete(ScriptState* script_state,
                                    const String& cache_name) {
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
 
+  // Make sure to bind the CacheStorage object to keep the mojo interface
+  // pointer alive during the operation.  Otherwise GC might prevent the
+  // callback from ever being executed.
   cache_storage_ptr_->Delete(
       cache_name,
       WTF::Bind(
-          [](ScriptPromiseResolver* resolver, TimeTicks start_time,
-             mojom::blink::CacheStorageError result) {
+          [](ScriptPromiseResolver* resolver, base::TimeTicks start_time,
+             CacheStorage* _, mojom::blink::CacheStorageError result) {
+            UMA_HISTOGRAM_TIMES(
+                "ServiceWorkerCache.CacheStorage.Renderer.Delete",
+                base::TimeTicks::Now() - start_time);
             if (!resolver->GetExecutionContext() ||
                 resolver->GetExecutionContext()->IsContextDestroyed())
               return;
             switch (result) {
               case mojom::blink::CacheStorageError::kSuccess:
-                UMA_HISTOGRAM_TIMES("ServiceWorkerCache.CacheStorage.Delete",
-                                    TimeTicks::Now() - start_time);
                 resolver->Resolve(true);
                 break;
               case mojom::blink::CacheStorageError::kErrorStorage:
@@ -123,7 +163,7 @@ ScriptPromise CacheStorage::Delete(ScriptState* script_state,
                 break;
             }
           },
-          WrapPersistent(resolver), TimeTicks::Now()));
+          WrapPersistent(resolver), TimeTicks::Now(), WrapPersistent(this)));
 
   return resolver->Promise();
 }
@@ -131,24 +171,27 @@ ScriptPromise CacheStorage::Delete(ScriptState* script_state,
 ScriptPromise CacheStorage::keys(ScriptState* script_state) {
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
 
+  // Make sure to bind the CacheStorage object to keep the mojo interface
+  // pointer alive during the operation.  Otherwise GC might prevent the
+  // callback from ever being executed.
   cache_storage_ptr_->Keys(WTF::Bind(
-      [](ScriptPromiseResolver* resolver, TimeTicks start_time,
-         const Vector<String>& keys) {
+      [](ScriptPromiseResolver* resolver, base::TimeTicks start_time,
+         CacheStorage* _, const Vector<String>& keys) {
+        UMA_HISTOGRAM_TIMES("ServiceWorkerCache.CacheStorage.Renderer.Keys",
+                            base::TimeTicks::Now() - start_time);
         if (!resolver->GetExecutionContext() ||
             resolver->GetExecutionContext()->IsContextDestroyed())
           return;
-        UMA_HISTOGRAM_TIMES("ServiceWorkerCache.CacheStorage.Keys",
-                            TimeTicks::Now() - start_time);
         resolver->Resolve(keys);
       },
-      WrapPersistent(resolver), TimeTicks::Now()));
+      WrapPersistent(resolver), TimeTicks::Now(), WrapPersistent(this)));
 
   return resolver->Promise();
 }
 
 ScriptPromise CacheStorage::match(ScriptState* script_state,
                                   const RequestInfo& request,
-                                  const CacheQueryOptions& options,
+                                  const MultiCacheQueryOptions* options,
                                   ExceptionState& exception_state) {
   DCHECK(!request.IsNull());
 
@@ -163,24 +206,35 @@ ScriptPromise CacheStorage::match(ScriptState* script_state,
 
 ScriptPromise CacheStorage::MatchImpl(ScriptState* script_state,
                                       const Request* request,
-                                      const CacheQueryOptions& options) {
-  WebServiceWorkerRequest web_request;
-  request->PopulateWebServiceWorkerRequest(web_request);
-
+                                      const MultiCacheQueryOptions* options) {
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
   const ScriptPromise promise = resolver->Promise();
 
-  if (request->method() != HTTPNames::GET && !options.ignoreMethod()) {
+  if (request->method() != http_names::kGET && !options->ignoreMethod()) {
     resolver->Resolve();
     return promise;
   }
 
+  // Make sure to bind the CacheStorage object to keep the mojo interface
+  // pointer alive during the operation.  Otherwise GC might prevent the
+  // callback from ever being executed.
   cache_storage_ptr_->Match(
-      web_request, Cache::ToQueryParams(options),
+      request->CreateFetchAPIRequest(),
+      mojom::blink::MultiCacheQueryOptions::From(options),
       WTF::Bind(
-          [](ScriptPromiseResolver* resolver, TimeTicks start_time,
-             const CacheQueryOptions& options,
+          [](ScriptPromiseResolver* resolver, base::TimeTicks start_time,
+             const MultiCacheQueryOptions* options, CacheStorage* _,
              mojom::blink::MatchResultPtr result) {
+            base::TimeDelta elapsed = base::TimeTicks::Now() - start_time;
+            if (!options->hasCacheName() || options->cacheName().IsEmpty()) {
+              UMA_HISTOGRAM_LONG_TIMES(
+                  "ServiceWorkerCache.CacheStorage.Renderer.MatchAllCaches",
+                  elapsed);
+            } else {
+              UMA_HISTOGRAM_LONG_TIMES(
+                  "ServiceWorkerCache.CacheStorage.Renderer.MatchOneCache",
+                  elapsed);
+            }
             if (!resolver->GetExecutionContext() ||
                 resolver->GetExecutionContext()->IsContextDestroyed())
               return;
@@ -197,26 +251,13 @@ ScriptPromise CacheStorage::MatchImpl(ScriptState* script_state,
                   break;
               }
             } else {
-              TimeDelta elapsed = TimeTicks::Now() - start_time;
-              UMA_HISTOGRAM_LONG_TIMES("ServiceWorkerCache.CacheStorage.Match2",
-                                       elapsed);
-              if (options.hasIgnoreSearch() && options.ignoreSearch()) {
-                UMA_HISTOGRAM_LONG_TIMES(
-                    "ServiceWorkerCache.CacheStorage.Match2."
-                    "IgnoreSearchEnabled",
-                    elapsed);
-              } else {
-                UMA_HISTOGRAM_LONG_TIMES(
-                    "ServiceWorkerCache.CacheStorage.Match2."
-                    "IgnoreSearchDisabled",
-                    elapsed);
-              }
               ScriptState::Scope scope(resolver->GetScriptState());
               resolver->Resolve(Response::Create(resolver->GetScriptState(),
                                                  *result->get_response()));
             }
           },
-          WrapPersistent(resolver), TimeTicks::Now(), options));
+          WrapPersistent(resolver), TimeTicks::Now(), WrapPersistent(options),
+          WrapPersistent(this)));
 
   return promise;
 }
@@ -224,20 +265,23 @@ ScriptPromise CacheStorage::MatchImpl(ScriptState* script_state,
 CacheStorage::CacheStorage(ExecutionContext* context,
                            GlobalFetch::ScopedFetcher* fetcher)
     : scoped_fetcher_(fetcher) {
+  // See https://bit.ly/2S0zRAS for task types.
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+      context->GetTaskRunner(blink::TaskType::kMiscPlatformAPI);
+
   // Service workers may already have a CacheStoragePtr provided as an
   // optimization.
-  if (context->IsServiceWorkerGlobalScope()) {
-    auto* service_worker = ToServiceWorkerGlobalScope(context);
+  if (auto* service_worker = DynamicTo<ServiceWorkerGlobalScope>(context)) {
     mojom::blink::CacheStoragePtrInfo info = service_worker->TakeCacheStorage();
     if (info) {
       cache_storage_ptr_ = RevocableInterfacePtr<mojom::blink::CacheStorage>(
-          std::move(info), context->GetInterfaceInvalidator());
+          std::move(info), context->GetInterfaceInvalidator(), task_runner);
       return;
     }
   }
 
-  context->GetInterfaceProvider()->GetInterface(
-      MakeRequest(&cache_storage_ptr_, context->GetInterfaceInvalidator()));
+  context->GetInterfaceProvider()->GetInterface(MakeRequest(
+      &cache_storage_ptr_, context->GetInterfaceInvalidator(), task_runner));
 }
 
 CacheStorage::~CacheStorage() = default;

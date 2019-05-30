@@ -72,7 +72,6 @@
 <translation id="3241680850019875542">Odaberite korijenski direktorij proširenja za pakiranje. Da biste ažurirali proširenje, odaberite i datoteku osobnog ključa za ponovnu upotrebu.</translation>
 <translation id="3280237271814976245">Spremi &amp;kao...</translation>
 <translation id="3288047731229977326">Proširenja pokrenuta u načinu rada razvojnog programera mogu naštetiti vašem računalu. Ako niste razvojni programer, trebali biste onemogućiti proširenja koja su pokrenuta u načinu rada razvojnog programera radi svoje zaštite.</translation>
-<translation id="3319048459796106952">&amp;Novi anonimni prozor</translation>
 <translation id="3347086966102161372">K&amp;opiraj adresu slike</translation>
 <translation id="3378572629723696641">Ovo proširenje možda je oštećeno.</translation>
 <translation id="345693547134384690">Otvori &amp;sliku u novoj &amp;kartici</translation>
@@ -130,10 +129,8 @@
 <translation id="5233019165164992427">Priključak za otklanjanje pogrešaka lokalnog klijenta</translation>
 <translation id="5233231016133573565">ID procesa</translation>
 <translation id="5233736638227740678">&amp;Zalijepi</translation>
-<translation id="5271549068863921519">Spremi zaporku</translation>
 <translation id="52912272896845572">Datoteka osobnog ključa nije važeća.</translation>
 <translation id="5301954838959518834">U redu, shvaćam</translation>
-<translation id="5329858601952122676">&amp;Obriši</translation>
 <translation id="5355926466126177564">Proširenje "<ph name="EXTENSION_NAME" />" promijenilo stranicu koja se prikazuje prilikom pretraživanja putem višenamjenskog okvira.</translation>
 <translation id="5362741141255528695">Odaberite datoteku s osobnim ključem.</translation>
 <translation id="5370819323174483825">&amp;Ponovo učitaj</translation>

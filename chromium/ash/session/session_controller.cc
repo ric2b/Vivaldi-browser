@@ -20,7 +20,8 @@
 #include "ash/system/power/power_event_observer.h"
 #include "ash/system/screen_security/screen_switch_check_controller.h"
 #include "ash/wm/lock_state_controller.h"
-#include "ash/wm/overview/window_selector_controller.h"
+#include "ash/wm/mru_window_tracker.h"
+#include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
@@ -28,7 +29,7 @@
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/logging.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "components/account_id/account_id.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -80,6 +81,11 @@ void SessionController::BindRequest(mojom::SessionControllerRequest request) {
 
 int SessionController::NumberOfLoggedInUsers() const {
   return static_cast<int>(user_sessions_.size());
+}
+
+AccountId SessionController::GetActiveAccountId() const {
+  return user_sessions_.empty() ? AccountId()
+                                : user_sessions_[0]->user_info->account_id;
 }
 
 AddUserSessionPolicy SessionController::GetAddUserPolicy() const {
@@ -198,6 +204,14 @@ bool SessionController::IsUserChild() const {
 
   user_manager::UserType active_user_type = GetUserSession(0)->user_info->type;
   return active_user_type == user_manager::USER_TYPE_CHILD;
+}
+
+bool SessionController::IsUserPublicAccount() const {
+  if (!IsActiveUserSessionStarted())
+    return false;
+
+  user_manager::UserType active_user_type = GetUserSession(0)->user_info->type;
+  return active_user_type == user_manager::USER_TYPE_PUBLIC_ACCOUNT;
 }
 
 base::Optional<user_manager::UserType> SessionController::GetUserType() const {
@@ -433,8 +447,7 @@ void SessionController::SetSessionLengthLimit(base::TimeDelta length_limit,
 void SessionController::CanSwitchActiveUser(
     CanSwitchActiveUserCallback callback) {
   // Cancel overview mode when switching user profiles.
-  WindowSelectorController* controller =
-      Shell::Get()->window_selector_controller();
+  OverviewController* controller = Shell::Get()->overview_controller();
   if (controller->IsSelecting())
     controller->ToggleOverview();
 
@@ -511,6 +524,7 @@ void SessionController::SetSessionState(SessionState state) {
   if (state_ == state)
     return;
 
+  const bool was_user_session_blocked = IsUserSessionBlocked();
   const bool was_locked = state_ == SessionState::LOCKED;
   state_ = state;
   for (auto& observer : observers_)
@@ -534,6 +548,9 @@ void SessionController::SetSessionState(SessionState state) {
     ConnectToSigninScreenPrefService();
     signin_screen_prefs_requested_ = true;
   }
+
+  if (was_user_session_blocked && !IsUserSessionBlocked())
+    EnsureActiveWindowAfterUnblockingUserSession();
 }
 
 void SessionController::AddUserSession(mojom::UserSessionPtr user_session) {
@@ -715,6 +732,16 @@ void SessionController::MaybeNotifyOnActiveUserPrefServiceChanged() {
 
   for (auto& observer : observers_)
     observer.OnActiveUserPrefServiceChanged(last_active_user_prefs_);
+}
+
+void SessionController::EnsureActiveWindowAfterUnblockingUserSession() {
+  // This happens only in tests (See SessionControllerTest).
+  if (!Shell::HasInstance())
+    return;
+
+  auto mru_list = Shell::Get()->mru_window_tracker()->BuildMruWindowList();
+  if (!mru_list.empty())
+    mru_list.front()->Focus();
 }
 
 }  // namespace ash

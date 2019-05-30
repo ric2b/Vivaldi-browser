@@ -9,19 +9,29 @@
 #include <memory>
 #include <vector>
 
+#include "base/component_export.h"
 #include "base/macros.h"
 #include "chromeos/services/assistant/public/mojom/assistant.mojom.h"
+#include "services/content/public/cpp/navigable_contents.h"
 
 namespace ash {
 
 class AssistantUiElement;
 
 // Models a renderable Assistant response.
-class AssistantResponse {
+class COMPONENT_EXPORT(ASSISTANT_MODEL) AssistantResponse {
  public:
   using AssistantSuggestion = chromeos::assistant::mojom::AssistantSuggestion;
   using AssistantSuggestionPtr =
       chromeos::assistant::mojom::AssistantSuggestionPtr;
+
+  using ProcessingCallback = base::OnceCallback<void(bool)>;
+
+  enum class ProcessingState {
+    kUnprocessed,  // Response has not yet been processed.
+    kProcessing,   // Response is currently being processed.
+    kProcessed,    // Response has finished processing.
+  };
 
   AssistantResponse();
   ~AssistantResponse();
@@ -43,9 +53,59 @@ class AssistantResponse {
   // Returns all suggestions belongs to the response, mapped to a unique id.
   std::map<int, const AssistantSuggestion*> GetSuggestions() const;
 
+  // Gets/sets the processing state for the response.
+  ProcessingState processing_state() const { return processing_state_; }
+  void set_processing_state(ProcessingState processing_state) {
+    processing_state_ = processing_state;
+  }
+
+  // Gets/sets if the response has TTS. This can only be reliably checked after
+  // the response is finalized for obvious reasons.
+  bool has_tts() const { return has_tts_; }
+  void set_has_tts(bool has_tts) { has_tts_ = has_tts; }
+
+  // Invoke to begin processing the response. Upon completion, |callback| will
+  // be run to indicate success or failure.
+  void Process(content::mojom::NavigableContentsFactoryPtr contents_factory,
+               ProcessingCallback callback);
+
  private:
+  // Handles processing for an AssistantResponse.
+  class Processor {
+   public:
+    Processor(AssistantResponse& response,
+              content::mojom::NavigableContentsFactoryPtr contents_factory,
+              ProcessingCallback callback);
+    ~Processor();
+
+    // Invoke to begin processing.
+    void Process();
+
+   private:
+    // Event fired upon completion of a UI element's asynchronous processing.
+    // Once all asynchronous processing of UI elements has completed, the
+    // response itself has finished processing.
+    void OnFinishedProcessing(bool success);
+
+    // Attempts to successfully complete response processing. This will no-op
+    // if we have already finished or if elements are still processing.
+    void TryFinishing();
+
+    AssistantResponse& response_;
+    content::mojom::NavigableContentsFactoryPtr contents_factory_;
+    ProcessingCallback callback_;
+
+    int processing_count_ = 0;
+
+    DISALLOW_COPY_AND_ASSIGN(Processor);
+  };
+
   std::vector<std::unique_ptr<AssistantUiElement>> ui_elements_;
   std::vector<AssistantSuggestionPtr> suggestions_;
+  ProcessingState processing_state_ = ProcessingState::kUnprocessed;
+  bool has_tts_ = false;
+
+  std::unique_ptr<Processor> processor_;
 
   DISALLOW_COPY_AND_ASSIGN(AssistantResponse);
 };

@@ -11,17 +11,19 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/observer_list.h"
+#include "base/scoped_observer.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/engagement/site_engagement_observer.h"
 #include "chrome/browser/installable/installable_ambient_badge_infobar_delegate.h"
 #include "chrome/browser/installable/installable_logging.h"
 #include "chrome/browser/installable/installable_manager.h"
-#include "chrome/browser/installable/installable_metrics.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "third_party/blink/public/common/manifest/web_display_mode.h"
-#include "third_party/blink/public/platform/modules/app_banner/app_banner.mojom.h"
+#include "third_party/blink/public/mojom/app_banner/app_banner.mojom.h"
 
+enum class WebappInstallSource;
 class InstallableManager;
 class SkBitmap;
 struct WebApplicationInfo;
@@ -58,6 +60,19 @@ class AppBannerManager : public content::WebContentsObserver,
                          public InstallableAmbientBadgeInfoBarDelegate::Client,
                          public SiteEngagementObserver {
  public:
+  class Observer : public base::CheckedObserver {
+   public:
+    Observer();
+    ~Observer() override;
+
+    void ObserveAppBannerManager(AppBannerManager* manager);
+
+    virtual void OnInstallabilityUpdated() = 0;
+
+   private:
+    ScopedObserver<AppBannerManager, Observer> scoped_observer_{this};
+  };
+
   // A StatusReporter handles the reporting of |InstallableStatusCode|s.
   class StatusReporter;
 
@@ -104,6 +119,10 @@ class AppBannerManager : public content::WebContentsObserver,
   // requirements.
   enum class Installable { INSTALLABLE_YES, INSTALLABLE_NO, UNKNOWN };
 
+  // Retrieves the platform specific instance of AppBannerManager from
+  // |web_contents|.
+  static AppBannerManager* FromWebContents(content::WebContents* web_contents);
+
   // Returns the current time.
   static base::Time GetCurrentTime();
 
@@ -116,10 +135,22 @@ class AppBannerManager : public content::WebContentsObserver,
   // Returns whether the new experimental flow and UI is enabled.
   static bool IsExperimentalAppBannersEnabled();
 
+  // TODO(https://crbug.com/930612): Move |GetInstallableAppName| and
+  // |IsWebContentsInstallable| out into a more general purpose installability
+  // check class.
+
   // Returns the app name if the current page is installable, otherwise returns
   // the empty string.
   static base::string16 GetInstallableAppName(
       content::WebContents* web_contents);
+
+  // Returns whether installability checks have passed (e.g. having a service
+  // worker fetch event).
+  bool IsInstallable() const;
+
+  // Each successful installability check gets to show one animation prompt,
+  // this returns and consumes the animation prompt if it is available.
+  bool MaybeConsumeInstallAnimation();
 
   // Requests an app banner. If |is_debug_mode| is true, any failure in the
   // pipeline will be reported to the devtools console.
@@ -140,6 +171,13 @@ class AppBannerManager : public content::WebContentsObserver,
   // Returns a WeakPtr to this object. Exposed so subclasses/infobars may
   // may bind callbacks without needing their own WeakPtrFactory.
   base::WeakPtr<AppBannerManager> GetWeakPtr();
+
+  void AddObserver(Observer* observer);
+  void RemoveObserver(Observer* observer);
+
+  // Overridden on desktop platforms. Called to initiate the bookmark app
+  // install. Not used on Android.
+  virtual void CreateBookmarkApp(WebappInstallSource install_source) {}
 
   // Overridden and passed through base::Bind on desktop platforms. Called when
   // the bookmark app install initiated by a banner has completed. Not used on
@@ -275,6 +313,11 @@ class AppBannerManager : public content::WebContentsObserver,
   State state() const { return state_; }
   bool IsRunning() const;
 
+  // Used by test subclasses that replace the existing AppBannerManager
+  // instance. The observer list must be transferred over to avoid dangling
+  // pointers in the observers.
+  void MigrateObserverListForTesting(content::WebContents* web_contents);
+
   // The URL for which the banner check is being conducted.
   GURL validated_url_;
 
@@ -290,19 +333,11 @@ class AppBannerManager : public content::WebContentsObserver,
   // The primary icon object.
   SkBitmap primary_icon_;
 
-  // The referrer string (if any) specified in the app URL. Used only for native
-  // app banners.
-  std::string referrer_;
-
   // The current banner pipeline state for this page load.
   State state_;
 
  private:
   friend class AppBannerManagerTest;
-
-  // Retrieves the platform specific instance of AppBannerManager from
-  // |web_contents|.
-  static AppBannerManager* FromWebContents(content::WebContents* web_contents);
 
   // Record that the banner could be shown at this point, if the triggering
   // heuristic allowed.
@@ -317,8 +352,7 @@ class AppBannerManager : public content::WebContentsObserver,
   // opportunity to cancel.
   virtual void OnBannerPromptReply(
       blink::mojom::AppBannerControllerPtr controller,
-      blink::mojom::AppBannerPromptReply reply,
-      const std::string& referrer);
+      blink::mojom::AppBannerPromptReply reply);
 
   // Does the non-platform specific parts of showing the app banner.
   void ShowBanner();
@@ -334,6 +368,8 @@ class AppBannerManager : public content::WebContentsObserver,
 
   // Returns a status code based on the current state, to log when terminating.
   InstallableStatusCode TerminationCode() const;
+
+  void SetInstallable(Installable installable);
 
   // Fetches the data required to display a banner for the current page.
   InstallableManager* manager_;
@@ -356,7 +392,10 @@ class AppBannerManager : public content::WebContentsObserver,
   bool triggered_by_devtools_;
 
   std::unique_ptr<StatusReporter> status_reporter_;
+  bool install_animation_pending_;
   Installable installable_;
+
+  base::ObserverList<Observer, true> observer_list_;
 
   // The concrete subclasses of this class are expected to have their lifetimes
   // scoped to the WebContents which they are observing. This allows us to use

@@ -119,6 +119,13 @@ bool Scrollbar::IsLeftSideVerticalScrollbar() const {
   return false;
 }
 
+int Scrollbar::Maximum() const {
+  IntSize max_offset = scrollable_area_->MaximumScrollOffsetInt() -
+                       scrollable_area_->MinimumScrollOffsetInt();
+  return orientation_ == kHorizontalScrollbar ? max_offset.Width()
+                                              : max_offset.Height();
+}
+
 void Scrollbar::OffsetDidChange() {
   DCHECK(scrollable_area_);
 
@@ -155,7 +162,7 @@ void Scrollbar::SetProportion(int visible_size, int total_size) {
 
 void Scrollbar::Paint(GraphicsContext& context,
                       const CullRect& cull_rect) const {
-  if (!cull_rect.IntersectsCullRect(FrameRect()))
+  if (!cull_rect.Intersects(FrameRect()))
     return;
 
   GetTheme().Paint(*this, context, cull_rect);

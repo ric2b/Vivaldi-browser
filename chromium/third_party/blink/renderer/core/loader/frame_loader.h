@@ -34,17 +34,12 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LOADER_FRAME_LOADER_H_
 
 #include "base/macros.h"
-#include "third_party/blink/public/mojom/blob/blob_url_store.mojom-blink.h"
-#include "third_party/blink/public/platform/web_insecure_request_policy.h"
-#include "third_party/blink/public/web/commit_result.mojom-shared.h"
+#include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
+#include "third_party/blink/public/platform/web_scoped_virtual_time_pauser.h"
 #include "third_party/blink/public/web/web_document_loader.h"
 #include "third_party/blink/public/web/web_frame_load_type.h"
-#include "third_party/blink/public/web/web_navigation_params.h"
 #include "third_party/blink/public/web/web_navigation_type.h"
-#include "third_party/blink/public/web/web_triggering_event_info.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/dom/icon_url.h"
-#include "third_party/blink/renderer/core/execution_context/security_context.h"
 #include "third_party/blink/renderer/core/frame/frame_types.h"
 #include "third_party/blink/renderer/core/frame/sandbox_flags.h"
 #include "third_party/blink/renderer/core/loader/frame_loader_state_machine.h"
@@ -52,9 +47,6 @@
 #include "third_party/blink/renderer/core/loader/history_item.h"
 #include "third_party/blink/renderer/core/loader/navigation_policy.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
-#include "third_party/blink/renderer/platform/instrumentation/tracing/traced_value.h"
-#include "third_party/blink/renderer/platform/loader/fetch/resource_loader_options.h"
-#include "third_party/blink/renderer/platform/loader/fetch/resource_request.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
 
@@ -62,6 +54,7 @@
 
 namespace blink {
 
+class ContentSecurityPolicy;
 class Document;
 class DocumentLoader;
 class ExecutionContext;
@@ -69,11 +62,16 @@ class LocalFrame;
 class Frame;
 class LocalFrameClient;
 class ProgressTracker;
-class ResourceError;
+class ResourceRequest;
 class SerializedScriptValue;
-class SubstituteData;
+class TracedValue;
 struct FrameLoadRequest;
+struct WebNavigationInfo;
 struct WebNavigationParams;
+
+namespace mojom {
+enum class CommitResult : int32_t;
+}
 
 CORE_EXPORT bool IsBackForwardLoadType(WebFrameLoadType);
 CORE_EXPORT bool IsReloadLoadType(WebFrameLoadType);
@@ -105,14 +103,10 @@ class CORE_EXPORT FrameLoader final {
   // Called when the browser process has asked this renderer process to commit
   // a navigation in this frame. This method skips most of the checks assuming
   // that browser process has already performed any checks necessary.
-  // For history navigations, a history item should be provided and
-  // an appropriate WebFrameLoadType should be given.
+  // See WebNavigationParams for details.
   void CommitNavigation(
-      const FrameLoadRequest&,
-      WebFrameLoadType = WebFrameLoadType::kStandard,
-      HistoryItem* = nullptr,
-      std::unique_ptr<WebNavigationParams> navigation_params = nullptr,
-      std::unique_ptr<WebDocumentLoader::ExtraData> extra_data = nullptr);
+      std::unique_ptr<WebNavigationParams> navigation_params,
+      std::unique_ptr<WebDocumentLoader::ExtraData> extra_data);
 
   // Called when the browser process has asked this renderer process to commit a
   // same document navigation in that frame. Returns false if the navigation
@@ -122,12 +116,28 @@ class CORE_EXPORT FrameLoader final {
       WebFrameLoadType,
       HistoryItem*,
       ClientRedirectPolicy,
-      Document* origin_document = nullptr,
-      bool has_event = false);
+      Document* origin_document,
+      bool has_event,
+      std::unique_ptr<WebDocumentLoader::ExtraData> extra_data = nullptr);
 
-  // Warning: stopAllLoaders can and will detach the LocalFrame out from under
-  // you. All callers need to either protect the LocalFrame or guarantee they
-  // won't in any way access the LocalFrame after stopAllLoaders returns.
+  // Called when the browser process is handling the navigation, to
+  // create a "placeholder" document loader and mark the frame as loading.
+  // This placeholder document loader will be later abandoned, and only
+  // lives temporarily so that the rest of Blink code knows the navigation
+  // is in place.
+  bool CreatePlaceholderDocumentLoader(
+      const WebNavigationInfo&,
+      std::unique_ptr<WebDocumentLoader::ExtraData>);
+
+  // This runs the "stop document loading" algorithm in HTML:
+  // https://html.spec.whatwg.org/C/browsing-the-web.html#stop-document-loading
+  // Note, this function only cancels ongoing navigation handled through
+  // FrameLoader. You might also want to call
+  // LocalFrameClient::AbortClientNavigation() if appropriate.
+  //
+  // Warning: StopAllLoaders() may detach the LocalFrame to which this
+  // FrameLoader belongs. Callers need to be careful about checking the
+  // existence of the frame after StopAllLoaders() returns.
   void StopAllLoaders();
 
   void ReplaceDocumentWhileExecutingJavaScriptURL(const String& source,
@@ -143,18 +153,12 @@ class CORE_EXPORT FrameLoader final {
     return provisional_document_loader_.Get();
   }
 
-  void LoadFailed(DocumentLoader*, const ResourceError&);
-
-  bool IsLoadingMainFrame() const;
-
-  bool ShouldTreatURLAsSameAsCurrent(const KURL&) const;
-  bool ShouldTreatURLAsSrcdocDocument(const KURL&) const;
-
   void SetDefersLoading(bool);
 
   void DidExplicitOpen();
 
   String UserAgent() const;
+  blink::UserAgentMetadata UserAgentMetadata() const;
 
   void DispatchDidClearWindowObjectInMainWorld();
   void DispatchDidClearDocumentOfWindowObject();
@@ -202,7 +206,6 @@ class CORE_EXPORT FrameLoader final {
                                        WebFrameLoadType,
                                        Document*);
 
-  bool ShouldSerializeScrollAnchor();
   void SaveScrollAnchor();
   void SaveScrollState();
   void RestoreScrollPositionAndViewState();
@@ -222,12 +225,19 @@ class CORE_EXPORT FrameLoader final {
   static void UpgradeInsecureRequest(ResourceRequest&, ExecutionContext*);
 
   void ClientDroppedNavigation();
+  void MarkAsLoading();
+
+  ContentSecurityPolicy* GetLastOriginDocumentCSP() {
+    return last_origin_document_csp_.Get();
+  }
 
  private:
   bool PrepareRequestForThisFrame(FrameLoadRequest&);
-  WebFrameLoadType DetermineFrameLoadType(const FrameLoadRequest&);
-
-  SubstituteData DefaultSubstituteDataForURL(const KURL&);
+  WebFrameLoadType DetermineFrameLoadType(const KURL& url,
+                                          const AtomicString& http_method,
+                                          Document* origin_document,
+                                          const KURL& failing_url,
+                                          WebFrameLoadType);
 
   bool ShouldPerformFragmentNavigation(bool is_form_submission,
                                        const String& http_method,
@@ -236,35 +246,27 @@ class CORE_EXPORT FrameLoader final {
   void ProcessFragment(const KURL&, WebFrameLoadType, LoadStartType);
 
   // Returns whether we should continue with new navigation.
-  bool CancelProvisionalLoaderForNewNavigation(NavigationPolicy);
-
-  void ClearInitialScrollState();
+  bool CancelProvisionalLoaderForNewNavigation(
+      bool cancel_scheduled_navigations,
+      bool is_starting_blank_navigation);
 
   void LoadInSameDocument(const KURL&,
                           scoped_refptr<SerializedScriptValue> state_object,
                           WebFrameLoadType,
                           HistoryItem*,
                           ClientRedirectPolicy,
-                          Document*);
+                          Document*,
+                          std::unique_ptr<WebDocumentLoader::ExtraData>);
   void RestoreScrollPositionAndViewState(WebFrameLoadType,
                                          bool is_same_document,
-                                         HistoryItem::ViewState*,
+                                         const HistoryItem::ViewState&,
                                          HistoryScrollRestorationType);
 
-  void ScheduleCheckCompleted();
-
-  void DetachDocumentLoader(Member<DocumentLoader>&);
+  void DetachDocumentLoader(Member<DocumentLoader>&,
+                            bool flush_microtask_queue = false);
 
   std::unique_ptr<TracedValue> ToTracedValue() const;
   void TakeObjectSnapshot() const;
-
-  DocumentLoader* CreateDocumentLoader(
-      const ResourceRequest&,
-      const FrameLoadRequest&,
-      WebFrameLoadType,
-      WebNavigationType,
-      std::unique_ptr<WebNavigationParams>,
-      std::unique_ptr<WebDocumentLoader::ExtraData>);
 
   LocalFrameClient* Client() const;
 
@@ -294,6 +296,10 @@ class CORE_EXPORT FrameLoader final {
   bool dispatching_did_clear_window_object_in_main_world_;
   bool protect_provisional_loader_;
   bool detached_;
+
+  WebScopedVirtualTimePauser virtual_time_pauser_;
+
+  Member<ContentSecurityPolicy> last_origin_document_csp_;
 
   DISALLOW_COPY_AND_ASSIGN(FrameLoader);
 };

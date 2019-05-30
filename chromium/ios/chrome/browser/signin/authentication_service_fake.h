@@ -10,6 +10,10 @@
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/public/provider/chrome/browser/signin/chrome_identity.h"
 
+namespace identity {
+class IdentityManager;
+}
+
 namespace web {
 class BrowserState;
 }
@@ -40,11 +44,9 @@ class AuthenticationServiceFake : public AuthenticationService {
 
  private:
   AuthenticationServiceFake(PrefService* pref_service,
-                            ProfileOAuth2TokenService* token_service,
                             SyncSetupService* sync_setup_service,
-                            AccountTrackerService* account_tracker,
-                            SigninManager* signin_manager,
-                            browser_sync::ProfileSyncService* sync_service);
+                            identity::IdentityManager* identity_manager,
+                            syncer::SyncService* sync_service);
 
   __strong ChromeIdentity* authenticated_identity_;
   bool have_accounts_changed_;

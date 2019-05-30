@@ -53,7 +53,8 @@ KeyframeEffect* KeyframeEffect::Create(Element* target,
                                        const Timing& timing,
                                        Priority priority,
                                        EventDelegate* event_delegate) {
-  return new KeyframeEffect(target, model, timing, priority, event_delegate);
+  return MakeGarbageCollected<KeyframeEffect>(target, model, timing, priority,
+                                              event_delegate);
 }
 
 KeyframeEffect* KeyframeEffect::Create(
@@ -76,7 +77,7 @@ KeyframeEffect* KeyframeEffect::Create(
   EffectModel::CompositeOperation composite = EffectModel::kCompositeReplace;
   if (options.IsKeyframeEffectOptions()) {
     composite = EffectModel::StringToCompositeOperation(
-                    options.GetAsKeyframeEffectOptions().composite())
+                    options.GetAsKeyframeEffectOptions()->composite())
                     .value();
   }
 
@@ -110,8 +111,9 @@ KeyframeEffect* KeyframeEffect::Create(ScriptState* script_state,
                                        ExceptionState& exception_state) {
   Timing new_timing = source->SpecifiedTiming();
   KeyframeEffectModelBase* model = source->Model()->Clone();
-  return new KeyframeEffect(source->target(), model, new_timing,
-                            source->GetPriority(), source->GetEventDelegate());
+  return MakeGarbageCollected<KeyframeEffect>(source->target(), model,
+                                              new_timing, source->GetPriority(),
+                                              source->GetEventDelegate());
 }
 
 KeyframeEffect::KeyframeEffect(Element* target,
@@ -164,7 +166,7 @@ Vector<ScriptValue> KeyframeEffect::getKeyframes(ScriptState* script_state) {
       KeyframeEffectModelBase::GetComputedOffsets(keyframes);
   computed_keyframes.ReserveInitialCapacity(keyframes.size());
   ScriptState::Scope scope(script_state);
-  for (size_t i = 0; i < keyframes.size(); i++) {
+  for (wtf_size_t i = 0; i < keyframes.size(); i++) {
     V8ObjectBuilder object_builder(script_state);
     keyframes[i]->AddKeyframePropertiesToV8Object(object_builder);
     object_builder.Add("computedOffset", computed_offsets[i]);

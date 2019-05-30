@@ -74,14 +74,14 @@ bool FileURLToFilePath(const GURL& url, base::FilePath* file_path) {
   std::string host = url.host();
   if (host.empty()) {
     // URL contains no host, the path is the filename. In this case, the path
-    // will probably be preceeded with a slash, as in "/C:/foo.txt", so we
+    // will probably be preceded with a slash, as in "/C:/foo.txt", so we
     // trim out that here.
     path = url.path();
     size_t first_non_slash = path.find_first_not_of("/\\");
     if (first_non_slash != std::string::npos && first_non_slash > 0)
       path.erase(0, first_non_slash);
   } else {
-    // URL contains a host: this means it's UNC. We keep the preceeding slash
+    // URL contains a host: this means it's UNC. We keep the preceding slash
     // on the path.
     path = "\\\\";
     path.append(host);
@@ -124,7 +124,7 @@ bool FileURLToFilePath(const GURL& url, base::FilePath* file_path) {
 
 #if defined(OS_WIN)
   if (base::IsStringUTF8(path)) {
-    file_path_str.assign(base::UTF8ToWide(path));
+    file_path_str.assign(base::UTF8ToUTF16(path));
     // We used to try too hard and see if |path| made up entirely of
     // the 1st 256 characters in the Unicode was a zero-extended UTF-16.
     // If so, we converted it to 'Latin-1' and checked if the result was UTF-8.
@@ -136,7 +136,7 @@ bool FileURLToFilePath(const GURL& url, base::FilePath* file_path) {
     // are giving the conversion function a nonempty string, and it may fail if
     // the given string is not in the current encoding and give us an empty
     // string back. We detect this and report failure.
-    file_path_str = base::SysNativeMBToWide(path);
+    file_path_str = base::WideToUTF16(base::SysNativeMBToWide(path));
   }
 #else  // defined(OS_WIN)
   // Collapse multiple path slashes into a single path slash.
@@ -185,7 +185,7 @@ bool IsReservedNameOnWindows(const base::FilePath::StringType& filename) {
       "com5", "com6", "com7", "com8", "com9", "lpt1", "lpt2",  "lpt3",
       "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9", "clock$"};
 #if defined(OS_WIN)
-  std::string filename_lower = base::ToLowerASCII(base::WideToUTF8(filename));
+  std::string filename_lower = base::ToLowerASCII(base::UTF16ToUTF8(filename));
 #elif defined(OS_POSIX) || defined(OS_FUCHSIA)
   std::string filename_lower = base::ToLowerASCII(filename);
 #endif

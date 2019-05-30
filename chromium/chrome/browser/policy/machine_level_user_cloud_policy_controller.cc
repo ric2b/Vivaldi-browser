@@ -16,6 +16,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/policy/browser_dm_token_storage.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/policy/cloud/machine_level_user_cloud_policy_helper.h"
@@ -26,11 +27,20 @@
 #include "components/policy/core/common/cloud/machine_level_user_cloud_policy_metrics.h"
 #include "components/policy/core/common/cloud/machine_level_user_cloud_policy_store.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/network_service_instance.h"
 #include "content/public/common/content_switches.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 #if defined(OS_WIN)
 #include "chrome/install_static/install_util.h"
+#endif
+
+#if !defined(GOOGLE_CHROME_BUILD)
+#include "chrome/common/chrome_switches.h"
+#endif
+
+#if defined(OS_MACOSX)
+#include "chrome/browser/app_controller_mac.h"
 #endif
 
 namespace policy {
@@ -43,6 +53,26 @@ void RecordEnrollmentResult(
       "Enterprise.MachineLevelUserCloudPolicyEnrollment.Result", result);
 }
 
+// The MachineLevelUserCloudPolicy is only enabled on Chrome by default.
+// However, it can be enabled on Chromium by command line switch for test and
+// development purpose.
+bool IsMachineLevelUserCloudPolicyEnabled() {
+#if defined(GOOGLE_CHROME_BUILD)
+  return true;
+#else
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kEnableMachineLevelUserCloudPolicy);
+#endif
+}
+
+#if defined(OS_LINUX) || defined(OS_MACOSX)
+void CleanupUnusedPolicyDirectory() {
+  std::string enrollment_token =
+      BrowserDMTokenStorage::Get()->RetrieveEnrollmentToken();
+  if (enrollment_token.empty())
+    BrowserDMTokenStorage::Get()->ScheduleUnusedPolicyDirectoryDeletion();
+}
+#endif
 }  // namespace
 
 const base::FilePath::CharType
@@ -57,6 +87,9 @@ MachineLevelUserCloudPolicyController::
 // static
 std::unique_ptr<MachineLevelUserCloudPolicyManager>
 MachineLevelUserCloudPolicyController::CreatePolicyManager() {
+  if (!IsMachineLevelUserCloudPolicyEnabled())
+    return nullptr;
+
   std::string enrollment_token =
       BrowserDMTokenStorage::Get()->RetrieveEnrollmentToken();
   std::string dm_token = BrowserDMTokenStorage::Get()->RetrieveDMToken();
@@ -84,12 +117,26 @@ MachineLevelUserCloudPolicyController::CreatePolicyManager() {
               {base::MayBlock(), base::TaskPriority::BEST_EFFORT}));
   return std::make_unique<MachineLevelUserCloudPolicyManager>(
       std::move(policy_store), nullptr, policy_dir,
-      base::ThreadTaskRunnerHandle::Get());
+      base::ThreadTaskRunnerHandle::Get(),
+      base::BindRepeating(&content::GetNetworkConnectionTracker));
 }
 
 void MachineLevelUserCloudPolicyController::Init(
     PrefService* local_state,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+#if defined(OS_LINUX) || defined(OS_MACOSX)
+  // This is a function that removes the directory we accidentally create due to
+  // crbug.com/880870. The directory is only removed when it's empty and
+  // enrollment token doesn't exist. This function is expected to be removed
+  // after few milestones.
+  // Also, this function is put before policy enable check on purpose so it
+  // could cover all users.
+  CleanupUnusedPolicyDirectory();
+#endif
+
+  if (!IsMachineLevelUserCloudPolicyEnabled())
+    return;
+
   MachineLevelUserCloudPolicyManager* policy_manager =
       g_browser_process->browser_policy_connector()
           ->machine_level_user_cloud_policy_manager();
@@ -152,12 +199,30 @@ void MachineLevelUserCloudPolicyController::Init(
   }
 }
 
-MachineLevelUserCloudPolicyController::RegisterResult
-MachineLevelUserCloudPolicyController::WaitUntilPolicyEnrollmentFinished() {
+bool MachineLevelUserCloudPolicyController::
+    WaitUntilPolicyEnrollmentFinished() {
   if (policy_register_watcher_) {
-    return policy_register_watcher_->WaitUntilCloudPolicyEnrollmentFinished();
+    switch (
+        policy_register_watcher_->WaitUntilCloudPolicyEnrollmentFinished()) {
+      case RegisterResult::kNoEnrollmentNeeded:
+      case RegisterResult::kEnrollmentSuccessBeforeDialogDisplayed:
+      case RegisterResult::kEnrollmentFailedSilentlyBeforeDialogDisplayed:
+        return true;
+      case RegisterResult::kEnrollmentSuccess:
+      case RegisterResult::kEnrollmentFailedSilently:
+#if defined(OS_MACOSX)
+        app_controller_mac::EnterpriseStartupDialogClosed();
+#endif
+        return true;
+      case RegisterResult::kRestartDueToFailure:
+        chrome::AttemptRestart();
+        return false;
+      case RegisterResult::kQuitDueToFailure:
+        chrome::AttemptExit();
+        return false;
+    }
   }
-  return RegisterResult::kNoEnrollmentNeeded;
+  return true;
 }
 
 void MachineLevelUserCloudPolicyController::AddObserver(Observer* observer) {
@@ -203,6 +268,11 @@ void MachineLevelUserCloudPolicyController::
     UMA_HISTOGRAM_TIMES(
         "Enterprise.MachineLevelUserCloudPolicyEnrollment.RequestFailureTime",
         enrollment_time);
+    MachineLevelUserCloudPolicyManager* policy_manager =
+        g_browser_process->browser_policy_connector()
+            ->machine_level_user_cloud_policy_manager();
+    if (policy_manager)
+      policy_manager->store()->InitWithoutToken();
     NotifyPolicyRegisterFinished(false);
     return;
   }

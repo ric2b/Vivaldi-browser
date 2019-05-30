@@ -23,13 +23,18 @@ extern const char kVivaldiAppIdHex[];
 extern const char kVivaldiAppURLDomain[];
 extern const char kVivaldiNewTabURL[];
 extern const char kVivaldiIncognitoURL[];
+extern const char kVivaldiGuestSessionURL[];
 
 extern const char kVivaldiReservedApiError[];
 
 extern const char kVivaldiUIScheme[];
 
 extern const char kVivaldiUIDataHost[];
+extern const char kVivaldiWebUIHost[];
+extern const char kVivaldiThumbDataHost[];
 extern const char kVivaldiUIDataURL[];
+extern const char kVivaldiWebUIURL[];
+extern const char kVivaldiThumbURL[];
 
 extern const char kWindowExtDataKey[];
 

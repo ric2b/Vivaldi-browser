@@ -105,7 +105,7 @@ class WebPlugin {
 
   virtual bool CanProcessDrag() const { return false; }
 
-  virtual void UpdateAllLifecyclePhases() = 0;
+  virtual void UpdateAllLifecyclePhases(WebWidget::LifecycleUpdateReason) = 0;
   virtual void Paint(cc::PaintCanvas*, const WebRect&) = 0;
 
   // Coordinates are relative to the containing window.
@@ -130,7 +130,7 @@ class WebPlugin {
   }
 
   virtual void DidReceiveResponse(const WebURLResponse&) = 0;
-  virtual void DidReceiveData(const char* data, int data_length) = 0;
+  virtual void DidReceiveData(const char* data, size_t data_length) = 0;
   virtual void DidFinishLoading() = 0;
   virtual void DidFailLoading(const WebURLError&) = 0;
 
@@ -138,9 +138,6 @@ class WebPlugin {
   // Whether the plugin supports its own paginated print. The other print
   // interface methods are called only if this method returns true.
   virtual bool SupportsPaginatedPrint() { return false; }
-  // Returns true if the printed content should not be scaled to
-  // the printer's printable area.
-  virtual bool IsPrintScalingDisabled() { return false; }
   // Returns true on success and sets the out parameter to the print preset
   // options for the document.
   virtual bool GetPrintPresetOptionsFromDocument(WebPrintPresetOptions*) {

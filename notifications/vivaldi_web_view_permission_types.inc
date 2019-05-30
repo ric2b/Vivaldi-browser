@@ -6,4 +6,8 @@
     // NOTE: Included verbatim in chromium/extensions/browser/guest_view/web_view/web_view_permission_types.h
     WEB_VIEW_PERMISSION_TYPE_NOTIFICATION,
 
+    WEB_VIEW_PERMISSION_TYPE_CAMERA,
+    WEB_VIEW_PERMISSION_TYPE_MICROPHONE,
+    WEB_VIEW_PERMISSION_TYPE_MICROPHONE_AND_CAMERA,
+
 #endif  // NOTIFICATIONS_VIVALDI_WEB_VIEW_PERMISSION_TYPES_H_

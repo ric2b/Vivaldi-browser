@@ -10,22 +10,15 @@
 
 #include "base/logging.h"
 #include "base/template_util.h"
+#include "base/thread_annotations.h"
 
 namespace base {
-
-// Specification:
-// http://en.cppreference.com/w/cpp/utility/optional/in_place_t
-struct in_place_t {};
 
 // Specification:
 // http://en.cppreference.com/w/cpp/utility/optional/nullopt_t
 struct nullopt_t {
   constexpr explicit nullopt_t(int) {}
 };
-
-// Specification:
-// http://en.cppreference.com/w/cpp/utility/optional/in_place
-constexpr in_place_t in_place = {};
 
 // Specification:
 // http://en.cppreference.com/w/cpp/utility/optional/nullopt
@@ -277,7 +270,9 @@ class OptionalBase {
       storage_.Init(std::forward<U>(value));
   }
 
-  void FreeIfNeeded() {
+  // TODO(lukasza): Figure out how to remove the NO_THREAD_SAFETY_ANALYSIS
+  // annotation below.  See https://crbug.com/881875#c1 for details.
+  void FreeIfNeeded() NO_THREAD_SAFETY_ANALYSIS {
     if (!storage_.is_populated_)
       return;
     storage_.value_.~T();

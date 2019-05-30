@@ -21,6 +21,37 @@
         }
       },
       {
+        "id": "CaptureUrlParams",
+        "type": "object",
+        "description": "A structure containing parameters for the captureUrl call.",
+        "properties": {
+          "bookmarkId": {
+            "type": "integer",
+            "description": "Bookmark id to associate the captured thumbnail with."
+          },
+          "url": {
+            "type": "string",
+            "description": "url to load and generate thumbnail for."
+          },
+          "width": {
+            "type": "integer",
+            "description": "Width of viewport hosting the loaded page."
+          },
+          "height": {
+            "type": "integer",
+            "description": "Height of viewport hosting the loaded page."
+          },
+          "scaledWidth": {
+            "type": "integer",
+            "description": "Scaled width of the thumbnail."
+          },
+          "scaledHeight": {
+            "type": "integer",
+            "description": "Scaled height of the thumbnail."
+          }
+        }
+      },
+      {
         "id": "CaptureUIParams",
         "type": "object",
         "description": "A structure containing parameters for the captureUI call.",
@@ -74,6 +105,11 @@
             "type": "boolean",
             "optional": true,
             "description": "If true, will copy the image to clipboard in a raw and uncompressed format. This will override any file path arguments. Default is false."
+          },
+          "saveFilePattern":  {
+            "type": "string",
+            "optional": true,
+            "description": "If set, will use this pattern to contruct the filename. Note that the file name is still guaranteed to be unique, and (1), (2) etc might be appended if needed."
           }
         }
       },
@@ -121,6 +157,11 @@
             "type": "boolean",
             "optional": true,
             "description": "If true, will copy the image to clipboard in a raw and uncompressed format. This will override any file path arguments. Default is false."
+          },
+          "saveFilePattern":  {
+            "type": "string",
+            "optional": true,
+            "description": "If set, will use this pattern to contruct the filename. Note that the file name is still guaranteed to be unique, and (1), (2) etc might be appended if needed."
           }
         }
       }
@@ -133,13 +174,8 @@
         "parameters": [
           {
             "name": "bookmarkId",
-            "type": "string",
+            "type": "integer",
             "description": "The bookmark id to check for available thumbnail"
-          },
-          {
-            "name": "url",
-            "type": "string",
-            "description": "The url of a site to check for thumbnail availability"
           },
           {
             "type": "function",
@@ -203,6 +239,38 @@
                 "name": "image",
                 "type": "string",
                 "description": "base64-encoded jpg of the captured image or, if |saveToBasePath| is used, the full path to the image on disk."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "captureUrl",
+        "type": "function",
+        "description": "Loads a url then captures the contents of it and attached it to a bookmark.",
+        "parameters": [
+          {
+            "name": "params",
+            "$ref": "CaptureUrlParams"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "bookmarkId",
+                "type": "integer",
+                "description": "The bookmark id that was captured. Is set even on failure"
+              },
+              {
+                "name": "success",
+                "type": "boolean",
+                "description": "true if capture succeeded, otherwise false."
+              },
+              {
+                "name": "thumbnailUrl",
+                "type": "string",
+                "description": "Url to reference the thumbnail with."
               }
             ]
           }

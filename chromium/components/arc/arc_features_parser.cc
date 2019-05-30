@@ -6,13 +6,14 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/post_task.h"
-#include "base/threading/thread_restrictions.h"
+#include "base/threading/scoped_blocking_call.h"
 #include "base/values.h"
 
 namespace arc {
@@ -28,8 +29,8 @@ base::Optional<ArcFeatures> ParseFeaturesJson(base::StringPiece input_json) {
   int error_code;
   std::string error_msg;
   std::unique_ptr<base::Value> json_value =
-      base::JSONReader::ReadAndReturnError(input_json, base::JSON_PARSE_RFC,
-                                           &error_code, &error_msg);
+      base::JSONReader::ReadAndReturnErrorDeprecated(
+          input_json, base::JSON_PARSE_RFC, &error_code, &error_msg);
   if (!json_value || !json_value->is_dict()) {
     LOG(ERROR) << "Error parsing feature JSON: " << error_msg;
     return base::nullopt;
@@ -109,12 +110,18 @@ base::Optional<ArcFeatures> ParseFeaturesJson(base::StringPiece input_json) {
 
 base::Optional<ArcFeatures> ReadOnFileThread(const base::FilePath& file_path) {
   DCHECK(!file_path.empty());
-  base::AssertBlockingAllowed();
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
 
   std::string input_json;
-  if (!base::ReadFileToString(file_path, &input_json)) {
-    PLOG(ERROR) << "Cannot read file " << file_path.value() << " into string.";
-    return base::nullopt;
+  {
+    base::ScopedBlockingCall scoped_blocking_call(
+        FROM_HERE, base::BlockingType::MAY_BLOCK);
+    if (!base::ReadFileToString(file_path, &input_json)) {
+      PLOG(ERROR) << "Cannot read file " << file_path.value()
+                  << " into string.";
+      return base::nullopt;
+    }
   }
 
   if (input_json.empty()) {

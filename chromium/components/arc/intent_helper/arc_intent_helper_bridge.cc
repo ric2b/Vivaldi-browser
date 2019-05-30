@@ -14,6 +14,8 @@
 #include "base/logging.h"
 #include "base/memory/singleton.h"
 #include "base/memory/weak_ptr.h"
+#include "base/metrics/histogram_macros.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_browser_context_keyed_service_factory_base.h"
@@ -69,7 +71,7 @@ constexpr const char* kArcSchemes[] = {url::kHttpScheme, url::kHttpsScheme,
                                        url::kMailToScheme};
 
 // mojom::ChromePage::LAST returns the ammout of valid entries - 1.
-static_assert(arraysize(kMapping) ==
+static_assert(base::size(kMapping) ==
                   static_cast<size_t>(mojom::ChromePage::LAST) + 1,
               "kMapping is out of sync");
 
@@ -161,12 +163,29 @@ void ArcIntentHelperBridge::OnOpenDownloads() {
 void ArcIntentHelperBridge::OnOpenUrl(const std::string& url) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   // Converts |url| to a fixed-up one and checks validity.
-  const GURL gurl(url_formatter::FixupURL(url, std::string()));
+  const GURL gurl(url_formatter::FixupURL(url, /*desired_tld=*/std::string()));
   if (!gurl.is_valid())
     return;
 
   if (allowed_arc_schemes_.find(gurl.scheme()) != allowed_arc_schemes_.end())
     g_open_url_delegate->OpenUrlFromArc(gurl);
+}
+
+void ArcIntentHelperBridge::OnOpenCustomTab(const std::string& url,
+                                            int32_t task_id,
+                                            int32_t surface_id,
+                                            int32_t top_margin,
+                                            OnOpenCustomTabCallback callback) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  // Converts |url| to a fixed-up one and checks validity.
+  const GURL gurl(url_formatter::FixupURL(url, /*desired_tld=*/std::string()));
+  if (!gurl.is_valid() ||
+      allowed_arc_schemes_.find(gurl.scheme()) == allowed_arc_schemes_.end()) {
+    std::move(callback).Run(nullptr);
+    return;
+  }
+  g_open_url_delegate->OpenArcCustomTab(gurl, task_id, surface_id, top_margin,
+                                        std::move(callback));
 }
 
 void ArcIntentHelperBridge::OnOpenChromePage(mojom::ChromePage page) {
@@ -208,6 +227,25 @@ void ArcIntentHelperBridge::OpenVolumeControl() {
   audio->ShowVolumeControls();
 }
 
+void ArcIntentHelperBridge::OnOpenWebApp(const std::string& url) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  // Converts |url| to a fixed-up one and checks validity.
+  const GURL gurl(url_formatter::FixupURL(url, /*desired_tld=*/std::string()));
+  if (!gurl.is_valid())
+    return;
+
+  // Web app launches should only be invoked on HTTPS URLs.
+  if (gurl.SchemeIs(url::kHttpsScheme))
+    g_open_url_delegate->OpenWebAppFromArc(gurl);
+}
+
+void ArcIntentHelperBridge::RecordShareFilesMetrics(mojom::ShareFiles flag) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  // Record metrics coming from ARC, these are related Share files feature
+  // stability.
+  UMA_HISTOGRAM_ENUMERATION("Arc.ShareFilesOnExit", flag);
+}
+
 ArcIntentHelperBridge::GetResult ArcIntentHelperBridge::GetActivityIcons(
     const std::vector<ActivityName>& activities,
     OnIconsReadyCallback callback) {
@@ -222,7 +260,9 @@ bool ArcIntentHelperBridge::ShouldChromeHandleUrl(const GURL& url) {
   }
 
   for (const IntentFilter& filter : intent_filters_) {
-    if (filter.Match(url))
+    // The intent helper package is used by ARC to send URLs to Chrome, so it
+    // does not count as a candidate.
+    if (filter.Match(url) && !IsIntentHelperPackage(filter.package_name()))
       return false;
   }
 

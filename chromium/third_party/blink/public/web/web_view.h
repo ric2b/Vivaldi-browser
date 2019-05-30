@@ -33,33 +33,38 @@
 
 #include "base/time/time.h"
 #include "third_party/blink/public/common/manifest/web_display_mode.h"
-#include "third_party/blink/public/mojom/page/page_visibility_state.mojom-shared.h"
 #include "third_party/blink/public/platform/web_drag_operation.h"
 #include "third_party/blink/public/platform/web_focus_type.h"
 #include "third_party/blink/public/platform/web_string.h"
-#include "third_party/blink/public/web/web_widget.h"
 #include "third_party/skia/include/core/SkColor.h"
 
-namespace blink {
+namespace gfx {
+class Point;
+}
 
+namespace blink {
 class PageScheduler;
 class WebFrame;
 class WebHitTestResult;
 class WebLocalFrame;
 class WebPageImportanceSignals;
+class WebPagePopup;
 class WebPrerendererClient;
 class WebRemoteFrame;
 class WebSettings;
 class WebString;
 class WebViewClient;
+class WebWidget;
 class WebWidgetClient;
 struct WebDeviceEmulationParams;
 struct WebFloatPoint;
+struct WebFloatSize;
 struct WebPluginAction;
-struct WebPoint;
+struct WebRect;
+struct WebSize;
 struct WebWindowFeatures;
 
-class WebView : protected WebWidget {
+class WebView {
  public:
   BLINK_EXPORT static const double kTextSizeMultiplierRatio;
   BLINK_EXPORT static const double kMinTextSizeMultiplier;
@@ -70,39 +75,6 @@ class WebView : protected WebWidget {
     kInjectStyleInTopFrameOnly
   };
 
-  // WebWidget overrides.
-  using WebWidget::Close;
-  using WebWidget::LifecycleUpdate;
-  using WebWidget::Size;
-  using WebWidget::Resize;
-  using WebWidget::ResizeVisualViewport;
-  using WebWidget::DidEnterFullscreen;
-  using WebWidget::DidExitFullscreen;
-  using WebWidget::BeginFrame;
-  using WebWidget::UpdateAllLifecyclePhases;
-  using WebWidget::UpdateLifecycle;
-  using WebWidget::PaintContent;
-  using WebWidget::LayoutAndPaintAsync;
-  using WebWidget::CompositeAndReadbackAsync;
-  using WebWidget::ThemeChanged;
-  using WebWidget::HandleInputEvent;
-  using WebWidget::DispatchBufferedTouchEvents;
-  using WebWidget::SetCursorVisibilityState;
-  using WebWidget::ApplyViewportDeltas;
-  using WebWidget::MouseCaptureLost;
-  using WebWidget::SetFocus;
-  using WebWidget::SelectionBounds;
-  using WebWidget::IsAcceleratedCompositingActive;
-  using WebWidget::IsWebView;
-  using WebWidget::IsPagePopup;
-  using WebWidget::WillCloseLayerTreeView;
-  using WebWidget::DidAcquirePointerLock;
-  using WebWidget::DidNotAcquirePointerLock;
-  using WebWidget::DidLosePointerLock;
-  using WebWidget::BackgroundColor;
-  using WebWidget::GetPagePopup;
-  using WebWidget::UpdateBrowserControlsState;
-
   // Initialization ------------------------------------------------------
 
   // Creates a WebView that is NOT yet initialized. To complete initialization,
@@ -110,12 +82,38 @@ class WebView : protected WebWidget {
   // as appropriate. It is legal to modify settings before completing
   // initialization.
   //
-  // client may be null, while PageVisibilityState defines the initial
-  // visibility of the page.
+  // clients may be null, but should both be null or not together.
+  // |is_hidden| defines the initial visibility of the page.
+  // |compositing_enabled| dictates whether accelerated compositing should be
+  // enabled for the page. It must be false if no clients are provided, or if a
+  // LayerTreeView will not be set for the WebWidget.
+  // TODO(danakj): This field should go away as WebWidgets always composite
+  // their output.
   BLINK_EXPORT static WebView* Create(WebViewClient*,
-                                      WebWidgetClient*,
-                                      mojom::PageVisibilityState,
+                                      bool is_hidden,
+                                      bool compositing_enabled,
                                       WebView* opener);
+
+  // Called to inform WebViewImpl that a local main frame has been attached.
+  // After this call MainFrameImpl() will return a valid frame until it is
+  // detached. It receives the WebWidgetClient* that provides input/compositing
+  // services for the attached main frame.
+  // This must be called for composited WebViews. Non-composited WebViews do not
+  // require a WebWidgetClient, but must call this in order to establish one.
+  virtual void DidAttachLocalMainFrame(WebWidgetClient*) = 0;
+
+  // Called to inform WebViewImpl that it has an initial remote main frame. This
+  // is a hack to just get a WebWidgetClient to WebViewImpl since it expects to
+  // always have one at this time.
+  // This does *NOT* need to be called every time a remote main frame exists,
+  // but is meant to be called when WebViewImpl is initialized with a remote
+  // main frame, since it will not receive a WebWidgetClient otherwise.
+  // TODO(danakj): Remove this method when WebViewImpl does not need a
+  // WebWidgetClient without a local main frame. At that point it should
+  // also drop the WebWidgetClient when a local main frame is detached.
+  // This must only be called for composited WebViews. Non-composited WebViews
+  // do not require a WebWidgetClient.
+  virtual void DidAttachRemoteMainFrame(WebWidgetClient*) = 0;
 
   // Initializes the various client interfaces.
   virtual void SetPrerendererClient(WebPrerendererClient*) = 0;
@@ -272,10 +270,17 @@ class WebView : protected WebWidget {
 
   // Returns the "preferred" contents size, defined as the preferred minimum
   // width of the main document's contents and the minimum height required to
-  // display the main document without scrollbars.  The returned size has the
-  // page zoom factor applied. The lifecycle must be updated to at least layout
-  // before calling this (see: |UpdateLifecycle|).
+  // display the main document without scrollbars. If the document is in quirks
+  // mode (does not have <!doctype html>), the height will stretch to fill the
+  // viewport. The returned size has the page zoom factor applied. The lifecycle
+  // must be updated to at least layout before calling (see: |UpdateLifecycle|).
   virtual WebSize ContentsPreferredMinimumSize() = 0;
+
+  // Requests a page-scale animation based on the specified point/rect.
+  virtual void AnimateDoubleTapZoom(const gfx::Point&, const WebRect&) = 0;
+
+  // Requests a page-scale animation based on the specified rect.
+  virtual void ZoomToFindInPageRect(const WebRect&) = 0;
 
   // Sets the display mode of the web app.
   virtual void SetDisplayMode(WebDisplayMode) = 0;
@@ -293,8 +298,8 @@ class WebView : protected WebWidget {
   virtual float ZoomFactorForDeviceScaleFactor() = 0;
 
   // Resize the view at the same time as changing the state of the top
-  // controls. If |browserControlsShrinkLayout| is true, the embedder shrunk the
-  // WebView size by the browser controls height.
+  // controls. If |browser_controls_shrink_layout| is true, the embedder shrunk
+  // the WebView size by the browser controls height.
   virtual void ResizeWithBrowserControls(
       const WebSize&,
       float top_controls_height,
@@ -315,19 +320,16 @@ class WebView : protected WebWidget {
 
   // Performs the specified plugin action on the node at the given location.
   virtual void PerformPluginAction(const WebPluginAction&,
-                                   const WebPoint& location) = 0;
+                                   const gfx::Point& location) = 0;
 
   // Notifies WebView when audio is started or stopped.
   virtual void AudioStateChanged(bool is_audio_playing) = 0;
 
   // Data exchange -------------------------------------------------------
 
-  // Do a hit test at given point and return the HitTestResult.
-  WebHitTestResult HitTestResultAt(const WebPoint&) override = 0;
-
   // Do a hit test equivalent to what would be done for a GestureTap event
   // that has width/height corresponding to the supplied |tapArea|.
-  virtual WebHitTestResult HitTestResultForTap(const WebPoint& tap_point,
+  virtual WebHitTestResult HitTestResultForTap(const gfx::Point& tap_point,
                                                const WebSize& tap_area) = 0;
 
   // Vivaldi start
@@ -344,7 +346,7 @@ class WebView : protected WebWidget {
 
   // Control plugins.
   virtual void SetPluginsEnabled(const bool plugins_enabled) = 0;
-  virtual void LoadImageAt(const WebPoint&) = 0;
+  virtual void LoadImageAt(const gfx::Point&) = 0;
 
   virtual void SetAllowAccessKeys(const bool allow_access_keys) = 0;
   // Vivaldi end
@@ -376,8 +378,11 @@ class WebView : protected WebWidget {
   // Sets whether select popup menus should be rendered by the browser.
   BLINK_EXPORT static void SetUseExternalPopupMenus(bool);
 
-  // Hides any popup (suggestions, selects...) that might be showing.
-  virtual void HidePopups() = 0;
+  // Cancels and hides the current popup (datetime, select...) if any.
+  virtual void CancelPagePopup() = 0;
+
+  // Returns the current popup if any.
+  virtual WebPagePopup* GetPagePopup() const = 0;
 
   // Visited link state --------------------------------------------------
 
@@ -399,16 +404,27 @@ class WebView : protected WebWidget {
                                   unsigned inactive_background_color,
                                   unsigned inactive_foreground_color) = 0;
 
+  // Sets the default background color when the page has not loaded enough to
+  // know a background colour. This can be overridden by the methods below as
+  // well.
+  virtual void SetBaseBackgroundColor(SkColor) {}
+
+  // Overrides the page's background and base background color. You
+  // can use this to enforce a transparent background, which is useful if you
+  // want to have some custom background rendered behind the widget.
+  //
+  // These may are only called for composited WebViews.
+  virtual void SetBackgroundColorOverride(SkColor) {}
+  virtual void ClearBackgroundColorOverride() {}
+  virtual void SetBaseBackgroundColorOverride(SkColor) {}
+  virtual void ClearBaseBackgroundColorOverride() {}
+
   // Modal dialog support ------------------------------------------------
 
   // Call these methods before and after running a nested, modal event loop
   // to suspend script callbacks and resource loads.
   BLINK_EXPORT static void WillEnterModalLoop();
   BLINK_EXPORT static void DidExitModalLoop();
-
-  virtual void SetShowPaintRects(bool) = 0;
-  virtual void SetShowFPSCounter(bool) = 0;
-  virtual void SetShowScrollBottleneckRects(bool) = 0;
 
   // Scheduling -----------------------------------------------------------
 
@@ -417,13 +433,13 @@ class WebView : protected WebWidget {
   // Visibility -----------------------------------------------------------
 
   // Sets the visibility of the WebView.
-  virtual void SetVisibilityState(mojom::PageVisibilityState visibility_state,
-                                  bool is_initial_state) {}
+  virtual void SetIsHidden(bool hidden, bool is_initial_state) = 0;
+  virtual bool IsHidden() = 0;
 
-  // PageOverlay ----------------------------------------------------------
+  // FrameOverlay ----------------------------------------------------------
 
   // Overlay this WebView with a solid color.
-  virtual void SetPageOverlayColor(SkColor) = 0;
+  virtual void SetMainFrameOverlayColor(SkColor) = 0;
 
   // Page Importance Signals ----------------------------------------------
 
@@ -462,12 +478,14 @@ class WebView : protected WebWidget {
 
   // Suspend and resume ---------------------------------------------------
 
-  // Pausing and unpausing current scheduled tasks.
-  virtual void PausePageScheduledTasks(bool paused) = 0;
-
   // TODO(lfg): Remove this once the refactor of WebView/WebWidget is
   // completed.
-  WebWidget* GetWidget() { return this; }
+  virtual WebWidget* MainFrameWidget() = 0;
+
+  // Portals --------------------------------------------------------------
+
+  // Informs the page that it is inside a portal.
+  virtual void SetInsidePortal(bool inside_portal) = 0;
 
  protected:
   ~WebView() = default;

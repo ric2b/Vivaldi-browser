@@ -10,14 +10,11 @@
 #include <utility>
 #include <vector>
 
-#include "ash/detachable_base/detachable_base_handler.h"
 #include "ash/public/cpp/login_constants.h"
 #include "ash/public/cpp/wallpaper_types.h"
 #include "ash/public/interfaces/constants.mojom.h"
 #include "ash/public/interfaces/shutdown.mojom.h"
 #include "ash/public/interfaces/tray_action.mojom.h"
-#include "ash/shell.h"
-#include "ash/strings/grit/ash_strings.h"
 #include "base/bind.h"
 #include "base/i18n/number_formatting.h"
 #include "base/location.h"
@@ -30,7 +27,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "chrome/browser/browser_process.h"
@@ -38,14 +35,12 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/chromeos/language_preferences.h"
-#include "chrome/browser/chromeos/lock_screen_apps/state_controller.h"
 #include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_service.h"
 #include "chrome/browser/chromeos/login/error_screens_histogram_helper.h"
 #include "chrome/browser/chromeos/login/help_app_launcher.h"
 #include "chrome/browser/chromeos/login/hwid_checker.h"
 #include "chrome/browser/chromeos/login/lock/screen_locker.h"
-#include "chrome/browser/chromeos/login/lock/webui_screen_locker.h"
 #include "chrome/browser/chromeos/login/lock_screen_utils.h"
 #include "chrome/browser/chromeos/login/quick_unlock/pin_backend.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_factory.h"
@@ -85,14 +80,15 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
-#include "chromeos/chromeos_switches.h"
 #include "chromeos/components/proximity_auth/screenlock_bridge.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power_manager_client.h"
 #include "chromeos/login/auth/key.h"
 #include "chromeos/login/auth/user_context.h"
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
+#include "chromeos/strings/grit/chromeos_strings.h"
 #include "components/login/localized_values_builder.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -139,16 +135,6 @@ const int kMaxGaiaReloadForProxyAuthDialog = 3;
 // Type of the login screen UI that is currently presented to user.
 const char kSourceGaiaSignin[] = "gaia-signin";
 const char kSourceAccountPicker[] = "account-picker";
-
-// Constants for lock screen apps activity state values:
-const char kNoLockScreenApps[] = "LOCK_SCREEN_APPS_STATE.NONE";
-const char kForegroundLockScreenApps[] = "LOCK_SCREEN_APPS_STATE.FOREGROUND";
-const char kAvailableLockScreenApps[] = "LOCK_SCREEN_APPS_STATE.AVAILABLE";
-
-// Constants for new lock screen note request type.
-const char kNewNoteRequestTap[] = "NEW_NOTE_REQUEST.TAP";
-const char kNewNoteRequestSwipe[] = "NEW_NOTE_REQUEST.SWIPE";
-const char kNewNoteRequestKeyboard[] = "NEW_NOTE_REQUEST.KEYBOARD";
 
 class CallOnReturn {
  public:
@@ -227,23 +213,6 @@ std::string GetNetworkName(const std::string& service_path) {
   return network->name();
 }
 
-ash::mojom::UserInfoPtr GetUserInfoForAccount(const AccountId& account_id) {
-  const user_manager::User* user =
-      user_manager::UserManager::Get()->FindUser(account_id);
-  if (!user)
-    return nullptr;
-
-  auto user_info = ash::mojom::UserInfo::New();
-  user_info->type = user->GetType();
-  user_info->account_id = account_id;
-  user_info->is_ephemeral =
-      user_manager::UserManager::Get()->IsUserNonCryptohomeDataEphemeral(
-          account_id);
-  user_info->display_name = base::UTF16ToUTF8(user->display_name());
-  user_info->display_email = user->display_email();
-  return user_info;
-}
-
 }  // namespace
 
 // LoginScreenContext implementation ------------------------------------------
@@ -253,11 +222,11 @@ LoginScreenContext::LoginScreenContext() = default;
 // SigninScreenHandler implementation ------------------------------------------
 
 SigninScreenHandler::SigninScreenHandler(
+    JSCallsContainer* js_calls_container,
     const scoped_refptr<NetworkStateInformer>& network_state_informer,
     ErrorScreen* error_screen,
     CoreOobeView* core_oobe_view,
-    GaiaScreenHandler* gaia_screen_handler,
-    JSCallsContainer* js_calls_container)
+    GaiaScreenHandler* gaia_screen_handler)
     : BaseWebUIHandler(js_calls_container),
       network_state_informer_(network_state_informer),
       error_screen_(error_screen),
@@ -268,9 +237,6 @@ SigninScreenHandler::SigninScreenHandler(
       proxy_auth_dialog_reload_times_(kMaxGaiaReloadForProxyAuthDialog),
       gaia_screen_handler_(gaia_screen_handler),
       histogram_helper_(new ErrorScreensHistogramHelper("Signin")),
-      session_manager_observer_(this),
-      lock_screen_apps_observer_(this),
-      detachable_base_observer_(this),
       observer_binding_(this),
       weak_factory_(this) {
   DCHECK(network_state_informer_.get());
@@ -290,8 +256,7 @@ SigninScreenHandler::SigninScreenHandler(
                  chrome::NOTIFICATION_AUTH_CANCELLED,
                  content::NotificationService::AllSources());
 
-  chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->AddObserver(
-      this);
+  chromeos::PowerManagerClient::Get()->AddObserver(this);
 
   chromeos::input_method::ImeKeyboard* keyboard =
       chromeos::input_method::InputMethodManager::Get()->GetImeKeyboard();
@@ -307,17 +272,9 @@ SigninScreenHandler::SigninScreenHandler(
   tablet_mode_client->AddObserver(this);
   OnTabletModeToggled(tablet_mode_client->tablet_mode_enabled());
 
-  session_manager_observer_.Add(session_manager::SessionManager::Get());
-  if (lock_screen_apps::StateController::IsEnabled())
-    lock_screen_apps_observer_.Add(lock_screen_apps::StateController::Get());
-
   ash::mojom::WallpaperObserverAssociatedPtrInfo ptr_info;
   observer_binding_.Bind(mojo::MakeRequest(&ptr_info));
   WallpaperControllerClient::Get()->AddObserver(std::move(ptr_info));
-  // TODO(tbarzic): This is needed for login UI - remove it when login switches
-  // to views implementation (or otherwise, make it work under mash).
-  if (!features::IsMultiProcessMash())
-    detachable_base_observer_.Add(ash::Shell::Get()->detachable_base_handler());
 }
 
 SigninScreenHandler::~SigninScreenHandler() {
@@ -325,8 +282,7 @@ SigninScreenHandler::~SigninScreenHandler() {
   OobeUI* oobe_ui = GetOobeUI();
   if (oobe_ui && oobe_ui_observer_added_)
     oobe_ui->RemoveObserver(this);
-  chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->RemoveObserver(
-      this);
+  chromeos::PowerManagerClient::Get()->RemoveObserver(this);
   chromeos::input_method::ImeKeyboard* keyboard =
       chromeos::input_method::InputMethodManager::Get()->GetImeKeyboard();
   if (keyboard)
@@ -345,7 +301,7 @@ void SigninScreenHandler::DeclareLocalizedValues(
     ::login::LocalizedValuesBuilder* builder) {
   // Format numbers to be used on the pin keyboard.
   for (int j = 0; j <= 9; j++) {
-    builder->Add("pinKeyboard" + base::IntToString(j),
+    builder->Add("pinKeyboard" + base::NumberToString(j),
                  base::FormatNumber(int64_t{j}));
   }
 
@@ -376,11 +332,8 @@ void SigninScreenHandler::DeclareLocalizedValues(
   builder->Add("addUser", IDS_ASH_ADD_USER_BUTTON);
   builder->Add("browseAsGuest", IDS_ASH_BROWSE_AS_GUEST_BUTTON);
   builder->Add("moreOptions", IDS_MORE_OPTIONS_BUTTON);
-  builder->Add("addSupervisedUser",
-               IDS_CREATE_LEGACY_SUPERVISED_USER_MENU_LABEL);
   builder->Add("cancel", IDS_ASH_SHELF_CANCEL_BUTTON);
   builder->Add("signOutUser", IDS_ASH_SHELF_SIGN_OUT_BUTTON);
-  builder->Add("unlockUser", IDS_ASH_SHELF_UNLOCK_BUTTON);
   builder->Add("offlineLogin", IDS_OFFLINE_LOGIN_HTML);
   builder->Add("ownerUserPattern", IDS_LOGIN_POD_OWNER_USER);
   builder->Add("removeUser", IDS_LOGIN_POD_REMOVE_USER);
@@ -496,9 +449,6 @@ void SigninScreenHandler::DeclareLocalizedValues(
                IDS_LOGIN_UNRECOVERABLE_CRYPTOHOME_ERROR_CONTINUE);
   builder->Add("unrecoverableCryptohomeErrorRecreatingProfile",
                IDS_LOGIN_UNRECOVERABLE_CRYPTOHOME_ERROR_WAIT_MESSAGE);
-
-  builder->Add("newLockScreenNoteButton",
-               IDS_LOGIN_NEW_LOCK_SCREEN_NOTE_BUTTON_TITLE);
 }
 
 void SigninScreenHandler::RegisterMessages() {
@@ -506,8 +456,6 @@ void SigninScreenHandler::RegisterMessages() {
   AddCallback("completeOfflineAuthentication",
               &SigninScreenHandler::HandleCompleteOfflineAuthentication);
   AddCallback("launchIncognito", &SigninScreenHandler::HandleLaunchIncognito);
-  AddCallback("showSupervisedUserCreationScreen",
-              &SigninScreenHandler::HandleShowSupervisedUserCreationScreen);
   AddCallback("launchPublicSession",
               &SigninScreenHandler::HandleLaunchPublicSession);
   AddRawCallback("offlineLogin", &SigninScreenHandler::HandleOfflineLogin);
@@ -522,7 +470,6 @@ void SigninScreenHandler::RegisterMessages() {
               &SigninScreenHandler::HandleToggleKioskEnableScreen);
   AddCallback("accountPickerReady",
               &SigninScreenHandler::HandleAccountPickerReady);
-  AddCallback("wallpaperReady", &SigninScreenHandler::HandleWallpaperReady);
   AddCallback("signOutUser", &SigninScreenHandler::HandleSignOutUser);
   AddCallback("openInternetDetailDialog",
               &SigninScreenHandler::HandleOpenInternetDetailDialog);
@@ -534,8 +481,6 @@ void SigninScreenHandler::RegisterMessages() {
   AddCallback("resyncUserData", &SigninScreenHandler::HandleResyncUserData);
   AddCallback("loginUIStateChanged",
               &SigninScreenHandler::HandleLoginUIStateChanged);
-  AddCallback("unlockOnLoginSuccess",
-              &SigninScreenHandler::HandleUnlockOnLoginSuccess);
   AddCallback("showLoadingTimeoutError",
               &SigninScreenHandler::HandleShowLoadingTimeoutError);
   AddCallback("focusPod", &SigninScreenHandler::HandleFocusPod);
@@ -560,12 +505,6 @@ void SigninScreenHandler::RegisterMessages() {
   AddCallback("launchKioskApp", &SigninScreenHandler::HandleLaunchKioskApp);
   AddCallback("launchArcKioskApp",
               &SigninScreenHandler::HandleLaunchArcKioskApp);
-  AddCallback("closeLockScreenApp",
-              &SigninScreenHandler::HandleCloseLockScreenApp);
-  AddCallback("requestNewLockScreenNote",
-              &SigninScreenHandler::HandleRequestNewNoteAction);
-  AddCallback("newNoteLaunchAnimationDone",
-              &SigninScreenHandler::HandleNewNoteLaunchAnimationDone);
 }
 
 void SigninScreenHandler::Show(const LoginScreenContext& context,
@@ -854,15 +793,15 @@ void SigninScreenHandler::SetupAndShowOfflineMessage(
                                  std::string());
   }
 
-  const bool guest_signin_allowed =
-      chrome_user_manager_util::IsGuestSessionAllowed(CrosSettings::Get()) &&
-      IsSigninScreenError(error_screen_->GetErrorState());
+  bool guest_signin_allowed = false;
+  bool offline_login_allowed = false;
+  if (IsSigninScreenError(error_screen_->GetErrorState())) {
+    guest_signin_allowed =
+        user_manager::UserManager::Get()->IsGuestSessionAllowed();
+    offline_login_allowed = error_screen_->GetErrorState() !=
+                            NetworkError::ERROR_STATE_AUTH_EXT_TIMEOUT;
+  }
   error_screen_->AllowGuestSignin(guest_signin_allowed);
-
-  const bool offline_login_allowed =
-      IsSigninScreenError(error_screen_->GetErrorState()) &&
-      error_screen_->GetErrorState() !=
-          NetworkError::ERROR_STATE_AUTH_EXT_TIMEOUT;
   error_screen_->AllowOfflineLogin(offline_login_allowed);
 
   if (GetCurrentScreen() != OobeScreen::SCREEN_ERROR_MESSAGE) {
@@ -947,14 +886,14 @@ void SigninScreenHandler::OnWallpaperColorsChanged(
       dark_muted_color);
   SkColor scroll_color =
       SkColorSetA(base_color, ash::login_constants::kScrollTranslucentAlpha);
-  CallJSOrDefer("login.AccountPickerScreen.setOverlayColors",
-                color_utils::SkColorToRgbaString(dark_muted_color),
-                color_utils::SkColorToRgbaString(scroll_color));
+  CallJS("login.AccountPickerScreen.setOverlayColors",
+         color_utils::SkColorToRgbaString(dark_muted_color),
+         color_utils::SkColorToRgbaString(scroll_color));
 }
 
 void SigninScreenHandler::OnWallpaperBlurChanged(bool blurred) {
-  CallJSOrDefer("login.AccountPickerScreen.togglePodBackground",
-                !blurred /*show_pod_background=*/);
+  CallJS("login.AccountPickerScreen.togglePodBackground",
+         !blurred /*show_pod_background=*/);
 }
 
 void SigninScreenHandler::ClearAndEnablePassword() {
@@ -995,8 +934,7 @@ void SigninScreenHandler::OnUserRemoved(const AccountId& account_id,
 
 void SigninScreenHandler::OnUserImageChanged(const user_manager::User& user) {
   if (page_is_ready()) {
-    CallJSOrDefer("login.AccountPickerScreen.updateUserImage",
-                  user.GetAccountId());
+    CallJS("login.AccountPickerScreen.updateUserImage", user.GetAccountId());
   }
 }
 
@@ -1125,57 +1063,7 @@ void SigninScreenHandler::SuspendDone(const base::TimeDelta& sleep_duration) {
 }
 
 void SigninScreenHandler::OnTabletModeToggled(bool enabled) {
-  CallJSOrDefer("login.AccountPickerScreen.setTabletModeState", enabled);
-}
-
-void SigninScreenHandler::OnSessionStateChanged() {
-  // If the session got unblocked, and the user for which the detachable base
-  // change notification was shown got added to the session, mark the paired
-  // base as used by the user, so they don't get further notifications about
-  // the detachable base change.
-  // The fact the user got added to the session implies that they have
-  // authenticated while the warning was displayed, so they should be aware
-  // of the base change at this point.
-  if (!account_with_detachable_base_error_.has_value())
-    return;
-
-  if (session_manager::SessionManager::Get()->IsUserSessionBlocked())
-    return;
-
-  const AccountId& account_id = *account_with_detachable_base_error_;
-  if (session_manager::SessionManager::Get()->HasSessionForAccountId(
-          account_id)) {
-    ash::mojom::UserInfoPtr user_info = GetUserInfoForAccount(account_id);
-    if (user_info) {
-      ash::Shell::Get()
-          ->detachable_base_handler()
-          ->SetPairedBaseAsLastUsedByUser(*user_info);
-    }
-  }
-
-  HideDetachableBaseChangedError();
-}
-
-void SigninScreenHandler::OnLockScreenNoteStateChanged(
-    ash::mojom::TrayActionState state) {
-  if (!ScreenLocker::default_screen_locker())
-    return;
-
-  std::string lock_screen_apps_state;
-  switch (state) {
-    case ash::mojom::TrayActionState::kLaunching:
-    case ash::mojom::TrayActionState::kActive:
-      lock_screen_apps_state = kForegroundLockScreenApps;
-      break;
-    case ash::mojom::TrayActionState::kAvailable:
-      lock_screen_apps_state = kAvailableLockScreenApps;
-      break;
-    case ash::mojom::TrayActionState::kNotAvailable:
-      lock_screen_apps_state = kNoLockScreenApps;
-      break;
-  }
-  CallJSOrDefer("login.AccountPickerScreen.setLockScreenAppsState",
-                lock_screen_apps_state);
+  CallJS("login.AccountPickerScreen.setTabletModeState", enabled);
 }
 
 bool SigninScreenHandler::ShouldLoadGaia() const {
@@ -1225,11 +1113,13 @@ void SigninScreenHandler::AuthenticateExistingUser(const AccountId& account_id,
   // network. See https://crbug.com/386606 for details.
   user_context.SetPasswordKey(Key(password));
   user_context.SetIsUsingPin(authenticated_by_pin);
-  if (account_id.GetAccountType() == AccountType::ACTIVE_DIRECTORY &&
-      (user_context.GetUserType() !=
-       user_manager::UserType::USER_TYPE_ACTIVE_DIRECTORY)) {
-    LOG(FATAL) << "Incorrect Active Directory user type "
-               << user_context.GetUserType();
+  if (account_id.GetAccountType() == AccountType::ACTIVE_DIRECTORY) {
+    if (user_context.GetUserType() !=
+        user_manager::UserType::USER_TYPE_ACTIVE_DIRECTORY) {
+      LOG(FATAL) << "Incorrect Active Directory user type "
+                 << user_context.GetUserType();
+    }
+    user_context.SetIsUsingOAuth(false);
   }
 
   delegate_->Login(user_context, SigninSpecifics());
@@ -1263,15 +1153,6 @@ void SigninScreenHandler::HandleLaunchIncognito() {
   UserContext context(user_manager::USER_TYPE_GUEST, EmptyAccountId());
   if (delegate_)
     delegate_->Login(context, SigninSpecifics());
-}
-
-void SigninScreenHandler::HandleShowSupervisedUserCreationScreen() {
-  if (!user_manager::UserManager::Get()->AreSupervisedUsersAllowed()) {
-    LOG(ERROR) << "Managed users not allowed.";
-    return;
-  }
-  LoginDisplayHost::default_host()->StartWizard(
-      OobeScreen::SCREEN_CREATE_SUPERVISED_USER_FLOW);
 }
 
 void SigninScreenHandler::HandleLaunchPublicSession(
@@ -1310,7 +1191,7 @@ void SigninScreenHandler::HandleShutdownSystem() {
 }
 
 void SigninScreenHandler::HandleRebootSystem() {
-  chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->RequestRestart(
+  chromeos::PowerManagerClient::Get()->RequestRestart(
       power_manager::REQUEST_RESTART_FOR_USER, "WebUI signin screen");
 }
 
@@ -1358,8 +1239,8 @@ void SigninScreenHandler::HandleToggleKioskAutolaunchScreen() {
 
 void SigninScreenHandler::LoadUsers(const user_manager::UserList& users,
                                     const base::ListValue& users_list) {
-  CallJSOrDefer("login.AccountPickerScreen.loadUsers", users_list,
-                delegate_->IsShowGuest());
+  CallJS("login.AccountPickerScreen.loadUsers", users_list,
+         delegate_->IsShowGuest());
 
   // Enable pin for any users who can use it.
   // TODO(jdufault): Cache pin state in BrowserProcess::local_state() so we
@@ -1400,10 +1281,6 @@ void SigninScreenHandler::HandleAccountPickerReady() {
 
   is_account_picker_showing_first_time_ = true;
 
-  if (lock_screen_apps::StateController::IsEnabled()) {
-    OnLockScreenNoteStateChanged(
-        lock_screen_apps::StateController::Get()->GetLockScreenNoteState());
-  }
   // The wallpaper may have been set before the instance is initialized, so make
   // sure the colors and blur state are updated.
   WallpaperControllerClient::Get()->GetWallpaperColors(
@@ -1413,16 +1290,17 @@ void SigninScreenHandler::HandleAccountPickerReady() {
       base::BindOnce(&SigninScreenHandler::OnWallpaperBlurChanged,
                      weak_factory_.GetWeakPtr()));
 
+  session_manager::SessionManager* session_manager =
+      session_manager::SessionManager::Get();
+  if (session_manager->session_state() == session_manager::SessionState::OOBE) {
+    // This updates post-OOBE shelf UI. Changes the color of shelf buttons and
+    // displays additional buttons that should only be shown in the login screen
+    session_manager->SetSessionState(
+        session_manager::SessionState::LOGIN_PRIMARY);
+  }
+
   if (delegate_)
     delegate_->OnSigninScreenReady();
-}
-
-void SigninScreenHandler::HandleWallpaperReady() {
-  if (ScreenLocker::default_screen_locker()) {
-    ScreenLocker::default_screen_locker()
-        ->delegate()
-        ->OnLockBackgroundDisplayed();
-  }
 }
 
 void SigninScreenHandler::HandleSignOutUser() {
@@ -1500,22 +1378,10 @@ void SigninScreenHandler::HandleLoginUIStateChanged(const std::string& source,
     ui_state_ = UI_STATE_GAIA_SIGNIN;
   } else if (source == kSourceAccountPicker) {
     ui_state_ = UI_STATE_ACCOUNT_PICKER;
-
-    if (active) {
-      UpdateDetachableBaseChangedError();
-    } else {
-      HideDetachableBaseChangedError();
-    }
   } else {
     NOTREACHED();
     return;
   }
-}
-
-void SigninScreenHandler::HandleUnlockOnLoginSuccess() {
-  DCHECK(user_manager::UserManager::Get()->IsUserLoggedIn());
-  if (ScreenLocker::default_screen_locker())
-    ScreenLocker::default_screen_locker()->UnlockOnLoginSuccess();
 }
 
 void SigninScreenHandler::HandleShowLoadingTimeoutError() {
@@ -1552,12 +1418,6 @@ void SigninScreenHandler::HandleFocusPod(const AccountId& account_id,
           ->SetLastFocusedPodHourClockType(
               use_24hour_clock ? base::k24HourClock : base::k12HourClock);
     }
-
-    // Update the detachable base change warning visibility when the focused
-    // user pod changes. Note that this should only be done for large pods - the
-    // pods whose authentication method is shown in the sign-in UI.
-    if (is_large_pod)
-      UpdateDetachableBaseChangedError();
   }
 }
 
@@ -1640,7 +1500,7 @@ void SigninScreenHandler::HandleSendFeedbackAndResyncUserData() {
   const std::string description = base::StringPrintf(
       "Auto generated feedback for http://crbug.com/547857.\n"
       "(uniquifier:%s)",
-      base::Int64ToString(base::Time::Now().ToInternalValue()).c_str());
+      base::NumberToString(base::Time::Now().ToInternalValue()).c_str());
 
   login_feedback_ =
       std::make_unique<LoginFeedback>(Profile::FromWebUI(web_ui()));
@@ -1649,34 +1509,6 @@ void SigninScreenHandler::HandleSendFeedbackAndResyncUserData() {
       base::BindOnce(
           &SigninScreenHandler::OnUnrecoverableCryptohomeFeedbackFinished,
           weak_factory_.GetWeakPtr()));
-}
-
-void SigninScreenHandler::HandleRequestNewNoteAction(
-    const std::string& request_type) {
-  lock_screen_apps::StateController* state_controller =
-      lock_screen_apps::StateController::Get();
-
-  if (request_type == kNewNoteRequestTap) {
-    state_controller->RequestNewLockScreenNote(
-        ash::mojom::LockScreenNoteOrigin::kLockScreenButtonTap);
-  } else if (request_type == kNewNoteRequestSwipe) {
-    state_controller->RequestNewLockScreenNote(
-        ash::mojom::LockScreenNoteOrigin::kLockScreenButtonSwipe);
-  } else if (request_type == kNewNoteRequestKeyboard) {
-    state_controller->RequestNewLockScreenNote(
-        ash::mojom::LockScreenNoteOrigin::kLockScreenButtonKeyboard);
-  } else {
-    NOTREACHED() << "Unknown request type " << request_type;
-  }
-}
-
-void SigninScreenHandler::HandleNewNoteLaunchAnimationDone() {
-  lock_screen_apps::StateController::Get()->NewNoteLaunchAnimationDone();
-}
-
-void SigninScreenHandler::HandleCloseLockScreenApp() {
-  lock_screen_apps::StateController::Get()->CloseLockScreenNote(
-      ash::mojom::CloseLockScreenNoteReason::kUnlockButtonPressed);
 }
 
 bool SigninScreenHandler::AllWhitelistedUsersPresent() {
@@ -1762,79 +1594,6 @@ void SigninScreenHandler::OnAllowedInputMethodsChanged() {
   } else {
     lock_screen_utils::EnforcePolicyInputMethods(std::string());
   }
-}
-
-void SigninScreenHandler::OnDetachableBasePairingStatusChanged(
-    ash::DetachableBasePairingStatus status) {
-  UpdateDetachableBaseChangedError();
-}
-void SigninScreenHandler::OnDetachableBaseRequiresUpdateChanged(
-    bool requires_update) {}
-
-void SigninScreenHandler::UpdateDetachableBaseChangedError() {
-  if (features::IsMultiProcessMash())
-    return;
-
-  auto pairing_status =
-      ash::Shell::Get()->detachable_base_handler()->GetPairingStatus();
-  if (pairing_status == ash::DetachableBasePairingStatus::kNone) {
-    HideDetachableBaseChangedError();
-    return;
-  }
-
-  // Requests to update the notification state will be postponed until a pod
-  // gets focused. Reasons for that are:
-  //   * The warning bubble is anchored at a user pod authentication element,
-  //     which is only shown when the pod is focused.
-  //   * If two large pods are shown, it's unclear which one should be
-  //     considered active if neither is focused.
-  // Send a request to the login UI to select/focus a use pod so the warning can
-  // be shown sooner, rather than later - the user might start typing without
-  // focusing a pod first, in which case showing the warning as the pod gets
-  // focused might be too late to warn the user their keyboard might not be
-  // trusted.
-  if (!focused_pod_account_id_) {
-    CallJSOrDefer(
-        "login.AccountPickerScreen.selectPodForDetachableBaseWarningBubble");
-    return;
-  }
-
-  bool base_trusted =
-      pairing_status == ash::DetachableBasePairingStatus::kAuthenticated;
-  if (base_trusted) {
-    ash::mojom::UserInfoPtr user_info =
-        GetUserInfoForAccount(*focused_pod_account_id_);
-    if (user_info) {
-      base_trusted = ash::Shell::Get()
-                         ->detachable_base_handler()
-                         ->PairedBaseMatchesLastUsedByUser(*user_info);
-    }
-  }
-
-  if (base_trusted) {
-    HideDetachableBaseChangedError();
-  } else {
-    ShowDetachableBaseChangedError();
-  }
-}
-
-void SigninScreenHandler::ShowDetachableBaseChangedError() {
-  account_with_detachable_base_error_ = *focused_pod_account_id_;
-
-  CallJSOrDefer(
-      "cr.ui.login.DisplayManager.showDetachableBaseChangedWarning",
-      *focused_pod_account_id_,
-      l10n_util::GetStringUTF8(IDS_LOGIN_ERROR_DETACHABLE_BASE_CHANGED),
-      std::string(), 0);
-}
-
-void SigninScreenHandler::HideDetachableBaseChangedError() {
-  if (!account_with_detachable_base_error_.has_value())
-    return;
-
-  CallJSOrDefer("cr.ui.login.DisplayManager.hideDetachableBaseChangedWarning",
-                *account_with_detachable_base_error_);
-  account_with_detachable_base_error_ = base::nullopt;
 }
 
 }  // namespace chromeos

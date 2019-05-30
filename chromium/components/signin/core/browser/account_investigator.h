@@ -11,17 +11,19 @@
 #include "base/macros.h"
 #include "base/timer/timer.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "components/signin/core/browser/gaia_cookie_manager_service.h"
+#include "services/identity/public/cpp/identity_manager.h"
 
-struct AccountInfo;
-class GaiaCookieManagerService;
+struct CoreAccountInfo;
 class PrefRegistrySimple;
 class PrefService;
-class SigninManagerBase;
 
 namespace base {
 class Time;
 }  // namespace base
+
+namespace identity {
+struct AccountsInCookieJarInfo;
+}  // namespace identity
 
 namespace signin_metrics {
 enum class AccountRelation;
@@ -33,16 +35,15 @@ enum class ReportingType;
 // is to watch for changes in relation between Chrome and content area accounts
 // and emit metrics about their relation.
 class AccountInvestigator : public KeyedService,
-                            public GaiaCookieManagerService::Observer {
+                            public identity::IdentityManager::Observer {
  public:
   // The targeted interval to perform periodic reporting. If chrome is not
   // active at the end of an interval, reporting will be done as soon as
   // possible.
   static const base::TimeDelta kPeriodicReportingInterval;
 
-  AccountInvestigator(GaiaCookieManagerService* cookie_service,
-                      PrefService* pref_service,
-                      SigninManagerBase* signin_manager);
+  AccountInvestigator(PrefService* pref_service,
+                      identity::IdentityManager* identity_manager);
   ~AccountInvestigator() override;
 
   static void RegisterPrefs(PrefRegistrySimple* registry);
@@ -53,13 +54,9 @@ class AccountInvestigator : public KeyedService,
   // KeyedService:
   void Shutdown() override;
 
-  // GaiaCookieManagerService::Observer:
-  void OnAddAccountToCookieCompleted(
-      const std::string& account_id,
-      const GoogleServiceAuthError& error) override;
-  void OnGaiaAccountsInCookieUpdated(
-      const std::vector<gaia::ListedAccount>& signed_in_accounts,
-      const std::vector<gaia::ListedAccount>& signed_out_accounts,
+  // identity::IdentityManager::Observer:
+  void OnAccountsInCookieUpdated(
+      const identity::AccountsInCookieJarInfo& accounts_in_cookie_jar_info,
       const GoogleServiceAuthError& error) override;
 
  private:
@@ -81,7 +78,7 @@ class AccountInvestigator : public KeyedService,
   // potentially signed into Chrome account, to the various account(s) in the
   // given cookie jar.
   static signin_metrics::AccountRelation DiscernRelation(
-      const AccountInfo& info,
+      const CoreAccountInfo& info,
       const std::vector<gaia::ListedAccount>& signed_in_accounts,
       const std::vector<gaia::ListedAccount>& signed_out_accounts);
 
@@ -111,9 +108,8 @@ class AccountInvestigator : public KeyedService,
       const std::vector<gaia::ListedAccount>& signed_out_accounts,
       signin_metrics::ReportingType type);
 
-  GaiaCookieManagerService* cookie_service_;
   PrefService* pref_service_;
-  SigninManagerBase* signin_manager_;
+  identity::IdentityManager* identity_manager_;
 
   // Handles invoking our periodic logic at the right time. As part of our
   // handling of this call we reset the timer for the next loop.

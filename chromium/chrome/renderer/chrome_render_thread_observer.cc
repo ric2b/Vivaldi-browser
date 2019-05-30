@@ -20,9 +20,11 @@
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/statistics_recorder.h"
+#include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/post_task.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -64,6 +66,10 @@
 #include "chrome/renderer/extensions/extension_localization_peer.h"
 #endif
 
+#if defined(OS_CHROMEOS)
+#include "chrome/renderer/chromeos_merge_session_loader_throttle.h"
+#endif
+
 using blink::WebCache;
 using blink::WebSecurityPolicy;
 using blink::WebString;
@@ -88,8 +94,8 @@ class RendererResourceDelegate : public content::ResourceDispatcherDelegate {
     if (!weak_factory_.HasWeakPtrs()) {
       base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
           FROM_HERE,
-          base::Bind(&RendererResourceDelegate::InformHostOfCacheStats,
-                     weak_factory_.GetWeakPtr()),
+          base::BindOnce(&RendererResourceDelegate::InformHostOfCacheStats,
+                         weak_factory_.GetWeakPtr()),
           base::TimeDelta::FromMilliseconds(kCacheStatsDelayMS));
     }
 
@@ -132,13 +138,73 @@ class RendererResourceDelegate : public content::ResourceDispatcherDelegate {
   DISALLOW_COPY_AND_ASSIGN(RendererResourceDelegate);
 };
 
+#if defined(OS_CHROMEOS)
+scoped_refptr<base::SequencedTaskRunner> GetCallbackGroupTaskRunner() {
+  content::ChildThread* child_thread = content::ChildThread::Get();
+  if (child_thread)
+    return child_thread->GetIOTaskRunner();
+
+  // This will happen when running via tests.
+  return base::SequencedTaskRunnerHandle::Get();
+}
+#endif  // defined(OS_CHROMEOS)
+
 }  // namespace
 
 bool ChromeRenderThreadObserver::is_incognito_process_ = false;
-bool ChromeRenderThreadObserver::force_safe_search_ = false;
-int32_t ChromeRenderThreadObserver::youtube_restrict_ = 0;
-std::string* ChromeRenderThreadObserver::allowed_domains_for_apps_ = nullptr;
-std::string* ChromeRenderThreadObserver::variation_ids_header_ = nullptr;
+
+#if defined(OS_CHROMEOS)
+// static
+scoped_refptr<ChromeRenderThreadObserver::ChromeOSListener>
+ChromeRenderThreadObserver::ChromeOSListener::Create(
+    chrome::mojom::ChromeOSListenerRequest chromeos_listener_request) {
+  scoped_refptr<ChromeOSListener> helper = new ChromeOSListener();
+  content::ChildThread::Get()->GetIOTaskRunner()->PostTask(
+      FROM_HERE, base::BindOnce(&ChromeOSListener::BindOnIOThread, helper,
+                                std::move(chromeos_listener_request)));
+  return helper;
+}
+
+bool ChromeRenderThreadObserver::ChromeOSListener::IsMergeSessionRunning()
+    const {
+  base::AutoLock lock(lock_);
+  return merge_session_running_;
+}
+
+void ChromeRenderThreadObserver::ChromeOSListener::RunWhenMergeSessionFinished(
+    DelayedCallbackGroup::Callback callback) {
+  base::AutoLock lock(lock_);
+  DCHECK(merge_session_running_);
+  session_merged_callbacks_->Add(std::move(callback));
+}
+
+void ChromeRenderThreadObserver::ChromeOSListener::MergeSessionComplete() {
+  {
+    base::AutoLock lock(lock_);
+    merge_session_running_ = false;
+  }
+  session_merged_callbacks_->RunAll();
+}
+
+ChromeRenderThreadObserver::ChromeOSListener::ChromeOSListener()
+    : session_merged_callbacks_(base::MakeRefCounted<DelayedCallbackGroup>(
+          MergeSessionLoaderThrottle::GetMergeSessionTimeout(),
+          GetCallbackGroupTaskRunner())),
+      merge_session_running_(true),
+      binding_(this) {}
+
+ChromeRenderThreadObserver::ChromeOSListener::~ChromeOSListener() {}
+
+void ChromeRenderThreadObserver::ChromeOSListener::BindOnIOThread(
+    chrome::mojom::ChromeOSListenerRequest chromeos_listener_request) {
+  binding_.Bind(std::move(chromeos_listener_request));
+}
+#endif  // defined(OS_CHROMEOS)
+
+chrome::mojom::DynamicParams* GetDynamicConfigParams() {
+  static base::NoDestructor<chrome::mojom::DynamicParams> dynamic_params;
+  return dynamic_params.get();
+}
 
 ChromeRenderThreadObserver::ChromeRenderThreadObserver()
     : visited_link_slave_(new visitedlink::VisitedLinkSlave),
@@ -177,6 +243,17 @@ ChromeRenderThreadObserver::ChromeRenderThreadObserver()
 
 ChromeRenderThreadObserver::~ChromeRenderThreadObserver() {}
 
+// static
+const chrome::mojom::DynamicParams&
+ChromeRenderThreadObserver::GetDynamicParams() {
+  return *GetDynamicConfigParams();
+}
+
+base::WeakPtr<ChromeRenderThreadObserver>
+ChromeRenderThreadObserver::GetWeakPtr() {
+  return weak_factory_.GetWeakPtr();
+}
+
 void ChromeRenderThreadObserver::RegisterMojoInterfaces(
     blink::AssociatedInterfaceRegistry* associated_interfaces) {
   associated_interfaces->AddInterface(base::Bind(
@@ -191,23 +268,20 @@ void ChromeRenderThreadObserver::UnregisterMojoInterfaces(
 }
 
 void ChromeRenderThreadObserver::SetInitialConfiguration(
-    bool is_incognito_process) {
+    bool is_incognito_process,
+    chrome::mojom::ChromeOSListenerRequest chromeos_listener_request) {
   is_incognito_process_ = is_incognito_process;
+#if defined(OS_CHROMEOS)
+  if (chromeos_listener_request) {
+    chromeos_listener_ =
+        ChromeOSListener::Create(std::move(chromeos_listener_request));
+  }
+#endif  // defined(OS_CHROMEOS)
 }
 
 void ChromeRenderThreadObserver::SetConfiguration(
-    bool force_safe_search,
-    int32_t youtube_restrict,
-    const std::string& allowed_domains_for_apps,
-    const std::string& variation_ids_header) {
-  force_safe_search_ = force_safe_search;
-  youtube_restrict_ = youtube_restrict;
-  if (!allowed_domains_for_apps_)
-    allowed_domains_for_apps_ = new std::string();
-  *allowed_domains_for_apps_ = allowed_domains_for_apps;
-  if (!variation_ids_header_)
-    variation_ids_header_ = new std::string();
-  *variation_ids_header_ = variation_ids_header;
+    chrome::mojom::DynamicParamsPtr params) {
+  *GetDynamicConfigParams() = std::move(*params);
 }
 
 void ChromeRenderThreadObserver::SetContentSettingRules(

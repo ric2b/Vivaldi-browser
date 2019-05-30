@@ -28,6 +28,7 @@
 
 #include "third_party/blink/renderer/core/html/forms/input_type_view.h"
 
+#include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/events/keyboard_event.h"
 #include "third_party/blink/renderer/core/html/forms/form_controller.h"
@@ -39,7 +40,7 @@ namespace blink {
 
 InputTypeView::~InputTypeView() = default;
 
-void InputTypeView::Trace(blink::Visitor* visitor) {
+void InputTypeView::Trace(Visitor* visitor) {
   visitor->Trace(element_);
 }
 
@@ -77,7 +78,8 @@ void InputTypeView::AccessKeyAction(bool) {
 }
 
 bool InputTypeView::ShouldSubmitImplicitly(const Event& event) {
-  return event.IsKeyboardEvent() && event.type() == EventTypeNames::keypress &&
+  return event.IsKeyboardEvent() &&
+         event.type() == event_type_names::kKeypress &&
          ToKeyboardEvent(event).charCode() == '\r';
 }
 
@@ -96,7 +98,7 @@ scoped_refptr<ComputedStyle> InputTypeView::CustomStyleForLayoutObject(
 }
 
 TextDirection InputTypeView::ComputedTextDirection() {
-  return GetElement().EnsureComputedStyle()->Direction();
+  return GetElement().ComputedStyleRef().Direction();
 }
 
 void InputTypeView::Blur() {
@@ -185,7 +187,7 @@ bool InputTypeView::HasBadInput() const {
   return false;
 }
 
-void ClickHandlingState::Trace(blink::Visitor* visitor) {
+void ClickHandlingState::Trace(Visitor* visitor) {
   visitor->Trace(checked_radio_button);
   EventDispatchHandlingState::Trace(visitor);
 }

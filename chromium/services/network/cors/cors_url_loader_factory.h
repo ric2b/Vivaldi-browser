@@ -12,6 +12,8 @@
 #include "base/macros.h"
 #include "mojo/public/cpp/bindings/strong_binding_set.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
+#include "services/network/cors/preflight_controller.h"
+#include "services/network/public/cpp/cors/origin_access_list.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 
@@ -26,24 +28,32 @@ namespace cors {
 
 // A factory class to create a URLLoader that supports CORS.
 // This class takes a network::mojom::URLLoaderFactory instance in the
-// constructor and owns it to make network requests for CORS preflight, and
+// constructor and owns it to make network requests for CORS-preflight, and
 // actual network request.
-class COMPONENT_EXPORT(NETWORK_SERVICE) CORSURLLoaderFactory final
+class COMPONENT_EXPORT(NETWORK_SERVICE) CorsURLLoaderFactory final
     : public mojom::URLLoaderFactory {
  public:
-  // Used by network::NetworkContext.
-  CORSURLLoaderFactory(
+  // |origin_access_list| should always outlive this factory instance.
+  // Used by network::NetworkContext. |network_loader_factory_for_testing|
+  // should be nullptr unless you need to overwrite the default factory for
+  // testing.
+  CorsURLLoaderFactory(
       NetworkContext* context,
       mojom::URLLoaderFactoryParamsPtr params,
       scoped_refptr<ResourceSchedulerClient> resource_scheduler_client,
-      mojom::URLLoaderFactoryRequest request);
+      mojom::URLLoaderFactoryRequest request,
+      const OriginAccessList* origin_access_list,
+      std::unique_ptr<mojom::URLLoaderFactory>
+          network_loader_factory_for_testing);
   // Used by content::ResourceMessageFilter.
   // TODO(yhirano): Remove this once when the network service is fully enabled.
-  CORSURLLoaderFactory(
+  CorsURLLoaderFactory(
       bool disable_web_security,
       std::unique_ptr<mojom::URLLoaderFactory> network_loader_factory,
-      const base::RepeatingCallback<void(int)>& preflight_finalizer);
-  ~CORSURLLoaderFactory() override;
+      const base::RepeatingCallback<void(int)>& preflight_finalizer,
+      const OriginAccessList* origin_access_list,
+      uint32_t process_id);
+  ~CorsURLLoaderFactory() override;
 
   void OnLoaderCreated(std::unique_ptr<mojom::URLLoader> loader);
   void DestroyURLLoader(mojom::URLLoader* loader);
@@ -74,16 +84,37 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CORSURLLoaderFactory final
   // The NetworkContext owns |this|.
   NetworkContext* const context_ = nullptr;
   scoped_refptr<ResourceSchedulerClient> resource_scheduler_client_;
-  std::set<std::unique_ptr<mojom::URLLoader>, base::UniquePtrComparator>
-      loaders_;
 
   const bool disable_web_security_;
+
+  const uint32_t process_id_;
+
+  // Relative order of |network_loader_factory_| and |loaders_| matters -
+  // URLLoaderFactory needs to live longer than URLLoaders created using the
+  // factory.  See also https://crbug.com/906305.
   std::unique_ptr<mojom::URLLoaderFactory> network_loader_factory_;
+  std::set<std::unique_ptr<mojom::URLLoader>, base::UniquePtrComparator>
+      loaders_;
 
   // Used when constructed by ResourceMessageFilter.
   base::RepeatingCallback<void(int)> preflight_finalizer_;
 
-  DISALLOW_COPY_AND_ASSIGN(CORSURLLoaderFactory);
+  // Accessed by instances in |loaders_| too. Since the factory outlives them,
+  // it's safe.
+  const OriginAccessList* const origin_access_list_;
+
+  // Owns factory bound OriginAccessList that to have factory specific
+  // additional allowed access list.
+  std::unique_ptr<OriginAccessList> factory_bound_origin_access_list_;
+
+  // Usually |preflight_controoler_| is owned by NetworkContext, but we create
+  // own one if NetworkContext is not provided, e.g. for legacy code path.
+  // TODO(toyoshim): Remove owned controller once the network service is fully
+  // enabled.
+  PreflightController* preflight_controller_;
+  std::unique_ptr<PreflightController> owned_preflight_controller_;
+
+  DISALLOW_COPY_AND_ASSIGN(CorsURLLoaderFactory);
 };
 
 }  // namespace cors

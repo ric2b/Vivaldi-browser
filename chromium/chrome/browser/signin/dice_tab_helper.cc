@@ -9,7 +9,7 @@
 #include "chrome/browser/signin/dice_tab_helper.h"
 #include "chrome/browser/signin/signin_util.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "components/signin/core/browser/profile_management_switches.h"
+#include "components/signin/core/browser/account_consistency_method.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
@@ -24,7 +24,8 @@ void DiceTabHelper::InitializeSigninFlow(
     const GURL& signin_url,
     signin_metrics::AccessPoint access_point,
     signin_metrics::Reason reason,
-    signin_metrics::PromoAction promo_action) {
+    signin_metrics::PromoAction promo_action,
+    const GURL& redirect_url) {
   DCHECK(signin_url.is_valid());
   DCHECK(signin_url_.is_empty() || signin_url_ == signin_url);
 
@@ -39,6 +40,7 @@ void DiceTabHelper::InitializeSigninFlow(
   signin_promo_action_ = promo_action;
   is_chrome_signin_page_ = true;
   signin_page_load_recorded_ = false;
+  redirect_url_ = redirect_url;
 
   if (reason == signin_metrics::Reason::REASON_SIGNIN_PRIMARY_ACCOUNT) {
     signin_metrics::LogSigninAccessPointStarted(access_point, promo_action);
@@ -99,3 +101,5 @@ bool DiceTabHelper::IsSigninPageNavigation(
          navigation_handle->GetURL().GetOrigin() ==
              GaiaUrls::GetInstance()->gaia_url();
 }
+
+WEB_CONTENTS_USER_DATA_KEY_IMPL(DiceTabHelper)

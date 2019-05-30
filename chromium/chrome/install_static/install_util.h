@@ -66,13 +66,32 @@ std::wstring GetChromeInstallSubDirectory();
 // their browsing data.
 std::wstring GetRegistryPath();
 
+// The next set of registry paths are generally for integration with an Omaha
+// updater (see https://github.com/google/omaha); Google Chrome builds integrate
+// with Google Update. For all accesses, HKLM or HKCU must be used based on
+// IsSystemInstall(). Additionally, KEY_WOW64_32KEY must be used for all
+// accesses, as Omaha updaters exclusively use the 32-bit view of the registry.
+
 // Returns the path "Software\Google\Update\Clients\<guid>" where "<guid>" is
-// the current install mode's appguid.
+// the current install mode's appguid. This key is primarily used for
+// registering the browser as an app managed by the updater.
 std::wstring GetClientsKeyPath();
 
 // Returns the path "Software\Google\Update\ClientState\<guid>" where "<guid>"
-// is the current install mode's appguid.
+// is the current install mode's appguid. This key is primarily (but not
+// exclusively) used for holding install-wide state that is used by both the
+// updater and the browser.
 std::wstring GetClientStateKeyPath();
+
+// Returns the path "Software\Google\Update\ClientStateMedium\<guid>" where
+// "<guid>" is the current install mode's appguid. This is is used exclusively
+// for system-wide installs to hold values written by the browser.
+std::wstring GetClientStateMediumKeyPath();
+
+// Returns the path to the ClientState{,Medium} key for the deprecated Chrome
+// binaries.
+std::wstring GetClientStateKeyPathForBinaries();
+std::wstring GetClientStateMediumKeyPathForBinaries();
 
 // Returns the path
 // "Software\Microsoft\Windows\CurrentVersion\Uninstall\[kCompanyPathName ]
@@ -90,8 +109,12 @@ const wchar_t* GetAppGuid();
 // the Windows OS.
 const CLSID& GetToastActivatorClsid();
 
-// The CLSID of the COM server that provides silent elevation functionality.
+// Returns the Elevation Service CLSID, IID, Name, and Display Name
+// respectively.
 const CLSID& GetElevatorClsid();
+const IID& GetElevatorIid();
+std::wstring GetElevationServiceName();
+std::wstring GetElevationServiceDisplayName();
 
 // Returns the unsuffixed application name of this program. This is the base of
 // the name registered with Default Programs. IMPORTANT: This must only be
@@ -252,9 +275,10 @@ std::vector<std::wstring> TokenizeString16(const std::wstring& str,
 std::vector<std::wstring> TokenizeCommandLineToArray(
     const std::wstring& command_line);
 
-// We assume that the command line |command_line| contains multiple switches
-// with the format --<switch name>=<switch value>. This function returns the
-// value of the |switch_name| passed in.
+// Returns the value of a switch of the form "--<switch name>=<switch value>" in
+// |command_line|. An empty switch in |command_line| ("--") denotes the end of
+// switches and the beginning of args. Anything of the form --<switch
+// name>=<switch value> following "--" is ignored.
 std::wstring GetSwitchValueFromCommandLine(const std::wstring& command_line,
                                            const std::wstring& switch_name);
 

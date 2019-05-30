@@ -24,6 +24,9 @@
 #import <Carbon/Carbon.h>
 #import <Cocoa/Cocoa.h>
 #import <math.h>
+
+#import "third_party/blink/public/platform/mac/web_sandbox_support.h"
+#import "third_party/blink/public/platform/platform.h"
 #import "third_party/blink/renderer/core/css_value_keywords.h"
 #import "third_party/blink/renderer/core/fileapi/file_list.h"
 #import "third_party/blink/renderer/core/html_names.h"
@@ -33,7 +36,6 @@
 #import "third_party/blink/renderer/platform/data_resource_helper.h"
 #import "third_party/blink/renderer/platform/fonts/string_truncator.h"
 #import "third_party/blink/renderer/platform/graphics/bitmap_image.h"
-#import "third_party/blink/renderer/platform/layout_test_support.h"
 #import "third_party/blink/renderer/platform/mac/color_mac.h"
 #import "third_party/blink/renderer/platform/mac/theme_mac.h"
 #import "third_party/blink/renderer/platform/mac/version_util_mac.h"
@@ -41,6 +43,7 @@
 #import "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #import "third_party/blink/renderer/platform/text/platform_locale.h"
 #import "third_party/blink/renderer/platform/theme.h"
+#import "third_party/blink/renderer/platform/web_test_support.h"
 
 // The methods in this file are specific to the Mac OS X platform.
 
@@ -128,13 +131,16 @@ bool FontSizeMatchesToControlSize(const ComputedStyle& style) {
   return false;
 }
 
-NSColor* ColorInColorSpace(NSColor* color) {
-  return [color colorUsingColorSpace:[NSColorSpace sRGBColorSpace]];
+Color GetSystemColor(MacSystemColorID color_id) {
+  // In tests, a WebSandboxSupport may not be set up. Just return a dummy
+  // color, in this case, black.
+  auto* sandbox_support = Platform::Current()->GetSandboxSupport();
+  if (!sandbox_support)
+    return Color();
+  return sandbox_support->GetSystemColor(color_id);
 }
 
 }  // namespace
-
-using namespace HTMLNames;
 
 LayoutThemeMac::LayoutThemeMac()
     : LayoutTheme(PlatformTheme()),
@@ -155,17 +161,11 @@ LayoutThemeMac::~LayoutThemeMac() {
 }
 
 Color LayoutThemeMac::PlatformActiveSelectionBackgroundColor() const {
-  NSColor* color = ColorInColorSpace([NSColor selectedTextBackgroundColor]);
-  return Color(static_cast<int>(255.0 * [color redComponent]),
-               static_cast<int>(255.0 * [color greenComponent]),
-               static_cast<int>(255.0 * [color blueComponent]));
+  return GetSystemColor(MacSystemColorID::kSelectedTextBackground);
 }
 
 Color LayoutThemeMac::PlatformInactiveSelectionBackgroundColor() const {
-  NSColor* color = ColorInColorSpace([NSColor secondarySelectedControlColor]);
-  return Color(static_cast<int>(255.0 * [color redComponent]),
-               static_cast<int>(255.0 * [color greenComponent]),
-               static_cast<int>(255.0 * [color blueComponent]));
+  return GetSystemColor(MacSystemColorID::kSecondarySelectedControl);
 }
 
 Color LayoutThemeMac::PlatformActiveSelectionForegroundColor() const {
@@ -173,10 +173,7 @@ Color LayoutThemeMac::PlatformActiveSelectionForegroundColor() const {
 }
 
 Color LayoutThemeMac::PlatformActiveListBoxSelectionBackgroundColor() const {
-  NSColor* color = ColorInColorSpace([NSColor alternateSelectedControlColor]);
-  return Color(static_cast<int>(255.0 * [color redComponent]),
-               static_cast<int>(255.0 * [color greenComponent]),
-               static_cast<int>(255.0 * [color blueComponent]));
+  return GetSystemColor(MacSystemColorID::kAlternateSelectedControl);
 }
 
 Color LayoutThemeMac::PlatformActiveListBoxSelectionForegroundColor() const {
@@ -262,84 +259,7 @@ void LayoutThemeMac::SystemFont(CSSValueID system_font_id,
                    : NormalSlopeValue();
   font_weight = ToFontWeight([font_manager weightOfFont:font]);
   font_size = [font pointSize];
-  font_family = FontFamilyNames::system_ui;
-}
-
-static RGBA32 ConvertNSColorToColor(NSColor* color) {
-  NSColor* color_in_color_space = ColorInColorSpace(color);
-  if (color_in_color_space) {
-    static const double kScaleFactor = nextafter(256.0, 0.0);
-    return MakeRGB(
-        static_cast<int>(kScaleFactor * [color_in_color_space redComponent]),
-        static_cast<int>(kScaleFactor * [color_in_color_space greenComponent]),
-        static_cast<int>(kScaleFactor * [color_in_color_space blueComponent]));
-  }
-
-  // This conversion above can fail if the NSColor in question is an
-  // NSPatternColor (as many system colors are). These colors are actually a
-  // repeating pattern not just a solid color. To work around this we simply
-  // draw a 1x1 image of the color and use that pixel's color. It might be
-  // better to use an average of the colors in the pattern instead.
-  NSBitmapImageRep* offscreen_rep =
-      [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:nil
-                                              pixelsWide:1
-                                              pixelsHigh:1
-                                           bitsPerSample:8
-                                         samplesPerPixel:4
-                                                hasAlpha:YES
-                                                isPlanar:NO
-                                          colorSpaceName:NSDeviceRGBColorSpace
-                                             bytesPerRow:4
-                                            bitsPerPixel:32];
-
-  [NSGraphicsContext saveGraphicsState];
-  [NSGraphicsContext
-      setCurrentContext:[NSGraphicsContext
-                            graphicsContextWithBitmapImageRep:offscreen_rep]];
-  NSEraseRect(NSMakeRect(0, 0, 1, 1));
-  [color drawSwatchInRect:NSMakeRect(0, 0, 1, 1)];
-  [NSGraphicsContext restoreGraphicsState];
-
-  NSUInteger pixel[4];
-  [offscreen_rep getPixel:pixel atX:0 y:0];
-  [offscreen_rep release];
-  // This recursive call will not recurse again, because the color space
-  // the second time around is NSDeviceRGBColorSpace.
-  return ConvertNSColorToColor([NSColor colorWithDeviceRed:pixel[0] / 255.
-                                                     green:pixel[1] / 255.
-                                                      blue:pixel[2] / 255.
-                                                     alpha:1.]);
-}
-
-static RGBA32 MenuBackgroundColor() {
-  NSBitmapImageRep* offscreen_rep =
-      [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:nil
-                                              pixelsWide:1
-                                              pixelsHigh:1
-                                           bitsPerSample:8
-                                         samplesPerPixel:4
-                                                hasAlpha:YES
-                                                isPlanar:NO
-                                          colorSpaceName:NSDeviceRGBColorSpace
-                                             bytesPerRow:4
-                                            bitsPerPixel:32];
-
-  CGContextRef context = static_cast<CGContextRef>([[NSGraphicsContext
-      graphicsContextWithBitmapImageRep:offscreen_rep] graphicsPort]);
-  CGRect rect = CGRectMake(0, 0, 1, 1);
-  HIThemeMenuDrawInfo draw_info;
-  draw_info.version = 0;
-  draw_info.menuType = kThemeMenuTypePopUp;
-  HIThemeDrawMenuBackground(&rect, &draw_info, context,
-                            kHIThemeOrientationInverted);
-
-  NSUInteger pixel[4];
-  [offscreen_rep getPixel:pixel atX:0 y:0];
-  [offscreen_rep release];
-  return ConvertNSColorToColor([NSColor colorWithDeviceRed:pixel[0] / 255.
-                                                     green:pixel[1] / 255.
-                                                      blue:pixel[2] / 255.
-                                                     alpha:1.]);
+  font_family = font_family_names::kSystemUi;
 }
 
 void LayoutThemeMac::PlatformColorsDidChange() {
@@ -358,50 +278,50 @@ Color LayoutThemeMac::SystemColor(CSSValueID css_value_id) const {
   bool needs_fallback = false;
   switch (css_value_id) {
     case CSSValueActiveborder:
-      color = ConvertNSColorToColor([NSColor keyboardFocusIndicatorColor]);
+      color = GetSystemColor(MacSystemColorID::kKeyboardFocusIndicator);
       break;
     case CSSValueActivecaption:
-      color = ConvertNSColorToColor([NSColor windowFrameTextColor]);
+      color = GetSystemColor(MacSystemColorID::kWindowFrameText);
       break;
     case CSSValueAppworkspace:
-      color = ConvertNSColorToColor([NSColor headerColor]);
+      color = GetSystemColor(MacSystemColorID::kHeader);
       break;
     case CSSValueBackground:
       // Use theme independent default
       needs_fallback = true;
       break;
     case CSSValueButtonface:
-      color = ConvertNSColorToColor([NSColor controlBackgroundColor]);
+      color = GetSystemColor(MacSystemColorID::kControlBackground);
       break;
     case CSSValueButtonhighlight:
-      color = ConvertNSColorToColor([NSColor controlHighlightColor]);
+      color = GetSystemColor(MacSystemColorID::kControlHighlight);
       break;
     case CSSValueButtonshadow:
-      color = ConvertNSColorToColor([NSColor controlShadowColor]);
+      color = GetSystemColor(MacSystemColorID::kControlShadow);
       break;
     case CSSValueButtontext:
-      color = ConvertNSColorToColor([NSColor controlTextColor]);
+      color = GetSystemColor(MacSystemColorID::kControlText);
       break;
     case CSSValueCaptiontext:
-      color = ConvertNSColorToColor([NSColor textColor]);
+      color = GetSystemColor(MacSystemColorID::kText);
       break;
     case CSSValueGraytext:
-      color = ConvertNSColorToColor([NSColor disabledControlTextColor]);
+      color = GetSystemColor(MacSystemColorID::kDisabledControlText);
       break;
     case CSSValueHighlight:
-      color = ConvertNSColorToColor([NSColor selectedTextBackgroundColor]);
+      color = GetSystemColor(MacSystemColorID::kSelectedTextBackground);
       break;
     case CSSValueHighlighttext:
-      color = ConvertNSColorToColor([NSColor selectedTextColor]);
+      color = GetSystemColor(MacSystemColorID::kSelectedText);
       break;
     case CSSValueInactiveborder:
-      color = ConvertNSColorToColor([NSColor controlBackgroundColor]);
+      color = GetSystemColor(MacSystemColorID::kControlBackground);
       break;
     case CSSValueInactivecaption:
-      color = ConvertNSColorToColor([NSColor controlBackgroundColor]);
+      color = GetSystemColor(MacSystemColorID::kControlBackground);
       break;
     case CSSValueInactivecaptiontext:
-      color = ConvertNSColorToColor([NSColor textColor]);
+      color = GetSystemColor(MacSystemColorID::kText);
       break;
     case CSSValueInfobackground:
       // There is no corresponding NSColor for this so we use a hard coded
@@ -409,25 +329,25 @@ Color LayoutThemeMac::SystemColor(CSSValueID css_value_id) const {
       color = 0xFFFBFCC5;
       break;
     case CSSValueInfotext:
-      color = ConvertNSColorToColor([NSColor textColor]);
+      color = GetSystemColor(MacSystemColorID::kText);
       break;
     case CSSValueMenu:
-      color = MenuBackgroundColor();
+      color = GetSystemColor(MacSystemColorID::kMenuBackground);
       break;
     case CSSValueMenutext:
-      color = ConvertNSColorToColor([NSColor selectedMenuItemTextColor]);
+      color = GetSystemColor(MacSystemColorID::kSelectedMenuItemText);
       break;
     case CSSValueScrollbar:
-      color = ConvertNSColorToColor([NSColor scrollBarColor]);
+      color = GetSystemColor(MacSystemColorID::kScrollBar);
       break;
     case CSSValueText:
-      color = ConvertNSColorToColor([NSColor textColor]);
+      color = GetSystemColor(MacSystemColorID::kText);
       break;
     case CSSValueThreeddarkshadow:
-      color = ConvertNSColorToColor([NSColor controlDarkShadowColor]);
+      color = GetSystemColor(MacSystemColorID::kControlDarkShadow);
       break;
     case CSSValueThreedshadow:
-      color = ConvertNSColorToColor([NSColor shadowColor]);
+      color = GetSystemColor(MacSystemColorID::kShadow);
       break;
     case CSSValueThreedface:
       // We use this value instead of NSColor's controlColor to avoid website
@@ -436,22 +356,22 @@ Color LayoutThemeMac::SystemColor(CSSValueID css_value_id) const {
       color = 0xFFC0C0C0;
       break;
     case CSSValueThreedhighlight:
-      color = ConvertNSColorToColor([NSColor highlightColor]);
+      color = GetSystemColor(MacSystemColorID::kHighlight);
       break;
     case CSSValueThreedlightshadow:
-      color = ConvertNSColorToColor([NSColor controlLightHighlightColor]);
+      color = GetSystemColor(MacSystemColorID::kControlLightHighlight);
       break;
     case CSSValueWebkitFocusRingColor:
-      color = ConvertNSColorToColor([NSColor keyboardFocusIndicatorColor]);
+      color = GetSystemColor(MacSystemColorID::kKeyboardFocusIndicator);
       break;
     case CSSValueWindow:
-      color = ConvertNSColorToColor([NSColor windowBackgroundColor]);
+      color = GetSystemColor(MacSystemColorID::kWindowBackground);
       break;
     case CSSValueWindowframe:
-      color = ConvertNSColorToColor([NSColor windowFrameColor]);
+      color = GetSystemColor(MacSystemColorID::kWindowFrame);
       break;
     case CSSValueWindowtext:
-      color = ConvertNSColorToColor([NSColor windowFrameTextColor]);
+      color = GetSystemColor(MacSystemColorID::kWindowFrameText);
       break;
     default:
       needs_fallback = true;
@@ -483,7 +403,7 @@ bool LayoutThemeMac::IsControlStyled(const ComputedStyle& style) const {
     if (!FontSizeMatchesToControlSize(style))
       return true;
     if (style.GetFontDescription().Family().Family() !=
-        FontFamilyNames::system_ui)
+        font_family_names::kSystemUi)
       return true;
     if (!style.Height().IsIntrinsicOrAuto())
       return true;
@@ -636,9 +556,9 @@ void LayoutThemeMac::SetSizeFromFont(ComputedStyle& style,
   // account.
   IntSize size = SizeForFont(style, sizes);
   if (style.Width().IsIntrinsicOrAuto() && size.Width() > 0)
-    style.SetWidth(Length(size.Width(), kFixed));
+    style.SetWidth(Length::Fixed(size.Width()));
   if (style.Height().IsAuto() && size.Height() > 0)
-    style.SetHeight(Length(size.Height(), kFixed));
+    style.SetHeight(Length::Fixed(size.Height()));
 }
 
 void LayoutThemeMac::SetFontFromControlSize(ComputedStyle& style,
@@ -649,7 +569,7 @@ void LayoutThemeMac::SetFontFromControlSize(ComputedStyle& style,
 
   NSFont* font = [NSFont
       systemFontOfSize:[NSFont systemFontSizeForControlSize:control_size]];
-  font_description.FirstFamily().SetFamily(FontFamilyNames::system_ui);
+  font_description.FirstFamily().SetFamily(font_family_names::kSystemUi);
   font_description.SetComputedSize([font pointSize] * style.EffectiveZoom());
   font_description.SetSpecifiedSize([font pointSize] * style.EffectiveZoom());
 
@@ -721,7 +641,7 @@ void LayoutThemeMac::AdjustMenuListStyle(ComputedStyle& style,
   style.ResetPadding();
 
   // Height is locked to auto.
-  style.SetHeight(Length(kAuto));
+  style.SetHeight(Length::Auto());
 
   // White-space is locked to pre.
   style.SetWhiteSpace(EWhiteSpace::kPre);
@@ -806,7 +726,7 @@ void LayoutThemeMac::AdjustMenuListButtonStyle(ComputedStyle& style,
               int(kBaseBorderRadius + font_scale - 1)));  // FIXME: Round up?
 
   const int kMinHeight = 15;
-  style.SetMinHeight(Length(kMinHeight, kFixed));
+  style.SetMinHeight(Length::Fixed(kMinHeight));
 
   style.SetLineHeight(ComputedStyleInitialValues::InitialLineHeight());
 }
@@ -873,11 +793,11 @@ void LayoutThemeMac::SetSearchFieldSize(ComputedStyle& style) const {
   SetSizeFromFont(style, SearchFieldSizes());
 }
 
-const int kSearchFieldBorderWidth = 2;
+const uint8_t kSearchFieldBorderWidth = 2;
 void LayoutThemeMac::AdjustSearchFieldStyle(ComputedStyle& style) const {
   // Override border.
   style.ResetBorder();
-  const short border_width = kSearchFieldBorderWidth * style.EffectiveZoom();
+  const float border_width = kSearchFieldBorderWidth * style.EffectiveZoom();
   style.SetBorderLeftWidth(border_width);
   style.SetBorderLeftStyle(EBorderStyle::kInset);
   style.SetBorderRightWidth(border_width);
@@ -888,7 +808,7 @@ void LayoutThemeMac::AdjustSearchFieldStyle(ComputedStyle& style) const {
   style.SetBorderTopStyle(EBorderStyle::kInset);
 
   // Override height.
-  style.SetHeight(Length(kAuto));
+  style.SetHeight(Length::Auto());
   SetSearchFieldSize(style);
 
   NSControlSize control_size = ControlSizeForFont(style);
@@ -897,10 +817,10 @@ void LayoutThemeMac::AdjustSearchFieldStyle(ComputedStyle& style) const {
   const int vertical_padding = 1 * style.EffectiveZoom();
   const int horizontal_padding =
       SearchFieldHorizontalPaddings()[control_size] * style.EffectiveZoom();
-  style.SetPaddingLeft(Length(horizontal_padding, kFixed));
-  style.SetPaddingRight(Length(horizontal_padding, kFixed));
-  style.SetPaddingTop(Length(vertical_padding, kFixed));
-  style.SetPaddingBottom(Length(vertical_padding, kFixed));
+  style.SetPaddingLeft(Length::Fixed(horizontal_padding));
+  style.SetPaddingRight(Length::Fixed(horizontal_padding));
+  style.SetPaddingTop(Length::Fixed(vertical_padding));
+  style.SetPaddingBottom(Length::Fixed(vertical_padding));
 
   SetFontFromControlSize(style, control_size);
 
@@ -916,8 +836,8 @@ const IntSize* LayoutThemeMac::CancelButtonSizes() const {
 void LayoutThemeMac::AdjustSearchFieldCancelButtonStyle(
     ComputedStyle& style) const {
   IntSize size = SizeForSystemFont(style, CancelButtonSizes());
-  style.SetWidth(Length(size.Width(), kFixed));
-  style.SetHeight(Length(size.Height(), kFixed));
+  style.SetWidth(Length::Fixed(size.Width()));
+  style.SetHeight(Length::Fixed(size.Height()));
   style.SetBoxShadow(nullptr);
 }
 
@@ -935,7 +855,7 @@ void LayoutThemeMac::AdjustProgressBarBounds(ComputedStyle& style) const {
   int height = ProgressBarHeights()[control_size] * zoom_level;
 
   // Now inflate it to account for the shadow.
-  style.SetMinHeight(Length(height + zoom_level, kFixed));
+  style.SetMinHeight(Length::Fixed(height + zoom_level));
 }
 
 void LayoutThemeMac::AdjustSliderThumbSize(ComputedStyle& style) const {
@@ -943,9 +863,9 @@ void LayoutThemeMac::AdjustSliderThumbSize(ComputedStyle& style) const {
   if (style.Appearance() == kSliderThumbHorizontalPart ||
       style.Appearance() == kSliderThumbVerticalPart) {
     style.SetWidth(
-        Length(static_cast<int>(kSliderThumbWidth * zoom_level), kFixed));
+        Length::Fixed(static_cast<int>(kSliderThumbWidth * zoom_level)));
     style.SetHeight(
-        Length(static_cast<int>(kSliderThumbHeight * zoom_level), kFixed));
+        Length::Fixed(static_cast<int>(kSliderThumbHeight * zoom_level)));
   }
 }
 
@@ -1050,7 +970,7 @@ scoped_refptr<LayoutTheme> LayoutThemeMac::Create() {
 }
 
 bool LayoutThemeMac::UsesTestModeFocusRingColor() const {
-  return LayoutTestSupport::IsRunningLayoutTest();
+  return WebTestSupport::IsRunningWebTest();
 }
 
 NSView* LayoutThemeMac::DocumentView() const {
@@ -1084,8 +1004,8 @@ String LayoutThemeMac::ExtraFullscreenStyleSheet() {
 
 String LayoutThemeMac::ExtraDefaultStyleSheet() {
   return LayoutTheme::ExtraDefaultStyleSheet() +
-         GetDataResourceAsASCIIString("themeInputMultipleFields.css") +
-         GetDataResourceAsASCIIString("themeMac.css");
+         GetDataResourceAsASCIIString("input_multiple_fields.css") +
+         GetDataResourceAsASCIIString("mac.css");
 }
 
 bool LayoutThemeMac::ThemeDrawsFocusRing(const ComputedStyle& style) const {

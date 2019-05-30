@@ -2,6 +2,9 @@
 
 #include "sync/vivaldi_sync_client.h"
 
+#include "chrome/browser/profiles/profile.h"
+#include "content/public/browser/browser_thread.h"
+#include "notes/notes_factory.h"
 #include "sync/vivaldi_invalidation_service.h"
 
 namespace vivaldi {
@@ -16,3 +19,12 @@ invalidation::InvalidationService* VivaldiSyncClient::GetInvalidationService() {
 }
 
 }  // namespace vivaldi
+
+namespace browser_sync {
+
+vivaldi::Notes_Model* ChromeSyncClient::GetNotesModel() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  return vivaldi::NotesModelFactory::GetForBrowserContext(profile_);
+}
+
+}  // namespace browser_sync

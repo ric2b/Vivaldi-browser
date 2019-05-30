@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 
 #include "content/renderer/navigation_client.h"
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "content/renderer/render_frame_impl.h"
 #include "third_party/blink/public/platform/task_type.h"
 
@@ -16,12 +18,12 @@ NavigationClient::~NavigationClient() {}
 void NavigationClient::CommitNavigation(
     const network::ResourceResponseHead& head,
     const CommonNavigationParams& common_params,
-    const RequestNavigationParams& request_params,
+    const CommitNavigationParams& commit_params,
     network::mojom::URLLoaderClientEndpointsPtr url_loader_client_endpoints,
-    std::unique_ptr<URLLoaderFactoryBundleInfo> subresource_loaders,
+    std::unique_ptr<blink::URLLoaderFactoryBundleInfo> subresource_loaders,
     base::Optional<std::vector<::content::mojom::TransferrableURLLoaderPtr>>
         subresource_overrides,
-    mojom::ControllerServiceWorkerInfoPtr controller_service_worker_info,
+    blink::mojom::ControllerServiceWorkerInfoPtr controller_service_worker_info,
     network::mojom::URLLoaderFactoryPtr prefetch_loader_factory,
     const base::UnguessableToken& devtools_navigation_token,
     CommitNavigationCallback callback) {
@@ -30,8 +32,8 @@ void NavigationClient::CommitNavigation(
   // race conditions leading to the early deletion of NavigationRequest would
   // unexpectedly abort the ongoing navigation. Remove when the races are fixed.
   ResetDisconnectionHandler();
-  render_frame_->CommitNavigation(
-      head, common_params, request_params,
+  render_frame_->CommitPerNavigationMojoInterfaceNavigation(
+      head, common_params, commit_params,
       std::move(url_loader_client_endpoints), std::move(subresource_loaders),
       std::move(subresource_overrides),
       std::move(controller_service_worker_info),
@@ -41,15 +43,15 @@ void NavigationClient::CommitNavigation(
 
 void NavigationClient::CommitFailedNavigation(
     const CommonNavigationParams& common_params,
-    const RequestNavigationParams& request_params,
+    const CommitNavigationParams& commit_params,
     bool has_stale_copy_in_cache,
     int error_code,
     const base::Optional<std::string>& error_page_content,
-    std::unique_ptr<URLLoaderFactoryBundleInfo> subresource_loaders,
+    std::unique_ptr<blink::URLLoaderFactoryBundleInfo> subresource_loaders,
     CommitFailedNavigationCallback callback) {
   ResetDisconnectionHandler();
-  render_frame_->CommitFailedNavigation(
-      common_params, request_params, has_stale_copy_in_cache, error_code,
+  render_frame_->CommitFailedPerNavigationMojoInterfaceNavigation(
+      common_params, commit_params, has_stale_copy_in_cache, error_code,
       error_page_content, std::move(subresource_loaders), std::move(callback));
 }
 
@@ -58,6 +60,11 @@ void NavigationClient::Bind(mojom::NavigationClientAssociatedRequest request) {
       std::move(request),
       render_frame_->GetTaskRunner(blink::TaskType::kInternalIPC));
   SetDisconnectionHandler();
+}
+
+void NavigationClient::MarkWasInitiatedInThisFrame() {
+  DCHECK(!was_initiated_in_this_frame_);
+  was_initiated_in_this_frame_ = true;
 }
 
 void NavigationClient::SetDisconnectionHandler() {

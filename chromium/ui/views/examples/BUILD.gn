@@ -9,6 +9,8 @@ jumbo_component("views_examples_lib") {
   testonly = true
 
   sources = [
+    "animated_image_view_example.cc",
+    "animated_image_view_example.h",
     "box_layout_example.cc",
     "box_layout_example.h",
     "bubble_example.cc",
@@ -29,8 +31,12 @@ jumbo_component("views_examples_lib") {
     "example_combobox_model.h",
     "examples_window.cc",
     "examples_window.h",
+    "flex_layout_example.cc",
+    "flex_layout_example.h",
     "label_example.cc",
     "label_example.h",
+    "layout_example_base.cc",
+    "layout_example_base.h",
     "link_example.cc",
     "link_example.h",
     "menu_example.cc",
@@ -118,6 +124,7 @@ executable("views_examples_exe") {
     "//ui/compositor",
     "//ui/compositor:test_support",
     "//ui/gfx",
+    "//ui/gl",
     "//ui/gl/init",
     "//ui/resources:ui_test_pak",
     "//ui/views",

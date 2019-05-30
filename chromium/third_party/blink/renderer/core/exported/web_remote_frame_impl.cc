@@ -35,7 +35,6 @@
 #include "third_party/blink/renderer/core/timing/dom_window_performance.h"
 #include "third_party/blink/renderer/core/timing/window_performance.h"
 #include "third_party/blink/renderer/platform/bindings/dom_wrapper_world.h"
-#include "third_party/blink/renderer/platform/feature_policy/feature_policy.h"
 #include "third_party/blink/renderer/platform/geometry/float_quad.h"
 #include "third_party/blink/renderer/platform/geometry/layout_rect.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
@@ -65,7 +64,8 @@ WebRemoteFrame* WebRemoteFrame::CreateMainFrame(WebView* web_view,
 
 WebRemoteFrameImpl* WebRemoteFrameImpl::Create(WebTreeScopeType scope,
                                                WebRemoteFrameClient* client) {
-  WebRemoteFrameImpl* frame = new WebRemoteFrameImpl(scope, client);
+  WebRemoteFrameImpl* frame =
+      MakeGarbageCollected<WebRemoteFrameImpl>(scope, client);
   return frame;
 }
 
@@ -73,8 +73,8 @@ WebRemoteFrameImpl* WebRemoteFrameImpl::CreateMainFrame(
     WebView* web_view,
     WebRemoteFrameClient* client,
     WebFrame* opener) {
-  WebRemoteFrameImpl* frame =
-      new WebRemoteFrameImpl(WebTreeScopeType::kDocument, client);
+  WebRemoteFrameImpl* frame = MakeGarbageCollected<WebRemoteFrameImpl>(
+      WebTreeScopeType::kDocument, client);
   frame->SetOpener(opener);
   Page& page = *static_cast<WebViewImpl*>(web_view)->GetPage();
   // It would be nice to DCHECK that the main frame is not set yet here.
@@ -144,16 +144,19 @@ WebLocalFrame* WebRemoteFrameImpl::CreateLocalChild(
     WebSandboxFlags sandbox_flags,
     WebLocalFrameClient* client,
     blink::InterfaceRegistry* interface_registry,
+    mojo::ScopedMessagePipeHandle document_interface_broker_handle,
     WebFrame* previous_sibling,
     const ParsedFeaturePolicy& container_policy,
     const WebFrameOwnerProperties& frame_owner_properties,
+    FrameOwnerElementType frame_owner_element_type,
     WebFrame* opener) {
-  WebLocalFrameImpl* child =
-      WebLocalFrameImpl::Create(scope, client, interface_registry, opener);
+  WebLocalFrameImpl* child = WebLocalFrameImpl::Create(
+      scope, client, interface_registry,
+      std::move(document_interface_broker_handle), opener);
   InsertAfter(child, previous_sibling);
-  RemoteFrameOwner* owner =
-      RemoteFrameOwner::Create(static_cast<SandboxFlags>(sandbox_flags),
-                               container_policy, frame_owner_properties);
+  RemoteFrameOwner* owner = RemoteFrameOwner::Create(
+      static_cast<SandboxFlags>(sandbox_flags), container_policy,
+      frame_owner_properties, frame_owner_element_type);
   child->InitializeCoreFrame(*GetFrame()->GetPage(), owner, name);
   DCHECK(child->GetFrame());
   return child;
@@ -172,24 +175,24 @@ WebRemoteFrame* WebRemoteFrameImpl::CreateRemoteChild(
     const WebString& name,
     WebSandboxFlags sandbox_flags,
     const ParsedFeaturePolicy& container_policy,
+    FrameOwnerElementType frame_owner_element_type,
     WebRemoteFrameClient* client,
     WebFrame* opener) {
   WebRemoteFrameImpl* child = WebRemoteFrameImpl::Create(scope, client);
   child->SetOpener(opener);
   AppendChild(child);
-  RemoteFrameOwner* owner =
-      RemoteFrameOwner::Create(static_cast<SandboxFlags>(sandbox_flags),
-                               container_policy, WebFrameOwnerProperties());
+  RemoteFrameOwner* owner = RemoteFrameOwner::Create(
+      static_cast<SandboxFlags>(sandbox_flags), container_policy,
+      WebFrameOwnerProperties(), frame_owner_element_type);
   child->InitializeCoreFrame(*GetFrame()->GetPage(), owner, name);
   return child;
 }
 
 void WebRemoteFrameImpl::SetCcLayer(cc::Layer* layer,
-                                    bool prevent_contents_opaque_changes) {
-  if (!GetFrame())
-    return;
-
-  GetFrame()->SetCcLayer(layer, prevent_contents_opaque_changes);
+                                    bool prevent_contents_opaque_changes,
+                                    bool is_surface_layer) {
+  GetFrame()->SetCcLayer(layer, prevent_contents_opaque_changes,
+                         is_surface_layer);
 }
 
 void WebRemoteFrameImpl::SetCoreFrame(RemoteFrame* frame) {
@@ -221,8 +224,8 @@ void WebRemoteFrameImpl::SetReplicatedOrigin(
   // Run SitePerProcessAccessibilityBrowserTest.TwoCrossSiteNavigations to
   // ensure an alternate fix works.  http://crbug.com/566222
   FrameOwner* owner = GetFrame()->Owner();
-  if (owner && owner->IsLocal()) {
-    HTMLElement* owner_element = ToHTMLFrameOwnerElement(owner);
+  HTMLElement* owner_element = DynamicTo<HTMLFrameOwnerElement>(owner);
+  if (owner_element) {
     AXObjectCache* cache = owner_element->GetDocument().ExistingAXObjectCache();
     if (cache)
       cache->ChildrenChanged(owner_element);
@@ -241,9 +244,16 @@ void WebRemoteFrameImpl::SetReplicatedName(const WebString& name) {
   GetFrame()->Tree().SetName(name);
 }
 
-void WebRemoteFrameImpl::SetReplicatedFeaturePolicyHeader(
-    const ParsedFeaturePolicy& parsed_header) {
+void WebRemoteFrameImpl::SetReplicatedFeaturePolicyHeaderAndOpenerPolicies(
+    const ParsedFeaturePolicy& parsed_header,
+    const FeaturePolicy::FeatureState& opener_feature_state) {
   feature_policy_header_ = parsed_header;
+  if (RuntimeEnabledFeatures::FeaturePolicyForSandboxEnabled()) {
+    DCHECK(opener_feature_state.empty() || GetFrame()->IsMainFrame());
+    if (opener_feature_state_.empty()) {
+      opener_feature_state_ = opener_feature_state;
+    }
+  }
   ApplyReplicatedFeaturePolicyHeader();
 }
 
@@ -258,12 +268,13 @@ void WebRemoteFrameImpl::ApplyReplicatedFeaturePolicyHeader() {
   if (GetFrame()->Owner())
     container_policy = GetFrame()->Owner()->ContainerPolicy();
   GetFrame()->GetSecurityContext()->InitializeFeaturePolicy(
-      feature_policy_header_, container_policy, parent_feature_policy);
+      feature_policy_header_, container_policy, parent_feature_policy,
+      opener_feature_state_.empty() ? nullptr : &opener_feature_state_);
 }
 
 void WebRemoteFrameImpl::AddReplicatedContentSecurityPolicyHeader(
     const WebString& header_value,
-    WebContentSecurityPolicyType type,
+    mojom::ContentSecurityPolicyType type,
     WebContentSecurityPolicySource source) {
   GetFrame()
       ->GetSecurityContext()
@@ -291,11 +302,10 @@ void WebRemoteFrameImpl::SetReplicatedInsecureNavigationsSet(
 
 void WebRemoteFrameImpl::ForwardResourceTimingToParent(
     const WebResourceTimingInfo& info) {
-  DCHECK(Parent()->IsWebLocalFrame());
-  WebLocalFrameImpl* parent_frame =
-      ToWebLocalFrameImpl(Parent()->ToWebLocalFrame());
+  auto* parent_frame = To<WebLocalFrameImpl>(Parent()->ToWebLocalFrame());
   HTMLFrameOwnerElement* owner_element =
-      ToHTMLFrameOwnerElement(frame_->Owner());
+      To<HTMLFrameOwnerElement>(frame_->Owner());
+  DCHECK(owner_element);
   DOMWindowPerformance::performance(*parent_frame->GetFrame()->DomWindow())
       ->AddResourceTiming(info, owner_element->localName());
 }
@@ -303,6 +313,10 @@ void WebRemoteFrameImpl::ForwardResourceTimingToParent(
 void WebRemoteFrameImpl::DispatchLoadEventForFrameOwner() {
   DCHECK(GetFrame()->Owner()->IsLocal());
   GetFrame()->Owner()->DispatchLoad();
+}
+
+void WebRemoteFrameImpl::SetNeedsOcclusionTracking(bool needs_tracking) {
+  GetFrame()->View()->SetNeedsOcclusionTracking(needs_tracking);
 }
 
 void WebRemoteFrameImpl::DidStartLoading() {
@@ -314,17 +328,13 @@ void WebRemoteFrameImpl::DidStopLoading() {
 }
 
 bool WebRemoteFrameImpl::IsIgnoredForHitTest() const {
-  HTMLFrameOwnerElement* owner = GetFrame()->DeprecatedLocalOwner();
-  if (!owner || !owner->GetLayoutObject())
-    return false;
-  return owner->GetLayoutObject()->Style()->PointerEvents() ==
-         EPointerEvents::kNone;
+  return GetFrame()->IsIgnoredForHitTest();
 }
 
 void WebRemoteFrameImpl::WillEnterFullscreen() {
   // This should only ever be called when the FrameOwner is local.
   HTMLFrameOwnerElement* owner_element =
-      ToHTMLFrameOwnerElement(GetFrame()->Owner());
+      To<HTMLFrameOwnerElement>(GetFrame()->Owner());
 
   // Call |requestFullscreen()| on |ownerElement| to make it the pending
   // fullscreen element in anticipation of the coming |didEnterFullscreen()|
@@ -339,7 +349,7 @@ void WebRemoteFrameImpl::WillEnterFullscreen() {
   // future, this should plumb in information about which request type
   // (prefixed or unprefixed) to use for firing fullscreen events.
   Fullscreen::RequestFullscreen(
-      *owner_element, FullscreenOptions(),
+      *owner_element, FullscreenOptions::Create(),
       Fullscreen::RequestType::kPrefixedForCrossProcessDescendant);
 }
 
@@ -351,6 +361,9 @@ void WebRemoteFrameImpl::UpdateUserActivationState(
       break;
     case UserActivationUpdateType::kConsumeTransientActivation:
       GetFrame()->ConsumeTransientUserActivationInLocalTree();
+      break;
+    case UserActivationUpdateType::kClearActivation:
+      GetFrame()->ClearUserActivationInLocalTree();
       break;
   }
 }
@@ -444,6 +457,15 @@ v8::Local<v8::Object> WebRemoteFrameImpl::GlobalProxy() const {
 
 WebRect WebRemoteFrameImpl::GetCompositingRect() {
   return GetFrame()->View()->GetCompositingRect();
+}
+
+void WebRemoteFrameImpl::RenderFallbackContent() const {
+  // TODO(ekaramad): If the owner renders its own content, then the current
+  // ContentFrame() should detach and free-up the OOPIF process (see
+  // https://crbug.com/850223).
+  auto* owner = frame_->DeprecatedLocalOwner();
+  DCHECK(IsHTMLObjectElement(owner));
+  owner->RenderFallbackContent(frame_);
 }
 
 WebRemoteFrameImpl::WebRemoteFrameImpl(WebTreeScopeType scope,

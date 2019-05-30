@@ -6,6 +6,7 @@ module network.mojom;
 
 import "url/mojom/url.mojom";
 import "services/network/public/mojom/network_param.mojom";
+import "services/network/public/mojom/ip_endpoint.mojom";
 
 enum WebSocketMessageType {
   CONTINUATION,
@@ -33,7 +34,7 @@ struct WebSocketHandshakeResponse {
   HttpVersion http_version;
   int32 status_code;
   string status_text;
-  HostPortPair socket_address;
+  IPEndPoint remote_endpoint;
   array<HttpHeader> headers;
   string headers_text;
 };
@@ -45,15 +46,13 @@ interface AuthenticationHandler {
   // authentication.
   OnAuthRequired(AuthChallengeInfo info,
                  HttpResponseHeaders headers,
-                 HostPortPair socket_address) => (AuthCredentials? credentials);
+                 IPEndPoint remote_endpoint) => (AuthCredentials? credentials);
 };
 
 interface WebSocketClient {
   OnFailChannel(string reason);
 
   // Notify the renderer that the browser has started an opening handshake.
-  // This message is for showing the request in the inspector and
-  // can be omitted if the inspector is not active.
   OnStartOpeningHandshake(WebSocketHandshakeRequest request);
 
   // Notify the renderer that the browser has finished an opening handshake.

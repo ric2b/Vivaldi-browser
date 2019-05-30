@@ -18,6 +18,8 @@
 #include "build/build_config.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/autofill/core/common/password_form_fill_data.h"
+#include "components/autofill/core/common/signatures_util.h"
+#include "components/password_manager/core/browser/form_parsing/password_field_prediction.h"
 #include "components/password_manager/core/browser/form_submission_observer.h"
 #include "components/password_manager/core/browser/login_model.h"
 #include "components/password_manager/core/browser/password_form_manager.h"
@@ -48,10 +50,6 @@ class NewPasswordFormManager;
 // for purposes of supporting HTTP authentication dialogs.
 class PasswordManager : public LoginModel, public FormSubmissionObserver {
  public:
-  // Expresses which navigation entry to use to check whether password manager
-  // is enabled.
-  enum class NavigationEntryToCheck { LAST_COMMITTED, VISIBLE };
-
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
   static void RegisterLocalPrefs(PrefRegistrySimple* registry);
@@ -74,16 +72,20 @@ class PasswordManager : public LoginModel, public FormSubmissionObserver {
 
   void GenerationAvailableForForm(const autofill::PasswordForm& form);
 
-  // Presaves the form with generated password.
-  void OnPresaveGeneratedPassword(const autofill::PasswordForm& form);
+  // Presaves the form with generated password. |driver| is needed to find the
+  // matched form manager.
+  void OnPresaveGeneratedPassword(PasswordManagerDriver* driver,
+                                  const autofill::PasswordForm& form);
 
-  // Stops treating a password as generated.
-  void OnPasswordNoLongerGenerated(const autofill::PasswordForm& form);
+  // Stops treating a password as generated. |driver| is needed to find the
+  // matched form manager.
+  void OnPasswordNoLongerGenerated(PasswordManagerDriver* driver,
+                                   const autofill::PasswordForm& form);
 
   // Update the generation element and whether generation was triggered
   // manually.
   void SetGenerationElementAndReasonForForm(
-      password_manager::PasswordManagerDriver* driver,
+      PasswordManagerDriver* driver,
       const autofill::PasswordForm& form,
       const base::string16& generation_element,
       bool is_manually_triggered);
@@ -95,26 +97,24 @@ class PasswordManager : public LoginModel, public FormSubmissionObserver {
   // of 2 (see SavePassword).
   // |driver| is optional and if it's given it should be a driver that
   // corresponds to a frame from which |form| comes from.
-  void ProvisionallySavePassword(
-      const autofill::PasswordForm& form,
-      const password_manager::PasswordManagerDriver* driver);
+  void ProvisionallySavePassword(const autofill::PasswordForm& form,
+                                 const PasswordManagerDriver* driver);
 
-  // Should be called when the user navigates the main frame. Not called for
-  // in-page navigation.
-  void DidNavigateMainFrame();
+  // FormSubmissionObserver:
+  void DidNavigateMainFrame(bool form_may_be_submitted) override;
 
   // Handles password forms being parsed.
-  void OnPasswordFormsParsed(password_manager::PasswordManagerDriver* driver,
+  void OnPasswordFormsParsed(PasswordManagerDriver* driver,
                              const std::vector<autofill::PasswordForm>& forms);
 
   // Handles password forms being rendered.
   void OnPasswordFormsRendered(
-      password_manager::PasswordManagerDriver* driver,
+      PasswordManagerDriver* driver,
       const std::vector<autofill::PasswordForm>& visible_forms,
       bool did_stop_loading);
 
   // Handles a password form being submitted.
-  void OnPasswordFormSubmitted(password_manager::PasswordManagerDriver* driver,
+  void OnPasswordFormSubmitted(PasswordManagerDriver* driver,
                                const autofill::PasswordForm& password_form);
 
   // Handles a password form being submitted, assumes that submission is
@@ -123,25 +123,19 @@ class PasswordManager : public LoginModel, public FormSubmissionObserver {
   // upon in-page navigation. This often means history.pushState being
   // called from JavaScript.
   void OnPasswordFormSubmittedNoChecks(
-      password_manager::PasswordManagerDriver* driver,
-      const autofill::PasswordForm& password_form);
-
-  // Handles a manual request to save password.
-  void OnPasswordFormForceSaveRequested(
-      password_manager::PasswordManagerDriver* driver,
+      PasswordManagerDriver* driver,
       const autofill::PasswordForm& password_form);
 
   // Handles a request to show manual fallback for password saving, i.e. the
   // omnibox icon with the anchored hidden prompt.
-  void ShowManualFallbackForSaving(
-      password_manager::PasswordManagerDriver* driver,
-      const autofill::PasswordForm& password_form);
+  void ShowManualFallbackForSaving(PasswordManagerDriver* driver,
+                                   const autofill::PasswordForm& password_form);
 
   // Handles a request to hide manual fallback for password saving.
   void HideManualFallbackForSaving();
 
   void ProcessAutofillPredictions(
-      password_manager::PasswordManagerDriver* driver,
+      PasswordManagerDriver* driver,
       const std::vector<autofill::FormStructure*>& forms);
 
   // Causes all |pending_login_managers_| to query the password store again.
@@ -177,9 +171,8 @@ class PasswordManager : public LoginModel, public FormSubmissionObserver {
   PasswordFormManagerInterface* GetSubmittedManagerForTest() const {
     return GetSubmittedManager();
   }
-#endif
 
-  NavigationEntryToCheck entry_to_check() const { return entry_to_check_; }
+#endif
 
   // Reports the priority of a PasswordGenerationRequirementsSpec for a
   // generated password. See
@@ -188,13 +181,50 @@ class PasswordManager : public LoginModel, public FormSubmissionObserver {
       const autofill::PasswordForm& password_form,
       uint32_t spec_priority);
 
+  // Reports the success from the renderer's PasswordAutofillAgent to fill
+  // credentials into a site. This may be called multiple times, but only
+  // the first result will be recorded for each PasswordFormManager.
+  void LogFirstFillingResult(PasswordManagerDriver* driver,
+                             uint32_t form_renderer_id,
+                             int32_t result);
+
+  // Notifies that Credential Management API function store() is called.
+  void NotifyStorePasswordCalled();
+
+#if defined(OS_IOS)
+  // TODO(https://crbug.com/866444): Use these methods instead olds ones when
+  // the old parser is gone.
+
+  // Presaves the form with |generated_password|. This function is called once
+  // when the user accepts the generated password. The password was generated in
+  // the field with identifier |generation_element|. |driver| corresponds to the
+  // |form| parent frame.
+  void PresaveGeneratedPassword(PasswordManagerDriver* driver,
+                                const autofill::FormData& form,
+                                const base::string16& generated_password,
+                                const base::string16& generation_element,
+                                bool is_manually_triggered);
+
+  // Updates the presaved credential with the generated password when the user
+  // types in field with |field_identifier|, which is in form with
+  // |form_identifier| and the field value is |field_value|. |driver|
+  // corresponds to the form parent frame.
+  void UpdateGeneratedPasswordOnUserInput(
+      PasswordManagerDriver* driver,
+      const base::string16& form_identifier,
+      const base::string16& field_identifier,
+      const base::string16& field_value);
+
+  // Stops treating a password as generated. |driver| corresponds to the
+  // form parent frame.
+  void OnPasswordNoLongerGenerated(PasswordManagerDriver* driver);
+
+#endif
+
  private:
   FRIEND_TEST_ALL_PREFIXES(
       PasswordManagerTest,
       ShouldBlockPasswordForSameOriginButDifferentSchemeTest);
-
-  // FormSubmissionObserver:
-  void OnStartNavigation(PasswordManagerDriver* driver) override;
 
   // Clones |matched_manager| and keeps it as |provisional_save_manager_|.
   // |form| is saved provisionally to |provisional_save_manager_|.
@@ -202,16 +232,17 @@ class PasswordManager : public LoginModel, public FormSubmissionObserver {
                                 PasswordFormManager* matched_manager,
                                 BrowserSavePasswordProgressLogger* logger);
 
-  // Returns true if |provisional_save_manager_| is ready for saving and
-  // non-blacklisted.
-  bool CanProvisionalManagerSave();
+  // Returns true if there is a form manager for a submitted form and this form
+  // manager contains the submitted credentials suitable for automatic save
+  // prompt, not for manual fallback only.
+  bool IsAutomaticSavePromptAvailable();
 
   // Returns true if there already exists a provisionally saved password form
-  // from the same origin as |form|, but with a different and secure scheme.
+  // from the origin |origin|, but with a different and secure scheme.
   // This prevents a potential attack where users can be tricked into saving
   // unwanted credentials, see http://crbug.com/571580 for details.
   bool ShouldBlockPasswordForSameOriginButDifferentScheme(
-      const autofill::PasswordForm& form) const;
+      const GURL& origin) const;
 
   // Called when the login was deemed successful. It handles the special case
   // when the provisionally saved password is a sync credential, and otherwise
@@ -220,29 +251,35 @@ class PasswordManager : public LoginModel, public FormSubmissionObserver {
   void OnLoginSuccessful();
 
   // Helper function called inside OnLoginSuccessful() to save password hash
-  // data for password reuse detection purpose.
-  void MaybeSavePasswordHash();
+  // data from |submitted_manager| for password reuse detection purpose.
+  void MaybeSavePasswordHash(
+      const PasswordFormManagerInterface& submitted_manager);
 
   // Checks for every form in |forms| whether |pending_login_managers_| already
   // contain a manager for that form. If not, adds a manager for each such form.
   void CreatePendingLoginManagers(
-      password_manager::PasswordManagerDriver* driver,
+      PasswordManagerDriver* driver,
       const std::vector<autofill::PasswordForm>& forms);
 
   // Checks for every form in |forms| whether |form_managers_| already contain a
   // manager for that form. If not, adds a manager for each such form.
-  void CreateFormManagers(password_manager::PasswordManagerDriver* driver,
+  void CreateFormManagers(PasswordManagerDriver* driver,
                           const std::vector<autofill::PasswordForm>& forms);
 
-  // Passes |submitted_form| to NewPasswordManager that manages it for using it
-  // after detecting submission success for saving. |driver| is needed to
-  // determine the match.
-  // If the function is called multiple times, only the form from the last call
-  // is considered to be submitted. Multiple calls is possible because there can
-  // be multiple submitted forms on a page or our heuristics might have
-  // incorrectly found submissions.
-  void ProcessSubmittedForm(const autofill::FormData& submitted_form,
-                            const PasswordManagerDriver* driver);
+  // Create NewPasswordFormManager for |form|, adds the newly created one to
+  // |form_managers_| and returns it.
+  NewPasswordFormManager* CreateFormManager(PasswordManagerDriver* driver,
+                                            const autofill::FormData& forms);
+
+  // Passes |form| to NewPasswordFormManager that manages it for using it after
+  // detecting submission success for saving. |driver| is needed to determine
+  // the match. If the function is called multiple times, only the form from the
+  // last call is provisionally saved. Multiple calls is possible because it is
+  // called on any user keystroke. If there is no NewPasswordFormManager that
+  // manages |form|, the new one is created.
+  // Returns manager which manages |form|.
+  NewPasswordFormManager* ProvisionallySaveForm(const autofill::FormData& form,
+                                                PasswordManagerDriver* driver);
 
   // Returns the best match in |pending_login_managers_| for |form|. May return
   // nullptr if no match exists.
@@ -255,7 +292,6 @@ class PasswordManager : public LoginModel, public FormSubmissionObserver {
   // gone.
   PasswordFormManagerInterface* GetSubmittedManager() const;
 
- private:
   // Returns the form manager that corresponds to the submitted form. It also
   // sets |submitted_form_manager_| to nullptr.
   // TODO(https://crbug.com/831123): Remove when the old PasswordFormManager is
@@ -273,6 +309,17 @@ class PasswordManager : public LoginModel, public FormSubmissionObserver {
   GetMetricRecorderFromNewPasswordFormManager(
       const autofill::FormData& form,
       const PasswordManagerDriver* driver);
+
+  // Returns the manager which manages |form|. |driver| is needed to determine
+  // the match. Returns nullptr when no matched manager is found.
+  PasswordFormManagerInterface* GetMatchedManager(
+      const PasswordManagerDriver* driver,
+      const autofill::PasswordForm& form);
+
+  // Returns the manager which manages |form|. |driver| is needed to determine
+  // the match. Returns nullptr when no matched manager is found.
+  NewPasswordFormManager* GetMatchedManager(const PasswordManagerDriver* driver,
+                                            const autofill::FormData& form);
 
   // Note about how a PasswordFormManager can transition from
   // pending_login_managers_ to provisional_save_manager_ and the infobar.
@@ -337,16 +384,21 @@ class PasswordManager : public LoginModel, public FormSubmissionObserver {
   // (to see if the login was a failure), and clears the vector.
   std::vector<autofill::PasswordForm> all_visible_forms_;
 
+  // Server predictions for the forms on the page.
+  std::map<autofill::FormSignature, FormPredictions> predictions_;
+
   // The user-visible URL from the last time a password was provisionally saved.
   GURL main_frame_url_;
 
-  // |entry_to_check_| specifies which navigation entry is relevant for
-  // determining if password manager is enabled. The last commited one is
-  // relevant for HTML forms, the visible one is for HTTP auth.
-  NavigationEntryToCheck entry_to_check_ =
-      NavigationEntryToCheck::LAST_COMMITTED;
-
   const bool is_new_form_parsing_for_saving_enabled_;
+
+  // If true, it turns off using PasswordFormManager in PasswordManager.
+  const bool is_only_new_parser_enabled_;
+
+  // True if Credential Management API function store() was called. In this case
+  // PasswordManager does not need to show a save/update prompt since
+  // CredentialManagerImpl takes care of it.
+  bool store_password_called_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(PasswordManager);
 };

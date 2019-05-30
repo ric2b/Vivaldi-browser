@@ -25,15 +25,18 @@
 
 #import <AppKit/NSFont.h>
 #import <AvailabilityMacros.h>
+
+#include "base/stl_util.h"
 #import "third_party/blink/public/platform/mac/web_sandbox_support.h"
 #import "third_party/blink/public/platform/platform.h"
 #import "third_party/blink/renderer/platform/fonts/font.h"
 #import "third_party/blink/renderer/platform/fonts/opentype/font_settings.h"
 #import "third_party/blink/renderer/platform/fonts/shaping/harfbuzz_face.h"
-#import "third_party/blink/renderer/platform/graphics/skia/skia_utils.h"
-#import "third_party/blink/renderer/platform/layout_test_support.h"
+#import "third_party/blink/renderer/platform/web_test_support.h"
 #import "third_party/blink/renderer/platform/wtf/retain_ptr.h"
 #import "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
+#import "third_party/skia/include/core/SkFont.h"
+#import "third_party/skia/include/core/SkStream.h"
 #import "third_party/skia/include/ports/SkTypeface_mac.h"
 
 namespace blink {
@@ -58,13 +61,13 @@ static CTFontDescriptorRef CascadeToLastResortFontDescriptor() {
   const void* descriptors[] = {last_resort.Get()};
   RetainPtr<CFArrayRef> values_array(
       kAdoptCF, CFArrayCreate(kCFAllocatorDefault, descriptors,
-                              arraysize(descriptors), &kCFTypeArrayCallBacks));
+                              base::size(descriptors), &kCFTypeArrayCallBacks));
 
   const void* keys[] = {kCTFontCascadeListAttribute};
   const void* values[] = {values_array.Get()};
   RetainPtr<CFDictionaryRef> attributes(
       kAdoptCF,
-      CFDictionaryCreate(kCFAllocatorDefault, keys, values, arraysize(keys),
+      CFDictionaryCreate(kCFAllocatorDefault, keys, values, base::size(keys),
                          &kCFTypeDictionaryKeyCallBacks,
                          &kCFTypeDictionaryValueCallBacks));
 
@@ -111,9 +114,9 @@ static sk_sp<SkTypeface> LoadFromBrowserProcess(NSFont* ns_font,
   return return_font;
 }
 
-void FontPlatformData::SetupPaintFont(PaintFont* paint_font,
-                                      float,
-                                      const Font* font) const {
+void FontPlatformData::SetupSkFont(SkFont* skfont,
+                                   float,
+                                   const Font* font) const {
   bool should_smooth_fonts = true;
   bool should_antialias = true;
   bool should_subpixel_position = true;
@@ -136,23 +139,28 @@ void FontPlatformData::SetupPaintFont(PaintFont* paint_font,
     }
   }
 
-  if (LayoutTestSupport::IsRunningLayoutTest()) {
+  if (WebTestSupport::IsRunningWebTest()) {
     should_smooth_fonts = false;
-    should_antialias = should_antialias &&
-                       LayoutTestSupport::IsFontAntialiasingEnabledForTest();
+    should_antialias =
+        should_antialias && WebTestSupport::IsFontAntialiasingEnabledForTest();
     should_subpixel_position =
-        LayoutTestSupport::IsTextSubpixelPositioningAllowedForTest();
+        WebTestSupport::IsTextSubpixelPositioningAllowedForTest();
   }
 
-  paint_font->SetAntiAlias(should_antialias);
-  paint_font->SetEmbeddedBitmapText(false);
+  if (should_antialias && should_smooth_fonts) {
+    skfont->setEdging(SkFont::Edging::kSubpixelAntiAlias);
+  } else if (should_antialias) {
+    skfont->setEdging(SkFont::Edging::kAntiAlias);
+  } else {
+    skfont->setEdging(SkFont::Edging::kAlias);
+  }
+  skfont->setEmbeddedBitmaps(false);
   const float ts = text_size_ >= 0 ? text_size_ : 12;
-  paint_font->SetTextSize(SkFloatToScalar(ts));
-  paint_font->SetTypeface(paint_typeface_);
-  paint_font->SetFakeBoldText(synthetic_bold_);
-  paint_font->SetTextSkewX(synthetic_italic_ ? -SK_Scalar1 / 4 : 0);
-  paint_font->SetLcdRenderText(should_smooth_fonts);
-  paint_font->SetSubpixelText(should_subpixel_position);
+  skfont->setSize(SkFloatToScalar(ts));
+  skfont->setTypeface(typeface_);
+  skfont->setEmbolden(synthetic_bold_);
+  skfont->setSkewX(synthetic_italic_ ? -SK_Scalar1 / 4 : 0);
+  skfont->setSubpixel(should_subpixel_position);
 
   // When rendering using CoreGraphics, disable hinting when
   // webkit-font-smoothing:antialiased or text-rendering:geometricPrecision is
@@ -160,7 +168,7 @@ void FontPlatformData::SetupPaintFont(PaintFont* paint_font,
   if (font &&
       (font->GetFontDescription().FontSmoothing() == kAntialiased ||
        font->GetFontDescription().TextRendering() == kGeometricPrecision))
-    paint_font->SetHinting(SkPaint::kNo_Hinting);
+    skfont->setHinting(SkFontHinting::kNone);
 }
 
 FontPlatformData::FontPlatformData(NSFont* ns_font,
@@ -199,8 +207,7 @@ FontPlatformData::FontPlatformData(NSFont* ns_font,
         typeface->openStream(nullptr)->duplicate(),
         SkFontArguments().setAxes(axes, variation_settings->size()));
   }
-  // TODO(vmpstr): Save the creation parameters in PaintTypeface instead.
-  paint_typeface_ = PaintTypeface::FromSkTypeface(typeface);
+  typeface_ = typeface;
 }
 
 }  // namespace blink

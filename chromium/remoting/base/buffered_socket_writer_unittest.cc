@@ -107,8 +107,9 @@ class BufferedSocketWriterTest : public testing::Test {
     EXPECT_EQ(net::OK, socket_->Connect(net::CompletionCallback()));
 
     writer_.reset(new BufferedSocketWriter());
-    test_buffer_ = new net::IOBufferWithSize(kTestBufferSize);
-    test_buffer_2_ = new net::IOBufferWithSize(kTestBufferSize);
+    test_buffer_ = base::MakeRefCounted<net::IOBufferWithSize>(kTestBufferSize);
+    test_buffer_2_ =
+        base::MakeRefCounted<net::IOBufferWithSize>(kTestBufferSize);
     for (int i = 0; i < kTestBufferSize; ++i) {
       test_buffer_->data()[i] = rand() % 256;
       test_buffer_2_->data()[i] = rand() % 256;
@@ -119,7 +120,7 @@ class BufferedSocketWriterTest : public testing::Test {
     writer_->Start(base::Bind(&WriteNetSocket, socket_.get()),
                    base::Bind(&BufferedSocketWriterTest::OnWriteFailed,
                               base::Unretained(this)));
-  };
+  }
 
   void OnWriteFailed(int error) {
     write_error_ = error;
@@ -147,11 +148,12 @@ class BufferedSocketWriterTest : public testing::Test {
   }
 
   void TestAppendInCallback() {
-    writer_->Write(test_buffer_,
-                   base::Bind(base::IgnoreResult(&BufferedSocketWriter::Write),
-                              base::Unretained(writer_.get()), test_buffer_2_,
-                              base::Closure(), TRAFFIC_ANNOTATION_FOR_TESTS),
-                   TRAFFIC_ANNOTATION_FOR_TESTS);
+    writer_->Write(
+        test_buffer_,
+        base::BindOnce(base::IgnoreResult(&BufferedSocketWriter::Write),
+                       base::Unretained(writer_.get()), test_buffer_2_,
+                       base::Closure(), TRAFFIC_ANNOTATION_FOR_TESTS),
+        TRAFFIC_ANNOTATION_FOR_TESTS);
     base::RunLoop().RunUntilIdle();
     VerifyWrittenData();
   }

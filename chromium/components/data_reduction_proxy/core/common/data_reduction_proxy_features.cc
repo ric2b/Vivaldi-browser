@@ -9,10 +9,6 @@
 namespace data_reduction_proxy {
 namespace features {
 
-// Enables the Data Reduction Proxy menu item in the main menu on Android.
-const base::Feature kDataReductionMainMenu{"DataReductionProxyMainMenu",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Enables a new version of the data reduction proxy protocol where the server
 // decides if a server-generated preview should be served. The previous
 // version required the client to make this decision. The new protocol relies
@@ -31,11 +27,6 @@ const base::Feature kDataReductionProxyLowMemoryDevicePromo{
     "DataReductionProxyLowMemoryDevicePromo",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enables logic to modify the bypass behavior when a missing via header is
-// detected.
-const base::Feature kMissingViaHeaderShortDuration{
-    "MissingViaHeaderShortDuration", base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Enables experiment that makes connection to the data saver proxy more robust.
 const base::Feature kDataReductionProxyRobustConnection{
     "DataReductionProxyRobustConnection", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -48,7 +39,31 @@ const base::Feature kDogfood{"DataReductionProxyDogfood",
 // harness, and disables the observer for data use ascriber.
 const base::Feature kDataSaverSiteBreakdownUsingPageLoadMetrics{
     "DataSaverSiteBreakdownUsingPageLoadMetrics",
+    base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Enables data reduction proxy when network service is enabled.
+const base::Feature kDataReductionProxyEnabledWithNetworkService{
+    "DataReductionProxyEnabledWithNetworkService",
     base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables block action of all proxies when 502 is received with no
+// Chrome-Proxy header. The block duration is configurable via field trial with
+// a default of one second.
+const base::Feature kDataReductionProxyBlockOnBadGatewayResponse{
+    "DataReductionProxyBlockOnBadGatewayResponse",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables populating the previews page ID from NavigationUIData to the
+// pingbacks.
+const base::Feature kDataReductionProxyPopulatePreviewsPageIDToPingback{
+    "DataReductionProxyPopulatePreviewsPageIDToPingback",
+    base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Enables not allowing proxies that fail warmup url fetch, to custom proxy
+// config updates when network service is enabled.
+const base::Feature kDataReductionProxyDisableProxyFailedWarmup{
+    "DataReductionProxyDisableProxyFailedWarmup",
+    base::FEATURE_ENABLED_BY_DEFAULT};
 
 }  // namespace features
 }  // namespace data_reduction_proxy

@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <memory>
 
+#include "base/bind.h"
 #include "base/trace_event/trace_event.h"
 #include "net/base/url_util.h"
 #include "storage/browser/quota/quota_manager.h"
@@ -246,7 +247,7 @@ StorageTypeObservers::~StorageTypeObservers() = default;
 
 void StorageTypeObservers::AddObserver(
     StorageObserver* observer, const StorageObserver::MonitorParams& params) {
-  std::string host = net::GetHostOrSpecFromURL(params.filter.origin);
+  std::string host = net::GetHostOrSpecFromURL(params.filter.origin.GetURL());
   if (host.empty())
     return;
 
@@ -284,7 +285,7 @@ const HostStorageObservers* StorageTypeObservers::GetHostObservers(
 void StorageTypeObservers::NotifyUsageChange(
     const StorageObserver::Filter& filter,
     int64_t delta) {
-  std::string host = net::GetHostOrSpecFromURL(filter.origin);
+  std::string host = net::GetHostOrSpecFromURL(filter.origin.GetURL());
   auto it = host_observers_map_.find(host);
   if (it == host_observers_map_.end())
     return;
@@ -308,8 +309,7 @@ void StorageMonitor::AddObserver(
   // Check preconditions.
   if (params.filter.storage_type == blink::mojom::StorageType::kUnknown ||
       params.filter.storage_type ==
-          blink::mojom::StorageType::kQuotaNotManaged ||
-      params.filter.origin.is_empty()) {
+          blink::mojom::StorageType::kQuotaNotManaged) {
     NOTREACHED();
     return;
   }
@@ -340,8 +340,7 @@ void StorageMonitor::NotifyUsageChange(const StorageObserver::Filter& filter,
                                        int64_t delta) {
   // Check preconditions.
   if (filter.storage_type == blink::mojom::StorageType::kUnknown ||
-      filter.storage_type == blink::mojom::StorageType::kQuotaNotManaged ||
-      filter.origin.is_empty()) {
+      filter.storage_type == blink::mojom::StorageType::kQuotaNotManaged) {
     NOTREACHED();
     return;
   }

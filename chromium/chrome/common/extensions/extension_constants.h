@@ -42,14 +42,11 @@ extern const char kCloudPrintAppId[];
 // The extension id of the Data Saver extension.
 extern const char kDataSaverExtensionId[];
 
-// The extension id of the Drive extension.
-extern const char kDriveExtensionId[];
+// The extension id of the Google Docs Offline extension.
+extern const char kDocsOfflineExtensionId[];
 
 // The extension id of the Drive hosted app.
 extern const char kDriveHostedAppId[];
-
-// The extension id of the Easy Unlock component application.
-extern const char kEasyUnlockAppId[];
 
 // The extension id of the Enterprise Web Store component application.
 extern const char kEnterpriseWebStoreAppId[];
@@ -104,6 +101,9 @@ extern const char kInAppPaymentsSupportAppId[];
 
 // The extension id of the stable media router extension.
 extern const char kMediaRouterStableExtensionId[];
+
+// The extension id of the Chrome Reporting extension.
+extern const char kCloudReportingExtensionId[];
 
 // The buckets used for app launches.
 enum AppLaunchBucket {
@@ -215,20 +215,28 @@ extern const char kConnectivityDiagnosticsPath[];
 extern const char kConnectivityDiagnosticsLauncherPath[];
 // The extension id of the first run dialog application.
 extern const char kFirstRunDialogId[];
-// Path to preinstalled speech synthesis extension.
-extern const char kSpeechSynthesisExtensionPath[];
-// The extension id of the speech synthesis extension.
-extern const char kSpeechSynthesisExtensionId[];
+// Path to preinstalled Google speech synthesis extension.
+extern const char kGoogleSpeechSynthesisExtensionPath[];
+// The extension id of the Google speech synthesis extension.
+extern const char kGoogleSpeechSynthesisExtensionId[];
+// Path to preinstalled eSpeak-NG speech synthesis extension.
+extern const char kEspeakSpeechSynthesisExtensionPath[];
+// The extension id of the eSpeak-NG speech synthesis extension.
+extern const char kEspeakSpeechSynthesisExtensionId[];
 // The extension id of the wallpaper manager application.
 extern const char kWallpaperManagerId[];
-// The app id of the webstore widget component app.
-extern const char kWebstoreWidgetAppId[];
-// The extension id of the new ZIP unpacker extension.
-extern const char kZIPUnpackerExtensionId[];
 // The extension id of the zip archiver extension.
 extern const char kZipArchiverExtensionId[];
 // Path to preinstalled zip archiver extension.
 extern const char kZipArchiverExtensionPath[];
+// The app ID of Chrome camera app.
+extern const char kChromeCameraAppId[];
+// The dev app ID of Chrome camera app.
+extern const char kChromeCameraAppDevId[];
+// Path to preinstalled Chrome camera app.
+extern const char kChromeCameraAppPath[];
+// The app ID of the Kiosk Next Home app.
+extern const char kKioskNextHomeAppId[];
 #endif
 
 // What causes an extension to be installed? Used in histograms, so don't

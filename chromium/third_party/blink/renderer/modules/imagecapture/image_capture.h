@@ -9,15 +9,14 @@
 #include "media/capture/mojom/image_capture.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/modules/event_target_modules.h"
 #include "third_party/blink/renderer/modules/imagecapture/photo_settings.h"
 #include "third_party/blink/renderer/modules/mediastream/media_track_capabilities.h"
 #include "third_party/blink/renderer/modules/mediastream/media_track_constraint_set.h"
 #include "third_party/blink/renderer/modules/mediastream/media_track_settings.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
-#include "third_party/blink/renderer/platform/async_method_runner.h"
 
 namespace blink {
 
@@ -27,7 +26,7 @@ class PhotoCapabilities;
 class ScriptPromiseResolver;
 class WebImageCaptureFrameGrabber;
 
-// TODO(mcasas): Consider adding a LayoutTest checking that this class is not
+// TODO(mcasas): Consider adding a web test checking that this class is not
 // garbage collected while it has event listeners.
 class MODULES_EXPORT ImageCapture final
     : public EventTargetWithInlineData,
@@ -40,6 +39,8 @@ class MODULES_EXPORT ImageCapture final
   static ImageCapture* Create(ExecutionContext*,
                               MediaStreamTrack*,
                               ExceptionState&);
+
+  ImageCapture(ExecutionContext*, MediaStreamTrack*);
   ~ImageCapture() override;
 
   // EventTarget implementation.
@@ -58,28 +59,27 @@ class MODULES_EXPORT ImageCapture final
   ScriptPromise getPhotoSettings(ScriptState*);
 
   ScriptPromise setOptions(ScriptState*,
-                           const PhotoSettings&,
+                           const PhotoSettings*,
                            bool trigger_take_photo = false);
 
   ScriptPromise takePhoto(ScriptState*);
-  ScriptPromise takePhoto(ScriptState*, const PhotoSettings&);
+  ScriptPromise takePhoto(ScriptState*, const PhotoSettings*);
 
   ScriptPromise grabFrame(ScriptState*);
 
-  MediaTrackCapabilities& GetMediaTrackCapabilities();
-  void SetMediaTrackConstraints(ScriptPromiseResolver*,
-                                const HeapVector<MediaTrackConstraintSet>&);
-  const MediaTrackConstraintSet& GetMediaTrackConstraints() const;
+  MediaTrackCapabilities* GetMediaTrackCapabilities() const;
+  void SetMediaTrackConstraints(
+      ScriptPromiseResolver*,
+      const HeapVector<Member<MediaTrackConstraintSet>>&);
+  const MediaTrackConstraintSet* GetMediaTrackConstraints() const;
   void ClearMediaTrackConstraints();
-  void GetMediaTrackSettings(MediaTrackSettings&) const;
+  void GetMediaTrackSettings(MediaTrackSettings*) const;
 
   void Trace(blink::Visitor*) override;
 
  private:
   using PromiseResolverFunction =
       base::OnceCallback<void(ScriptPromiseResolver*)>;
-
-  ImageCapture(ExecutionContext*, MediaStreamTrack*);
 
   void OnMojoGetPhotoState(ScriptPromiseResolver*,
                            PromiseResolverFunction,
@@ -101,10 +101,10 @@ class MODULES_EXPORT ImageCapture final
   std::unique_ptr<WebImageCaptureFrameGrabber> frame_grabber_;
   media::mojom::blink::ImageCapturePtr service_;
 
-  MediaTrackCapabilities capabilities_;
-  MediaTrackSettings settings_;
-  MediaTrackConstraintSet current_constraints_;
-  PhotoSettings photo_settings_;
+  Member<MediaTrackCapabilities> capabilities_;
+  Member<MediaTrackSettings> settings_;
+  Member<MediaTrackConstraintSet> current_constraints_;
+  Member<PhotoSettings> photo_settings_;
 
   Member<PhotoCapabilities> photo_capabilities_;
 

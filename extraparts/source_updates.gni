@@ -1,12 +1,5 @@
 import("//build/config/chrome_build.gni")
 
-update_target("//chrome/browser:test_support") {
-  sources += [
-    "//vivaldi/extraparts/vivaldi_unit_test_suite.cpp",
-    "//vivaldi/extraparts/vivaldi_unit_test_suite.h",
-  ]
-}
-
 _main_dll_targets = []
 if (is_win) {
   _main_dll_targets += [

@@ -14,6 +14,7 @@
 
 namespace autofill {
 class CreditCard;
+class FormStructure;
 }  // namespace autofill
 
 // WebView extension of AutofillClientIOSBridge.
@@ -21,7 +22,8 @@ class CreditCard;
 
 // Bridge for AutofillClient's method |ConfirmSaveCreditCardLocally|.
 - (void)confirmSaveCreditCardLocally:(const autofill::CreditCard&)creditCard
-                            callback:(const base::RepeatingClosure&)callback;
+                            callback:(autofill::AutofillClient::
+                                          LocalSaveCardPromptCallback)callback;
 
 // Bridge for AutofillClient's method |ShowUnmaskPrompt|.
 - (void)
@@ -32,6 +34,13 @@ showUnmaskPromptForCard:(const autofill::CreditCard&)creditCard
 // Bridge for AutofillClient's method |onUnmaskVerificationResult|.
 - (void)didReceiveUnmaskVerificationResult:
     (autofill::AutofillClient::PaymentsRpcResult)result;
+
+// Bridge for AutofillClient's method |LoadRiskData|.
+- (void)loadRiskData:(base::OnceCallback<void(const std::string&)>)callback;
+
+// Bridge for AutofillClient's method |PropagateAutofillPredictions|.
+- (void)propagateAutofillPredictionsForForms:
+    (const std::vector<autofill::FormStructure*>&)forms;
 
 @end
 

@@ -6,6 +6,7 @@
 #include <string>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_forward.h"
 #include "base/command_line.h"
@@ -15,24 +16,30 @@
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/bind_test_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
-#include "chrome/browser/banners/app_banner_manager_desktop.h"
+#include "chrome/browser/badging/badge_manager.h"
+#include "chrome/browser/badging/badge_manager_delegate.h"
+#include "chrome/browser/badging/badge_manager_factory.h"
+#include "chrome/browser/banners/test_app_banner_manager_desktop.h"
 #include "chrome/browser/engagement/site_engagement_service.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/launch_util.h"
+#include "chrome/browser/predictors/loading_predictor_config.h"
 #include "chrome/browser/profiles/profile_io_data.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
-#include "chrome/browser/ssl/cert_verifier_browser_test.h"
+#include "chrome/browser/ssl/chrome_mock_cert_verifier.h"
 #include "chrome/browser/ssl/ssl_browsertest_util.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/browser/ui/extensions/hosted_app_browser_controller.h"
@@ -40,11 +47,15 @@
 #include "chrome/browser/ui/page_info/page_info_dialog.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/app_menu_model.h"
+#include "chrome/browser/ui/web_applications/web_app_dialog_utils.h"
+#include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/web_application_info.h"
+#include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/security_interstitials/content/security_interstitial_tab_helper.h"
 #include "components/security_interstitials/core/controller_client.h"
 #include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/interstitial_page.h"
@@ -56,7 +67,6 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/context_menu_params.h"
-#include "content/public/common/renderer_preferences.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
@@ -70,11 +80,8 @@
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/request_handler_util.h"
+#include "third_party/blink/public/mojom/renderer_preferences.mojom.h"
 #include "ui/base/clipboard/clipboard.h"
-
-#if defined(OS_MACOSX)
-#include "chrome/common/chrome_features.h"
-#endif
 
 using content::RenderFrameHost;
 using content::WebContents;
@@ -127,36 +134,52 @@ void NavigateToURLAndWait(Browser* browser,
   if (!proceed_through_interstitial)
     return;
 
-  content::InterstitialPage* interstitial = web_contents->GetInterstitialPage();
   {
     // Need a second TestNavigationObserver; the above one is spent.
     content::TestNavigationObserver observer(
         web_contents, content::MessageLoopRunner::QuitMode::DEFERRED);
-    ASSERT_TRUE(interstitial);
-    interstitial->GetDelegateForTesting()->CommandReceived(
-        base::IntToString(security_interstitials::CMD_PROCEED));
+    if (base::FeatureList::IsEnabled(features::kSSLCommittedInterstitials)) {
+      security_interstitials::SecurityInterstitialTabHelper* helper =
+          security_interstitials::SecurityInterstitialTabHelper::
+              FromWebContents(
+                  browser->tab_strip_model()->GetActiveWebContents());
+      ASSERT_TRUE(
+          helper &&
+          helper->GetBlockingPageForCurrentlyCommittedNavigationForTesting());
+      std::string javascript =
+          "window.certificateErrorPageController.proceed();";
+      ASSERT_TRUE(content::ExecuteScript(web_contents, javascript));
+    } else {
+      content::InterstitialPage* interstitial =
+          web_contents->GetInterstitialPage();
+      ASSERT_TRUE(interstitial);
+      interstitial->GetDelegateForTesting()->CommandReceived(
+          base::NumberToString(security_interstitials::CMD_PROCEED));
+    }
     observer.Wait();
   }
 }
 
-// Used by ShouldLocationBarForXXX. Performs a navigation and then checks that
-// the location bar visibility is as expcted.
-void NavigateAndCheckForLocationBar(Browser* browser,
-                                    const GURL& url,
-                                    bool expected_visibility,
-                                    bool proceed_through_interstitial = false) {
+// Used by ShouldShowToolbarForXXX. Performs a navigation and then checks that
+// the toolbar visibility is as expected.
+void NavigateAndCheckForToolbar(Browser* browser,
+                                const GURL& url,
+                                bool expected_visibility,
+                                bool proceed_through_interstitial = false) {
   NavigateToURLAndWait(browser, url, proceed_through_interstitial);
   EXPECT_EQ(expected_visibility,
-      browser->hosted_app_controller()->ShouldShowLocationBar());
+            browser->hosted_app_controller()->ShouldShowToolbar());
 }
 
 void CheckWebContentsHasAppPrefs(content::WebContents* web_contents) {
-  content::RendererPreferences* prefs = web_contents->GetMutableRendererPrefs();
+  blink::mojom::RendererPreferences* prefs =
+      web_contents->GetMutableRendererPrefs();
   EXPECT_FALSE(prefs->can_accept_load_drops);
 }
 
 void CheckWebContentsDoesNotHaveAppPrefs(content::WebContents* web_contents) {
-  content::RendererPreferences* prefs = web_contents->GetMutableRendererPrefs();
+  blink::mojom::RendererPreferences* prefs =
+      web_contents->GetMutableRendererPrefs();
   EXPECT_TRUE(prefs->can_accept_load_drops);
 }
 
@@ -182,12 +205,8 @@ std::string GetPathWithHostAndPortReplaced(const std::string& original_path,
                                            net::HostPortPair host_port_pair) {
   base::StringPairs replacement_text = {
       {"REPLACE_WITH_HOST_AND_PORT", host_port_pair.ToString()}};
-
-  std::string path_with_replaced_text;
-  net::test_server::GetFilePathWithReplacements(original_path, replacement_text,
-                                                &path_with_replaced_text);
-
-  return path_with_replaced_text;
+  return net::test_server::GetFilePathWithReplacements(original_path,
+                                                       replacement_text);
 }
 
 // Tries to load an image at |image_url| and returns whether or not it loaded
@@ -242,68 +261,12 @@ AppMenuCommandState GetAppMenuCommandState(int command_id, Browser* browser) {
 
 }  // namespace
 
-class TestAppBannerManagerDesktop : public banners::AppBannerManagerDesktop {
- public:
-  explicit TestAppBannerManagerDesktop(WebContents* web_contents)
-      : AppBannerManagerDesktop(web_contents) {}
-
-  static TestAppBannerManagerDesktop* CreateForWebContents(
-      WebContents* web_contents) {
-    web_contents->SetUserData(
-        UserDataKey(),
-        std::make_unique<TestAppBannerManagerDesktop>(web_contents));
-    return static_cast<TestAppBannerManagerDesktop*>(
-        web_contents->GetUserData(UserDataKey()));
-  }
-
-  // Returns whether the installable check passed.
-  bool WaitForInstallableCheck() {
-    DCHECK(IsExperimentalAppBannersEnabled());
-
-    if (!installable_.has_value()) {
-      base::RunLoop run_loop;
-      quit_closure_ = run_loop.QuitClosure();
-      run_loop.Run();
-    }
-    DCHECK(installable_.has_value());
-    return *installable_;
-  }
-
-  // AppBannerManager:
-  void OnDidGetManifest(const InstallableData& result) override {
-    AppBannerManagerDesktop::OnDidGetManifest(result);
-
-    // AppBannerManagerDesktop does not call |OnDidPerformInstallableCheck| to
-    // complete the installability check in this case, instead it early exits
-    // with failure.
-    if (result.error_code != NO_ERROR_DETECTED)
-      SetInstallable(false);
-  }
-  void OnDidPerformInstallableCheck(const InstallableData& result) override {
-    AppBannerManagerDesktop::OnDidPerformInstallableCheck(result);
-    SetInstallable(result.error_code == NO_ERROR_DETECTED);
-  }
-
- private:
-  void SetInstallable(bool installable) {
-    DCHECK(!installable_.has_value());
-    installable_ = installable;
-    if (quit_closure_)
-      std::move(quit_closure_).Run();
-  }
-
-  base::Optional<bool> installable_;
-  base::OnceClosure quit_closure_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestAppBannerManagerDesktop);
-};
-
 // Parameters are {app_type, desktop_pwa_flag}. |app_type| controls whether it
 // is a Hosted or Bookmark app. |desktop_pwa_flag| enables the
 // kDesktopPWAWindowing flag.
 class HostedAppTest
     : public extensions::ExtensionBrowserTest,
-      public ::testing::WithParamInterface<std::tuple<AppType, bool>> {
+      public ::testing::WithParamInterface<std::tuple<AppType, bool, bool>> {
  public:
   HostedAppTest()
       : app_browser_(nullptr),
@@ -315,19 +278,25 @@ class HostedAppTest
     https_server_.AddDefaultHandlers(base::FilePath(kDocRoot));
 
     bool desktop_pwa_flag;
-    std::tie(app_type_, desktop_pwa_flag) = GetParam();
+    bool use_custom_tab_flag;
+
+    std::tie(app_type_, desktop_pwa_flag, use_custom_tab_flag) = GetParam();
+    std::vector<base::Feature> enabled_features;
+    std::vector<base::Feature> disabled_features = {
+        predictors::kSpeculativePreconnectFeature};
     if (desktop_pwa_flag) {
-      scoped_feature_list_.InitAndEnableFeature(features::kDesktopPWAWindowing);
+      enabled_features.push_back(features::kDesktopPWAWindowing);
     } else {
+      disabled_features.push_back(features::kDesktopPWAWindowing);
 #if defined(OS_MACOSX)
-      scoped_feature_list_.InitWithFeatures({features::kBookmarkApps},
-                                            {features::kDesktopPWAWindowing});
-#else
-      scoped_feature_list_.InitAndDisableFeature(
-          features::kDesktopPWAWindowing);
+      enabled_features.push_back(features::kBookmarkApps);
 #endif
     }
 
+    auto& features = use_custom_tab_flag ? enabled_features : disabled_features;
+    features.push_back(features::kDesktopPWAsCustomTabUI);
+
+    scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
     extensions::ExtensionBrowserTest::SetUp();
   }
 
@@ -353,7 +322,25 @@ class HostedAppTest
             : extensions::Extension::NO_FLAGS);
     ASSERT_TRUE(app_);
 
-    // Launch it in a window.
+    LaunchApp();
+  }
+
+  void SetupSystemAppWithURL(const GURL& app_url) {
+    extensions::TestExtensionDir test_app_dir;
+    test_app_dir.WriteManifest(
+        base::StringPrintf(kAppDotComManifest, app_url.spec().c_str()));
+
+    app_ = InstallExtensionWithSourceAndFlags(
+        test_app_dir.UnpackedPath(), 1,
+        extensions::Manifest::EXTERNAL_COMPONENT,
+        extensions::Extension::FROM_BOOKMARK);
+    ASSERT_TRUE(app_);
+
+    LaunchApp();
+  }
+
+  void LaunchApp() {
+    // Launch app in a window.
     app_browser_ = LaunchAppBrowser(app_);
     ASSERT_TRUE(app_browser_);
     ASSERT_TRUE(app_browser_ != browser());
@@ -373,6 +360,10 @@ class HostedAppTest
   }
 
   static const char* GetInstallableAppName() { return "Manifest test app"; }
+
+  GURL GetURLForPath(std::string path) {
+    return https_server_.GetURL("app.com", path);
+  }
 
   GURL GetSecureIFrameAppURL() {
     net::HostPortPair host_port_pair = net::HostPortPair::FromURL(
@@ -402,6 +393,8 @@ class HostedAppTest
     WebApplicationInfo web_app_info;
     web_app_info.app_url = app_url;
     web_app_info.scope = app_url.GetWithoutFilename();
+    web_app_info.open_as_window = true;
+
     app_ = InstallBookmarkApp(web_app_info);
 
     ui_test_utils::UrlLoadObserver url_observer(
@@ -485,8 +478,7 @@ class HostedAppTest
 };
 
 // Tests that "Open link in new tab" opens a link in a foreground tab.
-// Flaky, see https://crbug.com/795055
-IN_PROC_BROWSER_TEST_P(HostedAppTest, DISABLED_OpenLinkInNewTab) {
+IN_PROC_BROWSER_TEST_P(HostedAppTest, OpenLinkInNewTab) {
   SetupApp("app");
 
   const GURL url("http://www.foo.com/");
@@ -587,28 +579,28 @@ IN_PROC_BROWSER_TEST_P(HostedAppTest, WebContentsPrefsOpenInChrome) {
       browser()->tab_strip_model()->GetActiveWebContents());
 }
 
-// Check that the location bar is shown correctly.
-IN_PROC_BROWSER_TEST_P(HostedAppTest, ShouldShowLocationBar) {
+// Check that the toolbar is shown correctly.
+IN_PROC_BROWSER_TEST_P(HostedAppTest, ShouldShowToolbar) {
   ASSERT_TRUE(https_server()->Start());
 
   const GURL app_url = https_server()->GetURL("app.com", "/simple.html");
 
   SetupAppWithURL(app_url);
 
-  // Navigate to the app's launch page; the location bar should be hidden.
-  NavigateAndCheckForLocationBar(app_browser_, app_url, false);
+  // Navigate to the app's launch page; the toolbar should be hidden.
+  NavigateAndCheckForToolbar(app_browser_, app_url, false);
 
-  // Navigate to another page on the same origin; the location bar should still
+  // Navigate to another page on the same origin; the toolbar should still
   // hidden.
-  NavigateAndCheckForLocationBar(
+  NavigateAndCheckForToolbar(
       app_browser_, https_server()->GetURL("app.com", "/empty.html"), false);
 
-  // Navigate to different origin; the location bar should now be visible.
-  NavigateAndCheckForLocationBar(
+  // Navigate to different origin; the toolbar should now be visible.
+  NavigateAndCheckForToolbar(
       app_browser_, https_server()->GetURL("foo.com", "/simple.html"), true);
 }
 
-IN_PROC_BROWSER_TEST_P(HostedAppTest, ShouldShowLocationBarMixedContent) {
+IN_PROC_BROWSER_TEST_P(HostedAppTest, ShouldShowToolbarMixedContent) {
   ASSERT_TRUE(https_server()->Start());
 
   const GURL app_url = https_server()->GetURL("app.com", "/");
@@ -616,16 +608,15 @@ IN_PROC_BROWSER_TEST_P(HostedAppTest, ShouldShowLocationBarMixedContent) {
   SetupAppWithURL(app_url);
 
   // Navigate to another page on the same origin, but with mixed content; the
-  // location bar should be shown.
-  NavigateAndCheckForLocationBar(
+  // toolbar should be shown.
+  NavigateAndCheckForToolbar(
       app_browser_,
       https_server()->GetURL("app.com",
                              "/ssl/page_displays_insecure_content.html"),
       true);
 }
 
-IN_PROC_BROWSER_TEST_P(HostedAppTest,
-                       ShouldShowLocationBarDynamicMixedContent) {
+IN_PROC_BROWSER_TEST_P(HostedAppTest, ShouldShowToolbarDynamicMixedContent) {
   ASSERT_TRUE(https_server()->Start());
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -634,31 +625,30 @@ IN_PROC_BROWSER_TEST_P(HostedAppTest,
   SetupAppWithURL(app_url);
 
   // Navigate to a page on the same origin. Since mixed content hasn't been
-  // loaded yet, the location bar shouldn't be shown.
-  NavigateAndCheckForLocationBar(app_browser_, app_url, false);
+  // loaded yet, the toolbar shouldn't be shown.
+  NavigateAndCheckForToolbar(app_browser_, app_url, false);
 
-  // Load mixed content; now the location bar should be shown.
+  // Load mixed content; now the toolbar should be shown.
   content::WebContents* web_contents =
       app_browser_->tab_strip_model()->GetActiveWebContents();
   EXPECT_TRUE(TryToLoadImage(
       web_contents, embedded_test_server()->GetURL("foo.com", kImagePath)));
-  EXPECT_TRUE(app_browser_->hosted_app_controller()->ShouldShowLocationBar());
+  EXPECT_TRUE(app_browser_->hosted_app_controller()->ShouldShowToolbar());
 }
 
-IN_PROC_BROWSER_TEST_P(HostedAppTest,
-                       ShouldShowLocationBarForHTTPAppSameOrigin) {
+IN_PROC_BROWSER_TEST_P(HostedAppTest, ShouldShowToolbarForHTTPAppSameOrigin) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   const GURL app_url =
       embedded_test_server()->GetURL("app.com", "/simple.html");
   SetupAppWithURL(app_url);
 
-  // Navigate to the app's launch page; the location bar should be visible, even
+  // Navigate to the app's launch page; the toolbar should be visible, even
   // though it exactly matches the site, because it is not secure.
-  NavigateAndCheckForLocationBar(app_browser_, app_url, true);
+  NavigateAndCheckForToolbar(app_browser_, app_url, true);
 }
 
-IN_PROC_BROWSER_TEST_P(HostedAppTest, ShouldShowLocationBarForHTTPAppHTTPSUrl) {
+IN_PROC_BROWSER_TEST_P(HostedAppTest, ShouldShowToolbarForHTTPAppHTTPSUrl) {
   ASSERT_TRUE(https_server()->Start());
 
   const GURL app_url = https_server()->GetURL("app.com", "/simple.html");
@@ -670,25 +660,24 @@ IN_PROC_BROWSER_TEST_P(HostedAppTest, ShouldShowLocationBarForHTTPAppHTTPSUrl) {
   // "http" scheme.
   SetupAppWithURL(app_url.ReplaceComponents(scheme_http));
 
-  // Navigate to the https version of the site; the location bar should
+  // Navigate to the https version of the site; the toolbar should
   // be hidden, as it is a more secure version of the site.
-  NavigateAndCheckForLocationBar(app_browser_, app_url, false);
+  NavigateAndCheckForToolbar(app_browser_, app_url, false);
 }
 
-IN_PROC_BROWSER_TEST_P(HostedAppTest,
-                       ShouldShowLocationBarForHTTPSAppSameOrigin) {
+IN_PROC_BROWSER_TEST_P(HostedAppTest, ShouldShowToolbarForHTTPSAppSameOrigin) {
   ASSERT_TRUE(https_server()->Start());
 
   const GURL app_url = https_server()->GetURL("app.com", "/simple.html");
   SetupAppWithURL(app_url);
 
-  // Navigate to the app's launch page; the location bar should be hidden.
-  NavigateAndCheckForLocationBar(app_browser_, app_url, false);
+  // Navigate to the app's launch page; the toolbar should be hidden.
+  NavigateAndCheckForToolbar(app_browser_, app_url, false);
 }
 
-// Check that the location bar is shown correctly for HTTPS apps when they
+// Check that the toolbar is shown correctly for HTTPS apps when they
 // navigate to a HTTP page on the same origin.
-IN_PROC_BROWSER_TEST_P(HostedAppTest, ShouldShowLocationBarForHTTPSAppHTTPUrl) {
+IN_PROC_BROWSER_TEST_P(HostedAppTest, ShouldShowToolbarForHTTPSAppHTTPUrl) {
   ASSERT_TRUE(https_server()->Start());
 
   const GURL app_url = https_server()->GetURL("app.com", "/simple.html");
@@ -697,79 +686,38 @@ IN_PROC_BROWSER_TEST_P(HostedAppTest, ShouldShowLocationBarForHTTPSAppHTTPUrl) {
   GURL::Replacements scheme_http;
   scheme_http.SetSchemeStr("http");
 
-  // Navigate to the http version of the site; the location bar should
+  // Navigate to the http version of the site; the toolbar should
   // be visible for the https version as it is not secure.
-  NavigateAndCheckForLocationBar(app_browser_,
-                                 app_url.ReplaceComponents(scheme_http), true);
+  NavigateAndCheckForToolbar(app_browser_,
+                             app_url.ReplaceComponents(scheme_http), true);
 }
 
-// Check that location bar is not shown for apps hosted within extensions pages.
-// This simulates a case where the user has manually navigated to a page hosted
-// within an extension, then added it as a bookmark app.
-// Regression test for https://crbug.com/828233.
-IN_PROC_BROWSER_TEST_P(HostedAppTest, ShouldShowLocationBarForExtensionPage) {
-  // Test only applies for bookmark apps.
-  if (app_type() != AppType::BOOKMARK_APP)
-    return;
-
-  // Note: This involves the creation of *two* extensions: The first is a
-  // regular (non-app) extension with a popup page. The second is a bookmark app
-  // created from the popup page URL (allowing the extension's popup page to be
-  // loaded in a window).
-
-  // Install the extension that has the popup page.
-  ASSERT_TRUE(LoadExtension(
-      test_data_dir_.AppendASCII("ui").AppendASCII("browser_action_popup")));
-  base::RunLoop().RunUntilIdle();  // Ensure the extension is fully loaded.
-
-  // Install the bookmark app that links to the extension's popup page.
-  GURL popup_url("chrome-extension://" + last_loaded_extension_id() +
-                 "/popup.html");
-  // TODO(mgiuca): Abstract this logic to share code with InstallPWA (which does
-  // almost the same thing, but also sets a scope).
-  WebApplicationInfo web_app_info;
-  web_app_info.app_url = popup_url;
-  app_ = InstallBookmarkApp(web_app_info);
-
-  ui_test_utils::UrlLoadObserver url_observer(
-      popup_url, content::NotificationService::AllSources());
-  app_browser_ = LaunchAppBrowser(app_);
-  url_observer.Wait();
-
-  CHECK(app_browser_);
-  CHECK(app_browser_ != browser());
-
-  // Navigate to the app's launch page; the location bar should not be visible,
-  // because extensions pages are secure.
-  NavigateAndCheckForLocationBar(app_browser_, popup_url, false);
-}
-
-// Check that the location bar is shown correctly for apps that specify start
+// Check that the toolbar is shown correctly for apps that specify start
 // URLs without the 'www.' prefix.
-IN_PROC_BROWSER_TEST_P(HostedAppTest, ShouldShowLocationBarForAppWithoutWWW) {
+IN_PROC_BROWSER_TEST_P(HostedAppTest, ShouldShowToolbarForAppWithoutWWW) {
   ASSERT_TRUE(https_server()->Start());
 
   const GURL app_url = https_server()->GetURL("app.com", "/simple.html");
   SetupAppWithURL(app_url);
 
-  // Navigate to the app's launch page; the location bar should be hidden.
-  NavigateAndCheckForLocationBar(app_browser_, app_url, false);
+  // Navigate to the app's launch page; the toolbar should be hidden.
+  NavigateAndCheckForToolbar(app_browser_, app_url, false);
 
-  // Navigate to the app's launch page with the 'www.' prefix; the location bar
+  // Navigate to the app's launch page with the 'www.' prefix; the toolbar
   // should be hidden.
-  NavigateAndCheckForLocationBar(
+  NavigateAndCheckForToolbar(
       app_browser_, https_server()->GetURL("www.app.com", "/simple.html"),
       false);
 
-  // Navigate to different origin; the location bar should now be visible.
-  NavigateAndCheckForLocationBar(
+  // Navigate to different origin; the toolbar should now be visible.
+  NavigateAndCheckForToolbar(
       app_browser_, https_server()->GetURL("www.foo.com", "/simple.html"),
       true);
 }
 
-// Checks that the location bar is shown for an HTTPS app with an invalid
+// Checks that the toolbar is shown for an HTTPS app with an invalid
 // certificate, if the user has previously proceeded through the interstitial.
-IN_PROC_BROWSER_TEST_P(HostedAppTest, ShouldShowLocationBarDangerous) {
+IN_PROC_BROWSER_TEST_P(HostedAppTest, ShouldShowToolbarDangerous) {
   // If DesktopPWAWindowing and CommittedInterstitials are enabled, we will
   // never load a dangerous app. Opening dangerous apps will always show an
   // interstitial and proceeding through it will redirect the navigation to a
@@ -804,14 +752,24 @@ IN_PROC_BROWSER_TEST_P(HostedAppTest, ShouldShowLocationBarDangerous) {
 
     // There should be no interstitial shown because we previously proceeded
     // through it.
-    ASSERT_FALSE(app_browser_->tab_strip_model()
-                     ->GetActiveWebContents()
-                     ->GetInterstitialPage());
+    if (base::FeatureList::IsEnabled(features::kSSLCommittedInterstitials)) {
+      security_interstitials::SecurityInterstitialTabHelper* helper =
+          security_interstitials::SecurityInterstitialTabHelper::
+              FromWebContents(
+                  browser()->tab_strip_model()->GetActiveWebContents());
+      ASSERT_FALSE(
+          helper &&
+          helper->GetBlockingPageForCurrentlyCommittedNavigationForTesting());
+    } else {
+      ASSERT_FALSE(app_browser_->tab_strip_model()
+                       ->GetActiveWebContents()
+                       ->GetInterstitialPage());
+    }
     proceed_through_interstitial = false;
   }
 
-  NavigateAndCheckForLocationBar(app_browser_, app_url, true,
-                                 proceed_through_interstitial);
+  NavigateAndCheckForToolbar(app_browser_, app_url, true,
+                             proceed_through_interstitial);
 }
 
 // Check that a subframe on a regular web page can navigate to a URL that
@@ -853,38 +811,6 @@ IN_PROC_BROWSER_TEST_P(HostedAppTest, SubframeRedirectsToHostedApp) {
   EXPECT_EQ("This page has no title.", result);
 }
 
-IN_PROC_BROWSER_TEST_P(HostedAppTest, BookmarkAppThemeColor) {
-  if (app_type() != AppType::BOOKMARK_APP)
-    return;
-
-  {
-    WebApplicationInfo web_app_info;
-    web_app_info.app_url = GURL(kExampleURL);
-    web_app_info.scope = GURL(kExampleURL);
-    web_app_info.theme_color = SkColorSetA(SK_ColorBLUE, 0xF0);
-    const extensions::Extension* app = InstallBookmarkApp(web_app_info);
-    Browser* app_browser = LaunchAppBrowser(app);
-
-    EXPECT_EQ(web_app::GetAppIdFromApplicationName(app_browser->app_name()),
-              app->id());
-    EXPECT_EQ(SkColorSetA(*web_app_info.theme_color, SK_AlphaOPAQUE),
-              app_browser->hosted_app_controller()->GetThemeColor().value());
-  }
-  {
-    WebApplicationInfo web_app_info;
-    web_app_info.app_url = GURL("http://example.org/2");
-    web_app_info.scope = GURL("http://example.org/");
-    web_app_info.theme_color = base::Optional<SkColor>();
-    const extensions::Extension* app = InstallBookmarkApp(web_app_info);
-    Browser* app_browser = LaunchAppBrowser(app);
-
-    EXPECT_EQ(web_app::GetAppIdFromApplicationName(app_browser->app_name()),
-              app->id());
-    EXPECT_FALSE(
-        app_browser->hosted_app_controller()->GetThemeColor().has_value());
-  }
-}
-
 // Check that no assertions are hit when showing a permission request bubble.
 IN_PROC_BROWSER_TEST_P(HostedAppTest, PermissionBubble) {
   ASSERT_TRUE(https_server()->Start());
@@ -906,29 +832,6 @@ IN_PROC_BROWSER_TEST_P(HostedAppTest, PermissionBubble) {
       "navigator.geolocation.getCurrentPosition(function(){});"));
 }
 
-// Ensure that hosted app windows with blank titles don't display the URL as a
-// default window title.
-IN_PROC_BROWSER_TEST_P(HostedAppTest, Title) {
-  if (app_type() != AppType::BOOKMARK_APP)
-    return;
-
-  ASSERT_TRUE(embedded_test_server()->Start());
-  GURL url = embedded_test_server()->GetURL("app.site.com", "/empty.html");
-  WebApplicationInfo web_app_info;
-  web_app_info.app_url = url;
-  const extensions::Extension* app = InstallBookmarkApp(web_app_info);
-
-  Browser* app_browser = LaunchAppBrowser(app);
-  content::WebContents* web_contents =
-      app_browser->tab_strip_model()->GetActiveWebContents();
-  content::WaitForLoadStop(web_contents);
-  EXPECT_EQ(base::string16(), app_browser->GetWindowTitleForCurrentTab(false));
-  NavigateToURLAndWait(app_browser, embedded_test_server()->GetURL(
-                                        "app.site.com", "/simple.html"));
-  EXPECT_EQ(base::ASCIIToUTF16("OK"),
-            app_browser->GetWindowTitleForCurrentTab(false));
-}
-
 // Tests that regular Hosted Apps and Bookmark Apps can still load mixed
 // content.
 IN_PROC_BROWSER_TEST_P(HostedAppTest, MixedContentInBookmarkApp) {
@@ -947,6 +850,224 @@ IN_PROC_BROWSER_TEST_P(HostedAppTest, MixedContentInBookmarkApp) {
 
   CheckMixedContentLoaded(app_browser_);
 }
+
+// Ensure that hosted app windows with blank titles don't display the URL as a
+// default window title.
+IN_PROC_BROWSER_TEST_P(HostedAppTest, EmptyTitlesDoNotDisplayUrl) {
+  ASSERT_TRUE(https_server()->Start());
+  GURL url = https_server()->GetURL("app.site.com", "/empty.html");
+
+  WebApplicationInfo web_app_info;
+  web_app_info.app_url = url;
+  const extensions::Extension* app = InstallBookmarkApp(web_app_info);
+
+  Browser* app_browser = LaunchAppBrowser(app);
+  content::WebContents* web_contents =
+      app_browser->tab_strip_model()->GetActiveWebContents();
+  content::WaitForLoadStop(web_contents);
+  EXPECT_EQ(base::string16(), app_browser->GetWindowTitleForCurrentTab(false));
+  NavigateToURLAndWait(app_browser,
+                       https_server()->GetURL("app.site.com", "/simple.html"));
+  EXPECT_EQ(base::ASCIIToUTF16("OK"),
+            app_browser->GetWindowTitleForCurrentTab(false));
+}
+
+using HostedAppCustomTabBarOnlyTest = HostedAppTest;
+
+// Ensure that hosted app windows display the app title instead of the page
+// title when off scope.
+IN_PROC_BROWSER_TEST_P(HostedAppCustomTabBarOnlyTest,
+                       OffScopeUrlsDisplayAppTitle) {
+  ASSERT_TRUE(https_server()->Start());
+  GURL url = GetSecureAppURL();
+
+  WebApplicationInfo web_app_info;
+  web_app_info.app_url = url;
+  web_app_info.scope = url.GetWithoutFilename();
+  web_app_info.title = base::ASCIIToUTF16("A Hosted App");
+  const extensions::Extension* app = InstallBookmarkApp(web_app_info);
+
+  Browser* app_browser = LaunchAppBrowser(app);
+  content::WebContents* web_contents =
+      app_browser->tab_strip_model()->GetActiveWebContents();
+  content::WaitForLoadStop(web_contents);
+
+  // When we are within scope, show the page title.
+  EXPECT_EQ(base::ASCIIToUTF16("Google"),
+            app_browser->GetWindowTitleForCurrentTab(false));
+
+  NavigateToURLAndWait(app_browser,
+                       https_server()->GetURL("app.site.com", "/simple.html"));
+
+  // When we are off scope, show the app title.
+  EXPECT_EQ(base::ASCIIToUTF16("A Hosted App"),
+            app_browser->GetWindowTitleForCurrentTab(false));
+}
+
+// Ensure that hosted app windows display the app title instead of the page
+// title when using http.
+IN_PROC_BROWSER_TEST_P(HostedAppCustomTabBarOnlyTest,
+                       InScopeHttpUrlsDisplayAppTitle) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url = embedded_test_server()->GetURL("app.site.com", "/simple.html");
+  WebApplicationInfo web_app_info;
+  web_app_info.app_url = url;
+  web_app_info.title = base::ASCIIToUTF16("A Hosted App");
+
+  const extensions::Extension* app = InstallBookmarkApp(web_app_info);
+
+  Browser* app_browser = LaunchAppBrowser(app);
+  content::WebContents* web_contents =
+      app_browser->tab_strip_model()->GetActiveWebContents();
+  content::WaitForLoadStop(web_contents);
+
+  // The page title is "OK" but the page is being served over HTTP, so the app
+  // title should be used instead.
+  EXPECT_EQ(base::ASCIIToUTF16("A Hosted App"),
+            app_browser->GetWindowTitleForCurrentTab(false));
+}
+
+#if !defined(OS_ANDROID)
+class HostedAppBadgingTest : public HostedAppTest {
+ public:
+  // Listens to BadgeManager events and forwards them to the test class.
+  class TestBadgeManagerDelegate : public badging::BadgeManagerDelegate {
+   public:
+    using SetBadgeCallback =
+        base::RepeatingCallback<void(const std::string&,
+                                     base::Optional<uint64_t>)>;
+    using ClearBadgeCallback =
+        base::RepeatingCallback<void(const std::string&)>;
+
+    TestBadgeManagerDelegate(Profile* profile,
+                             SetBadgeCallback on_set_badge,
+                             ClearBadgeCallback on_clear_badge)
+        : badging::BadgeManagerDelegate(profile),
+          on_set_badge_(on_set_badge),
+          on_clear_badge_(on_clear_badge) {}
+
+    void OnBadgeSet(const std::string& app_id,
+                    base::Optional<uint64_t> contents) override {
+      on_set_badge_.Run(app_id, contents);
+    }
+
+    void OnBadgeCleared(const std::string& app_id) override {
+      on_clear_badge_.Run(app_id);
+    }
+
+   private:
+    SetBadgeCallback on_set_badge_;
+    ClearBadgeCallback on_clear_badge_;
+  };
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    HostedAppTest::SetUpCommandLine(command_line);
+    command_line->AppendSwitchASCII("enable-blink-features", "Badging");
+  }
+
+  void SetUpOnMainThread() override {
+    HostedAppTest::SetUpOnMainThread();
+
+    ASSERT_TRUE(https_server()->Start());
+    ASSERT_TRUE(embedded_test_server()->Start());
+
+    InstallSecurePWA();
+
+    awaiter_ = std::make_unique<base::RunLoop>();
+
+    Profile* profile = app_browser_->profile();
+    std::unique_ptr<badging::BadgeManagerDelegate> delegate =
+        std::make_unique<TestBadgeManagerDelegate>(
+            profile,
+            base::BindRepeating(&HostedAppBadgingTest::OnBadgeSet,
+                                base::Unretained(this)),
+            base::BindRepeating(&HostedAppBadgingTest::OnBadgeCleared,
+                                base::Unretained(this)));
+    badging::BadgeManagerFactory::GetInstance()
+        ->GetForProfile(profile)
+        ->SetDelegate(std::move(delegate));
+  }
+
+  // BadgeManagerDelegate:
+  void OnBadgeSet(const std::string& app_id,
+                  base::Optional<uint64_t> badge_content) {
+    if (badge_content.has_value())
+      last_badge_content_ = badge_content;
+    else
+      was_flagged_ = true;
+
+    awaiter_->Quit();
+  }
+
+  void OnBadgeCleared(const std::string& app_id) {
+    was_cleared_ = true;
+    awaiter_->Quit();
+  }
+
+ protected:
+  void ExecuteScriptAndWaitForBadgeChange(std::string script) {
+    was_cleared_ = false;
+    was_flagged_ = false;
+    last_badge_content_ = base::nullopt;
+    awaiter_.reset(new base::RunLoop());
+
+    content::WebContents* web_contents =
+        app_browser_->tab_strip_model()->GetActiveWebContents();
+    ASSERT_TRUE(content::ExecuteScript(web_contents, script));
+
+    if (was_cleared_ || was_flagged_ || last_badge_content_ != base::nullopt)
+      return;
+
+    awaiter_->Run();
+  }
+
+  bool was_cleared_ = false;
+  bool was_flagged_ = false;
+  base::Optional<uint64_t> last_badge_content_ = base::nullopt;
+
+ private:
+  std::unique_ptr<base::RunLoop> awaiter_;
+};
+
+// Tests that setting the badge to an integer will be propagated across
+// processes.
+IN_PROC_BROWSER_TEST_P(HostedAppBadgingTest, BadgeCanBeSetToAnInteger) {
+  ExecuteScriptAndWaitForBadgeChange("ExperimentalBadge.set(99)");
+  ASSERT_FALSE(was_cleared_);
+  ASSERT_FALSE(was_flagged_);
+  ASSERT_EQ(base::Optional<uint64_t>(99u), last_badge_content_);
+}
+
+// Tests that calls to |Badge.clear| are propagated across processes.
+IN_PROC_BROWSER_TEST_P(HostedAppBadgingTest, BadgeCanBeClearedWithClearMethod) {
+  ExecuteScriptAndWaitForBadgeChange("ExperimentalBadge.set(55)");
+  ASSERT_FALSE(was_cleared_);
+  ASSERT_FALSE(was_flagged_);
+  ASSERT_EQ(base::Optional<uint64_t>(55u), last_badge_content_);
+
+  ExecuteScriptAndWaitForBadgeChange("ExperimentalBadge.clear()");
+  ASSERT_TRUE(was_cleared_);
+  ASSERT_FALSE(was_flagged_);
+  ASSERT_EQ(base::nullopt, last_badge_content_);
+}
+
+// Tests that calling Badge.set(0) is equivalent to calling |Badge.clear| and
+// that it propagates across processes.
+IN_PROC_BROWSER_TEST_P(HostedAppBadgingTest, BadgeCanBeClearedWithZero) {
+  ExecuteScriptAndWaitForBadgeChange("ExperimentalBadge.set(0)");
+  ASSERT_TRUE(was_cleared_);
+  ASSERT_FALSE(was_flagged_);
+  ASSERT_EQ(base::nullopt, last_badge_content_);
+}
+
+// Tests that setting the badge without content is propagated across processes.
+IN_PROC_BROWSER_TEST_P(HostedAppBadgingTest, BadgeCanBeSetWithoutAValue) {
+  ExecuteScriptAndWaitForBadgeChange("ExperimentalBadge.set()");
+  ASSERT_FALSE(was_cleared_);
+  ASSERT_TRUE(was_flagged_);
+  ASSERT_EQ(base::nullopt, last_badge_content_);
+}
+#endif  // !defined(OS_CHROMEOS)
 
 using HostedAppPWAOnlyTest = HostedAppTest;
 
@@ -968,6 +1089,91 @@ IN_PROC_BROWSER_TEST_P(HostedAppPWAOnlyTest, PopOutDisabledInIncognito) {
   ASSERT_TRUE(app_menu_model->GetModelAndIndexForCommandId(
       IDC_OPEN_IN_PWA_WINDOW, &model, &index));
   EXPECT_FALSE(model->IsEnabledAt(index));
+}
+
+// Tests that desktop PWAs open links in the browser.
+IN_PROC_BROWSER_TEST_P(HostedAppPWAOnlyTest,
+                       DesktopPWAsOpenLinksInAppWhenFeatureEnabled) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(features::kDesktopPWAsStayInWindow);
+
+  ASSERT_TRUE(https_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  InstallSecurePWA();
+  ASSERT_TRUE(base::FeatureList::IsEnabled(features::kDesktopPWAsStayInWindow));
+  ASSERT_TRUE(
+      extensions::util::GetInstalledPwaForUrl(profile(), GetSecureAppURL()));
+
+  NavigateToURLAndWait(app_browser_, GetSecureAppURL());
+
+  ASSERT_TRUE(app_browser_->hosted_app_controller());
+
+  NavigateAndCheckForToolbar(app_browser_, GURL(kExampleURL), true);
+}
+
+// Tests that desktop PWAs open links in the browser.
+IN_PROC_BROWSER_TEST_P(HostedAppPWAOnlyTest,
+                       DesktopPWAsOpenLinksInBrowserWhenFeatureDisabled) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndDisableFeature(features::kDesktopPWAsStayInWindow);
+
+  ASSERT_TRUE(https_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  InstallSecurePWA();
+  ASSERT_FALSE(
+      base::FeatureList::IsEnabled(features::kDesktopPWAsStayInWindow));
+  ASSERT_TRUE(
+      extensions::util::GetInstalledPwaForUrl(profile(), GetSecureAppURL()));
+
+  NavigateToURLAndWait(app_browser_, GetSecureAppURL());
+
+  ASSERT_TRUE(app_browser_->hosted_app_controller());
+
+  TestAppActionOpensForegroundTab(
+      base::BindOnce(
+          [](Browser* browser, content::WebContents* app_contents,
+             const GURL& target_url) {
+            content::TestNavigationObserver observer(target_url);
+            observer.StartWatchingNewWebContents();
+
+            std::string script = base::StringPrintf("window.location = '%s';",
+                                                    target_url.spec().c_str());
+            ASSERT_TRUE(content::ExecuteScript(app_contents, script));
+
+            observer.WaitForNavigationFinished();
+          },
+          app_browser_, app_browser_->tab_strip_model()->GetActiveWebContents(),
+          GURL(kExampleURL)),
+      GURL(kExampleURL));
+}
+
+// Test navigating to an out of scope url on the same origin causes the url
+// to be shown to the user.
+IN_PROC_BROWSER_TEST_P(HostedAppPWAOnlyTest,
+                       LocationBarIsVisibleOffScopeOnSameOrigin) {
+  // If the feature for remaining in window is not enabled, the out of scope url
+  // will open in a new tab.
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(features::kDesktopPWAsStayInWindow);
+
+  ASSERT_TRUE(https_server()->Start());
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  InstallSecurePWA();
+
+  // Toolbar should not be visible in the app.
+  ASSERT_FALSE(app_browser_->hosted_app_controller()->ShouldShowToolbar());
+
+  // The installed PWA's scope is app.com:{PORT}/ssl,
+  // so app.com:{PORT}/accessibility_fail.html is out of scope.
+  const GURL& out_of_scope = GetURLForPath("/accessibility_fail.html");
+
+  NavigateToURLAndWait(app_browser_, out_of_scope);
+
+  // Location should be visible off scope.
+  ASSERT_TRUE(app_browser_->hosted_app_controller()->ShouldShowToolbar());
 }
 
 // Tests that PWA menus have an uninstall option.
@@ -996,7 +1202,7 @@ IN_PROC_BROWSER_TEST_P(HostedAppPWAOnlyTest, UninstallMenuOption) {
 // incognito windows.
 IN_PROC_BROWSER_TEST_P(HostedAppPWAOnlyTest, ShortcutMenuOptionsInIncognito) {
   Browser* incognito_browser = CreateIncognitoBrowser(profile());
-  auto* manager = TestAppBannerManagerDesktop::CreateForWebContents(
+  auto* manager = banners::TestAppBannerManagerDesktop::CreateForWebContents(
       incognito_browser->tab_strip_model()->GetActiveWebContents());
 
   ASSERT_TRUE(https_server()->Start());
@@ -1013,7 +1219,7 @@ IN_PROC_BROWSER_TEST_P(HostedAppPWAOnlyTest, ShortcutMenuOptionsInIncognito) {
 // for an installable PWA.
 IN_PROC_BROWSER_TEST_P(HostedAppPWAOnlyTest,
                        ShortcutMenuOptionsForInstallablePWA) {
-  auto* manager = TestAppBannerManagerDesktop::CreateForWebContents(
+  auto* manager = banners::TestAppBannerManagerDesktop::CreateForWebContents(
       browser()->tab_strip_model()->GetActiveWebContents());
 
   ASSERT_TRUE(https_server()->Start());
@@ -1028,7 +1234,7 @@ IN_PROC_BROWSER_TEST_P(HostedAppPWAOnlyTest,
 // a non-installable site.
 IN_PROC_BROWSER_TEST_P(HostedAppPWAOnlyTest,
                        ShortcutMenuOptionsForNonInstallableSite) {
-  auto* manager = TestAppBannerManagerDesktop::CreateForWebContents(
+  auto* manager = banners::TestAppBannerManagerDesktop::CreateForWebContents(
       browser()->tab_strip_model()->GetActiveWebContents());
 
   ASSERT_TRUE(https_server()->Start());
@@ -1043,14 +1249,30 @@ IN_PROC_BROWSER_TEST_P(HostedAppPWAOnlyTest, InstallInstallableSite) {
   ASSERT_TRUE(https_server()->Start());
   NavigateToURLAndWait(browser(), GetInstallableAppURL());
 
-  chrome::SetAutoAcceptPWAInstallDialogForTesting(true);
+  chrome::SetAutoAcceptPWAInstallDialogForTesting(/*auto_accept*/ true);
+
+  web_app::AppId app_id;
+
+  base::RunLoop run_loop;
+  web_app::SetInstalledCallbackForTesting(
+      base::BindLambdaForTesting([&](const web_app::AppId& installed_app_id,
+                                     web_app::InstallResultCode code) {
+        EXPECT_EQ(web_app::InstallResultCode::kSuccess, code);
+        app_id = installed_app_id;
+        run_loop.Quit();
+      }));
+
   chrome::ExecuteCommand(browser(), IDC_INSTALL_PWA);
+  run_loop.Run();
+
+  chrome::SetAutoAcceptPWAInstallDialogForTesting(/*auto_accept*/ false);
+
   const extensions::Extension* app =
-      extensions::TestExtensionRegistryObserver(
-          extensions::ExtensionRegistry::Get(browser()->profile()))
-          .WaitForExtensionInstalled();
+      extensions::ExtensionRegistry::Get(browser()->profile())
+          ->enabled_extensions()
+          .GetByID(app_id);
+  ASSERT_TRUE(app);
   EXPECT_EQ(app->name(), GetInstallableAppName());
-  chrome::SetAutoAcceptPWAInstallDialogForTesting(false);
 
   // Installed PWAs should launch in their own window.
   EXPECT_EQ(extensions::GetLaunchContainer(
@@ -1096,13 +1318,14 @@ IN_PROC_BROWSER_TEST_P(HostedAppPWAOnlyTest,
 
   Browser* app_browser = ReparentSecureActiveTabIntoPwaWindow(browser());
 
-  ASSERT_EQ(app_browser->hosted_app_controller()->GetExtension(), app_);
+  ASSERT_EQ(app_browser->hosted_app_controller()->GetExtensionForTesting(),
+            app_);
 }
 
 // Tests that the manifest name of the current installable site is used in the
 // installation menu text.
 IN_PROC_BROWSER_TEST_P(HostedAppPWAOnlyTest, InstallToShelfContainsAppName) {
-  auto* manager = TestAppBannerManagerDesktop::CreateForWebContents(
+  auto* manager = banners::TestAppBannerManagerDesktop::CreateForWebContents(
       browser()->tab_strip_model()->GetActiveWebContents());
 
   ASSERT_TRUE(https_server()->Start());
@@ -1416,6 +1639,19 @@ IN_PROC_BROWSER_TEST_P(HostedAppPWAOnlyTest, AppInfoOpensPageInfo) {
 }
 #endif
 
+// Check that the toolbar is shown correctly with a System App.
+IN_PROC_BROWSER_TEST_P(HostedAppPWAOnlyTest, ShouldShowToolbarForSystemApp) {
+  const GURL app_url(chrome::kChromeUISettingsURL);
+
+  SetupSystemAppWithURL(app_url);
+
+  // Navigate to the app's launch page; the toolbar should be hidden.
+  NavigateAndCheckForToolbar(app_browser_, app_url, false);
+}
+
+// TODO(loyso): crbug.com/918089. This test is deprecated in favor of
+// BookmarkAppTest.EngagementHistogramForAppInWindow and
+// BookmarkAppTest.EngagementHistogramForAppInTab.
 IN_PROC_BROWSER_TEST_P(HostedAppPWAOnlyTest, EngagementHistogram) {
   base::HistogramTester histograms;
   WebApplicationInfo web_app_info;
@@ -1460,6 +1696,9 @@ IN_PROC_BROWSER_TEST_P(HostedAppPWAOnlyTest, EngagementHistogram) {
                                SiteEngagementService::ENGAGEMENT_MOUSE, 1);
 }
 
+// TODO(loyso): crbug.com/918089. This test is deprecated in favor of
+// BookmarkAppTest.EngagementHistogramAppWithoutScope and
+// BookmarkAppTest.EngagementHistogramRecordedForNonApps.
 IN_PROC_BROWSER_TEST_P(HostedAppPWAOnlyTest,
                        EngagementHistogramNotRecordedIfNoScope) {
   base::HistogramTester histograms;
@@ -1476,6 +1715,8 @@ IN_PROC_BROWSER_TEST_P(HostedAppPWAOnlyTest,
   histograms.ExpectTotalCount(extensions::kPwaWindowEngagementTypeHistogram, 0);
 }
 
+// TODO(loyso): crbug.com/918089. This test is deprecated in favor of
+// BookmarkAppTest.EngagementHistogramTwoApps.
 IN_PROC_BROWSER_TEST_P(HostedAppPWAOnlyTest, EngagementHistogramTwoApps) {
   base::HistogramTester histograms;
   const extensions::Extension *app1, *app2;
@@ -1529,8 +1770,7 @@ constexpr const char kHostedAppProcessModelManifest[] =
           } )";
 
 // This set of tests verifies the hosted app process model behavior in various
-// isolation modes. They can be run by default, with --site-per-process, or
-// with --top-document-isolation. In each mode, they contain an isolated origin.
+// isolation modes.
 //
 // Relevant frames in the tests:
 // - |app| - app.site.com/frame_tree/cross_origin_but_same_site_frames.html
@@ -1546,6 +1786,9 @@ constexpr const char kHostedAppProcessModelManifest[] =
 //                 |diff_dir|.
 // - |isolated| - isolated.site.com/title1.htm
 //                Within app's extent, but belongs to an isolated origin.
+//                Some tests also use isolated.site.com/title1.htm (defined by
+//                |isolated_url_outside_app_|), which is an isolated origin
+//                outside the app's extent.
 // - |cross_site| - cross.domain.com/title1.htm
 //                  Cross-site from all the other frames.
 
@@ -1557,8 +1800,12 @@ class HostedAppProcessModelTest : public HostedAppTest {
   void SetUpCommandLine(base::CommandLine* command_line) override {
     HostedAppTest::SetUpCommandLine(command_line);
     ASSERT_TRUE(embedded_test_server()->InitializeAndListen());
-    std::string origin_list =
+    std::string origin1 =
         embedded_test_server()->GetURL("isolated.site.com", "/").spec();
+    std::string origin2 =
+        embedded_test_server()->GetURL("isolated.foo.com", "/").spec();
+    std::string origin_list =
+        base::StringPrintf("%s,%s", origin1.c_str(), origin2.c_str());
     command_line->AppendSwitchASCII(switches::kIsolateOrigins, origin_list);
   }
 
@@ -1567,13 +1814,6 @@ class HostedAppProcessModelTest : public HostedAppTest {
     host_resolver()->AddRule("*", "127.0.0.1");
     embedded_test_server()->StartAcceptingConnections();
 
-    // TODO(alexmos): This should also be true for TDI, if
-    // base::FeatureList::IsEnabled(features::kTopDocumentIsolation) is true.
-    // However, we can't do that yet, because
-    // ChromeContentBrowserClientExtensionsPart::
-    // ShouldFrameShareParentSiteInstanceDespiteTopDocumentIsolation() returns
-    // true for all hosted apps and hence forces even cross-site subframes to
-    // be kept in the app process.
     should_swap_for_cross_site_ = content::AreAllSitesIsolatedForTesting();
 
     process_map_ = extensions::ProcessMap::Get(browser()->profile());
@@ -1586,6 +1826,8 @@ class HostedAppProcessModelTest : public HostedAppTest {
         embedded_test_server()->GetURL("other.site.com", "/title1.html");
     isolated_url_ =
         embedded_test_server()->GetURL("isolated.site.com", "/title1.html");
+    isolated_url_outside_app_ =
+        embedded_test_server()->GetURL("isolated.foo.com", "/title1.html");
     cross_site_url_ =
         embedded_test_server()->GetURL("cross.domain.com", "/title1.html");
   }
@@ -1675,6 +1917,7 @@ class HostedAppProcessModelTest : public HostedAppTest {
   GURL diff_dir_url_;
   GURL same_site_url_;
   GURL isolated_url_;
+  GURL isolated_url_outside_app_;
   GURL cross_site_url_;
 
  private:
@@ -1732,9 +1975,14 @@ IN_PROC_BROWSER_TEST_P(HostedAppProcessModelTest, IframesInsideHostedApp) {
   EXPECT_NE(same_site_site, app_site);
   EXPECT_EQ(same_site_site, diff_dir_site);
 
+  // The isolated.site.com iframe is covered by the hosted app's extent, so it
+  // uses a chrome-extension site URL, but the site URL should be different
+  // from the main app's site URL, as this iframe is expected to go into a
+  // separate app process, because isolated.site.com matches an isolated
+  // origin.
   GURL isolated_site = content::SiteInstance::GetSiteForURL(
       app_browser_->profile(), isolated->GetLastCommittedURL());
-  EXPECT_NE(extensions::kExtensionScheme, isolated_site.scheme());
+  EXPECT_EQ(extensions::kExtensionScheme, isolated_site.scheme());
   EXPECT_NE(isolated_site, app_site);
   EXPECT_NE(isolated_site, diff_dir_site);
 
@@ -1768,10 +2016,12 @@ IN_PROC_BROWSER_TEST_P(HostedAppProcessModelTest, IframesInsideHostedApp) {
   else
     EXPECT_EQ(cross_site->GetProcess(), app->GetProcess());
 
-  // The isolated origin iframe's process should not be in the ProcessMap. If
-  // we swapped processes for the |cross_site| iframe, its process should also
+  // The isolated origin iframe's process should be in the ProcessMap, since
+  // the isolated origin is covered by the app's extent.
+  EXPECT_TRUE(process_map_->Contains(isolated->GetProcess()->GetID()));
+
+  // If we swapped processes for the |cross_site| iframe, its process should
   // not be on the ProcessMap.
-  EXPECT_FALSE(process_map_->Contains(isolated->GetProcess()->GetID()));
   if (should_swap_for_cross_site_)
     EXPECT_FALSE(process_map_->Contains(cross_site->GetProcess()->GetID()));
 
@@ -1892,16 +2142,25 @@ IN_PROC_BROWSER_TEST_P(HostedAppProcessModelTest, PopupsInsideHostedApp) {
     SCOPED_TRACE("... for same_site popup");
     TestPopupProcess(app, same_site_url_, true, true);
   }
+  // The isolated origin URL for isolated.site.com should swap processes, but
+  // since it's covered by the app's extent, it should still be in a
+  // (different) app process.
   {
     SCOPED_TRACE("... for isolated_url popup");
-    TestPopupProcess(app, isolated_url_, false, false);
+    TestPopupProcess(app, isolated_url_, false, true);
   }
-  // For cross-site, the resulting process is only in the app process if we
-  // don't swap processes.
+  // The isolated origin URL for isolated.foo.com should swap processes, and
+  // since it's not covered by the app's extent, it should not be in an app
+  // process.
+  {
+    SCOPED_TRACE("... for isolated_url_outside_app popup");
+    TestPopupProcess(app, isolated_url_outside_app_, false, false);
+  }
+  // For cross-site, the resulting popup should swap processes and not be in
+  // the app process.
   {
     SCOPED_TRACE("... for cross_site popup");
-    TestPopupProcess(app, cross_site_url_, !should_swap_for_cross_site_,
-                     !should_swap_for_cross_site_);
+    TestPopupProcess(app, cross_site_url_, false, false);
   }
 
   // If the iframes open popups that are same-origin with themselves, the popups
@@ -1920,7 +2179,7 @@ IN_PROC_BROWSER_TEST_P(HostedAppProcessModelTest, PopupsInsideHostedApp) {
   }
   {
     SCOPED_TRACE("... for isolated_url iframe popup");
-    TestPopupProcess(isolated, isolated_url_, true, false);
+    TestPopupProcess(isolated, isolated_url_, true, true);
   }
   {
     SCOPED_TRACE("... for cross_site iframe popup");
@@ -1983,10 +2242,11 @@ IN_PROC_BROWSER_TEST_P(HostedAppProcessModelTest, MAYBE_FromOutsideHostedApp) {
     TestPopupProcess(same_site_rfh, app_url, false, true);
   }
 
-  // Starting on an isolated origin, popups should swap to the app.
+  // Starting on an isolated origin outside the app's extent, popups should
+  // swap to the app.
   {
     SCOPED_TRACE("... from isolated_url");
-    ui_test_utils::NavigateToURL(app_browser_, isolated_url_);
+    ui_test_utils::NavigateToURL(app_browser_, isolated_url_outside_app_);
     RenderFrameHost* main_frame = web_contents->GetMainFrame();
     EXPECT_FALSE(main_frame->GetSiteInstance()->GetSiteURL().SchemeIs(
         extensions::kExtensionScheme));
@@ -2037,11 +2297,11 @@ class HostedAppIsolatedOriginTest : public HostedAppProcessModelTest {
   }
 };
 
-// Check that a hosted app that is contained entirely within an isolated.com
-// isolated origin is allowed to load in a privileged app process. Also check
-// that very.isolated.com, which does *not* match all URLs in the hosted app's
-// extent, still ends up in its own non-app process.  See
-// https://crbug.com/799638.
+// Check that a hosted app that is contained within an isolated.com isolated
+// origin is allowed to load in a privileged app process. Also check that a
+// very.isolated.com URL, which corresponds to very.isolated.com isolated
+// origin but is outside the hosted app's extent, ends up in its own non-app
+// process. See https://crbug.com/799638.
 IN_PROC_BROWSER_TEST_P(HostedAppIsolatedOriginTest,
                        NestedIsolatedOriginStaysOutsideApp) {
   // Set up and launch the hosted app.
@@ -2069,8 +2329,7 @@ IN_PROC_BROWSER_TEST_P(HostedAppIsolatedOriginTest,
   EXPECT_TRUE(content::WaitForLoadStop(web_contents));
 
   // Check that the app loaded properly. Even though its URL is from an
-  // isolated origin (isolated.com), it should go into an app process because
-  // the app's extent is contained entirely within isolated.com.
+  // isolated origin (isolated.com), it should go into an app process.
   RenderFrameHost* app = web_contents->GetMainFrame();
   EXPECT_EQ(extensions::kExtensionScheme,
             app->GetSiteInstance()->GetSiteURL().scheme());
@@ -2079,19 +2338,29 @@ IN_PROC_BROWSER_TEST_P(HostedAppIsolatedOriginTest,
   EXPECT_EQ(extensions::kExtensionScheme, app_site.scheme());
   EXPECT_TRUE(process_map_->Contains(app->GetProcess()->GetID()));
 
-  // Add a same-site subframe on isolated.com.  This should stay in app
-  // process.
+  // Add a same-site subframe on isolated.com outside the app's extent.  This
+  // should stay in app process.
   GURL foo_isolated_url =
       embedded_test_server()->GetURL("foo.isolated.com", "/title1.html");
   TestSubframeProcess(app, foo_isolated_url, true /* expect_same_process */,
                       true /* expect_app_process */);
 
-  // Add a subframe on very.isolated.com.  This should go into a separate,
-  // non-app process.
+  // Add a subframe on very.isolated.com outside the app's extent.  Despite
+  // being same-site, this matches a different, more specific isolated origin
+  // and should go into a separate, non-app process.
   GURL very_isolated_url =
       embedded_test_server()->GetURL("very.isolated.com", "/title2.html");
   TestSubframeProcess(app, very_isolated_url, false /* expect_same_process */,
                       false /* expect_app_process */);
+
+  // Add a subframe on very.isolated.com inside the app's extent.  Despite
+  // being same-site, this matches a different, more specific isolated origin
+  // and should go into a separate app process.
+  GURL very_isolated_app_url = embedded_test_server()->GetURL(
+      "very.isolated.com", "/frame_tree/simple.htm");
+  TestSubframeProcess(app, very_isolated_app_url,
+                      false /* expect_same_process */,
+                      true /* expect_app_process */);
 
   // Similarly, a popup for very.isolated.com should go into a separate,
   // non-app process.
@@ -2111,8 +2380,9 @@ IN_PROC_BROWSER_TEST_P(HostedAppIsolatedOriginTest,
 }
 
 // Check that when a hosted app's extent contains multiple origins, one of
-// which is an isolated origin, loading an app URL in that isolated origin does
-// not go into the app process.
+// which is an isolated origin, loading an app URL in that isolated origin
+// won't later allow another origin in the app's extent to share the same app
+// process.
 IN_PROC_BROWSER_TEST_P(HostedAppIsolatedOriginTest,
                        AppBroaderThanIsolatedOrigin) {
   // Set up and launch the hosted app, with the launch URL being in an isolated
@@ -2140,23 +2410,32 @@ IN_PROC_BROWSER_TEST_P(HostedAppIsolatedOriginTest,
       app_browser_->tab_strip_model()->GetActiveWebContents();
   EXPECT_TRUE(content::WaitForLoadStop(web_contents));
 
-  // The app URL shouldn't have loaded in an app process, because that would
-  // allow isolated.com to share the app process with unisolated.com.
+  // The app URL should have loaded in an app process.
   RenderFrameHost* app = web_contents->GetMainFrame();
-  EXPECT_FALSE(process_map_->Contains(app->GetProcess()->GetID()));
-  EXPECT_NE(extensions::kExtensionScheme,
+  EXPECT_TRUE(process_map_->Contains(app->GetProcess()->GetID()));
+  EXPECT_EQ(extensions::kExtensionScheme,
             app->GetSiteInstance()->GetSiteURL().scheme());
+  int first_app_process_id = app->GetProcess()->GetID();
 
-  // In contrast, opening a popup or navigating to an app URL on unisolated.com
-  // is permitted to go into an app process.
+  // Creating a subframe on unisolated.com should not be allowed to share the
+  // main frame's app process, since we don't want the isolated.com isolated
+  // origin to share a process with another origin.
   GURL unisolated_app_url =
       embedded_test_server()->GetURL("unisolated.com", "/title1.html");
+  TestSubframeProcess(app, unisolated_app_url, false /* expect_same_process */,
+                      true /* expect_app_process */);
+
+  // Opening a popup or navigating to an app URL on unisolated.com should go
+  // into a separate app process, different from the one that was used for
+  // isolated.com.
   TestPopupProcess(app, unisolated_app_url, false /* expect_same_process */,
                    true /* expect_app_process */);
 
   ui_test_utils::NavigateToURL(app_browser_, unisolated_app_url);
   EXPECT_TRUE(process_map_->Contains(
       web_contents->GetMainFrame()->GetProcess()->GetID()));
+  EXPECT_NE(first_app_process_id,
+            web_contents->GetMainFrame()->GetProcess()->GetID());
 }
 
 class HostedAppSitePerProcessTest : public HostedAppProcessModelTest {
@@ -2458,12 +2737,9 @@ IN_PROC_BROWSER_TEST_P(HostedAppProcessModelTest,
       foo_contents->GetMainFrame()->GetSiteInstance()->IsRelatedSiteInstance(
           foo_contents2->GetMainFrame()->GetSiteInstance()));
 
-  // The bar.com tab should be in the same process as the foo.com tabs only if
-  // we are not in --site-per-process mode.  --site-per-process should override
-  // the process-per-site behavior.
+  // The bar.com tab should be in a different process from the foo.com tabs.
   auto* bar_process = bar_contents->GetMainFrame()->GetProcess();
-  EXPECT_EQ(foo_process == bar_process,
-            !content::AreAllSitesIsolatedForTesting());
+  EXPECT_NE(foo_process, bar_process);
 
   // Ensure all tabs are in app processes.
   auto* process_map = extensions::ProcessMap::Get(browser()->profile());
@@ -2537,26 +2813,123 @@ IN_PROC_BROWSER_TEST_P(HostedAppProcessModelTest,
                             "window.open('', 'bg2').document.body.innerText"));
 }
 
-INSTANTIATE_TEST_CASE_P(/* no prefix */,
-                        HostedAppTest,
-                        ::testing::Combine(kAppTypeValues, ::testing::Bool()));
-INSTANTIATE_TEST_CASE_P(/* no prefix */,
-                        HostedAppPWAOnlyTest,
-                        ::testing::Values(std::tuple<AppType, bool>{
-                            AppType::BOOKMARK_APP, true}));
-INSTANTIATE_TEST_CASE_P(
+using BookmarkAppOnlyTest = HostedAppTest;
+
+IN_PROC_BROWSER_TEST_P(BookmarkAppOnlyTest, ThemeColor) {
+  {
+    WebApplicationInfo web_app_info;
+    web_app_info.app_url = GURL(kExampleURL);
+    web_app_info.scope = GURL(kExampleURL);
+    web_app_info.theme_color = SkColorSetA(SK_ColorBLUE, 0xF0);
+    const extensions::Extension* app = InstallBookmarkApp(web_app_info);
+    Browser* app_browser = LaunchAppBrowser(app);
+
+    EXPECT_EQ(web_app::GetAppIdFromApplicationName(app_browser->app_name()),
+              app->id());
+    EXPECT_EQ(SkColorSetA(*web_app_info.theme_color, SK_AlphaOPAQUE),
+              app_browser->hosted_app_controller()->GetThemeColor().value());
+  }
+  {
+    WebApplicationInfo web_app_info;
+    web_app_info.app_url = GURL("http://example.org/2");
+    web_app_info.scope = GURL("http://example.org/");
+    web_app_info.theme_color = base::Optional<SkColor>();
+    const extensions::Extension* app = InstallBookmarkApp(web_app_info);
+    Browser* app_browser = LaunchAppBrowser(app);
+
+    EXPECT_EQ(web_app::GetAppIdFromApplicationName(app_browser->app_name()),
+              app->id());
+    EXPECT_FALSE(
+        app_browser->hosted_app_controller()->GetThemeColor().has_value());
+  }
+}
+
+// Check that toolbar is not shown for apps hosted within extensions pages.
+// This simulates a case where the user has manually navigated to a page hosted
+// within an extension, then added it as a bookmark app.
+// Regression test for https://crbug.com/828233.
+IN_PROC_BROWSER_TEST_P(BookmarkAppOnlyTest, ShouldShowToolbarForExtensionPage) {
+  // Note: This involves the creation of *two* extensions: The first is a
+  // regular (non-app) extension with a popup page. The second is a bookmark app
+  // created from the popup page URL (allowing the extension's popup page to be
+  // loaded in a window).
+
+  // Install the extension that has the popup page.
+  ASSERT_TRUE(LoadExtension(
+      test_data_dir_.AppendASCII("ui").AppendASCII("browser_action_popup")));
+  base::RunLoop().RunUntilIdle();  // Ensure the extension is fully loaded.
+
+  // Install the bookmark app that links to the extension's popup page.
+  GURL popup_url("chrome-extension://" + last_loaded_extension_id() +
+                 "/popup.html");
+  // TODO(mgiuca): Abstract this logic to share code with InstallPWA (which does
+  // almost the same thing, but also sets a scope).
+  WebApplicationInfo web_app_info;
+  web_app_info.app_url = popup_url;
+  app_ = InstallBookmarkApp(web_app_info);
+
+  ui_test_utils::UrlLoadObserver url_observer(
+      popup_url, content::NotificationService::AllSources());
+  app_browser_ = LaunchAppBrowser(app_);
+  url_observer.Wait();
+
+  CHECK(app_browser_);
+  CHECK(app_browser_ != browser());
+
+  // Navigate to the app's launch page; the toolbar should not be visible,
+  // because extensions pages are secure.
+  NavigateAndCheckForToolbar(app_browser_, popup_url, false);
+}
+
+INSTANTIATE_TEST_SUITE_P(/* no prefix */,
+                         HostedAppTest,
+                         ::testing::Combine(kAppTypeValues,
+                                            ::testing::Bool(),
+                                            ::testing::Bool()));
+
+INSTANTIATE_TEST_SUITE_P(/* no prefix */,
+                         HostedAppCustomTabBarOnlyTest,
+                         ::testing::Combine(kAppTypeValues,
+                                            ::testing::Bool(),
+                                            ::testing::Values(true)));
+INSTANTIATE_TEST_SUITE_P(
+    /* no prefix */,
+    HostedAppPWAOnlyTest,
+    ::testing::Combine(::testing::Values(AppType::BOOKMARK_APP),
+                       ::testing::Values(true),
+                       ::testing::Bool()));
+INSTANTIATE_TEST_SUITE_P(
+    /* no prefix */,
+    BookmarkAppOnlyTest,
+    ::testing::Combine(::testing::Values(AppType::BOOKMARK_APP),
+                       ::testing::Bool(),
+                       ::testing::Bool()));
+
+INSTANTIATE_TEST_SUITE_P(
     /* no prefix */,
     HostedAppProcessModelTest,
     ::testing::Combine(::testing::Values(AppType::HOSTED_APP),
+                       ::testing::Bool(),
                        ::testing::Bool()));
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     /* no prefix */,
     HostedAppIsolatedOriginTest,
     ::testing::Combine(::testing::Values(AppType::HOSTED_APP),
+                       ::testing::Bool(),
                        ::testing::Bool()));
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
     /* no prefix */,
     HostedAppSitePerProcessTest,
     ::testing::Combine(::testing::Values(AppType::HOSTED_APP),
+                       ::testing::Bool(),
                        ::testing::Bool()));
+
+#if !defined(OS_CHROMEOS)
+INSTANTIATE_TEST_SUITE_P(
+    /* no prefix */,
+    HostedAppBadgingTest,
+    ::testing::Combine(::testing::Values(AppType::BOOKMARK_APP),
+                       ::testing::Values(true),
+                       ::testing::Bool()));
+#endif  // !defined(OS_CHROMEOS)

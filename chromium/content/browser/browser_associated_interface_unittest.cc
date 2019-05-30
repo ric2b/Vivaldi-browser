@@ -6,15 +6,18 @@
 #include <string>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
 #include "base/pickle.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/post_task.h"
 #include "base/threading/thread.h"
 #include "content/public/browser/browser_associated_interface.h"
 #include "content/public/browser/browser_message_filter.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/test/test_browser_associated_interfaces.mojom.h"
@@ -164,8 +167,9 @@ class TestClientRunner {
 TEST_F(BrowserAssociatedInterfaceTest, Basic) {
   TestBrowserThreadBundle browser_threads_;
   mojo::MessagePipe pipe;
-  ProxyRunner proxy(std::move(pipe.handle0), true,
-                    BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
+  ProxyRunner proxy(
+      std::move(pipe.handle0), true,
+      base::CreateSingleThreadTaskRunnerWithTraits({BrowserThread::IO}));
   AddFilterToChannel(new TestDriverMessageFilter, proxy.channel());
 
   TestClientRunner client(std::move(pipe.handle1));

@@ -21,18 +21,21 @@ class MediaControlPanelElementTest : public PageTestBase {
     // Create page and add a video element with controls.
     PageTestBase::SetUp();
     media_element_ = HTMLVideoElement::Create(GetDocument());
-    media_element_->SetBooleanAttribute(HTMLNames::controlsAttr, true);
+    media_element_->SetBooleanAttribute(html_names::kControlsAttr, true);
     GetDocument().body()->AppendChild(media_element_);
 
     // Create instance of MediaControlInputElement to run tests on.
     media_controls_ =
         static_cast<MediaControlsImpl*>(media_element_->GetMediaControls());
     ASSERT_NE(media_controls_, nullptr);
-    panel_element_ = new MediaControlPanelElement(*media_controls_);
+    panel_element_ =
+        MakeGarbageCollected<MediaControlPanelElement>(*media_controls_);
   }
 
  protected:
-  void SimulateTransitionEnd() { TriggerEvent(EventTypeNames::transitionend); }
+  void SimulateTransitionEnd(Element& element) {
+    TriggerEvent(element, event_type_names::kTransitionend);
+  }
 
   void ExpectPanelIsDisplayed() { EXPECT_TRUE(GetPanel().IsWanted()); }
 
@@ -49,11 +52,13 @@ class MediaControlPanelElementTest : public PageTestBase {
   }
 
   MediaControlPanelElement& GetPanel() { return *panel_element_.Get(); }
+  HTMLMediaElement& GetMediaElement() { return *media_element_.Get(); }
 
  private:
-  void TriggerEvent(const AtomicString& name) {
+  void TriggerEvent(Element& element, const AtomicString& name) {
     Event* event = Event::Create(name);
-    GetPanel().DispatchEvent(*event);
+    event->SetTarget(&element);
+    GetPanel().FireEventListeners(*event);
   }
 
   Persistent<HTMLMediaElement> media_element_;
@@ -62,6 +67,9 @@ class MediaControlPanelElementTest : public PageTestBase {
 };
 
 TEST_F(MediaControlPanelElementTest, StateTransitions) {
+  Element* child_div = HTMLDivElement::Create(GetPanel().GetDocument());
+  GetPanel().ParserAppendChild(child_div);
+
   // Make sure we are displayed (we are already opaque).
   GetPanel().SetIsDisplayed(true);
   ExpectPanelIsDisplayed();
@@ -71,10 +79,15 @@ TEST_F(MediaControlPanelElementTest, StateTransitions) {
   EventListenerNotCreated();
   GetPanel().MakeTransparent();
 
-  // The event listener should now be attached so we should simulate the
-  // transition end and the panel will be hidden.
+  // The event listener should now be attached
   EventListenerAttached();
-  SimulateTransitionEnd();
+
+  // Simulate child div transition end and the panel should not be hidden
+  SimulateTransitionEnd(*child_div);
+  ExpectPanelIsDisplayed();
+
+  // Simulate panel transition end and the panel will be hidden
+  SimulateTransitionEnd(GetPanel());
   ExpectPanelIsNotDisplayed();
 
   // The event listener should be detached. We should now make the panel
@@ -85,8 +98,16 @@ TEST_F(MediaControlPanelElementTest, StateTransitions) {
   // The event listener should now be attached so we should simulate the
   // transition end event and the panel will be hidden.
   EventListenerAttached();
-  SimulateTransitionEnd();
+  SimulateTransitionEnd(GetPanel());
   ExpectPanelIsDisplayed();
+}
+
+TEST_F(MediaControlPanelElementTest, isConnected) {
+  EXPECT_TRUE(
+      GetMediaElement().GetMediaControls()->PanelElement()->isConnected());
+  GetMediaElement().remove();
+  EXPECT_FALSE(
+      GetMediaElement().GetMediaControls()->PanelElement()->isConnected());
 }
 
 }  // namespace blink

@@ -39,10 +39,10 @@ import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.contextmenu.ContextMenuUtils;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
-import org.chromium.content.browser.test.util.DOMUtils;
-import org.chromium.content.browser.test.util.TestTouchUtils;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.DOMUtils;
+import org.chromium.content_public.browser.test.util.TestTouchUtils;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.policy.test.annotations.Policies;
 
@@ -79,23 +79,13 @@ public class ContextMenuTest implements CustomMainActivityStart {
 
     @Before
     public void setUp() throws Exception {
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                FirstRunStatus.setFirstRunFlowComplete(true);
-            }
-        });
+        ThreadUtils.runOnUiThreadBlocking(() -> FirstRunStatus.setFirstRunFlowComplete(true));
     }
 
     @After
     public void tearDown() throws Exception {
         mTestServer.stopAndDestroyServer();
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                FirstRunStatus.setFirstRunFlowComplete(false);
-            }
-        });
+        ThreadUtils.runOnUiThreadBlocking(() -> FirstRunStatus.setFirstRunFlowComplete(false));
         deleteTestFiles();
     }
 
@@ -369,9 +359,9 @@ public class ContextMenuTest implements CustomMainActivityStart {
         ContextMenu menu = ContextMenuUtils.openContextMenu(tab, "testLink");
 
         Integer[] expectedItems = {R.id.contextmenu_open_in_new_tab,
-                R.id.contextmenu_open_in_incognito_tab, R.id.contextmenu_save_link_as,
-                R.id.contextmenu_copy_link_text, R.id.contextmenu_copy_link_address,
-                R.id.contextmenu_share_link};
+                R.id.contextmenu_open_in_incognito_tab, R.id.contextmenu_open_in_ephemeral_tab,
+                R.id.contextmenu_save_link_as, R.id.contextmenu_copy_link_text,
+                R.id.contextmenu_copy_link_address, R.id.contextmenu_share_link};
         assertMenuItemsAreEqual(menu, expectedItems);
     }
 
@@ -385,7 +375,8 @@ public class ContextMenuTest implements CustomMainActivityStart {
         ContextMenu menu = ContextMenuUtils.openContextMenu(tab, "testImage");
 
         Integer[] expectedItems = {R.id.contextmenu_save_image,
-                R.id.contextmenu_open_image_in_new_tab, R.id.contextmenu_search_by_image,
+                R.id.contextmenu_open_image_in_new_tab,
+                R.id.contextmenu_open_image_in_ephemeral_tab, R.id.contextmenu_search_by_image,
                 R.id.contextmenu_share_image};
         assertMenuItemsAreEqual(menu, expectedItems);
     }
@@ -401,7 +392,8 @@ public class ContextMenuTest implements CustomMainActivityStart {
         ContextMenu menu = ContextMenuUtils.openContextMenu(tab, "testImage");
 
         Integer[] expectedItems = {R.id.contextmenu_save_image,
-                R.id.contextmenu_open_image_in_new_tab, R.id.contextmenu_share_image};
+                R.id.contextmenu_open_image_in_new_tab,
+                R.id.contextmenu_open_image_in_ephemeral_tab, R.id.contextmenu_share_image};
         assertMenuItemsAreEqual(menu, expectedItems);
     }
 
@@ -415,9 +407,10 @@ public class ContextMenuTest implements CustomMainActivityStart {
         ContextMenu menu = ContextMenuUtils.openContextMenu(tab, "testImageLink");
 
         Integer[] expectedItems = {R.id.contextmenu_open_in_new_tab,
-                R.id.contextmenu_open_in_incognito_tab, R.id.contextmenu_copy_link_address,
-                R.id.contextmenu_save_link_as, R.id.contextmenu_save_image,
-                R.id.contextmenu_open_image_in_new_tab, R.id.contextmenu_search_by_image,
+                R.id.contextmenu_open_in_incognito_tab, R.id.contextmenu_open_in_ephemeral_tab,
+                R.id.contextmenu_copy_link_address, R.id.contextmenu_save_link_as,
+                R.id.contextmenu_save_image, R.id.contextmenu_open_image_in_new_tab,
+                R.id.contextmenu_open_image_in_ephemeral_tab, R.id.contextmenu_search_by_image,
                 R.id.contextmenu_share_image, R.id.contextmenu_share_link};
         assertMenuItemsAreEqual(menu, expectedItems);
     }

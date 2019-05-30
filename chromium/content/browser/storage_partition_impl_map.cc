@@ -4,9 +4,11 @@
 
 #include "content/browser/storage_partition_impl_map.h"
 
+#include <unordered_set>
 #include <utility>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/files/file_enumerator.h"
@@ -41,6 +43,7 @@
 #include "content/browser/webui/url_data_manager_backend.h"
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/storage_partition.h"
@@ -187,9 +190,7 @@ void ObliterateOneDirectory(const base::FilePath& current_dir,
     // Enum tracking which of the 3 possible actions to take for |to_delete|.
     enum { kSkip, kEnqueue, kDelete } action = kDelete;
 
-    for (std::vector<base::FilePath>::const_iterator to_keep =
-             paths_to_keep.begin();
-         to_keep != paths_to_keep.end();
+    for (auto to_keep = paths_to_keep.begin(); to_keep != paths_to_keep.end();
          ++to_keep) {
       if (to_delete == *to_keep) {
         action = kSkip;
@@ -245,9 +246,7 @@ void BlockingObliteratePath(
 
   // Reduce |paths_to_keep| set to those under the root and actually on disk.
   std::vector<base::FilePath> valid_paths_to_keep;
-  for (std::vector<base::FilePath>::const_iterator it = paths_to_keep.begin();
-       it != paths_to_keep.end();
-       ++it) {
+  for (auto it = paths_to_keep.begin(); it != paths_to_keep.end(); ++it) {
     if (root.IsParent(*it) && base::PathExists(*it))
       valid_paths_to_keep.push_back(*it);
   }
@@ -274,11 +273,10 @@ void BlockingObliteratePath(
 
 // Ensures each path in |active_paths| is a direct child of storage_root.
 void NormalizeActivePaths(const base::FilePath& storage_root,
-                          base::hash_set<base::FilePath>* active_paths) {
-  base::hash_set<base::FilePath> normalized_active_paths;
+                          std::unordered_set<base::FilePath>* active_paths) {
+  std::unordered_set<base::FilePath> normalized_active_paths;
 
-  for (base::hash_set<base::FilePath>::iterator iter = active_paths->begin();
-       iter != active_paths->end(); ++iter) {
+  for (auto iter = active_paths->begin(); iter != active_paths->end(); ++iter) {
     base::FilePath relative_path;
     if (!storage_root.AppendRelativePath(*iter, &relative_path))
       continue;
@@ -313,7 +311,7 @@ void NormalizeActivePaths(const base::FilePath& storage_root,
 void BlockingGarbageCollect(
     const base::FilePath& storage_root,
     const scoped_refptr<base::TaskRunner>& file_access_runner,
-    std::unique_ptr<base::hash_set<base::FilePath>> active_paths) {
+    std::unique_ptr<std::unordered_set<base::FilePath>> active_paths) {
   CHECK(storage_root.IsAbsolute());
 
   NormalizeActivePaths(storage_root, active_paths.get());
@@ -416,30 +414,51 @@ StoragePartitionImpl* StoragePartitionImplMap::Get(
   }
 
   URLRequestInterceptorScopedVector request_interceptors;
-  request_interceptors.push_back(
-      std::make_unique<DevToolsURLRequestInterceptor>(browser_context_));
+
+  auto devtools_interceptor =
+      DevToolsURLRequestInterceptor::MaybeCreate(browser_context_);
+  if (devtools_interceptor)
+    request_interceptors.push_back(std::move(devtools_interceptor));
   request_interceptors.push_back(ServiceWorkerRequestHandler::CreateInterceptor(
       browser_context_->GetResourceContext()));
   request_interceptors.push_back(std::make_unique<AppCacheInterceptor>());
 
-  // These calls must happen after StoragePartitionImpl::Create().
-  if (partition_domain.empty()) {
-    partition->SetURLRequestContext(
-        browser_context_->CreateRequestContext(
-            &protocol_handlers, std::move(request_interceptors)));
-  } else {
-    partition->SetURLRequestContext(
-        browser_context_->CreateRequestContextForStoragePartition(
-            partition->GetPath(), in_memory, &protocol_handlers,
-            std::move(request_interceptors)));
+  bool create_request_context = true;
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+    // These ifdefs should match StoragePartitionImpl::GetURLRequestContext.
+#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
+    create_request_context = false;
+#elif defined(OS_ANDROID)
+    create_request_context =
+        GetContentClient()->browser()->NeedURLRequestContext();
+#endif
   }
-  partition->SetMediaURLRequestContext(
-      partition_domain.empty() ?
-      browser_context_->CreateMediaRequestContext() :
-      browser_context_->CreateMediaRequestContextForStoragePartition(
-          partition->GetPath(), in_memory));
+
+  if (create_request_context) {
+    // These calls must happen after StoragePartitionImpl::Create().
+    if (partition_domain.empty()) {
+      partition->SetURLRequestContext(browser_context_->CreateRequestContext(
+          &protocol_handlers, std::move(request_interceptors)));
+    } else {
+      partition->SetURLRequestContext(
+          browser_context_->CreateRequestContextForStoragePartition(
+              partition->GetPath(), in_memory, &protocol_handlers,
+              std::move(request_interceptors)));
+    }
+  }
+
+  // A separate media cache isn't used with the network service.
+  if (!base::FeatureList::IsEnabled(network::features::kNetworkService)) {
+    partition->SetMediaURLRequestContext(
+        partition_domain.empty()
+            ? browser_context_->CreateMediaRequestContext()
+            : browser_context_->CreateMediaRequestContextForStoragePartition(
+                  partition->GetPath(), in_memory));
+  }
+
+  // Arm the serviceworker cookie change observation API.
   partition->GetCookieStoreContext()->ListenToCookieChanges(
-      partition->GetNetworkContext(), base::DoNothing());
+      partition->GetNetworkContext(), /*success_callback=*/base::DoNothing());
 
   if (!base::FeatureList::IsEnabled(network::features::kNetworkService)) {
     // This needs to happen after SetURLRequestContext() since we need this
@@ -486,8 +505,7 @@ void StoragePartitionImplMap::AsyncObliterate(
           // All except shader cache.
           ~StoragePartition::REMOVE_DATA_MASK_SHADER_CACHE,
           StoragePartition::QUOTA_MANAGED_STORAGE_MASK_ALL, GURL(),
-          StoragePartition::OriginMatcherFunction(), base::Time(),
-          base::Time::Max(), base::DoNothing());
+          base::Time(), base::Time::Max(), base::DoNothing());
       if (!config.in_memory) {
         paths_to_keep.push_back(it->second->GetPath());
       }
@@ -509,7 +527,7 @@ void StoragePartitionImplMap::AsyncObliterate(
 }
 
 void StoragePartitionImplMap::GarbageCollect(
-    std::unique_ptr<base::hash_set<base::FilePath>> active_paths,
+    std::unique_ptr<std::unordered_set<base::FilePath>> active_paths,
     const base::Closure& done) {
   // Include all paths for current StoragePartitions in the active_paths since
   // they cannot be deleted safely.
@@ -554,42 +572,44 @@ void StoragePartitionImplMap::PostCreateInitialization(
     InitializeResourceContext(browser_context_);
   }
 
+  scoped_refptr<net::URLRequestContextGetter> request_context_getter;
+  if (!base::FeatureList::IsEnabled(network::features::kNetworkService))
+    request_context_getter = partition->GetURLRequestContext();
+
   // Check first to avoid memory leak in unittests.
   if (BrowserThread::IsThreadInitialized(BrowserThread::IO)) {
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::IO},
         base::BindOnce(
             &ChromeAppCacheService::InitializeOnIOThread,
             partition->GetAppCacheService(),
             in_memory ? base::FilePath()
                       : partition->GetPath().Append(kAppCacheDirname),
-            browser_context_->GetResourceContext(),
-            base::RetainedRef(partition->GetURLRequestContext()),
+            browser_context_->GetResourceContext(), request_context_getter,
             base::RetainedRef(browser_context_->GetSpecialStoragePolicy())));
 
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::IO},
         base::BindOnce(&CacheStorageContextImpl::SetBlobParametersForCache,
                        partition->GetCacheStorageContext(),
-                       base::RetainedRef(partition->GetURLRequestContext()),
                        base::RetainedRef(ChromeBlobStorageContext::GetFor(
                            browser_context_))));
 
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::IO},
         base::BindOnce(&ServiceWorkerContextWrapper::InitializeResourceContext,
                        partition->GetServiceWorkerContext(),
                        browser_context_->GetResourceContext()));
 
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::IO},
         base::BindOnce(&PrefetchURLLoaderService::InitializeResourceContext,
                        partition->GetPrefetchURLLoaderService(),
                        browser_context_->GetResourceContext(),
-                       base::RetainedRef(partition->GetURLRequestContext())));
+                       request_context_getter));
 
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::IO},
         base::BindOnce(&BackgroundFetchContext::InitializeOnIOThread,
                        partition->GetBackgroundFetchContext()));
 

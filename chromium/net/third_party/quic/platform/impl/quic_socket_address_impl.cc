@@ -31,8 +31,11 @@ QuicSocketAddressImpl::QuicSocketAddressImpl(
 }
 
 QuicSocketAddressImpl::QuicSocketAddressImpl(const struct sockaddr& saddr) {
-  QUIC_BUG << "QuicSocketAddressImpl(const struct sockaddr& saddr) is not "
-              "implemented.";
+  if (saddr.sa_family == AF_INET) {
+    CHECK(socket_address_.FromSockAddr(&saddr, sizeof(struct sockaddr_in)));
+  } else if (saddr.sa_family == AF_INET6) {
+    CHECK(socket_address_.FromSockAddr(&saddr, sizeof(struct sockaddr_in6)));
+  }
 }
 
 bool operator==(const QuicSocketAddressImpl& lhs,
@@ -83,7 +86,7 @@ uint16_t QuicSocketAddressImpl::port() const {
 }
 
 sockaddr_storage QuicSocketAddressImpl::generic_address() const {
-  sockaddr_storage raw_address;
+  sockaddr_storage raw_address = {};
   socklen_t address_len = sizeof(raw_address);
   CHECK(socket_address_.ToSockAddr(
       reinterpret_cast<struct sockaddr*>(&raw_address), &address_len));

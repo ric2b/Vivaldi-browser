@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/webui/snippets_internals/snippets_internals_page_handler.h"
 
+#include "base/bind.h"
 #include "base/containers/flat_map.h"
 #include "base/feature_list.h"
 #include "base/i18n/time_formatting.h"
@@ -101,7 +102,7 @@ snippets_internals::mojom::SuggestionItemPtr PrepareContentSuggestionItem(
   auto item = snippets_internals::mojom::SuggestionItem::New();
   item->suggestionTitle = base::UTF16ToUTF8(suggestion.title());
   item->suggestionIdWithinCategory = suggestion.id().id_within_category();
-  item->suggestionId = "content-suggestion-" + base::IntToString(index);
+  item->suggestionId = "content-suggestion-" + base::NumberToString(index);
   item->url = suggestion.url().spec();
   item->faviconUrl = suggestion.url_with_favicon().spec();
   item->snippet = base::UTF16ToUTF8(suggestion.snippet_text());
@@ -185,8 +186,9 @@ void SnippetsInternalsPageHandler::GetGeneralProperties(
 
   std::set<variations::VariationID> ids = GetSnippetsExperiments();
   std::vector<std::string> string_ids;
-  std::transform(ids.begin(), ids.end(), std::back_inserter(string_ids),
-                 &base::IntToString);
+  std::transform(
+      ids.begin(), ids.end(), std::back_inserter(string_ids),
+      [](variations::VariationID id) { return base::NumberToString(id); });
 
   properties["experiment-ids"] = base::JoinString(string_ids, ", ");
   std::move(callback).Run(properties);

@@ -78,6 +78,9 @@ DWORD DesktopDropTargetWin::OnDragOver(IDataObject* data_object,
   Translate(data_object, key_state, position, effect, &data, &event, &delegate);
   if (delegate)
     drag_operation = delegate->OnDragUpdated(*event);
+
+  UMA_HISTOGRAM_BOOLEAN("Event.DragDrop.AcceptDragUpdate",
+                        drag_operation != ui::DragDropTypes::DRAG_NONE);
   return ui::DragDropTypes::DragOperationToDropEffect(drag_operation);
 }
 
@@ -99,7 +102,7 @@ DWORD DesktopDropTargetWin::OnDrop(IDataObject* data_object,
     DragDropClient* client = aura::client::GetDragDropClient(root_window_);
     if (client && !client->IsDragDropInProgress() &&
         drag_operation != ui::DragDropTypes::DRAG_NONE) {
-      UMA_HISTOGRAM_COUNTS("Event.DragDrop.ExternalOriginDrop", 1);
+      UMA_HISTOGRAM_COUNTS_1M("Event.DragDrop.ExternalOriginDrop", 1);
     }
   }
   if (target_window_) {

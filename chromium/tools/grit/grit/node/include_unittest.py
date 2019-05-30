@@ -79,9 +79,32 @@ class IncludeNodeUnittest(unittest.TestCase):
     compressed = inc.GetDataPackValue(lang='en', encoding=1)
 
     decompressed_data = zlib.decompress(compressed, 16 + zlib.MAX_WBITS)
-    self.assertEqual(util.ReadFile(util.PathFromRoot('grit/testdata')
-                                   + "/test_text.txt", util.BINARY),
-                     decompressed_data)
+
+  def testSkipInResourceMap(self):
+    root = util.ParseGrdForUnittest('''
+        <includes>
+          <include name="TEST1_TXT" file="test1_text.txt" type="BINDATA"/>
+          <include name="TEST2_TXT" file="test1_text.txt" type="BINDATA"
+                                    skip_in_resource_map="true"/>
+          <include name="TEST3_TXT" file="test1_text.txt" type="BINDATA"
+                                    skip_in_resource_map="false"/>
+        </includes>''', base_dir = util.PathFromRoot('grit/testdata'))
+    inc = root.GetChildrenOfType(include.IncludeNode)
+    self.assertTrue(inc[0].IsResourceMapSource())
+    self.assertFalse(inc[1].IsResourceMapSource())
+    self.assertTrue(inc[2].IsResourceMapSource())
+
+  def testAcceptsPreprocess(self):
+    root = util.ParseGrdForUnittest('''
+        <includes>
+          <include name="PREPROCESS_TEST" file="preprocess_test.html"
+                   preprocess="true" type="chrome_html"/>
+        </includes>''', base_dir = util.PathFromRoot('grit/testdata'))
+    inc, = root.GetChildrenOfType(include.IncludeNode)
+    result = inc.GetDataPackValue(lang='en', encoding=1)
+    self.failUnless(result.find('should be kept') != -1)
+    self.failUnless(result.find('in the middle...') != -1)
+    self.failUnless(result.find('should be removed') == -1)
 
 
 if __name__ == '__main__':

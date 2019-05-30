@@ -207,9 +207,7 @@ void ContactService::Cleanup() {
         base::Bind(&ContactBackend::Closing, contact_backend_);
     ScheduleTask(closing_task);
     closing_task.Reset();
-    ContactBackend* raw_ptr = contact_backend_.get();
-    contact_backend_ = nullptr;
-    backend_task_runner_->ReleaseSoon(FROM_HERE, raw_ptr);
+    backend_task_runner_->ReleaseSoon(FROM_HERE, std::move(contact_backend_));
   }
 
   // Clear |backend_task_runner_| to make sure it's not used after Cleanup().

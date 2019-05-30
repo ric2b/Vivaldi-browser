@@ -16,4 +16,6 @@ public interface WebViewProviderFactoryBoundaryInterface {
     /* StaticsAdapter */ InvocationHandler getStatics();
     String[] getSupportedFeatures();
     /* SupportLibraryServiceWorkerController */ InvocationHandler getServiceWorkerController();
+    /* SupportLibraryTracingController */ InvocationHandler getTracingController();
+    /* SupportLibraryProxyController */ InvocationHandler getProxyController();
 }

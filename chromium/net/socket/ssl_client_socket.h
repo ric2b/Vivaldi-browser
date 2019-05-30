@@ -18,7 +18,6 @@
 #include "net/base/net_export.h"
 #include "net/socket/ssl_socket.h"
 #include "net/socket/stream_socket.h"
-#include "net/ssl/token_binding.h"
 
 namespace net {
 
@@ -26,6 +25,7 @@ class CTPolicyEnforcer;
 class CertVerifier;
 class ChannelIDService;
 class CTVerifier;
+class SSLClientSessionCache;
 class SSLKeyLogger;
 class TransportSecurityState;
 
@@ -38,23 +38,20 @@ struct SSLClientSocketContext {
                          TransportSecurityState* transport_security_state_arg,
                          CTVerifier* cert_transparency_verifier_arg,
                          CTPolicyEnforcer* ct_policy_enforcer_arg,
-                         const std::string& ssl_session_cache_shard_arg)
+                         SSLClientSessionCache* ssl_client_session_cache_arg)
       : cert_verifier(cert_verifier_arg),
         channel_id_service(channel_id_service_arg),
         transport_security_state(transport_security_state_arg),
         cert_transparency_verifier(cert_transparency_verifier_arg),
         ct_policy_enforcer(ct_policy_enforcer_arg),
-        ssl_session_cache_shard(ssl_session_cache_shard_arg) {}
+        ssl_client_session_cache(ssl_client_session_cache_arg) {}
 
   CertVerifier* cert_verifier = nullptr;
   ChannelIDService* channel_id_service = nullptr;
   TransportSecurityState* transport_security_state = nullptr;
   CTVerifier* cert_transparency_verifier = nullptr;
   CTPolicyEnforcer* ct_policy_enforcer = nullptr;
-  // ssl_session_cache_shard is an opaque string that identifies a shard of the
-  // SSL session cache. SSL sockets with the same ssl_session_cache_shard may
-  // resume each other's SSL sessions but we'll never sessions between shards.
-  std::string ssl_session_cache_shard;
+  SSLClientSessionCache* ssl_client_session_cache = nullptr;
 };
 
 // A client socket that uses SSL as the transport layer.
@@ -73,10 +70,6 @@ class NET_EXPORT SSLClientSocket : public SSLSocket {
   // TODO(davidben): Switch this to a parameter on the SSLClientSocketContext
   // once https://crbug.com/458365 is resolved.
   static void SetSSLKeyLogger(std::unique_ptr<SSLKeyLogger> logger);
-
-  // Returns true if |error| is OK or |load_flags| ignores certificate errors
-  // and |error| is a certificate error.
-  static bool IgnoreCertError(int error, int load_flags);
 
   // ClearSessionCache clears the SSL session cache, used to resume SSL
   // sessions.

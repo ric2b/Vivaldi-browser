@@ -3,6 +3,7 @@
   "AAAAA2 See generate_buildbot_json.py to make changes": {},
   "android_chromium_compile": {
     "additional_compile_targets": [
+      "blink_unittests",
       "browser_tests",
       "capture_unittests",
       "content_browsertests",
@@ -13,6 +14,7 @@
   },
   "linux_chromium_compile": {
     "additional_compile_targets": [
+      "blink_unittests",
       "browser_tests",
       "capture_unittests",
       "content_browsertests",
@@ -24,6 +26,7 @@
   },
   "mac_chromium_compile": {
     "additional_compile_targets": [
+      "blink_unittests",
       "browser_tests",
       "capture_unittests",
       "content_browsertests",
@@ -35,6 +38,7 @@
   },
   "win_chromium_compile": {
     "additional_compile_targets": [
+      "blink_unittests",
       "browser_tests",
       "capture_unittests",
       "content_browsertests",

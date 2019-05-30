@@ -14,6 +14,7 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
@@ -27,7 +28,6 @@ import static org.chromium.chrome.browser.ntp.cards.ContentSuggestionsUnitTestUt
 import static org.chromium.chrome.test.util.browser.suggestions.ContentSuggestionsTestUtils.createDummySuggestions;
 import static org.chromium.chrome.test.util.browser.suggestions.ContentSuggestionsTestUtils.registerCategory;
 
-import android.accounts.Account;
 import android.content.res.Resources;
 import android.support.annotation.Nullable;
 import android.support.v7.widget.RecyclerView;
@@ -49,40 +49,37 @@ import org.robolectric.annotation.Implements;
 import org.robolectric.shadows.ShadowResources;
 
 import org.chromium.base.Callback;
+import org.chromium.base.task.test.CustomShadowAsyncTask;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.asynctask.CustomShadowAsyncTask;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeFeatureList;
-import org.chromium.chrome.browser.modelutil.RecyclerViewAdapter;
-import org.chromium.chrome.browser.ntp.ContextMenuManager;
+import org.chromium.chrome.browser.native_page.ContextMenuManager;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageViewHolder.PartialBindCallback;
 import org.chromium.chrome.browser.ntp.cards.SignInPromo.SigninObserver;
 import org.chromium.chrome.browser.ntp.snippets.CategoryInt;
 import org.chromium.chrome.browser.ntp.snippets.CategoryStatus;
 import org.chromium.chrome.browser.ntp.snippets.KnownCategories;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
-import org.chromium.chrome.browser.ntp.snippets.SuggestionsSource;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
+import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.signin.SigninManager;
-import org.chromium.chrome.browser.signin.SigninManager.SignInAllowedObserver;
-import org.chromium.chrome.browser.signin.SigninManager.SignInStateObserver;
 import org.chromium.chrome.browser.suggestions.ContentSuggestionsAdditionalAction;
 import org.chromium.chrome.browser.suggestions.DestructionObserver;
 import org.chromium.chrome.browser.suggestions.SuggestionsEventReporter;
 import org.chromium.chrome.browser.suggestions.SuggestionsRanker;
 import org.chromium.chrome.browser.suggestions.SuggestionsUiDelegate;
 import org.chromium.chrome.test.support.DisableHistogramsRule;
+import org.chromium.chrome.test.util.NewTabPageTestUtils;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.suggestions.ContentSuggestionsTestUtils.CategoryInfoBuilder;
 import org.chromium.chrome.test.util.browser.suggestions.FakeSuggestionsSource;
 import org.chromium.components.signin.AccountManagerFacade;
-import org.chromium.components.signin.test.util.AccountHolder;
-import org.chromium.components.signin.test.util.FakeAccountManagerDelegate;
 import org.chromium.net.NetworkChangeNotifier;
+import org.chromium.ui.modelutil.RecyclerViewAdapter;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -98,9 +95,7 @@ import java.util.Locale;
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE, shadows = {CustomShadowAsyncTask.class})
 @DisableFeatures({ChromeFeatureList.CONTENT_SUGGESTIONS_SCROLL_TO_LOAD,
-        ChromeFeatureList.NTP_ARTICLE_SUGGESTIONS_EXPANDABLE_HEADER,
-        ChromeFeatureList.SIMPLIFIED_NTP, ChromeFeatureList.CHROME_DUET,
-        ChromeFeatureList.UNIFIED_CONSENT})
+        ChromeFeatureList.CHROME_DUET, ChromeFeatureList.UNIFIED_CONSENT})
 public class NewTabPageAdapterTest {
     @Rule
     public DisableHistogramsRule mDisableHistogramsRule = new DisableHistogramsRule();
@@ -110,6 +105,9 @@ public class NewTabPageAdapterTest {
 
     @CategoryInt
     private static final int TEST_CATEGORY = 42;
+
+    @CategoryInt
+    private static final int ARTICLE_CATEGORY = KnownCategories.ARTICLES;
 
     private FakeSuggestionsSource mSource;
     private NewTabPageAdapter mAdapter;
@@ -127,7 +125,7 @@ public class NewTabPageAdapterTest {
      */
     private static class SectionDescriptor {
         // TODO(https://crbug.com/754763): Smells. To be cleaned up.
-        public boolean mIsSignInPromo;
+        public boolean mSignInPromo;
 
         public boolean mHeader = true;
         public List<SnippetArticle> mSuggestions;
@@ -140,11 +138,6 @@ public class NewTabPageAdapterTest {
 
         public SectionDescriptor(List<SnippetArticle> suggestions) {
             mSuggestions = suggestions;
-        }
-
-        public SectionDescriptor withoutHeader() {
-            mHeader = false;
-            return this;
         }
 
         public SectionDescriptor withViewAllButton() {
@@ -166,8 +159,8 @@ public class NewTabPageAdapterTest {
             return this;
         }
 
-        public SectionDescriptor isSigninPromo() {
-            mIsSignInPromo = true;
+        public SectionDescriptor withSignInPromo() {
+            mSignInPromo = true;
             return this;
         }
 
@@ -196,13 +189,12 @@ public class NewTabPageAdapterTest {
         }
 
         public void expectSection(SectionDescriptor descriptor) {
-            if (descriptor.mIsSignInPromo) {
-                expectDescription("SIGN_IN_PROMO");
-                return;
-            }
-
             if (descriptor.mHeader) {
                 expectDescription("HEADER");
+            }
+
+            if (descriptor.mSignInPromo) {
+                expectDescription("SIGN_IN_PROMO");
             }
 
             for (SnippetArticle suggestion : descriptor.mSuggestions) {
@@ -259,17 +251,9 @@ public class NewTabPageAdapterTest {
         // Set empty variation params for the test.
         CardsVariationParameters.setTestVariationParams(new HashMap<>());
 
-        // Initialise AccountManagerFacade and add one dummy account.
-        FakeAccountManagerDelegate fakeAccountManager = new FakeAccountManagerDelegate(
-                FakeAccountManagerDelegate.ENABLE_PROFILE_DATA_SOURCE);
-        AccountManagerFacade.overrideAccountManagerFacadeForTests(fakeAccountManager);
-        Account account = AccountManagerFacade.createAccountFromName("test@gmail.com");
-        fakeAccountManager.addAccountHolderExplicitly(new AccountHolder.Builder(account).build());
-        assertFalse(AccountManagerFacade.get().isUpdatePending());
-
-        // Initialise the sign in state. We will be signed in by default in the tests.
-        assertFalse(ChromePreferenceManager.getInstance().readBoolean(
-                ChromePreferenceManager.NTP_SIGNIN_PROMO_DISMISSED, false));
+        // Set up test account and initialize the sign in state. We will be signed in by default
+        // in the tests.
+        NewTabPageTestUtils.setUpTestAccount();
         SigninManager.setInstanceForTesting(mMockSigninManager);
         when(mMockSigninManager.isSignedInOnNative()).thenReturn(true);
         when(mMockSigninManager.isSignInAllowed()).thenReturn(true);
@@ -738,26 +722,27 @@ public class NewTabPageAdapterTest {
     @Test
     @Feature({"Ntp"})
     public void testArticlesForYouSection() {
+        when(mPrefServiceBridge.getBoolean(eq(Pref.NTP_ARTICLES_LIST_VISIBLE))).thenReturn(true);
         // Show one section of suggestions from the test category, and one section with Articles for
         // You.
         List<SnippetArticle> suggestions = createDummySuggestions(3, TEST_CATEGORY);
         mSource.setStatusForCategory(TEST_CATEGORY, CategoryStatus.AVAILABLE);
         mSource.setSuggestionsForCategory(TEST_CATEGORY, suggestions);
 
-        mSource.setInfoForCategory(KnownCategories.ARTICLES,
-                new CategoryInfoBuilder(KnownCategories.ARTICLES).build());
-        mSource.setStatusForCategory(KnownCategories.ARTICLES, CategoryStatus.AVAILABLE);
-        List<SnippetArticle> articles = createDummySuggestions(3, KnownCategories.ARTICLES);
-        mSource.setSuggestionsForCategory(KnownCategories.ARTICLES, articles);
+        mSource.setInfoForCategory(
+                ARTICLE_CATEGORY, new CategoryInfoBuilder(ARTICLE_CATEGORY).build());
+        mSource.setStatusForCategory(ARTICLE_CATEGORY, CategoryStatus.AVAILABLE);
+        List<SnippetArticle> articles = createDummySuggestions(3, ARTICLE_CATEGORY);
+        mSource.setSuggestionsForCategory(ARTICLE_CATEGORY, articles);
 
         reloadNtp();
         assertItemsFor(section(suggestions), section(articles));
 
-        // Remove the test category section. The remaining lone Articles for You section should not
+        // Remove the test category section. The remaining lone Articles for You section should
         // have a header.
         mSource.setStatusForCategory(TEST_CATEGORY, CategoryStatus.NOT_PROVIDED);
         reloadNtp();
-        assertItemsFor(section(articles).withoutHeader());
+        assertItemsFor(section(articles));
     }
 
     /**
@@ -907,51 +892,41 @@ public class NewTabPageAdapterTest {
     @Test
     @Feature({"Ntp"})
     public void testSigninPromo() {
-        @CategoryInt
-        final int remoteCategory = KnownCategories.REMOTE_CATEGORIES_OFFSET + TEST_CATEGORY;
+        useArticleCategory();
 
         when(mMockSigninManager.isSignInAllowed()).thenReturn(true);
         when(mMockSigninManager.isSignedInOnNative()).thenReturn(false);
         resetUiDelegate();
         reloadNtp();
 
-        assertItemsFor(sectionWithStatusCard().withProgress(), signinPromo());
+        assertItemsFor(sectionWithStatusCard().withSignInPromo().withProgress());
         assertTrue(isSignInPromoVisible());
 
-        // Note: As currently implemented, these variables should point to the same object, a
-        // SignInPromo.SigninObserver
-        List<DestructionObserver> observers = getDestructionObserver(mUiDelegate);
-        SignInStateObserver signInStateObserver =
-                findFirstInstanceOf(observers, SignInStateObserver.class);
-        assertNotNull(signInStateObserver);
-        SignInAllowedObserver signInAllowedObserver =
-                findFirstInstanceOf(observers, SignInAllowedObserver.class);
-        assertNotNull(signInAllowedObserver);
-        SuggestionsSource.Observer suggestionsObserver =
-                findFirstInstanceOf(observers, SuggestionsSource.Observer.class);
-        assertNotNull(suggestionsObserver);
+        SignInPromo signInPromo = getSignInPromo();
+        assertNotNull(signInPromo);
+        SigninObserver signinObserver = signInPromo.getSigninObserverForTesting();
+        assertNotNull(signinObserver);
 
-        signInStateObserver.onSignedIn();
+        signinObserver.onSignedIn();
         assertFalse(isSignInPromoVisible());
 
-        signInStateObserver.onSignedOut();
+        signinObserver.onSignedOut();
         assertTrue(isSignInPromoVisible());
 
         when(mMockSigninManager.isSignInAllowed()).thenReturn(false);
-        signInAllowedObserver.onSignInAllowedChanged();
+        signinObserver.onSignInAllowedChanged();
         assertFalse(isSignInPromoVisible());
 
         when(mMockSigninManager.isSignInAllowed()).thenReturn(true);
-        signInAllowedObserver.onSignInAllowedChanged();
+        signinObserver.onSignInAllowedChanged();
         assertTrue(isSignInPromoVisible());
 
-        mSource.setRemoteSuggestionsEnabled(false);
-        suggestionsObserver.onCategoryStatusChanged(
-                remoteCategory, CategoryStatus.CATEGORY_EXPLICITLY_DISABLED);
+        when(mPrefServiceBridge.getBoolean(eq(Pref.NTP_ARTICLES_LIST_VISIBLE))).thenReturn(false);
+        mAdapter.getSectionListForTesting().onSuggestionsVisibilityChanged(ARTICLE_CATEGORY);
         assertFalse(isSignInPromoVisible());
 
-        mSource.setRemoteSuggestionsEnabled(true);
-        suggestionsObserver.onCategoryStatusChanged(remoteCategory, CategoryStatus.AVAILABLE);
+        when(mPrefServiceBridge.getBoolean(eq(Pref.NTP_ARTICLES_LIST_VISIBLE))).thenReturn(true);
+        mAdapter.getSectionListForTesting().onSuggestionsVisibilityChanged(ARTICLE_CATEGORY);
         assertTrue(isSignInPromoVisible());
     }
 
@@ -960,6 +935,7 @@ public class NewTabPageAdapterTest {
     public void testSigninPromoSuppressionActive() {
         when(mMockSigninManager.isSignInAllowed()).thenReturn(true);
         when(mMockSigninManager.isSignedInOnNative()).thenReturn(false);
+        useArticleCategory();
 
         // Suppress promo.
         ChromePreferenceManager.getInstance().setNewTabPageSigninPromoSuppressionPeriodStart(
@@ -975,6 +951,7 @@ public class NewTabPageAdapterTest {
     public void testSigninPromoSuppressionExpired() {
         when(mMockSigninManager.isSignInAllowed()).thenReturn(true);
         when(mMockSigninManager.isSignedInOnNative()).thenReturn(false);
+        useArticleCategory();
 
         // Suppress promo.
         ChromePreferenceManager preferenceManager = ChromePreferenceManager.getInstance();
@@ -1002,7 +979,7 @@ public class NewTabPageAdapterTest {
         when(mMockSigninManager.isSignedInOnNative()).thenReturn(false);
         ChromePreferenceManager.getInstance().writeBoolean(
                 ChromePreferenceManager.NTP_SIGNIN_PROMO_DISMISSED, false);
-        reloadNtp();
+        useArticleCategory();
 
         final int signInPromoPosition = mAdapter.getFirstPositionForType(ItemViewType.PROMO);
         assertNotEquals(RecyclerView.NO_POSITION, signInPromoPosition);
@@ -1021,12 +998,18 @@ public class NewTabPageAdapterTest {
     @Test
     @Feature({"Ntp"})
     public void testAllDismissedVisibility() {
-        SigninObserver signinObserver =
-                findFirstInstanceOf(getDestructionObserver(mUiDelegate), SigninObserver.class);
+        useArticleCategory();
+        SignInPromo signInPromo = getSignInPromo();
+        assertNotNull(signInPromo);
+        SigninObserver signinObserver = signInPromo.getSigninObserverForTesting();
         assertNotNull(signinObserver);
 
         @SuppressWarnings("unchecked")
         Callback<String> itemDismissedCallback = mock(Callback.class);
+
+        // On signed out, the promo should be shown.
+        when(mMockSigninManager.isSignedInOnNative()).thenReturn(false);
+        signinObserver.onSignedOut();
 
         // By default, there is no All Dismissed item.
         // Adapter content:
@@ -1034,15 +1017,15 @@ public class NewTabPageAdapterTest {
         // ----|--------------------
         // 0   | Above-the-fold
         // 1   | Header
-        // 2   | Status
-        // 3   | Progress Indicator
-        // 4   | Footer
-        assertEquals(4, mAdapter.getFirstPositionForType(ItemViewType.FOOTER));
-        assertEquals(RecyclerView.NO_POSITION,
-                mAdapter.getFirstPositionForType(ItemViewType.ALL_DISMISSED));
+        // 2   | Sign-in Promo
+        // 3   | Status
+        // 4   | Progress Indicator
+        // 5   | Footer
+        assertItemsFor(sectionWithStatusCard().withSignInPromo().withProgress());
 
         // When we remove the section, the All Dismissed item should be there.
-        mAdapter.dismissItem(2, itemDismissedCallback);
+        int statusCardPosition = mAdapter.getFirstPositionForType(ItemViewType.STATUS);
+        mAdapter.dismissItem(statusCardPosition, itemDismissedCallback);
 
         verify(itemDismissedCallback).onResult(anyString());
 
@@ -1051,80 +1034,62 @@ public class NewTabPageAdapterTest {
         // ----|--------------------
         // 0   | Above-the-fold
         // 1   | All Dismissed
-        assertEquals(
-                RecyclerView.NO_POSITION, mAdapter.getFirstPositionForType(ItemViewType.FOOTER));
-        assertEquals(1, mAdapter.getFirstPositionForType(ItemViewType.ALL_DISMISSED));
+        assertItemsFor();
 
-        // On Sign out, the sign in promo should come and the All Dismissed item be removed.
-        when(mMockSigninManager.isSignedInOnNative()).thenReturn(false);
-        signinObserver.onSignedOut();
+        // Disabling remote suggestions should remove both the promo and the AllDismissed item
+        mSource.setRemoteSuggestionsEnabled(false);
+        mAdapter.getSuggestionsSourceObserverForTesting().onCategoryStatusChanged(
+                ARTICLE_CATEGORY, CategoryStatus.CATEGORY_EXPLICITLY_DISABLED);
+
         // Adapter content:
         // Idx | Item
         // ----|--------------------
         // 0   | Above-the-fold
-        // 1   | Sign In Promo
-        // 2   | Footer
-        assertEquals(2, mAdapter.getFirstPositionForType(ItemViewType.FOOTER));
-        assertEquals(RecyclerView.NO_POSITION,
-                mAdapter.getFirstPositionForType(ItemViewType.ALL_DISMISSED));
+        ItemsMatcher matcher = new ItemsMatcher(mAdapter.getRootForTesting());
+        matcher.expectAboveTheFoldItem();
+        matcher.finish();
 
-        // When sign in is disabled, the promo is removed and the All Dismissed item can come back.
-        when(mMockSigninManager.isSignInAllowed()).thenReturn(false);
-        signinObserver.onSignInAllowedChanged();
+        // Prepare some suggestions. They should not load because the category is dismissed on
+        // the current NTP.
+        mSource.setRemoteSuggestionsEnabled(true);
+        mAdapter.getSuggestionsSourceObserverForTesting().onCategoryStatusChanged(
+                ARTICLE_CATEGORY, CategoryStatus.AVAILABLE);
+        mSource.setStatusForCategory(ARTICLE_CATEGORY, CategoryStatus.AVAILABLE);
+        List<SnippetArticle> suggestions = createDummySuggestions(1, ARTICLE_CATEGORY);
+        mSource.setSuggestionsForCategory(ARTICLE_CATEGORY, suggestions);
+        mSource.setInfoForCategory(
+                ARTICLE_CATEGORY, new CategoryInfoBuilder(ARTICLE_CATEGORY).build());
+
         // Adapter content:
         // Idx | Item
         // ----|--------------------
         // 0   | Above-the-fold
         // 1   | All Dismissed
-        assertEquals(
-                RecyclerView.NO_POSITION, mAdapter.getFirstPositionForType(ItemViewType.FOOTER));
-        assertEquals(1, mAdapter.getFirstPositionForType(ItemViewType.ALL_DISMISSED));
+        assertItemsFor();
 
-        // Re-enabling sign in should only bring the promo back, thus removing the AllDismissed item
-        when(mMockSigninManager.isSignInAllowed()).thenReturn(true);
-        signinObserver.onSignInAllowedChanged();
+        // Refresh suggestions
+        mAdapter.getSectionListForTesting().refreshSuggestions();
+
         // Adapter content:
         // Idx | Item
         // ----|--------------------
         // 0   | Above-the-fold
-        // 1   | Sign In Promo
-        // 2   | Footer
-        assertEquals(ItemViewType.FOOTER, mAdapter.getItemViewType(2));
-        assertEquals(RecyclerView.NO_POSITION,
-                mAdapter.getFirstPositionForType(ItemViewType.ALL_DISMISSED));
-
-        // Disabling remote suggestions should remove both the promo and the AllDismissed item
-        mSource.setRemoteSuggestionsEnabled(false);
-        signinObserver.onCategoryStatusChanged(
-                KnownCategories.REMOTE_CATEGORIES_OFFSET + TEST_CATEGORY,
-                CategoryStatus.CATEGORY_EXPLICITLY_DISABLED);
-        // Adapter content:
-        // Idx | Item
-        // ----|--------------------
-        // 0   | Above-the-fold
-        assertEquals(
-                RecyclerView.NO_POSITION, mAdapter.getFirstPositionForType(ItemViewType.FOOTER));
-        assertEquals(RecyclerView.NO_POSITION,
-                mAdapter.getFirstPositionForType(ItemViewType.ALL_DISMISSED));
-        assertEquals(
-                RecyclerView.NO_POSITION, mAdapter.getFirstPositionForType(ItemViewType.PROMO));
-        assertEquals(1, mAdapter.getItemCount());
-
-        // Prepare some suggestions. They should not load because the category is dismissed on
-        // the current NTP.
-        mSource.setRemoteSuggestionsEnabled(true);
-        signinObserver.onCategoryStatusChanged(
-                KnownCategories.REMOTE_CATEGORIES_OFFSET + TEST_CATEGORY, CategoryStatus.AVAILABLE);
-        mSource.setStatusForCategory(TEST_CATEGORY, CategoryStatus.AVAILABLE);
-        mSource.setSuggestionsForCategory(TEST_CATEGORY, createDummySuggestions(1, TEST_CATEGORY));
-        mSource.setInfoForCategory(TEST_CATEGORY, new CategoryInfoBuilder(TEST_CATEGORY).build());
-        assertEquals(3, mAdapter.getItemCount()); // TODO(dgn): rewrite with section descriptors.
+        // 1   | Header
+        // 2   | Sign-in Promo
+        // 3   | Snippet
+        // 4   | Footer
+        assertItemsFor(section(suggestions).withSignInPromo());
 
         // On Sign in, we should reset the sections, bring back suggestions instead of the All
         // Dismissed item.
-        mAdapter.getSectionListForTesting().refreshSuggestions();
+        signInPromo = getSignInPromo();
+        assertNotNull(signInPromo);
+        signinObserver = signInPromo.getSigninObserverForTesting();
+        assertNotNull(signinObserver);
         when(mMockSigninManager.isSignInAllowed()).thenReturn(true);
+        signinObserver.onSignInAllowedChanged();
         signinObserver.onSignedIn();
+
         // Adapter content:
         // Idx | Item
         // ----|--------------------
@@ -1132,9 +1097,7 @@ public class NewTabPageAdapterTest {
         // 1   | Header
         // 2   | Suggestion
         // 4   | Footer
-        assertEquals(3, mAdapter.getFirstPositionForType(ItemViewType.FOOTER));
-        assertEquals(RecyclerView.NO_POSITION,
-                mAdapter.getFirstPositionForType(ItemViewType.ALL_DISMISSED));
+        assertItemsFor(section(suggestions));
     }
 
     /**
@@ -1193,10 +1156,6 @@ public class NewTabPageAdapterTest {
         return new SectionDescriptor(suggestions);
     }
 
-    private SectionDescriptor signinPromo() {
-        return new SectionDescriptor().isSigninPromo();
-    }
-
     /**
      * To be used with {@link #assertItemsFor(SectionDescriptor...)}, for a section that has no
      * suggestions, but a status card to be displayed.
@@ -1230,6 +1189,28 @@ public class NewTabPageAdapterTest {
                 makeUiConfig(), mOfflinePageBridge, mock(ContextMenuManager.class)
                 /* tileGroupDelegate = */);
         mAdapter.refreshSuggestions();
+    }
+
+    /**
+     * Removes the section for {@link #TEST_CATEGORY} and adds a section for
+     * {@link #ARTICLE_CATEGORY} for testing some features that will only be enabled for the article
+     * section (e.g. sign-in promo).
+     */
+    private void useArticleCategory() {
+        when(mPrefServiceBridge.getBoolean(eq(Pref.NTP_ARTICLES_LIST_VISIBLE))).thenReturn(true);
+
+        mSource.setStatusForCategory(TEST_CATEGORY, CategoryStatus.NOT_PROVIDED);
+
+        mSource.setInfoForCategory(
+                ARTICLE_CATEGORY, new CategoryInfoBuilder(ARTICLE_CATEGORY).showIfEmpty().build());
+        mSource.setStatusForCategory(ARTICLE_CATEGORY, CategoryStatus.INITIALIZING);
+        reloadNtp();
+    }
+
+    private SignInPromo getSignInPromo() {
+        return mAdapter.getSectionListForTesting()
+                .getSection(ARTICLE_CATEGORY)
+                .getSignInPromoForTesting();
     }
 
     private boolean isSignInPromoVisible() {

@@ -6,7 +6,7 @@
 
 #include <string>
 
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "content/shell/test_runner/web_view_test_proxy.h"
 #include "gin/handle.h"
 #include "gin/object_template_builder.h"
@@ -71,8 +71,10 @@ void AccessibilityControllerBindings::Install(
   if (bindings.IsEmpty())
     return;
   v8::Local<v8::Object> global = context->Global();
-  global->Set(gin::StringToV8(isolate, "accessibilityController"),
-              bindings.ToV8());
+  global
+      ->Set(context, gin::StringToV8(isolate, "accessibilityController"),
+            bindings.ToV8())
+      .Check();
 }
 
 AccessibilityControllerBindings::AccessibilityControllerBindings(
@@ -135,9 +137,9 @@ v8::Local<v8::Object> AccessibilityControllerBindings::AccessibleElementById(
 }
 
 AccessibilityController::AccessibilityController(
-    WebViewTestProxyBase* web_view_test_proxy_base)
+    WebViewTestProxy* web_view_test_proxy)
     : log_accessibility_events_(false),
-      web_view_test_proxy_base_(web_view_test_proxy_base),
+      web_view_test_proxy_(web_view_test_proxy),
       weak_factory_(this) {}
 
 AccessibilityController::~AccessibilityController() {}
@@ -191,13 +193,15 @@ void AccessibilityController::NotificationReceived(
 
   // Call global notification listeners.
   v8::Local<v8::Value> argv[] = {
-      element_handle, v8::String::NewFromUtf8(isolate, notification_name.data(),
-                                              v8::String::kNormalString,
-                                              notification_name.size()),
+      element_handle,
+      v8::String::NewFromUtf8(isolate, notification_name.data(),
+                              v8::NewStringType::kNormal,
+                              notification_name.size())
+          .ToLocalChecked(),
   };
   local_frame->CallFunctionEvenIfScriptDisabled(
       v8::Local<v8::Function>::New(isolate, notification_callback_),
-      context->Global(), arraysize(argv), argv);
+      context->Global(), base::size(argv), argv);
 }
 
 void AccessibilityController::LogAccessibilityEvents() {
@@ -219,7 +223,7 @@ v8::Local<v8::Object> AccessibilityController::FocusedElement() {
   if (!frame)
     return v8::Local<v8::Object>();
 
-  // TODO(lukasza): Finish adding OOPIF support to the layout tests harness.
+  // TODO(lukasza): Finish adding OOPIF support to the web tests harness.
   CHECK(frame->IsWebLocalFrame())
       << "This function cannot be called if the main frame is not a "
          "local frame.";
@@ -273,14 +277,14 @@ AccessibilityController::FindAccessibleElementByIdRecursive(
 }
 
 blink::WebView* AccessibilityController::web_view() {
-  return web_view_test_proxy_base_->web_view();
+  return web_view_test_proxy_->webview();
 }
 
 blink::WebAXObject
 AccessibilityController::GetAccessibilityObjectForMainFrame() {
   blink::WebFrame* frame = web_view()->MainFrame();
 
-  // TODO(lukasza): Finish adding OOPIF support to the layout tests harness.
+  // TODO(lukasza): Finish adding OOPIF support to the web tests harness.
   CHECK(frame && frame->IsWebLocalFrame())
       << "This function cannot be called if the main frame is not a "
          "local frame.";

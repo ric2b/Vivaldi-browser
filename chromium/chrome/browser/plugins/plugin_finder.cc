@@ -70,7 +70,7 @@ void LoadMimeTypes(bool matching_mime_types,
     return;
 
   bool success = false;
-  for (base::ListValue::const_iterator mime_type_it = mime_types->begin();
+  for (auto mime_type_it = mime_types->begin();
        mime_type_it != mime_types->end(); ++mime_type_it) {
     std::string mime_type_str;
     success = mime_type_it->GetAsString(&mime_type_str);
@@ -106,8 +106,7 @@ std::unique_ptr<PluginMetadata> CreatePluginMetadata(
       group_name_matcher, language_str);
   const base::ListValue* versions = NULL;
   if (plugin_dict->GetList("versions", &versions)) {
-    for (base::ListValue::const_iterator it = versions->begin();
-         it != versions->end(); ++it) {
+    for (auto it = versions->begin(); it != versions->end(); ++it) {
       const base::DictionaryValue* version_dict = NULL;
       if (!it->GetAsDictionary(&version_dict)) {
         NOTREACHED();
@@ -172,8 +171,9 @@ std::unique_ptr<base::DictionaryValue> PluginFinder::LoadBuiltInPluginList() {
           IDR_PLUGIN_DB_JSON));
   std::string error_str;
   int error_code = base::JSONReader::JSON_NO_ERROR;
-  std::unique_ptr<base::Value> value = base::JSONReader::ReadAndReturnError(
-      json_resource, base::JSON_PARSE_RFC, &error_code, &error_str);
+  std::unique_ptr<base::Value> value =
+      base::JSONReader::ReadAndReturnErrorDeprecated(
+          json_resource, base::JSON_PARSE_RFC, &error_code, &error_str);
   if (!value) {
     DLOG(ERROR) << error_str;
     switch (error_code) {
@@ -263,7 +263,7 @@ void PluginFinder::ReinitializePlugins(
     const base::DictionaryValue* plugin = nullptr;
     const std::string& identifier = plugin_it.key();
     if (plugin_list->GetDictionaryWithoutPathExpansion(identifier, &plugin)) {
-      //DCHECK(identifier_plugin_.find(identifier) == identifier_plugin_.end());
+      DCHECK(identifier_plugin_.find(identifier) == identifier_plugin_.end());
       identifier_plugin_[identifier] = CreatePluginMetadata(identifier, plugin);
 
       if (installers_.find(identifier) == installers_.end())

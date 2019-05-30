@@ -89,10 +89,6 @@ class CORE_EXPORT ThreadableLoader final
   // After any of these methods is called, the loader won't call any of the
   // ThreadableLoaderClient methods.
   //
-  // A user must guarantee that the loading completes before the attached
-  // client gets invalid. Also, a user must guarantee that the loading
-  // completes before the ThreadableLoader is destructed.
-  //
   // When ThreadableLoader::Cancel() is called,
   // ThreadableLoaderClient::DidFail() is called with a ResourceError
   // with IsCancellation() returning true, if any of DidFinishLoading()
@@ -100,10 +96,14 @@ class CORE_EXPORT ThreadableLoader final
   // called with a ResourceError with IsCancellation() returning true
   // also for cancellation happened inside the loader.)
   //
-  // ThreadableLoaderClient methods may call cancel().
+  // ThreadableLoaderClient methods may call Cancel().
+  //
+  // The specified ResourceFetcher if non-null, or otherwise
+  // ExecutionContext::Fetcher() is used.
   ThreadableLoader(ExecutionContext&,
                    ThreadableLoaderClient*,
-                   const ResourceLoaderOptions&);
+                   const ResourceLoaderOptions&,
+                   ResourceFetcher* = nullptr);
   ~ThreadableLoader() override;
 
   // Exposed for testing. Code outside this class should not call this function.
@@ -151,18 +151,17 @@ class CORE_EXPORT ThreadableLoader final
 
   // RawResourceClient
   void DataSent(Resource*,
-                unsigned long long bytes_sent,
-                unsigned long long total_bytes_to_be_sent) override;
-  void ResponseReceived(Resource*,
-                        const ResourceResponse&,
-                        std::unique_ptr<WebDataConsumerHandle>) override;
-  void SetSerializedCachedMetadata(Resource*, const char*, size_t) override;
+                uint64_t bytes_sent,
+                uint64_t total_bytes_to_be_sent) override;
+  void ResponseReceived(Resource*, const ResourceResponse&) override;
+  void ResponseBodyReceived(Resource*, BytesConsumer& body) override;
+  void SetSerializedCachedMetadata(Resource*, const uint8_t*, size_t) override;
   void DataReceived(Resource*, const char* data, size_t data_length) override;
   bool RedirectReceived(Resource*,
                         const ResourceRequest&,
                         const ResourceResponse&) override;
   void RedirectBlocked() override;
-  void DataDownloaded(Resource*, int) override;
+  void DataDownloaded(Resource*, uint64_t) override;
   void DidReceiveResourceTiming(Resource*, const ResourceTimingInfo&) override;
   void DidDownloadToBlob(Resource*, scoped_refptr<BlobDataHandle>) override;
 
@@ -187,7 +186,7 @@ class CORE_EXPORT ThreadableLoader final
   void LoadActualRequest();
   // Clears actual_request_ and reports access control check failure to
   // m_client.
-  void HandlePreflightFailure(const KURL&, const network::CORSErrorStatus&);
+  void HandlePreflightFailure(const KURL&, const network::CorsErrorStatus&);
   // Investigates the response for the preflight request. If successful,
   // the actual request will be made later in NotifyFinished().
   void HandlePreflightResponse(const ResourceResponse&);
@@ -204,7 +203,6 @@ class CORE_EXPORT ThreadableLoader final
   // ResourceFetcher doesn't perform some part of the CORS logic since this
   // class performs it by itself.
   void LoadRequest(ResourceRequest&, ResourceLoaderOptions);
-  bool IsAllowedRedirect(network::mojom::FetchRequestMode, const KURL&) const;
 
   const SecurityOrigin* GetSecurityOrigin() const;
 
@@ -212,8 +210,9 @@ class CORE_EXPORT ThreadableLoader final
   // TODO(kinuko): Remove dependency to document.
   Document* GetDocument() const;
 
-  ThreadableLoaderClient* client_;
+  Member<ThreadableLoaderClient> client_;
   Member<ExecutionContext> execution_context_;
+  Member<ResourceFetcher> resource_fetcher_;
 
   TimeDelta timeout_;
   // Some items may be overridden by m_forceDoNotAllowStoredCredentials and
@@ -221,20 +220,18 @@ class CORE_EXPORT ThreadableLoader final
   // up-to-date values from them and this variable, and use it.
   const ResourceLoaderOptions resource_loader_options_;
 
-  // True when feature OutOfBlinkCORS is enabled (https://crbug.com/736308).
+  // True when feature OutOfBlinkCors is enabled (https://crbug.com/736308).
   bool out_of_blink_cors_;
 
   // Corresponds to the CORS flag in the Fetch spec.
   bool cors_flag_ = false;
   scoped_refptr<const SecurityOrigin> security_origin_;
-
-  // Set to true when the response data is given to a data consumer handle.
-  bool is_using_data_consumer_handle_;
+  scoped_refptr<const SecurityOrigin> original_security_origin_;
 
   const bool async_;
 
   // Holds the original request context (used for sanity checks).
-  WebURLRequest::RequestContext request_context_;
+  mojom::RequestContextType request_context_;
 
   // Saved so that we can use the original value for the modes in
   // ResponseReceived() where |resource| might be a reused one (e.g. preloaded
@@ -250,6 +247,8 @@ class CORE_EXPORT ThreadableLoader final
   // handling phase.
   ResourceRequest actual_request_;
   ResourceLoaderOptions actual_options_;
+  network::mojom::FetchResponseType response_tainting_ =
+      network::mojom::FetchResponseType::kBasic;
 
   KURL initial_request_url_;
   KURL last_request_url_;
@@ -268,6 +267,7 @@ class CORE_EXPORT ThreadableLoader final
   // Holds the referrer after a redirect response was received. This referrer is
   // used to populate the HTTP Referer header when following the redirect.
   bool override_referrer_;
+  bool report_upload_progress_ = false;
   Referrer referrer_after_redirect_;
 
   bool detached_ = false;

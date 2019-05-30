@@ -7,12 +7,13 @@ package org.chromium.chrome.browser.tabmodel.document;
 import android.content.Context;
 import android.util.SparseArray;
 
-import org.chromium.base.AsyncTask;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.StreamUtil;
-import org.chromium.chrome.browser.TabState;
+import org.chromium.base.task.AsyncTask;
+import org.chromium.base.task.BackgroundOnlyAsyncTask;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabState;
 import org.chromium.chrome.browser.tabmodel.TabPersister;
 import org.chromium.chrome.browser.tabmodel.document.DocumentTabModel.Entry;
 import org.chromium.chrome.browser.tabmodel.document.DocumentTabModelInfo.DocumentEntry;
@@ -115,7 +116,7 @@ public class StorageDelegate extends TabPersister {
     private void preloadStateDirectory() {
         if (sBaseStateDirectoryFetchTask != null) return;
 
-        sBaseStateDirectoryFetchTask = new AsyncTask<File>() {
+        sBaseStateDirectoryFetchTask = new BackgroundOnlyAsyncTask<File>() {
             @Override
             protected File doInBackground() {
                 return ContextUtils.getApplicationContext().getDir(

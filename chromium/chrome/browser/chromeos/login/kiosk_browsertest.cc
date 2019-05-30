@@ -16,7 +16,8 @@
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
-#include "base/sys_info.h"
+#include "base/strings/stringprintf.h"
+#include "base/system/sys_info.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/app_mode/fake_cws.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_launch_error.h"
@@ -24,8 +25,11 @@
 #include "chrome/browser/chromeos/file_manager/fake_disk_mount_manager.h"
 #include "chrome/browser/chromeos/login/app_launch_controller.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
+#include "chrome/browser/chromeos/login/test/fake_gaia_mixin.h"
+#include "chrome/browser/chromeos/login/test/js_checker.h"
 #include "chrome/browser/chromeos/login/test/oobe_base_test.h"
 #include "chrome/browser/chromeos/login/test/oobe_screen_waiter.h"
+#include "chrome/browser/chromeos/login/test/test_condition_waiter.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host_webui.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
@@ -43,25 +47,24 @@
 #include "chrome/browser/profiles/profile_impl.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profiles_state.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/ash/wallpaper_controller_client.h"
 #include "chrome/browser/ui/webui/chromeos/login/kiosk_app_menu_handler.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/cryptohome_client.h"
 #include "chromeos/disks/disk_mount_manager.h"
 #include "chromeos/settings/cros_settings_provider.h"
 #include "components/prefs/pref_service.h"
-#include "components/signin/core/browser/signin_manager.h"
-#include "components/signin/core/browser/signin_pref_names.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/test_utils.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/app_window/native_app_window.h"
@@ -74,16 +77,16 @@
 #include "google_apis/gaia/gaia_constants.h"
 #include "google_apis/gaia/gaia_switches.h"
 #include "google_apis/gaia/gaia_urls.h"
-#include "media/audio/mock_audio_manager.h"
 #include "media/audio/sounds/audio_stream_handler.h"
 #include "media/audio/sounds/sounds_manager.h"
 #include "media/audio/test_audio_thread.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "services/audio/public/cpp/fake_system_info.h"
+#include "services/identity/public/cpp/identity_manager.h"
 #include "ui/aura/window.h"
 #include "ui/base/accelerators/accelerator.h"
-#include "ui/keyboard/keyboard_switches.h"
+#include "ui/keyboard/public/keyboard_switches.h"
 
 namespace em = enterprise_management;
 
@@ -94,85 +97,85 @@ namespace {
 // This is a simple test app that creates an app window and immediately closes
 // it again. Webstore data json is in
 //   chrome/test/data/chromeos/app_mode/webstore/inlineinstall/
-//       detail/ggbflgnkafappblpkiflbgpmkfdpnhhe
-const char kTestKioskApp[] = "ggbflgnkafappblpkiflbgpmkfdpnhhe";
+//       detail/ggaeimfdpnmlhdhpcikgoblffmkckdmn
+const char kTestKioskApp[] = "ggaeimfdpnmlhdhpcikgoblffmkckdmn";
 
 // This app creates a window and declares usage of the identity API in its
 // manifest, so we can test device robot token minting via the identity API.
 // Webstore data json is in
 //   chrome/test/data/chromeos/app_mode/webstore/inlineinstall/
-//       detail/ibjkkfdnfcaoapcpheeijckmpcfkifob
-const char kTestEnterpriseKioskApp[] = "ibjkkfdnfcaoapcpheeijckmpcfkifob";
+//       detail/gcpjojfkologpegommokeppihdbcnahn
+const char kTestEnterpriseKioskApp[] = "gcpjojfkologpegommokeppihdbcnahn";
 
 // An offline enable test app. Webstore data json is in
 //   chrome/test/data/chromeos/app_mode/webstore/inlineinstall/
-//       detail/ajoggoflpgplnnjkjamcmbepjdjdnpdp
+//       detail/iiigpodgfihagabpagjehoocpakbnclp
 // An app profile with version 1.0.0 installed is in
 //   chrome/test/data/chromeos/app_mode/offline_enabled_app_profile
 // The version 2.0.0 crx is in
 //   chrome/test/data/chromeos/app_mode/webstore/downloads/
-const char kTestOfflineEnabledKioskApp[] = "ajoggoflpgplnnjkjamcmbepjdjdnpdp";
+const char kTestOfflineEnabledKioskApp[] = "iiigpodgfihagabpagjehoocpakbnclp";
 
 // An app to test local fs data persistence across app update. V1 app writes
 // data into local fs. V2 app reads and verifies the data.
 // Webstore data json is in
 //   chrome/test/data/chromeos/app_mode/webstore/inlineinstall/
-//       detail/bmbpicmpniaclbbpdkfglgipkkebnbjf
-const char kTestLocalFsKioskApp[] = "bmbpicmpniaclbbpdkfglgipkkebnbjf";
+//       detail/abbjjkefakmllanciinhgjgjamdmlbdg
+const char kTestLocalFsKioskApp[] = "abbjjkefakmllanciinhgjgjamdmlbdg";
 
 // An app to test local access to file systems via the
 // chrome.fileSystem.requestFileSystem API.
 // Webstore data json is in
 //     chrome/test/data/chromeos/app_mode/webstore/inlineinstall/
-//         detail/aaedpojejpghjkedenggihopfhfijcko
-const char kTestGetVolumeListKioskApp[] = "aaedpojejpghjkedenggihopfhfijcko";
+//         detail/enelnimkndkcejhjnpaofdlbbfmdnagi
+const char kTestGetVolumeListKioskApp[] = "enelnimkndkcejhjnpaofdlbbfmdnagi";
 
 // An app to test Kiosk virtual keyboard API chrome.virtualKeyboard.* .
 // Source files are in
 //     chrome/test/data/chromeos/app_mode/virtual_keyboard/src/
-const char kTestVirtualKeyboardKioskApp[] = "fmmbbdiapbcicajbpkpkdbcgidgppada";
+const char kTestVirtualKeyboardKioskApp[] = "bbkdjgcbpfjanhcdljmpddplpeehopdo";
 
 // Testing apps for testing kiosk multi-app feature. All the crx files are in
 //    chrome/test/data/chromeos/app_mode/webstore/downloads.
 
 // Source files are in
 //     chrome/test/data/chromeos/app_mode/multi_app_kiosk/src/primary_app
-const char kTestPrimaryKioskApp[] = "dpejijbnadgcgmabkmcoajkgongfgnii";
+const char kTestPrimaryKioskApp[] = "fclmjfpgiaifbnbnlpmdjhicolkapihc";
 
 // Source files are in
 //     chrome/test/data/chromeos/app_mode/multi_app_kiosk/src/secondary_app_1
-const char kTestSecondaryApp1[] = "emnbflhfbllbehnpjmjddklbkeeoaaeg";
+const char kTestSecondaryApp1[] = "elbhpkeieolijdlflcplbbabceggjknh";
 
 // Source files are in
 //     chrome/test/data/chromeos/app_mode/multi_app_kiosk/src/secondary_app_2
-const char kTestSecondaryApp2[] = "blmjgfbajihimkjmepbhgmjbopjchlda";
+const char kTestSecondaryApp2[] = "coamgmmgmjeeaodkbpdajekljacgfhkc";
 
 // Source files are in
 //     chrome/test/data/chromeos/app_mode/multi_app_kiosk/src/secondary_app_3
-const char kTestSecondaryApp3[] = "jkofhenkpndpdflehcjpcekgecjkpggg";
+const char kTestSecondaryApp3[] = "miccbahcahimnejpdoaafjeolookhoem";
 
 // Source files are in
 //     chrome/test/data/chromeos/app_mode/multi_app_kiosk/src/
 //         secondary_extensions_1
-const char kTestSecondaryExtension[] = "gdmgkkoghcihimdfoabkefdkccllcfea";
+const char kTestSecondaryExtension[] = "pegeblegnlhnpgghhjblhchdllfijodp";
 
 // Source files are in
 //     chrome/test/data/chromeos/app_mode/multi_app_kiosk/src/
 //         shared_module_primary_app
-const char kTestSharedModulePrimaryApp[] = "ofmeihgcmabfalhhgooajcijiaoekhkg";
+const char kTestSharedModulePrimaryApp[] = "kidkeddeanfhailinhfokehpolmfdppa";
 
 // Source files are in
 //     chrome/test/data/chromeos/app_mode/multi_app_kiosk/src/secondary_app
-const char kTestSecondaryApp[] = "bbmaiojbgkkmfaglfhaplfomobgojhke";
+const char kTestSecondaryApp[] = "ffceghmcpipkneddgikbgoagnheejdbf";
 
 // Source files are in
 //     chrome/test/data/chromeos/app_mode/multi_app_kiosk/src/shared_module
-const char kTestSharedModuleId[] = "biebhpdepndljbnkadldcbjkiedldnmn";
+const char kTestSharedModuleId[] = "hpanhkopkhnkpcmnedlnjmkfafmlamak";
 
 // Source files are in
 //     chrome/test/data/chromeos/app_mode/multi_app_kiosk/src/
 //         secondary_extension
-const char kTestSecondaryExt[] = "kcoobopfcjmbfeppibolpaolbgbmkcjd";
+const char kTestSecondaryExt[] = "meaknlbicgahoejcchpnkenkmbekcddf";
 
 // Fake usb stick mount path.
 const char kFakeUsbMountPathUpdatePass[] =
@@ -314,47 +317,6 @@ class ScopedCanConfigureNetwork {
   AppLaunchController::ReturnBoolCallback can_configure_network_callback_;
   AppLaunchController::ReturnBoolCallback needs_owner_auth_callback_;
   DISALLOW_COPY_AND_ASSIGN(ScopedCanConfigureNetwork);
-};
-
-// Helper class to wait until a js condition becomes true.
-class JsConditionWaiter {
- public:
-  JsConditionWaiter(content::WebContents* web_contents, const std::string& js)
-      : web_contents_(web_contents), js_(js) {}
-
-  void Wait() {
-    if (CheckJs())
-      return;
-
-    base::RepeatingTimer check_timer;
-    check_timer.Start(FROM_HERE, base::TimeDelta::FromMilliseconds(10), this,
-                      &JsConditionWaiter::OnTimer);
-
-    runner_ = new content::MessageLoopRunner;
-    runner_->Run();
-  }
-
- private:
-  bool CheckJs() {
-    bool result;
-    CHECK(content::ExecuteScriptAndExtractBool(
-        web_contents_,
-        "window.domAutomationController.send(!!(" + js_ + "));",
-        &result));
-    return result;
-  }
-
-  void OnTimer() {
-    DCHECK(runner_.get());
-    if (CheckJs())
-      runner_->Quit();
-  }
-
-  content::WebContents* web_contents_;
-  const std::string js_;
-  scoped_refptr<content::MessageLoopRunner> runner_;
-
-  DISALLOW_COPY_AND_ASSIGN(JsConditionWaiter);
 };
 
 class KioskFakeDiskMountManager : public file_manager::FakeDiskMountManager {
@@ -525,7 +487,7 @@ class KioskTest : public OobeBaseTest {
     // Needed to avoid showing Gaia screen instead of owner signin for
     // consumer network down test cases.
     StartupUtils::MarkDeviceRegistered(base::Closure());
-    settings_helper_.ReplaceProvider(kAccountsPrefDeviceLocalAccounts);
+    settings_helper_.ReplaceDeviceSettingsProviderWithStub();
     owner_settings_service_ = settings_helper_.CreateOwnerSettingsService(
         ProfileManager::GetPrimaryUserProfile());
 
@@ -534,7 +496,7 @@ class KioskTest : public OobeBaseTest {
   }
 
   void TearDownOnMainThread() override {
-    settings_helper_.RestoreProvider();
+    settings_helper_.RestoreRealDeviceSettingsProvider();
     AppLaunchController::SetNetworkTimeoutCallbackForTesting(NULL);
     AppLaunchSigninScreen::SetUserManagerForTesting(NULL);
 
@@ -758,7 +720,7 @@ class KioskTest : public OobeBaseTest {
     WaitForAppLaunchNetworkTimeout();
 
     // Configure network link should be visible.
-    JsExpect("$('splash-config-network').hidden == false");
+    test::OobeJS().ExpectTrue("$('splash-config-network').hidden == false");
 
     // Set up fake user manager with an owner for the test.
     LoginDisplayHost::default_host()->GetOobeUI()->ShowOobeUI(false);
@@ -770,7 +732,7 @@ class KioskTest : public OobeBaseTest {
     lock_screen_waiter.Wait();
 
     // There should be only one owner pod on this screen.
-    JsExpect("$('pod-row').alwaysFocusSinglePod");
+    test::OobeJS().ExpectTrue("$('pod-row').alwaysFocusSinglePod");
 
     // A network error screen should be shown after authenticating.
     OobeScreenWaiter error_screen_waiter(OobeScreen::SCREEN_ERROR_MESSAGE);
@@ -906,7 +868,7 @@ IN_PROC_BROWSER_TEST_F(KioskTest, NotSignedInWithGAIAAccount) {
   Profile* app_profile = ProfileManager::GetPrimaryUserProfile();
   ASSERT_TRUE(app_profile);
   EXPECT_FALSE(
-      SigninManagerFactory::GetForProfile(app_profile)->IsAuthenticated());
+      IdentityManagerFactory::GetForProfile(app_profile)->HasPrimaryAccount());
 }
 
 IN_PROC_BROWSER_TEST_F(KioskTest, PRE_LaunchAppNetworkDown) {
@@ -942,7 +904,8 @@ IN_PROC_BROWSER_TEST_F(KioskTest,
   ASSERT_TRUE(GetAppLaunchController()->showing_network_dialog());
 
   // Continue button should be visible since we are online.
-  JsExpect("$('error-message-md-continue-button').hidden == false");
+  test::OobeJS().ExpectTrue(
+      "$('error-message-md-continue-button').hidden == false");
 
   // Let app launching resume.
   AppLaunchController::SetBlockAppLaunchForTesting(false);
@@ -969,7 +932,7 @@ IN_PROC_BROWSER_TEST_F(KioskTest, LaunchAppNetworkDownConfigureNotAllowed) {
   WaitForAppLaunchNetworkTimeout();
 
   // Configure network link should not be visible.
-  JsExpect("$('splash-config-network').hidden == true");
+  test::OobeJS().ExpectTrue("$('splash-config-network').hidden == true");
 
   // Network becomes online and app launch is resumed.
   SimulateNetworkOnline();
@@ -1021,22 +984,21 @@ IN_PROC_BROWSER_TEST_F(KioskTest, LaunchInDiagnosticMode) {
 
   LaunchApp(kTestKioskApp, true);
 
-  content::WebContents* login_contents = GetLoginUI()->GetWebContents();
-
   bool new_kiosk_ui = KioskAppMenuHandler::EnableNewKioskUI();
-  JsConditionWaiter(login_contents, new_kiosk_ui ? kCheckDiagnosticModeNewAPI
-                                                 : kCheckDiagnosticModeOldAPI)
-      .Wait();
+  test::OobeJS()
+      .CreateWaiter(new_kiosk_ui ? kCheckDiagnosticModeNewAPI
+                                 : kCheckDiagnosticModeOldAPI)
+      ->Wait();
 
   std::string diagnosticMode(new_kiosk_ui ?
       kCheckDiagnosticModeNewAPI : kCheckDiagnosticModeOldAPI);
-  ASSERT_TRUE(content::ExecuteScript(
-      login_contents,
+  test::OobeJS().Evaluate(
       "(function() {"
-         "var e = new Event('click');" +
-         diagnosticMode + "."
-             "okButton_.dispatchEvent(e);"
-      "})();"));
+      "var e = new Event('click');" +
+      diagnosticMode +
+      "."
+      "okButton_.dispatchEvent(e);"
+      "})();");
 
   WaitForAppLaunchSuccess();
   EXPECT_EQ(extensions::Manifest::EXTERNAL_PREF, GetInstalledAppLocation());
@@ -1378,7 +1340,8 @@ class KioskUpdateTest : public KioskTest {
 
   void PreCacheApp(const std::string& app_id,
                    const std::string& version,
-                   const std::string& crx_file) {
+                   const std::string& crx_file,
+                   bool wait_for_app_data) {
     set_test_app_id(app_id);
     set_test_app_version(version);
     set_test_crx_file(crx_file);
@@ -1386,7 +1349,10 @@ class KioskUpdateTest : public KioskTest {
     KioskAppManager* manager = KioskAppManager::Get();
     AppDataLoadWaiter waiter(manager, app_id, version);
     ReloadKioskApps();
-    waiter.Wait();
+    if (wait_for_app_data)
+      waiter.WaitForAppData();
+    else
+      waiter.Wait();
     EXPECT_TRUE(waiter.loaded());
     std::string cached_version;
     base::FilePath file_path;
@@ -1448,7 +1414,8 @@ class KioskUpdateTest : public KioskTest {
       const TestAppInfo& primary_app,
       const std::vector<TestAppInfo>& secondary_apps) {
     // Pre-cache the primary app.
-    PreCacheApp(primary_app.id, primary_app.version, primary_app.crx_filename);
+    PreCacheApp(primary_app.id, primary_app.version, primary_app.crx_filename,
+                /*wait_for_app_data=*/false);
 
     set_test_app_id(primary_app.id);
     fake_cws()->SetNoUpdate(primary_app.id);
@@ -1626,7 +1593,8 @@ IN_PROC_BROWSER_TEST_F(KioskUpdateTest, LaunchOfflineEnabledAppNoNetwork) {
 IN_PROC_BROWSER_TEST_F(KioskUpdateTest,
                        PRE_LaunchCachedOfflineEnabledAppNoNetwork) {
   PreCacheApp(kTestOfflineEnabledKioskApp, "1.0.0",
-              std::string(kTestOfflineEnabledKioskApp) + "_v1.crx");
+              std::string(kTestOfflineEnabledKioskApp) + "_v1.crx",
+              /*wait_for_app_data=*/true);
 }
 
 IN_PROC_BROWSER_TEST_F(KioskUpdateTest,
@@ -1698,7 +1666,7 @@ IN_PROC_BROWSER_TEST_F(KioskUpdateTest, PRE_LaunchOfflineEnabledAppHasUpdate) {
 IN_PROC_BROWSER_TEST_F(KioskUpdateTest, LaunchOfflineEnabledAppHasUpdate) {
   set_test_app_id(kTestOfflineEnabledKioskApp);
   fake_cws()->SetUpdateCrx(test_app_id(),
-                           "ajoggoflpgplnnjkjamcmbepjdjdnpdp.crx", "2.0.0");
+                           "iiigpodgfihagabpagjehoocpakbnclp.crx", "2.0.0");
 
   StartUIForAppLaunch();
   SimulateNetworkOnline();
@@ -1713,7 +1681,8 @@ IN_PROC_BROWSER_TEST_F(KioskUpdateTest, LaunchOfflineEnabledAppHasUpdate) {
 // plug in usb stick with a v2 app for offline updating.
 IN_PROC_BROWSER_TEST_F(KioskUpdateTest, PRE_UsbStickUpdateAppNoNetwork) {
   PreCacheApp(kTestOfflineEnabledKioskApp, "1.0.0",
-              std::string(kTestOfflineEnabledKioskApp) + "_v1.crx");
+              std::string(kTestOfflineEnabledKioskApp) + "_v1.crx",
+              /*wait_for_app_data=*/true);
 
   set_test_app_id(kTestOfflineEnabledKioskApp);
   StartUIForAppLaunch();
@@ -2169,14 +2138,16 @@ class KioskEnterpriseTest : public KioskTest {
         "https://www.googleapis.com/auth/userinfo.email");
     userinfo_token_info.audience = gaia_urls->oauth2_chrome_client_id();
     userinfo_token_info.email = kTestEnterpriseServiceAccountId;
-    fake_gaia_->IssueOAuthToken(kTestRefreshToken, userinfo_token_info);
+    fake_gaia_.fake_gaia()->IssueOAuthToken(kTestRefreshToken,
+                                            userinfo_token_info);
 
     // The any-api access token for accessing the token minting endpoint.
     FakeGaia::AccessTokenInfo login_token_info;
     login_token_info.token = kTestLoginToken;
     login_token_info.scopes.insert(GaiaConstants::kAnyApiOAuth2Scope);
     login_token_info.audience = gaia_urls->oauth2_chrome_client_id();
-    fake_gaia_->IssueOAuthToken(kTestRefreshToken, login_token_info);
+    fake_gaia_.fake_gaia()->IssueOAuthToken(kTestRefreshToken,
+                                            login_token_info);
 
     // This is the access token requested by the app via the identity API.
     FakeGaia::AccessTokenInfo access_token_info;
@@ -2184,7 +2155,7 @@ class KioskEnterpriseTest : public KioskTest {
     access_token_info.scopes.insert(kTestAppScope);
     access_token_info.audience = kTestClientId;
     access_token_info.email = kTestEnterpriseServiceAccountId;
-    fake_gaia_->IssueOAuthToken(kTestLoginToken, access_token_info);
+    fake_gaia_.fake_gaia()->IssueOAuthToken(kTestLoginToken, access_token_info);
 
     DeviceOAuth2TokenService* token_service =
         DeviceOAuth2TokenServiceFactory::Get();
@@ -2210,6 +2181,8 @@ class KioskEnterpriseTest : public KioskTest {
   }
 
  private:
+  FakeGaiaMixin fake_gaia_{&mixin_host_, embedded_test_server()};
+
   DISALLOW_COPY_AND_ASSIGN(KioskEnterpriseTest);
 };
 
@@ -2258,7 +2231,7 @@ IN_PROC_BROWSER_TEST_F(KioskEnterpriseTest, EnterpriseKioskApp) {
   Profile* app_profile = ProfileManager::GetPrimaryUserProfile();
   ASSERT_TRUE(app_profile);
   EXPECT_FALSE(
-      SigninManagerFactory::GetForProfile(app_profile)->IsAuthenticated());
+      IdentityManagerFactory::GetForProfile(app_profile)->HasPrimaryAccount());
 
   // Terminate the app.
   window->GetBaseWindow()->Close();
@@ -2387,11 +2360,6 @@ class KioskVirtualKeyboardTest : public KioskTest,
     std::move(callback).Run(true);
   }
 
-  // Use class variable for sane lifetime.
-  // TODO(https://crbug.com/812170): Remove it when media::AudioSystem becomes
-  // service-based.
-  std::unique_ptr<media::MockAudioManager> mock_audio_manager_;
-
  private:
   DISALLOW_COPY_AND_ASSIGN(KioskVirtualKeyboardTest);
 };
@@ -2399,12 +2367,6 @@ class KioskVirtualKeyboardTest : public KioskTest,
 // Verifies that chrome.virtualKeyboard.restrictFeatures and related private
 // APIs work.
 IN_PROC_BROWSER_TEST_F(KioskVirtualKeyboardTest, RestrictFeatures) {
-  // Mock existence of audio input.
-  // We cannot do this in SetUp because it's overriden in RunTestOnMainThread.
-  mock_audio_manager_ = std::make_unique<media::MockAudioManager>(
-      std::make_unique<media::TestAudioThread>());
-  mock_audio_manager_->SetHasInputDevices(true);
-
   set_test_app_id(kTestVirtualKeyboardKioskApp);
   set_test_app_version("0.1");
   set_test_crx_file(test_app_id() + ".crx");
@@ -2412,9 +2374,6 @@ IN_PROC_BROWSER_TEST_F(KioskVirtualKeyboardTest, RestrictFeatures) {
   extensions::ResultCatcher catcher;
   StartAppLaunchFromLoginScreen(SimulateNetworkOnlineClosure());
   EXPECT_TRUE(catcher.GetNextResult()) << catcher.message();
-
-  // Shutdown should be done in the same thread, thus not in the destructor.
-  mock_audio_manager_->Shutdown();
 }
 
 // Specialized test fixture for testing kiosk mode on the

@@ -11,12 +11,21 @@ namespace crostini {
 namespace prefs {
 
 extern const char kCrostiniEnabled[];
+extern const char kCrostiniMimeTypes[];
 extern const char kCrostiniRegistry[];
+extern const char kCrostiniSharedPaths[];
+extern const char kCrostiniSharedUsbDevices[];
+extern const char kCrostiniContainers[];
+extern const char kVmKey[];
+extern const char kContainerKey[];
+
 extern const char kUserCrostiniAllowedByPolicy[];
+extern const char kUserCrostiniExportImportUIAllowedByPolicy[];
 
 extern const char kReportCrostiniUsageEnabled[];
 extern const char kCrostiniLastLaunchVersion[];
 extern const char kCrostiniLastLaunchTimeWindowStart[];
+extern const char kCrostiniLastDiskSize[];
 
 void RegisterProfilePrefs(PrefRegistrySimple* registry);
 

@@ -53,7 +53,7 @@ SelectPopup::~SelectPopup() {
   ScopedJavaLocalRef<jobject> j_obj = java_obj_.get(env);
   if (j_obj.is_null())
     return;
-  Java_SelectPopup_destroy(env, j_obj);
+  Java_SelectPopup_onNativeDestroyed(env, j_obj);
 }
 
 void SelectPopup::ShowMenu(RenderFrameHost* frame,
@@ -139,12 +139,8 @@ void SelectPopup::SelectMenuItems(JNIEnv* env,
     return;
   }
 
-  int selected_count = env->GetArrayLength(indices);
   std::vector<int> selected_indices;
-  jint* indices_ptr = env->GetIntArrayElements(indices, NULL);
-  for (int i = 0; i < selected_count; ++i)
-    selected_indices.push_back(indices_ptr[i]);
-  env->ReleaseIntArrayElements(indices, indices_ptr, JNI_ABORT);
+  base::android::JavaIntArrayToIntVector(env, indices, &selected_indices);
   rfhi->DidSelectPopupMenuItems(selected_indices);
 }
 

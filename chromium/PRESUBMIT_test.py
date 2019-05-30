@@ -1377,11 +1377,11 @@ class ForwardDeclarationTest(unittest.TestCase):
   def testBlinkHeaders(self):
     mock_input_api = MockInputApi()
     mock_input_api.files = [
-      MockAffectedFile('third_party/WebKit/header.h', [
+      MockAffectedFile('third_party/blink/header.h', [
         'class DummyClass;',
         'struct DummyStruct;',
       ]),
-      MockAffectedFile('third_party\\WebKit\\header.h', [
+      MockAffectedFile('third_party\\blink\\header.h', [
         'class DummyClass;',
         'struct DummyStruct;',
       ])
@@ -1389,54 +1389,6 @@ class ForwardDeclarationTest(unittest.TestCase):
     warnings = PRESUBMIT._CheckUselessForwardDeclarations(mock_input_api,
                                                           MockOutputApi())
     self.assertEqual(4, len(warnings))
-
-
-class RiskyJsTest(unittest.TestCase):
-  def testArrowWarnInIos9Code(self):
-    mock_input_api = MockInputApi()
-    mock_output_api = MockOutputApi()
-
-    mock_input_api.files = [
-      MockAffectedFile('components/blah.js', ["shouldn't use => here"]),
-    ]
-    warnings = PRESUBMIT._CheckForRiskyJsFeatures(
-        mock_input_api, mock_output_api)
-    self.assertEqual(1, len(warnings))
-
-    mock_input_api.files = [
-      MockAffectedFile('ios/blee.js', ['might => break folks']),
-    ]
-    warnings = PRESUBMIT._CheckForRiskyJsFeatures(
-        mock_input_api, mock_output_api)
-    self.assertEqual(1, len(warnings))
-
-    mock_input_api.files = [
-      MockAffectedFile('ui/webui/resources/blarg.js', ['on => iOS9']),
-    ]
-    warnings = PRESUBMIT._CheckForRiskyJsFeatures(
-        mock_input_api, mock_output_api)
-    self.assertEqual(1, len(warnings))
-
-  def testArrowsAllowedInChromeCode(self):
-    mock_input_api = MockInputApi()
-    mock_input_api.files = [
-      MockAffectedFile('chrome/browser/resources/blah.js', 'arrow => OK here'),
-    ]
-    warnings = PRESUBMIT._CheckForRiskyJsFeatures(
-        mock_input_api, MockOutputApi())
-    self.assertEqual(0, len(warnings))
-
-  def testConstLetWarningIos9Code(self):
-    mock_input_api = MockInputApi()
-    mock_output_api = MockOutputApi()
-
-    mock_input_api.files = [
-      MockAffectedFile('components/blah.js', [" const foo = 'bar';"]),
-      MockAffectedFile('ui/webui/resources/blah.js', [" let foo = 3;"]),
-    ]
-    warnings = PRESUBMIT._CheckForRiskyJsFeatures(
-        mock_input_api, mock_output_api)
-    self.assertEqual(2, len(warnings))
 
 
 class RelativeIncludesTest(unittest.TestCase):
@@ -1493,7 +1445,7 @@ class RelativeIncludesTest(unittest.TestCase):
   def testRelativeIncludeWebKitProducesError(self):
     mock_input_api = MockInputApi()
     mock_input_api.files = [
-      MockAffectedFile('third_party/WebKit/test.cpp',
+      MockAffectedFile('third_party/blink/test.cpp',
                        ['#include "../header.h']),
     ]
 
@@ -1611,8 +1563,127 @@ class NewHeaderWithoutGnChangeTest(unittest.TestCase):
     self.assertTrue('base/another.h' in warnings[0].items)
 
 
-class MojoManifestOwnerTest(unittest.TestCase):
-  def testMojoManifestChangeNeedsSecurityOwner(self):
+class CorrectProductNameInMessagesTest(unittest.TestCase):
+  def testProductNameInDesc(self):
+    mock_input_api = MockInputApi()
+    mock_input_api.files = [
+      MockAffectedFile('chrome/app/google_chrome_strings.grd', [
+        '<message name="Foo" desc="Welcome to Chrome">',
+        '  Welcome to Chrome!',
+        '</message>',
+      ]),
+      MockAffectedFile('chrome/app/chromium_strings.grd', [
+        '<message name="Bar" desc="Welcome to Chrome">',
+        '  Welcome to Chromium!',
+        '</message>',
+      ]),
+    ]
+    warnings = PRESUBMIT._CheckCorrectProductNameInMessages(
+        mock_input_api, MockOutputApi())
+    self.assertEqual(0, len(warnings))
+
+  def testChromeInChromium(self):
+    mock_input_api = MockInputApi()
+    mock_input_api.files = [
+      MockAffectedFile('chrome/app/google_chrome_strings.grd', [
+        '<message name="Foo" desc="Welcome to Chrome">',
+        '  Welcome to Chrome!',
+        '</message>',
+      ]),
+      MockAffectedFile('chrome/app/chromium_strings.grd', [
+        '<message name="Bar" desc="Welcome to Chrome">',
+        '  Welcome to Chrome!',
+        '</message>',
+      ]),
+    ]
+    warnings = PRESUBMIT._CheckCorrectProductNameInMessages(
+        mock_input_api, MockOutputApi())
+    self.assertEqual(1, len(warnings))
+    self.assertTrue('chrome/app/chromium_strings.grd' in warnings[0].items[0])
+
+  def testChromiumInChrome(self):
+    mock_input_api = MockInputApi()
+    mock_input_api.files = [
+      MockAffectedFile('chrome/app/google_chrome_strings.grd', [
+        '<message name="Foo" desc="Welcome to Chrome">',
+        '  Welcome to Chromium!',
+        '</message>',
+      ]),
+      MockAffectedFile('chrome/app/chromium_strings.grd', [
+        '<message name="Bar" desc="Welcome to Chrome">',
+        '  Welcome to Chromium!',
+        '</message>',
+      ]),
+    ]
+    warnings = PRESUBMIT._CheckCorrectProductNameInMessages(
+        mock_input_api, MockOutputApi())
+    self.assertEqual(1, len(warnings))
+    self.assertTrue(
+        'chrome/app/google_chrome_strings.grd:2' in warnings[0].items[0])
+
+  def testMultipleInstances(self):
+    mock_input_api = MockInputApi()
+    mock_input_api.files = [
+      MockAffectedFile('chrome/app/chromium_strings.grd', [
+        '<message name="Bar" desc="Welcome to Chrome">',
+        '  Welcome to Chrome!',
+        '</message>',
+        '<message name="Baz" desc="A correct message">',
+        '  Chromium is the software you are using.',
+        '</message>',
+        '<message name="Bat" desc="An incorrect message">',
+        '  Google Chrome is the software you are using.',
+        '</message>',
+      ]),
+    ]
+    warnings = PRESUBMIT._CheckCorrectProductNameInMessages(
+        mock_input_api, MockOutputApi())
+    self.assertEqual(1, len(warnings))
+    self.assertTrue(
+        'chrome/app/chromium_strings.grd:2' in warnings[0].items[0])
+    self.assertTrue(
+        'chrome/app/chromium_strings.grd:8' in warnings[0].items[1])
+
+  def testMultipleWarnings(self):
+    mock_input_api = MockInputApi()
+    mock_input_api.files = [
+      MockAffectedFile('chrome/app/chromium_strings.grd', [
+        '<message name="Bar" desc="Welcome to Chrome">',
+        '  Welcome to Chrome!',
+        '</message>',
+        '<message name="Baz" desc="A correct message">',
+        '  Chromium is the software you are using.',
+        '</message>',
+        '<message name="Bat" desc="An incorrect message">',
+        '  Google Chrome is the software you are using.',
+        '</message>',
+      ]),
+      MockAffectedFile('components/components_google_chrome_strings.grd', [
+        '<message name="Bar" desc="Welcome to Chrome">',
+        '  Welcome to Chrome!',
+        '</message>',
+        '<message name="Baz" desc="A correct message">',
+        '  Chromium is the software you are using.',
+        '</message>',
+        '<message name="Bat" desc="An incorrect message">',
+        '  Google Chrome is the software you are using.',
+        '</message>',
+      ]),
+    ]
+    warnings = PRESUBMIT._CheckCorrectProductNameInMessages(
+        mock_input_api, MockOutputApi())
+    self.assertEqual(2, len(warnings))
+    self.assertTrue(
+        'components/components_google_chrome_strings.grd:5'
+             in warnings[0].items[0])
+    self.assertTrue(
+        'chrome/app/chromium_strings.grd:2' in warnings[1].items[0])
+    self.assertTrue(
+        'chrome/app/chromium_strings.grd:8' in warnings[1].items[1])
+
+
+class ServiceManifestOwnerTest(unittest.TestCase):
+  def testServiceManifestJsonChangeNeedsSecurityOwner(self):
     mock_input_api = MockInputApi()
     mock_input_api.files = [
       MockAffectedFile('services/goat/manifest.json',
@@ -1635,7 +1706,7 @@ class MojoManifestOwnerTest(unittest.TestCase):
 
     # No warning if already covered by an OWNERS rule.
 
-  def testNonManifestChangesDoNotRequireSecurityOwner(self):
+  def testNonManifestJsonChangesDoNotRequireSecurityOwner(self):
     mock_input_api = MockInputApi()
     mock_input_api.files = [
       MockAffectedFile('services/goat/species.json',
@@ -1651,39 +1722,33 @@ class MojoManifestOwnerTest(unittest.TestCase):
         mock_input_api, mock_output_api)
     self.assertEqual([], errors)
 
+  def testServiceManifestChangeNeedsSecurityOwner(self):
+    mock_input_api = MockInputApi()
+    mock_input_api.files = [
+      MockAffectedFile('services/goat/public/cpp/manifest.cc',
+                       [
+                         '#include "services/goat/public/cpp/manifest.h"',
+                         'const service_manager::Manifest& GetManifest() {}',
+                       ])]
+    mock_output_api = MockOutputApi()
+    errors = PRESUBMIT._CheckIpcOwners(
+        mock_input_api, mock_output_api)
+    self.assertEqual(1, len(errors))
+    self.assertEqual(
+        'Found OWNERS files that need to be updated for IPC security review ' +
+        'coverage.\nPlease update the OWNERS files below:', errors[0].message)
 
-class CheckCrbugLinksHaveHttpsTest(unittest.TestCase):
-  def assertWarningsWithFile(self, content, expected_warnings, file_name):
-    input_api = MockInputApi()
-    input_api.files = [
-      MockFile(file_name, [content])
-    ]
-
-    warnings = PRESUBMIT._CheckCrbugLinksHaveHttps(input_api, MockOutputApi())
-    self.assertEqual(expected_warnings, len(warnings))
-
-  def assertWarnings(self, content, expected_warnings):
-    for f in ['somewhere/file.cc', 'file.java', 'file.py', 'file_test.cc']:
-      self.assertWarningsWithFile(content, expected_warnings, f)
-
-  # The cr bug strings are split to avoid matching in real PRESUBMIT, so meta!
-  def testNoScheme(self):
-    self.assertWarnings('// TODO(dev): cr''bug.com should be linkified', 1)
-
-  def testNoScheme2(self):
-    self.assertWarnings('// TODO(dev): (cr''bug.com) should be linkified', 1)
-
-  def testNoCom(self):
-    self.assertWarnings('// TODO(dev): cr''bug/123 should be well formed', 1)
-
-  def testHttp(self):
-    self.assertWarnings('// TODO(dev): http://cr''bug.com it\'s OK', 0)
-
-  def testHttps(self):
-    self.assertWarnings('// TODO(dev): https://cr''bug.com is just great', 0)
-
-  def testTodo(self):
-    self.assertWarnings('// TODO(cr''bug.com/123456): it\'s also OK', 0)
+  def testNonServiceManifestSourceChangesDoNotRequireSecurityOwner(self):
+    mock_input_api = MockInputApi()
+    mock_input_api.files = [
+      MockAffectedFile('some/non/service/thing/foo_manifest.cc',
+                       [
+                         'const char kNoEnforcement[] = "not a manifest!";',
+                       ])]
+    mock_output_api = MockOutputApi()
+    errors = PRESUBMIT._CheckIpcOwners(
+        mock_input_api, mock_output_api)
+    self.assertEqual([], errors)
 
 
 class BannedFunctionCheckTest(unittest.TestCase):
@@ -1959,9 +2024,10 @@ class TranslationScreenshotsTest(unittest.TestCase):
                                                       MockOutputApi())
     self.assertEqual(1, len(warnings))
     self.assertEqual(self.GENERATE_SIGNATURES_MESSAGE, warnings[0].message)
-    self.assertEqual(
-      ['test_grd/IDS_TEST1.png.sha1', 'test_grd/IDS_TEST2.png.sha1'],
-      warnings[0].items)
+    self.assertEqual([
+        os.path.join('test_grd', 'IDS_TEST1.png.sha1'),
+        os.path.join('test_grd', 'IDS_TEST2.png.sha1')
+    ], warnings[0].items)
 
     input_api = self.makeInputApi([
       MockAffectedFile('test.grd', self.NEW_GRD_CONTENTS2,
@@ -1970,46 +2036,72 @@ class TranslationScreenshotsTest(unittest.TestCase):
                                                       MockOutputApi())
     self.assertEqual(1, len(warnings))
     self.assertEqual(self.GENERATE_SIGNATURES_MESSAGE, warnings[0].message)
-    self.assertEqual(['test_grd/IDS_TEST2.png.sha1'], warnings[0].items)
+    self.assertEqual([os.path.join('test_grd', 'IDS_TEST2.png.sha1')],
+                     warnings[0].items)
 
 
   def testUnnecessaryScreenshots(self):
     # CL added a single message and added the png file, but not the sha1 file.
     input_api = self.makeInputApi([
-      MockAffectedFile('test.grd', self.NEW_GRD_CONTENTS1,
-                       self.OLD_GRD_CONTENTS, action='M'),
-      MockAffectedFile('test_grd/IDS_TEST1.png', 'binary', action='A')])
+        MockAffectedFile(
+            'test.grd',
+            self.NEW_GRD_CONTENTS1,
+            self.OLD_GRD_CONTENTS,
+            action='M'),
+        MockAffectedFile(
+            os.path.join('test_grd', 'IDS_TEST1.png'), 'binary', action='A')
+    ])
     warnings = PRESUBMIT._CheckTranslationScreenshots(input_api,
                                                       MockOutputApi())
     self.assertEqual(2, len(warnings))
     self.assertEqual(self.DO_NOT_UPLOAD_PNG_MESSAGE, warnings[0].message)
-    self.assertEqual(['test_grd/IDS_TEST1.png'], warnings[0].items)
+    self.assertEqual([os.path.join('test_grd', 'IDS_TEST1.png')],
+                     warnings[0].items)
     self.assertEqual(self.GENERATE_SIGNATURES_MESSAGE, warnings[1].message)
-    self.assertEqual(['test_grd/IDS_TEST1.png.sha1'], warnings[1].items)
+    self.assertEqual([os.path.join('test_grd', 'IDS_TEST1.png.sha1')],
+                     warnings[1].items)
 
     # CL added two messages, one has a png. Expect two messages:
     # - One for the unnecessary png.
     # - Another one for missing .sha1 files.
     input_api = self.makeInputApi([
-      MockAffectedFile('test.grd', self.NEW_GRD_CONTENTS2,
-                       self.OLD_GRD_CONTENTS, action='M'),
-      MockAffectedFile('test_grd/IDS_TEST1.png', 'binary', action='A')])
+        MockAffectedFile(
+            'test.grd',
+            self.NEW_GRD_CONTENTS2,
+            self.OLD_GRD_CONTENTS,
+            action='M'),
+        MockAffectedFile(
+            os.path.join('test_grd', 'IDS_TEST1.png'), 'binary', action='A')
+    ])
     warnings = PRESUBMIT._CheckTranslationScreenshots(input_api,
                                                       MockOutputApi())
     self.assertEqual(2, len(warnings))
     self.assertEqual(self.DO_NOT_UPLOAD_PNG_MESSAGE, warnings[0].message)
-    self.assertEqual(['test_grd/IDS_TEST1.png'], warnings[0].items)
+    self.assertEqual([os.path.join('test_grd', 'IDS_TEST1.png')],
+                     warnings[0].items)
     self.assertEqual(self.GENERATE_SIGNATURES_MESSAGE, warnings[1].message)
-    self.assertEqual(['test_grd/IDS_TEST1.png.sha1',
-                      'test_grd/IDS_TEST2.png.sha1'], warnings[1].items)
+    self.assertEqual([
+        os.path.join('test_grd', 'IDS_TEST1.png.sha1'),
+        os.path.join('test_grd', 'IDS_TEST2.png.sha1')
+    ], warnings[1].items)
 
   def testScreenshotsWithSha1(self):
     # CL added two messages and their corresponding .sha1 files. No warnings.
     input_api = self.makeInputApi([
-      MockAffectedFile('test.grd', self.NEW_GRD_CONTENTS2,
-                       self.OLD_GRD_CONTENTS, action='M'),
-      MockFile('test_grd/IDS_TEST1.png.sha1', 'binary', action='A'),
-      MockFile('test_grd/IDS_TEST2.png.sha1', 'binary', action='A')])
+        MockAffectedFile(
+            'test.grd',
+            self.NEW_GRD_CONTENTS2,
+            self.OLD_GRD_CONTENTS,
+            action='M'),
+        MockFile(
+            os.path.join('test_grd', 'IDS_TEST1.png.sha1'),
+            'binary',
+            action='A'),
+        MockFile(
+            os.path.join('test_grd', 'IDS_TEST2.png.sha1'),
+            'binary',
+            action='A')
+    ])
     warnings = PRESUBMIT._CheckTranslationScreenshots(input_api,
                                                       MockOutputApi())
     self.assertEqual([], warnings)
@@ -2018,40 +2110,127 @@ class TranslationScreenshotsTest(unittest.TestCase):
     # Swap old contents with new contents, remove IDS_TEST1 and IDS_TEST2. The
     # sha1 files associated with the messages should also be removed by the CL.
     input_api = self.makeInputApi([
-      MockAffectedFile('test.grd', self.OLD_GRD_CONTENTS,
-                       self.NEW_GRD_CONTENTS2, action='M'),
-      MockFile('test_grd/IDS_TEST1.png.sha1', 'binary', ""),
-      MockFile('test_grd/IDS_TEST2.png.sha1', 'binary', "")])
+        MockAffectedFile(
+            'test.grd',
+            self.OLD_GRD_CONTENTS,
+            self.NEW_GRD_CONTENTS2,
+            action='M'),
+        MockFile(os.path.join('test_grd', 'IDS_TEST1.png.sha1'), 'binary', ""),
+        MockFile(os.path.join('test_grd', 'IDS_TEST2.png.sha1'), 'binary', "")
+    ])
     warnings = PRESUBMIT._CheckTranslationScreenshots(input_api,
                                                       MockOutputApi())
     self.assertEqual(1, len(warnings))
     self.assertEqual(self.REMOVE_SIGNATURES_MESSAGE, warnings[0].message)
-    self.assertEqual(['test_grd/IDS_TEST1.png.sha1',
-                      'test_grd/IDS_TEST2.png.sha1'], warnings[0].items)
+    self.assertEqual([
+        os.path.join('test_grd', 'IDS_TEST1.png.sha1'),
+        os.path.join('test_grd', 'IDS_TEST2.png.sha1')
+    ], warnings[0].items)
 
     # Same as above, but this time one of the .sha1 files is removed.
     input_api = self.makeInputApi([
-      MockAffectedFile('test.grd', self.OLD_GRD_CONTENTS,
-                       self.NEW_GRD_CONTENTS2, action='M'),
-      MockFile('test_grd/IDS_TEST1.png.sha1', 'binary', ''),
-      MockAffectedFile('test_grd/IDS_TEST2.png.sha1',
-                       '', 'old_contents', action='D')])
+        MockAffectedFile(
+            'test.grd',
+            self.OLD_GRD_CONTENTS,
+            self.NEW_GRD_CONTENTS2,
+            action='M'),
+        MockFile(os.path.join('test_grd', 'IDS_TEST1.png.sha1'), 'binary', ''),
+        MockAffectedFile(
+            os.path.join('test_grd', 'IDS_TEST2.png.sha1'),
+            '',
+            'old_contents',
+            action='D')
+    ])
     warnings = PRESUBMIT._CheckTranslationScreenshots(input_api,
                                                       MockOutputApi())
     self.assertEqual(1, len(warnings))
     self.assertEqual(self.REMOVE_SIGNATURES_MESSAGE, warnings[0].message)
-    self.assertEqual(['test_grd/IDS_TEST1.png.sha1'], warnings[0].items)
+    self.assertEqual([os.path.join('test_grd', 'IDS_TEST1.png.sha1')],
+                     warnings[0].items)
 
     # Remove both sha1 files. No presubmit warnings.
     input_api = self.makeInputApi([
-      MockAffectedFile('test.grd', self.OLD_GRD_CONTENTS,
-                       self.NEW_GRD_CONTENTS2, action='M'),
-      MockFile('test_grd/IDS_TEST1.png.sha1', 'binary', action='D'),
-      MockFile('test_grd/IDS_TEST2.png.sha1', 'binary', action='D')])
+        MockAffectedFile(
+            'test.grd',
+            self.OLD_GRD_CONTENTS,
+            self.NEW_GRD_CONTENTS2,
+            action='M'),
+        MockFile(
+            os.path.join('test_grd', 'IDS_TEST1.png.sha1'),
+            'binary',
+            action='D'),
+        MockFile(
+            os.path.join('test_grd', 'IDS_TEST2.png.sha1'),
+            'binary',
+            action='D')
+    ])
     warnings = PRESUBMIT._CheckTranslationScreenshots(input_api,
                                                       MockOutputApi())
     self.assertEqual([], warnings)
 
+
+class DISABLETypoInTest(unittest.TestCase):
+
+  def testPositive(self):
+    # Verify the typo "DISABLE_" instead of "DISABLED_" in various contexts
+    # where the desire is to disable a test.
+    tests = [
+        # Disabled on one platform:
+        '#if defined(OS_WIN)\n'
+        '#define MAYBE_FoobarTest DISABLE_FoobarTest\n'
+        '#else\n'
+        '#define MAYBE_FoobarTest FoobarTest\n'
+        '#endif\n',
+        # Disabled on one platform spread cross lines:
+        '#if defined(OS_WIN)\n'
+        '#define MAYBE_FoobarTest \\\n'
+        '    DISABLE_FoobarTest\n'
+        '#else\n'
+        '#define MAYBE_FoobarTest FoobarTest\n'
+        '#endif\n',
+        # Disabled on all platforms:
+        '  TEST_F(FoobarTest, DISABLE_Foo)\n{\n}',
+        # Disabled on all platforms but multiple lines
+        '  TEST_F(FoobarTest,\n   DISABLE_foo){\n}\n',
+    ]
+
+    for test in tests:
+      mock_input_api = MockInputApi()
+      mock_input_api.files = [
+          MockFile('some/path/foo_unittest.cc', test.splitlines()),
+      ]
+
+      results = PRESUBMIT._CheckNoDISABLETypoInTests(mock_input_api,
+                                                     MockOutputApi())
+      self.assertEqual(
+          1,
+          len(results),
+          msg=('expected len(results) == 1 but got %d in test: %s' %
+               (len(results), test)))
+      self.assertTrue(
+          'foo_unittest.cc' in results[0].message,
+          msg=('expected foo_unittest.cc in message but got %s in test %s' %
+               (results[0].message, test)))
+
+  def testIngoreNotTestFiles(self):
+    mock_input_api = MockInputApi()
+    mock_input_api.files = [
+        MockFile('some/path/foo.cc', 'TEST_F(FoobarTest, DISABLE_Foo)'),
+    ]
+
+    results = PRESUBMIT._CheckNoDISABLETypoInTests(mock_input_api,
+                                                   MockOutputApi())
+    self.assertEqual(0, len(results))
+
+  def testIngoreDeletedFiles(self):
+    mock_input_api = MockInputApi()
+    mock_input_api.files = [
+        MockFile('some/path/foo.cc', 'TEST_F(FoobarTest, Foo)', action='D'),
+    ]
+
+    results = PRESUBMIT._CheckNoDISABLETypoInTests(mock_input_api,
+                                                   MockOutputApi())
+    self.assertEqual(0, len(results))
 
 if __name__ == '__main__':
   unittest.main()

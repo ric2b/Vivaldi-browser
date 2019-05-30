@@ -33,14 +33,17 @@ import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.WebContentsFactory;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.chrome.browser.preferences.datareduction.DataReductionPromoUtils;
+import org.chromium.chrome.browser.tab.SadTab;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.InfoBarTestAnimationListener;
 import org.chromium.chrome.test.util.InfoBarUtil;
+import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
+import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.chrome.test.util.browser.LocationSettingsTestUtil;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.net.test.EmbeddedTestServer;
 
 import java.net.HttpURLConnection;
@@ -121,18 +124,10 @@ public class InfoBarTest {
         mActivityTestRule.startMainActivityOnBlankPage();
 
         // Register for animation notifications
-        CriteriaHelper.pollInstrumentationThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return (mActivityTestRule.getActivity().getActivityTab() != null
-                        && mActivityTestRule.getActivity().getActivityTab().getInfoBarContainer()
-                                != null);
-            }
-        });
-        InfoBarContainer container =
-                mActivityTestRule.getActivity().getActivityTab().getInfoBarContainer();
+        CriteriaHelper.pollInstrumentationThread(
+                () -> mActivityTestRule.getInfoBarContainer() != null);
         mListener =  new InfoBarTestAnimationListener();
-        container.addAnimationListener(mListener);
+        mActivityTestRule.getInfoBarContainer().addAnimationListener(mListener);
 
         mTestServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
 
@@ -262,7 +257,7 @@ public class InfoBarTest {
      */
     @Test
     @MediumTest
-    @CommandLineFlags.Add("disable-features=" + ChromeFeatureList.MODAL_PERMISSION_PROMPTS)
+    @DisableFeatures(ChromeFeatureList.MODAL_PERMISSION_PROMPTS)
     @Feature({"Browser", "Main"})
     @RetryOnFailure
     public void testInfoBarForGeolocation() throws InterruptedException, TimeoutException {
@@ -288,7 +283,7 @@ public class InfoBarTest {
      */
     @Test
     @MediumTest
-    @CommandLineFlags.Add("disable-features=" + ChromeFeatureList.MODAL_PERMISSION_PROMPTS)
+    @DisableFeatures(ChromeFeatureList.MODAL_PERMISSION_PROMPTS)
     @Feature({"Browser"})
     @RetryOnFailure
     public void testInfoBarForGeolocationDisappearsOnBack()
@@ -318,6 +313,7 @@ public class InfoBarTest {
     @Test
     @MediumTest
     @CommandLineFlags.Add("force-fieldtrials=DataCompressionProxyPromoVisibility/Enabled")
+    @EnableFeatures("DataReductionProxyEnabledWithNetworkService")
     @Feature({"Browser", "Main"})
     @RetryOnFailure
     public void testDataReductionPromoInfoBar() {
@@ -592,10 +588,10 @@ public class InfoBarTest {
         // The renderer should have been killed and the InfoBar removed.
         mListener.removeInfoBarAnimationFinished("InfoBar not removed.");
         Assert.assertTrue("Wrong infobar count", mActivityTestRule.getInfoBars().isEmpty());
-        CriteriaHelper.pollInstrumentationThread(new Criteria() {
+        CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
-                return mActivityTestRule.getActivity().getActivityTab().isShowingSadTab();
+                return SadTab.isShowing(mActivityTestRule.getActivity().getActivityTab());
             }
         }, MAX_TIMEOUT, CHECK_INTERVAL);
     }
@@ -607,7 +603,7 @@ public class InfoBarTest {
      */
     @Test
     @MediumTest
-    @CommandLineFlags.Add("disable-features=" + ChromeFeatureList.MODAL_PERMISSION_PROMPTS)
+    @DisableFeatures(ChromeFeatureList.MODAL_PERMISSION_PROMPTS)
     @Feature({"Browser", "Main"})
     @RetryOnFailure
     public void testInfoBarContainerSwapsWebContents()
@@ -620,8 +616,7 @@ public class InfoBarTest {
 
         // Swap out the WebContents and send the user somewhere so that the InfoBar gets removed.
         InfoBarTestAnimationListener removeListener = new InfoBarTestAnimationListener();
-        mActivityTestRule.getActivity().getActivityTab().getInfoBarContainer().addAnimationListener(
-                removeListener);
+        mActivityTestRule.getInfoBarContainer().addAnimationListener(removeListener);
         ThreadUtils.runOnUiThread(new Runnable() {
             @Override
             public void run() {
@@ -636,8 +631,7 @@ public class InfoBarTest {
 
         // Revisiting the original page should make the InfoBar reappear.
         InfoBarTestAnimationListener addListener = new InfoBarTestAnimationListener();
-        mActivityTestRule.getActivity().getActivityTab().getInfoBarContainer().addAnimationListener(
-                addListener);
+        mActivityTestRule.getInfoBarContainer().addAnimationListener(addListener);
         mActivityTestRule.loadUrl(mTestServer.getURL(GEOLOCATION_PAGE));
         addListener.addInfoBarAnimationFinished("InfoBar not added");
         Assert.assertEquals("Wrong infobar count", 1, mActivityTestRule.getInfoBars().size());

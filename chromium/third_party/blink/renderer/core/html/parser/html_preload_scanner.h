@@ -44,7 +44,7 @@
 
 namespace blink {
 
-typedef size_t TokenPreloadScannerCheckpoint;
+typedef wtf_size_t TokenPreloadScannerCheckpoint;
 
 class HTMLParserOptions;
 class HTMLTokenizer;
@@ -72,8 +72,9 @@ struct CORE_EXPORT CachedDocumentParameters {
   Length default_viewport_min_width;
   bool viewport_meta_zero_values_quirk;
   bool viewport_meta_enabled;
-  ReferrerPolicy referrer_policy;
+  network::mojom::ReferrerPolicy referrer_policy;
   SubresourceIntegrity::IntegrityFeatures integrity_features;
+  bool lazyload_policy_enforced;
 
  private:
   explicit CachedDocumentParameters(Document*);
@@ -89,7 +90,8 @@ class TokenPreloadScanner {
   TokenPreloadScanner(const KURL& document_url,
                       std::unique_ptr<CachedDocumentParameters>,
                       const MediaValuesCached::MediaValuesCachedData&,
-                      const ScannerType);
+                      const ScannerType,
+                      bool priority_hints_origin_trial_enabled);
   ~TokenPreloadScanner();
 
   void Scan(const HTMLToken&,
@@ -161,6 +163,12 @@ class TokenPreloadScanner {
   Persistent<MediaValuesCached> media_values_;
   ClientHintsPreferences client_hints_preferences_;
   ScannerType scanner_type_;
+  // TODO(domfarolino): Remove this once Priority Hints is no longer in Origin
+  // Trial (see https://crbug.com/821464). This member exists because
+  // HTMLPreloadScanner has no access to an ExecutionContext*, and therefore
+  // cannot determine an Origin Trial's status, so we accept this information in
+  // the constructor and set this flag accordingly.
+  bool priority_hints_origin_trial_enabled_;
 
   bool did_rewind_ = false;
 
@@ -188,7 +196,8 @@ class CORE_EXPORT HTMLPreloadScanner {
 
   void AppendToEnd(const SegmentedString&);
   PreloadRequestStream Scan(const KURL& document_base_element_url,
-                            ViewportDescriptionWrapper*);
+                            ViewportDescriptionWrapper*,
+                            bool& has_csp_meta_tag);
 
  private:
   HTMLPreloadScanner(const HTMLParserOptions&,

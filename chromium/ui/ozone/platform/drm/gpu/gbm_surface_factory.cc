@@ -21,7 +21,6 @@
 #include "ui/ozone/platform/drm/gpu/drm_window_proxy.h"
 #include "ui/ozone/platform/drm/gpu/gbm_overlay_surface.h"
 #include "ui/ozone/platform/drm/gpu/gbm_pixmap.h"
-#include "ui/ozone/platform/drm/gpu/gbm_surface.h"
 #include "ui/ozone/platform/drm/gpu/gbm_surfaceless.h"
 #include "ui/ozone/platform/drm/gpu/proxy_helpers.h"
 #include "ui/ozone/platform/drm/gpu/screen_manager.h"
@@ -30,7 +29,6 @@
 #if BUILDFLAG(ENABLE_VULKAN)
 #include "gpu/vulkan/vulkan_function_pointers.h"
 #include "ui/ozone/platform/drm/gpu/vulkan_implementation_gbm.h"
-#if defined(OS_CHROMEOS)
 #define VK_STRUCTURE_TYPE_DMA_BUF_IMAGE_CREATE_INFO_INTEL 1024
 typedef struct VkDmaBufImageCreateInfo_ {
   VkStructureType sType;
@@ -48,7 +46,6 @@ typedef VkResult(VKAPI_PTR* PFN_vkCreateDmaBufImageINTEL)(
     VkDeviceMemory* pMem,
     VkImage* pImage);
 #endif
-#endif
 
 namespace ui {
 
@@ -64,9 +61,7 @@ class GLOzoneEGLGbm : public GLOzoneEGL {
 
   scoped_refptr<gl::GLSurface> CreateViewGLSurface(
       gfx::AcceleratedWidget window) override {
-    return gl::InitializeGLSurface(new GbmSurface(
-        surface_factory_, drm_thread_proxy_->CreateDrmWindowProxy(window),
-        window));
+    return nullptr;
   }
 
   scoped_refptr<gl::GLSurface> CreateSurfacelessViewGLSurface(
@@ -158,7 +153,6 @@ scoped_refptr<gfx::NativePixmap> GbmSurfaceFactory::CreateNativePixmapForVulkan(
     VkDevice vk_device,
     VkDeviceMemory* vk_device_memory,
     VkImage* vk_image) {
-#if defined(OS_CHROMEOS)
   std::unique_ptr<GbmBuffer> buffer;
   scoped_refptr<DrmFramebuffer> framebuffer;
 
@@ -178,18 +172,28 @@ scoped_refptr<gfx::NativePixmap> GbmSurfaceFactory::CreateNativePixmapForVulkan(
   }
 
   DCHECK(buffer->AreFdsValid());
-  DCHECK_EQ(buffer->GetFdCount(), 1U);
+  DCHECK_EQ(buffer->GetNumPlanes(), 1U);
 
   base::ScopedFD vk_image_fd(dup(buffer->GetPlaneFd(0)));
   DCHECK(vk_image_fd.is_valid());
 
+  // TODO(spang): Fix this for formats other than gfx::BufferFormat::BGRA_8888
+  DCHECK_EQ(format, display::DisplaySnapshot::PrimaryFormat());
+  VkFormat vk_format = VK_FORMAT_B8G8R8A8_SRGB;
+
   VkDmaBufImageCreateInfo dma_buf_image_create_info = {
-      .sType = static_cast<VkStructureType>(
+      /* .sType = */ static_cast<VkStructureType>(
           VK_STRUCTURE_TYPE_DMA_BUF_IMAGE_CREATE_INFO_INTEL),
-      .fd = vk_image_fd.release(),
-      .format = VK_FORMAT_B8G8R8A8_SRGB,
-      .extent = (VkExtent3D){size.width(), size.height(), 1},
-      .strideInBytes = buffer->GetPlaneStride(0),
+      /* .pNext = */ nullptr,
+      /* .fd = */ vk_image_fd.release(),
+      /* .format = */ vk_format,
+      /* .extent = */
+      {
+          /* .width = */ size.width(),
+          /* .height = */ size.height(),
+          /* .depth = */ 1,
+      },
+      /* .strideInBytes = */ buffer->GetPlaneStride(0),
   };
 
   VkResult result =
@@ -202,9 +206,6 @@ scoped_refptr<gfx::NativePixmap> GbmSurfaceFactory::CreateNativePixmapForVulkan(
 
   return base::MakeRefCounted<GbmPixmap>(this, std::move(buffer),
                                          std::move(framebuffer));
-#else
-  return nullptr;
-#endif
 }
 #endif
 
@@ -219,13 +220,6 @@ std::unique_ptr<SurfaceOzoneCanvas> GbmSurfaceFactory::CreateCanvasForWidget(
   DCHECK(thread_checker_.CalledOnValidThread());
   LOG(ERROR) << "Software rendering mode is not supported with GBM platform";
   return nullptr;
-}
-
-std::vector<gfx::BufferFormat> GbmSurfaceFactory::GetScanoutFormats(
-    gfx::AcceleratedWidget widget) {
-  std::vector<gfx::BufferFormat> scanout_formats;
-  drm_thread_proxy_->GetScanoutFormats(widget, &scanout_formats);
-  return scanout_formats;
 }
 
 scoped_refptr<gfx::NativePixmap> GbmSurfaceFactory::CreateNativePixmap(
@@ -250,15 +244,15 @@ GbmSurfaceFactory::CreateNativePixmapFromHandleInternal(
     gfx::BufferFormat format,
     const gfx::NativePixmapHandle& handle) {
   size_t num_planes = gfx::NumberOfPlanesForBufferFormat(format);
-  if (handle.planes.size() != num_planes ||
-      (handle.fds.size() != 1 && handle.fds.size() != num_planes)) {
+  DCHECK_GE(num_planes, handle.fds.size());
+  if (handle.planes.size() != num_planes) {
     return nullptr;
   }
+
   std::vector<base::ScopedFD> scoped_fds;
   for (auto& fd : handle.fds) {
     scoped_fds.emplace_back(fd.fd);
   }
-
   std::vector<gfx::NativePixmapPlane> planes;
   for (const auto& plane : handle.planes) {
     planes.push_back(plane);

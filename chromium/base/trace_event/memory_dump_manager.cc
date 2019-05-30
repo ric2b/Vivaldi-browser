@@ -16,7 +16,6 @@
 #include "base/command_line.h"
 #include "base/debug/alias.h"
 #include "base/debug/stack_trace.h"
-#include "base/debug/thread_heap_usage_tracker.h"
 #include "base/memory/ptr_util.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_util.h"
@@ -32,7 +31,7 @@
 #include "base/trace_event/memory_infra_background_whitelist.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/trace_event.h"
-#include "base/trace_event/trace_event_argument.h"
+#include "base/trace_event/traced_value.h"
 #include "build/build_config.h"
 
 #if defined(OS_ANDROID)
@@ -65,8 +64,7 @@ void DoGlobalDumpWithoutCallback(
 }  // namespace
 
 // static
-const char* const MemoryDumpManager::kTraceCategory =
-    TRACE_DISABLED_BY_DEFAULT("memory-infra");
+constexpr const char* MemoryDumpManager::kTraceCategory;
 
 // static
 const int MemoryDumpManager::kMaxConsecutiveFailuresCount = 3;
@@ -141,8 +139,6 @@ void MemoryDumpManager::Initialize(
   RegisterDumpProvider(JavaHeapDumpProvider::GetInstance(), "JavaHeap",
                        nullptr);
 #endif
-
-  TRACE_EVENT_WARMUP_CATEGORY(kTraceCategory);
 }
 
 void MemoryDumpManager::RegisterDumpProvider(

@@ -12,7 +12,9 @@
 #include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
 #include "chrome/browser/ui/ash/ash_util.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/service_manager_connection.h"
 #include "extensions/browser/view_type_utils.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -69,9 +71,8 @@ AccessibilityPanel::AccessibilityPanel(content::BrowserContext* browser_context,
   params.delegate = this;
   params.activatable = views::Widget::InitParams::ACTIVATABLE_NO;
   params.name = widget_name;
+  params.shadow_elevation = wm::kShadowElevationInactiveWindow;
   widget_->Init(params);
-  wm::SetShadowElevation(widget_->GetNativeWindow(),
-                         wm::kShadowElevationInactiveWindow);
 
   // WebContentsObserver::DidFirstVisuallyNonEmptyPaint is not called under
   // mash. Work around this by showing the window immediately.
@@ -83,6 +84,17 @@ AccessibilityPanel::AccessibilityPanel(content::BrowserContext* browser_context,
 }
 
 AccessibilityPanel::~AccessibilityPanel() = default;
+
+// static
+ash::mojom::AccessibilityControllerPtr
+AccessibilityPanel::GetAccessibilityController() {
+  // Connect to the accessibility mojo interface in ash.
+  ash::mojom::AccessibilityControllerPtr accessibility_controller;
+  content::ServiceManagerConnection::GetForProcess()
+      ->GetConnector()
+      ->BindInterface(ash::mojom::kServiceName, &accessibility_controller);
+  return accessibility_controller;
+}
 
 void AccessibilityPanel::CloseNow() {
   widget_->CloseNow();
@@ -115,6 +127,7 @@ views::View* AccessibilityPanel::GetContentsView() {
 }
 
 bool AccessibilityPanel::HandleContextMenu(
+    content::RenderFrameHost* render_frame_host,
     const content::ContextMenuParams& params) {
   // Eat all requests as context menus are disallowed.
   return true;

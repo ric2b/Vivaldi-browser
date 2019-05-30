@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/platform/scheduler/worker/non_main_thread_task_queue.h"
 
+#include "base/bind.h"
 #include "third_party/blink/renderer/platform/scheduler/worker/non_main_thread_scheduler_impl.h"
 
 namespace blink {
@@ -17,7 +18,7 @@ NonMainThreadTaskQueue::NonMainThreadTaskQueue(
     NonMainThreadSchedulerImpl* non_main_thread_scheduler)
     : TaskQueue(std::move(impl), spec),
       non_main_thread_scheduler_(non_main_thread_scheduler) {
-  if (GetTaskQueueImpl()) {
+  if (GetTaskQueueImpl() && spec.should_notify_observers) {
     // TaskQueueImpl may be null for tests.
     GetTaskQueueImpl()->SetOnTaskCompletedHandler(base::BindRepeating(
         &NonMainThreadTaskQueue::OnTaskCompleted, base::Unretained(this)));
@@ -27,12 +28,18 @@ NonMainThreadTaskQueue::NonMainThreadTaskQueue(
 NonMainThreadTaskQueue::~NonMainThreadTaskQueue() = default;
 
 void NonMainThreadTaskQueue::OnTaskCompleted(
-    const TaskQueue::Task& task,
+    const base::sequence_manager::Task& task,
     const TaskQueue::TaskTiming& task_timing) {
   // |non_main_thread_scheduler_| can be nullptr in tests.
   if (non_main_thread_scheduler_) {
     non_main_thread_scheduler_->OnTaskCompleted(this, task, task_timing);
   }
+}
+
+void NonMainThreadTaskQueue::SetPaused(bool paused) {
+  if (!task_queue_voter_)
+    task_queue_voter_ = CreateQueueEnabledVoter();
+  task_queue_voter_->SetQueueEnabled(!paused);
 }
 
 }  // namespace scheduler

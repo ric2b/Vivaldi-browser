@@ -7,17 +7,52 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/test/scoped_task_environment.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "content/public/test/test_browser_thread.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_status_code.h"
-#include "net/url_request/test_url_fetcher_factory.h"
-#include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_request_status.h"
 #include "services/data_decoder/public/cpp/testing_json_parser.h"
+#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+#include "services/network/test/test_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+namespace {
+
+const char kStatementList[] = R"(
+[{
+  "relation": ["other_relationship"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.peter.trustedpetersactivity",
+    "sha256_cert_fingerprints": [
+      "FA:2A:03:CB:38:9C:F3:BE:28:E3:CA:7F:DA:2E:FA:4F:4A:96:F3:BC:45:2C:08:A2:16:A1:5D:FD:AB:46:BC:9D"
+    ]
+  }
+}, {
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.example.firstapp",
+    "sha256_cert_fingerprints": [
+      "64:2F:D4:BE:1C:4D:F8:36:2E:D3:50:C4:69:53:96:A1:3D:14:0A:23:AD:2F:BF:EB:6E:C6:E4:64:54:3B:34:C1"
+    ]
+  }
+}]
+)";
+
+const char kDomain[] = "https://www.example.com";
+const char kValidPackage[] = "com.example.firstapp";
+const char kValidRelation[] = "delegate_permission/common.handle_all_urls";
+const char kValidFingerprint[] =
+    "64:2F:D4:BE:1C:4D:F8:36:2E:D3:50:C4:69:53:96:A1:3D:14:0A:23:AD:2F:BF:EB:"
+    "6E:C6:E4:64:54:3B:34:C1";
+
+}  // namespace
 
 namespace digital_asset_links {
 namespace {
@@ -27,7 +62,8 @@ class DigitalAssetLinksHandlerTest : public ::testing::Test {
   DigitalAssetLinksHandlerTest()
       : num_invocations_(0),
         result_(RelationshipCheckResult::SUCCESS),
-        io_thread_(content::BrowserThread::IO, &message_loop_) {}
+        io_thread_(content::BrowserThread::IO,
+                   base::ThreadTaskRunnerHandle::Get()) {}
 
   void OnRelationshipCheckComplete(RelationshipCheckResult result) {
     ++num_invocations_;
@@ -37,105 +73,205 @@ class DigitalAssetLinksHandlerTest : public ::testing::Test {
  protected:
   void SetUp() override { num_invocations_ = 0; }
 
-  void SendResponse(net::Error error, int response_code, bool linked) {
-    net::TestURLFetcher* fetcher = url_fetcher_factory_.GetFetcherByID(0);
-    ASSERT_TRUE(fetcher);
-    fetcher->set_status(net::URLRequestStatus::FromError(error));
-    fetcher->set_response_code(response_code);
-    if (error == net::OK && response_code == net::HTTP_OK && linked) {
-      fetcher->SetResponseString(
-          R"({
-            "linked":  true ,
-            "maxAge": "40.188652381s"
-          })");
-    } else if (error == net::OK && response_code == net::HTTP_OK) {
-      fetcher->SetResponseString(
-          R"({
-            "linked":  false ,
-            "maxAge": "40.188652381s"
-          })");
-    } else if (error == net::OK && response_code == net::HTTP_BAD_REQUEST) {
-      fetcher->SetResponseString(
-          R"({
-            "code":  400 ,
-            "message": "Invalid statement query received."
-            "status": "INVALID_ARGUMENT"
-          })");
-    } else {
-      fetcher->SetResponseString("");
-    }
-    fetcher->delegate()->OnURLFetchComplete(fetcher);
+  scoped_refptr<network::SharedURLLoaderFactory> GetSharedURLLoaderFactory() {
+    return base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
+        &test_url_loader_factory_);
+  }
+
+  void AddErrorResponse(net::Error error, int response_code) {
+    request_url_ =
+        test_url_loader_factory_.pending_requests()->at(0).request.url;
+
+    network::ResourceResponseHead response_head;
+    std::string status_line =
+        "HTTP/1.1 " + base::NumberToString(response_code) + " " +
+        net::GetHttpReasonPhrase(
+            static_cast<net::HttpStatusCode>(response_code));
+    response_head.headers =
+        base::MakeRefCounted<net::HttpResponseHeaders>(status_line);
+    test_url_loader_factory_.AddResponse(
+        request_url_, response_head, "",
+        network::URLLoaderCompletionStatus(error));
+
+    base::RunLoop().RunUntilIdle();
+  }
+
+  void AddResponse(const std::string& response) {
+    request_url_ =
+        test_url_loader_factory_.pending_requests()->at(0).request.url;
+
+    test_url_loader_factory_.AddResponse(request_url_.spec(), response,
+                                         net::HTTP_OK);
+
     base::RunLoop().RunUntilIdle();
   }
 
   int num_invocations_;
   RelationshipCheckResult result_;
+  GURL request_url_;
 
  private:
-  base::MessageLoop message_loop_;
+  base::test::ScopedTaskEnvironment task_environment_;
   data_decoder::TestingJsonParser::ScopedFactoryOverride factory_override_;
   content::TestBrowserThread io_thread_;
-  net::TestURLFetcherFactory url_fetcher_factory_;
+  network::TestURLLoaderFactory test_url_loader_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(DigitalAssetLinksHandlerTest);
 };
 }  // namespace
 
-TEST_F(DigitalAssetLinksHandlerTest, PositiveResponse) {
-  DigitalAssetLinksHandler handler(nullptr);
+TEST_F(DigitalAssetLinksHandlerTest, CorrectAssetLinksUrl) {
+  DigitalAssetLinksHandler handler(GetSharedURLLoaderFactory());
   handler.CheckDigitalAssetLinkRelationship(
-      base::Bind(&DigitalAssetLinksHandlerTest::OnRelationshipCheckComplete,
-                 base::Unretained(this)),
-      "", "", "", "");
-  SendResponse(net::OK, net::HTTP_OK, true);
+      base::BindOnce(&DigitalAssetLinksHandlerTest::OnRelationshipCheckComplete,
+                     base::Unretained(this)),
+      kDomain, kValidPackage, kValidFingerprint, kValidRelation);
+  AddResponse("");
+
+  EXPECT_EQ(request_url_,
+            "https://www.example.com/.well-known/assetlinks.json");
+}
+
+TEST_F(DigitalAssetLinksHandlerTest, PositiveResponse) {
+  DigitalAssetLinksHandler handler(GetSharedURLLoaderFactory());
+  handler.CheckDigitalAssetLinkRelationship(
+      base::BindOnce(&DigitalAssetLinksHandlerTest::OnRelationshipCheckComplete,
+                     base::Unretained(this)),
+      kDomain, kValidPackage, kValidFingerprint, kValidRelation);
+  AddResponse(kStatementList);
 
   EXPECT_EQ(1, num_invocations_);
   EXPECT_EQ(result_, RelationshipCheckResult::SUCCESS);
 }
 
-TEST_F(DigitalAssetLinksHandlerTest, NegativeResponse) {
-  DigitalAssetLinksHandler handler(nullptr);
+TEST_F(DigitalAssetLinksHandlerTest, PackageMismatch) {
+  DigitalAssetLinksHandler handler(GetSharedURLLoaderFactory());
   handler.CheckDigitalAssetLinkRelationship(
-      base::Bind(&DigitalAssetLinksHandlerTest::OnRelationshipCheckComplete,
-                 base::Unretained(this)),
-      "", "", "", "");
-  SendResponse(net::OK, net::HTTP_OK, false);
+      base::BindOnce(&DigitalAssetLinksHandlerTest::OnRelationshipCheckComplete,
+                     base::Unretained(this)),
+      kDomain, "evil.package", kValidFingerprint, kValidRelation);
+  AddResponse(kStatementList);
+
+  EXPECT_EQ(1, num_invocations_);
+  EXPECT_EQ(result_, RelationshipCheckResult::FAILURE);
+}
+
+TEST_F(DigitalAssetLinksHandlerTest, SignatureMismatch) {
+  DigitalAssetLinksHandler handler(GetSharedURLLoaderFactory());
+  handler.CheckDigitalAssetLinkRelationship(
+      base::BindOnce(&DigitalAssetLinksHandlerTest::OnRelationshipCheckComplete,
+                     base::Unretained(this)),
+      kDomain, kValidPackage, "66:66:66:66:66:66", kValidRelation);
+  AddResponse(kStatementList);
+
+  EXPECT_EQ(1, num_invocations_);
+  EXPECT_EQ(result_, RelationshipCheckResult::FAILURE);
+}
+
+TEST_F(DigitalAssetLinksHandlerTest, RelationshipMismatch) {
+  DigitalAssetLinksHandler handler(GetSharedURLLoaderFactory());
+  handler.CheckDigitalAssetLinkRelationship(
+      base::BindOnce(&DigitalAssetLinksHandlerTest::OnRelationshipCheckComplete,
+                     base::Unretained(this)),
+      kDomain, kValidPackage, kValidFingerprint, "take_firstborn_child");
+  AddResponse(kStatementList);
+
+  EXPECT_EQ(1, num_invocations_);
+  EXPECT_EQ(result_, RelationshipCheckResult::FAILURE);
+}
+
+TEST_F(DigitalAssetLinksHandlerTest, StatementIsolation) {
+  // Ensure we don't merge separate statements together.
+  DigitalAssetLinksHandler handler(GetSharedURLLoaderFactory());
+  handler.CheckDigitalAssetLinkRelationship(
+      base::BindOnce(&DigitalAssetLinksHandlerTest::OnRelationshipCheckComplete,
+                     base::Unretained(this)),
+      kDomain, kValidPackage, kValidFingerprint, "other_relationship");
+  AddResponse(kStatementList);
+
+  EXPECT_EQ(1, num_invocations_);
+  EXPECT_EQ(result_, RelationshipCheckResult::FAILURE);
+}
+
+TEST_F(DigitalAssetLinksHandlerTest, BadAssetLinks_Empty) {
+  DigitalAssetLinksHandler handler(GetSharedURLLoaderFactory());
+  handler.CheckDigitalAssetLinkRelationship(
+      base::BindOnce(&DigitalAssetLinksHandlerTest::OnRelationshipCheckComplete,
+                     base::Unretained(this)),
+      kDomain, kValidPackage, kValidFingerprint, kValidRelation);
+  AddResponse("");
+
+  EXPECT_EQ(1, num_invocations_);
+  EXPECT_EQ(result_, RelationshipCheckResult::FAILURE);
+}
+
+TEST_F(DigitalAssetLinksHandlerTest, BadAssetLinks_NotList) {
+  DigitalAssetLinksHandler handler(GetSharedURLLoaderFactory());
+  handler.CheckDigitalAssetLinkRelationship(
+      base::BindOnce(&DigitalAssetLinksHandlerTest::OnRelationshipCheckComplete,
+                     base::Unretained(this)),
+      kDomain, kValidPackage, kValidFingerprint, kValidRelation);
+  AddResponse(R"({ "key": "value"})");
+
+  EXPECT_EQ(1, num_invocations_);
+  EXPECT_EQ(result_, RelationshipCheckResult::FAILURE);
+}
+
+TEST_F(DigitalAssetLinksHandlerTest, BadAssetLinks_StatementNotDict) {
+  DigitalAssetLinksHandler handler(GetSharedURLLoaderFactory());
+  handler.CheckDigitalAssetLinkRelationship(
+      base::BindOnce(&DigitalAssetLinksHandlerTest::OnRelationshipCheckComplete,
+                     base::Unretained(this)),
+      kDomain, kValidPackage, kValidFingerprint, kValidRelation);
+  AddResponse(R"([ [], [] ])");
+
+  EXPECT_EQ(1, num_invocations_);
+  EXPECT_EQ(result_, RelationshipCheckResult::FAILURE);
+}
+
+TEST_F(DigitalAssetLinksHandlerTest, BadAssetLinks_MissingFields) {
+  DigitalAssetLinksHandler handler(GetSharedURLLoaderFactory());
+  handler.CheckDigitalAssetLinkRelationship(
+      base::BindOnce(&DigitalAssetLinksHandlerTest::OnRelationshipCheckComplete,
+                     base::Unretained(this)),
+      kDomain, kValidPackage, kValidFingerprint, kValidRelation);
+  AddResponse(R"([ { "target" : {} } ])");
 
   EXPECT_EQ(1, num_invocations_);
   EXPECT_EQ(result_, RelationshipCheckResult::FAILURE);
 }
 
 TEST_F(DigitalAssetLinksHandlerTest, BadRequest) {
-  DigitalAssetLinksHandler handler(nullptr);
+  DigitalAssetLinksHandler handler(GetSharedURLLoaderFactory());
   handler.CheckDigitalAssetLinkRelationship(
-      base::Bind(&DigitalAssetLinksHandlerTest::OnRelationshipCheckComplete,
-                 base::Unretained(this)),
-      "", "", "", "");
-  SendResponse(net::OK, net::HTTP_BAD_REQUEST, true);
+      base::BindOnce(&DigitalAssetLinksHandlerTest::OnRelationshipCheckComplete,
+                     base::Unretained(this)),
+      kDomain, kValidPackage, kValidFingerprint, kValidRelation);
+  AddErrorResponse(net::OK, net::HTTP_BAD_REQUEST);
 
   EXPECT_EQ(1, num_invocations_);
   EXPECT_EQ(result_, RelationshipCheckResult::FAILURE);
 }
 
 TEST_F(DigitalAssetLinksHandlerTest, NetworkError) {
-  DigitalAssetLinksHandler handler(nullptr);
+  DigitalAssetLinksHandler handler(GetSharedURLLoaderFactory());
   handler.CheckDigitalAssetLinkRelationship(
-      base::Bind(&DigitalAssetLinksHandlerTest::OnRelationshipCheckComplete,
-                 base::Unretained(this)),
-      "", "", "", "");
-  SendResponse(net::ERR_ABORTED, net::HTTP_OK, true);
+      base::BindOnce(&DigitalAssetLinksHandlerTest::OnRelationshipCheckComplete,
+                     base::Unretained(this)),
+      kDomain, kValidPackage, kValidFingerprint, kValidRelation);
+  AddErrorResponse(net::ERR_ABORTED, net::HTTP_OK);
 
   EXPECT_EQ(1, num_invocations_);
   EXPECT_EQ(result_, RelationshipCheckResult::FAILURE);
 }
 
 TEST_F(DigitalAssetLinksHandlerTest, NetworkDisconnected) {
-  DigitalAssetLinksHandler handler(nullptr);
+  DigitalAssetLinksHandler handler(GetSharedURLLoaderFactory());
   handler.CheckDigitalAssetLinkRelationship(
-      base::Bind(&DigitalAssetLinksHandlerTest::OnRelationshipCheckComplete,
-                 base::Unretained(this)),
-      "", "", "", "");
-  SendResponse(net::ERR_INTERNET_DISCONNECTED, net::HTTP_OK, true);
+      base::BindOnce(&DigitalAssetLinksHandlerTest::OnRelationshipCheckComplete,
+                     base::Unretained(this)),
+      kDomain, kValidPackage, kValidFingerprint, kValidRelation);
+  AddErrorResponse(net::ERR_INTERNET_DISCONNECTED, net::HTTP_OK);
 
   EXPECT_EQ(1, num_invocations_);
   EXPECT_EQ(result_, RelationshipCheckResult::NO_CONNECTION);

@@ -24,6 +24,7 @@
 namespace media {
 
 class CameraBufferFactory;
+class ReprocessManager;
 
 // CameraHalDelegate is the component which does Mojo IPCs to the camera HAL
 // process on Chrome OS to access the module-level camera functionalities such
@@ -56,7 +57,8 @@ class CAPTURE_EXPORT CameraHalDelegate final
   std::unique_ptr<VideoCaptureDevice> CreateDevice(
       scoped_refptr<base::SingleThreadTaskRunner>
           task_runner_for_screen_observer,
-      const VideoCaptureDeviceDescriptor& device_descriptor);
+      const VideoCaptureDeviceDescriptor& device_descriptor,
+      ReprocessManager* reprocess_manager);
   void GetSupportedFormats(
       const VideoCaptureDeviceDescriptor& device_descriptor,
       VideoCaptureFormats* supported_formats);
@@ -126,13 +128,22 @@ class CAPTURE_EXPORT CameraHalDelegate final
   // OnGotCameraInfoOnIpcThread.
   base::WaitableEvent builtin_camera_info_updated_;
 
+  // Signaled/Reset when |pending_external_camera_info_.empty()| is changed.
+  base::WaitableEvent external_camera_info_updated_;
+  std::unordered_set<int> pending_external_camera_info_;
+
+  // Signaled/Reset when |camera_info_.empty()| is changed.
+  base::WaitableEvent has_camera_connected_;
+
   // |num_builtin_cameras_| stores the number of built-in camera devices
   // reported by the camera HAL, and |camera_info_| stores the camera info of
   // each camera device. They are modified only on |ipc_task_runner_|. They
   // are also read in GetSupportedFormats and GetDeviceDescriptors, in which the
   // access is protected by |camera_info_lock_| and sequenced through
   // UpdateBuiltInCameraInfo and |builtin_camera_info_updated_| to avoid race
-  // conditions.
+  // conditions. For external cameras, the |camera_info_| would be read nad
+  // updated in CameraDeviceStatusChange, which is also protected by
+  // |camera_info_lock|.
   size_t num_builtin_cameras_;
   base::Lock camera_info_lock_;
   std::unordered_map<std::string, cros::mojom::CameraInfoPtr> camera_info_;

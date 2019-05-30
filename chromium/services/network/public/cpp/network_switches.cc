@@ -15,6 +15,12 @@ const char kForceEffectiveConnectionType[] = "force-effective-connection-type";
 // These mappings only apply to the host resolver.
 const char kHostResolverRules[] = "host-resolver-rules";
 
+// Causes net::URLFetchers to ignore requests for SSL client certificates,
+// causing them to attempt an unauthenticated SSL/TLS session. This is intended
+// for use when testing various service URLs (eg: kPromoServerURL, kSbURLPrefix,
+// kSyncServiceURL, etc).
+const char kIgnoreUrlFetcherCertRequests[] = "ignore-urlfetcher-cert-requests";
+
 // A set of public key hashes for which to ignore certificate-related errors.
 //
 // If the certificate chain presented by the server does not validate, and one
@@ -34,8 +40,18 @@ const char kIgnoreCertificateErrorsSPKIList[] =
 // user data directory.
 const char kLogNetLog[] = "log-net-log";
 
+// Causes SSL key material to be logged to the specified file for debugging
+// purposes. See
+// https://developer.mozilla.org/en-US/docs/Mozilla/Projects/NSS/Key_Log_Format
+// for the format.
+const char kSSLKeyLogFile[] = "ssl-key-log-file";
+
 // Don't send HTTP-Referer headers.
 const char kNoReferrers[] = "no-referrers";
+
+// Allows overriding the list of restricted ports by passing a comma-separated
+// list of port numbers.
+const char kExplicitlyAllowedPorts[] = "explicitly-allowed-ports";
 
 }  // namespace switches
 

@@ -27,6 +27,8 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_WEBGL_WEBGL_RENDERING_CONTEXT_H_
 
 #include <memory>
+
+#include "base/macros.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context_factory.h"
 #include "third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.h"
 
@@ -40,6 +42,7 @@ class EXTFragDepth;
 class EXTShaderTextureLOD;
 class EXTsRGB;
 class EXTTextureFilterAnisotropic;
+class KHRParallelShaderCompile;
 class OESElementIndexUint;
 class OESStandardDerivatives;
 class OESTextureFloat;
@@ -50,14 +53,14 @@ class WebGLColorBufferFloat;
 class WebGLDebugRendererInfo;
 class WebGLDepthTexture;
 class WebGLLoseContext;
+class WebGLMultiDraw;
+class WebGLMultiDrawInstanced;
 
 class WebGLRenderingContext final : public WebGLRenderingContextBase {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
   class Factory : public CanvasRenderingContextFactory {
-    WTF_MAKE_NONCOPYABLE(Factory);
-
    public:
     Factory() = default;
     ~Factory() override = default;
@@ -70,7 +73,15 @@ class WebGLRenderingContext final : public WebGLRenderingContextBase {
       return CanvasRenderingContext::kContextWebgl;
     }
     void OnError(HTMLCanvasElement*, const String& error) override;
+
+   private:
+    DISALLOW_COPY_AND_ASSIGN(Factory);
   };
+
+  WebGLRenderingContext(CanvasRenderingContextHost*,
+                        std::unique_ptr<WebGraphicsContext3DProvider>,
+                        bool using_gpu_compositing,
+                        const CanvasContextCreationAttributesCore&);
 
   CanvasRenderingContext::ContextType GetContextType() const override {
     return CanvasRenderingContext::kContextWebgl;
@@ -84,11 +95,6 @@ class WebGLRenderingContext final : public WebGLRenderingContextBase {
   void Trace(blink::Visitor*) override;
 
  private:
-  WebGLRenderingContext(CanvasRenderingContextHost*,
-                        std::unique_ptr<WebGraphicsContext3DProvider>,
-                        bool using_gpu_compositing,
-                        const CanvasContextCreationAttributesCore&);
-
   // Enabled extension objects.
   Member<ANGLEInstancedArrays> angle_instanced_arrays_;
   Member<EXTBlendMinMax> ext_blend_min_max_;
@@ -98,6 +104,7 @@ class WebGLRenderingContext final : public WebGLRenderingContextBase {
   Member<EXTShaderTextureLOD> ext_shader_texture_lod_;
   Member<EXTTextureFilterAnisotropic> ext_texture_filter_anisotropic_;
   Member<EXTsRGB> exts_rgb_;
+  Member<KHRParallelShaderCompile> khr_parallel_shader_compile_;
   Member<OESElementIndexUint> oes_element_index_uint_;
   Member<OESStandardDerivatives> oes_standard_derivatives_;
   Member<OESTextureFloat> oes_texture_float_;
@@ -117,6 +124,8 @@ class WebGLRenderingContext final : public WebGLRenderingContextBase {
   Member<WebGLDepthTexture> webgl_depth_texture_;
   Member<WebGLDrawBuffers> webgl_draw_buffers_;
   Member<WebGLLoseContext> webgl_lose_context_;
+  Member<WebGLMultiDraw> webgl_multi_draw_;
+  Member<WebGLMultiDrawInstanced> webgl_multi_draw_instanced_;
 };
 
 DEFINE_TYPE_CASTS(WebGLRenderingContext,

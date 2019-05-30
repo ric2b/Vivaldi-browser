@@ -32,9 +32,13 @@ namespace fileManagerPrivateInternal {
   callback ValidatePathNameLengthCallback = void(boolean result);
   callback GetDirectorySizeCallback = void(double size);
   callback GetRecentFilesCallback = void(EntryDescription[] entries);
+  callback GetCrostiniSharedPathsCallback =
+      void(EntryDescription[] entries, boolean firstForSession);
+  callback GetLinuxPackageInfoCallback =
+      void(fileManagerPrivate.LinuxPackageInfo linux_package_info);
   callback InstallLinuxPackageCallback =
-      void(fileManagerPrivate.InstallLinuxPackageResponse response,
-           optional DOMString failure_reason);
+      void(fileManagerPrivate.InstallLinuxPackageResponse response);
+  callback GetThumbnailCallback = void(DOMString ThumbnailDataUrl);
 
   interface Functions {
     static void resolveIsolatedEntries(DOMString[] urls,
@@ -72,7 +76,6 @@ namespace fileManagerPrivateInternal {
                                SimpleCallback callback);
     static void getFileTasks(DOMString[] urls,
                              GetFileTasksCallback callback);
-    static void getShareUrl(DOMString  url, GetUrlCallback callback);
     static void getDownloadUrl(DOMString url, GetUrlCallback callback);
     static void requestDriveShare(DOMString url,
                                 fileManagerPrivate.DriveShareType shareType,
@@ -100,7 +103,17 @@ namespace fileManagerPrivateInternal {
                                  GetDirectorySizeCallback callback);
     static void getRecentFiles(fileManagerPrivate.SourceRestriction restriction,
                                GetRecentFilesCallback callback);
+    static void sharePathsWithCrostini(DOMString[] urls, boolean persist,
+                                      SimpleCallback callback);
+    static void unsharePathWithCrostini(DOMString url, SimpleCallback callback);
+    static void getCrostiniSharedPaths(boolean observeFirstForSession,
+        GetCrostiniSharedPathsCallback callback);
+    static void getLinuxPackageInfo(DOMString url,
+                                    GetLinuxPackageInfoCallback callback);
     static void installLinuxPackage(DOMString url,
                                     InstallLinuxPackageCallback callback);
+    static void getThumbnail(DOMString url,
+                             boolean cropToSquare,
+                             GetThumbnailCallback callback);
   };
 };

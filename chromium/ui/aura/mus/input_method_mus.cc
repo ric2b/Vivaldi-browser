@@ -6,11 +6,15 @@
 
 #include <utility>
 
+#include "base/bind.h"
+#include "base/bind_helpers.h"
+#include "base/strings/string16.h"
 #include "services/ws/public/mojom/constants.mojom.h"
 #include "services/ws/public/mojom/ime/ime.mojom.h"
 #include "services/ws/public/mojom/window_tree_constants.mojom.h"
 #include "ui/aura/mus/input_method_mus_delegate.h"
 #include "ui/aura/mus/text_input_client_impl.h"
+#include "ui/base/ime/text_edit_commands.h"
 #include "ui/base/ime/text_input_client.h"
 #include "ui/events/event.h"
 #include "ui/platform_window/mojo/ime_type_converters.h"
@@ -19,6 +23,67 @@
 using ws::mojom::EventResult;
 
 namespace aura {
+namespace {
+
+void CallEventResultCallback(InputMethodMus::EventResultCallback ack_callback,
+                             bool handled) {
+  // |ack_callback| can be null if the standard form of DispatchKeyEvent() is
+  // called instead of the version which provides a callback. In mus+ash we
+  // use the version with callback, but some unittests use the standard form.
+  if (!ack_callback)
+    return;
+
+  std::move(ack_callback)
+      .Run(handled ? EventResult::HANDLED : EventResult::UNHANDLED);
+}
+
+void OnDispatchKeyEventPostIME(InputMethodMus::EventResultCallback callback,
+                               bool handled,
+                               bool stopped_propagation) {
+  CallEventResultCallback(std::move(callback), handled);
+}
+
+ws::mojom::TextInputClientDataPtr GetTextInputClientData(
+    const ui::TextInputClient* client) {
+  auto data = ws::mojom::TextInputClientData::New();
+  data->has_composition_text = client->HasCompositionText();
+
+  gfx::Range text_range;
+  if (client->GetTextRange(&text_range))
+    data->text_range = text_range;
+
+  base::string16 text;
+  if (data->text_range.has_value() &&
+      client->GetTextFromRange(*data->text_range, &text)) {
+    data->text = std::move(text);
+  }
+
+  gfx::Range composition_text_range;
+  if (client->GetCompositionTextRange(&composition_text_range))
+    data->composition_text_range = composition_text_range;
+
+  gfx::Range editable_selection_range;
+  if (client->GetEditableSelectionRange(&editable_selection_range))
+    data->editable_selection_range = editable_selection_range;
+
+  const size_t kFirstCommand =
+      static_cast<size_t>(ui::TextEditCommand::FIRST_COMMAND);
+  static_assert(kFirstCommand == 0,
+                "ui::TextEditCommand is used as index to a vector. "
+                "FIRST_COMMAND must have a numeric value of 0.");
+  const size_t kLastCommand =
+      static_cast<size_t>(ui::TextEditCommand::LAST_COMMAND);
+  std::vector<bool> edit_command_enabled(kLastCommand);
+  for (size_t i = kFirstCommand; i < kLastCommand; ++i) {
+    edit_command_enabled[i] =
+        client->IsTextEditCommandEnabled(static_cast<ui::TextEditCommand>(i));
+  }
+  data->edit_command_enabled = std::move(edit_command_enabled);
+
+  return data;
+}
+
+}  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 // InputMethodMus, public:
@@ -26,15 +91,14 @@ namespace aura {
 InputMethodMus::InputMethodMus(
     ui::internal::InputMethodDelegate* delegate,
     InputMethodMusDelegate* input_method_mus_delegate)
-    : input_method_mus_delegate_(input_method_mus_delegate) {
-  SetDelegate(delegate);
-}
+    : ui::InputMethodBase(delegate),
+      input_method_mus_delegate_(input_method_mus_delegate) {}
 
 InputMethodMus::~InputMethodMus() {
   // Mus won't dispatch the next key event until the existing one is acked. We
   // may have KeyEvents sent to IME and awaiting the result, we need to ack
   // them otherwise mus won't process the next event until it times out.
-  AckPendingCallbacksUnhandled();
+  AckPendingCallbacks();
 }
 
 void InputMethodMus::Init(service_manager::Connector* connector) {
@@ -48,15 +112,12 @@ ui::EventDispatchDetails InputMethodMus::DispatchKeyEvent(
   DCHECK(event->type() == ui::ET_KEY_PRESSED ||
          event->type() == ui::ET_KEY_RELEASED);
 
-  // If no text input client, do nothing.
-  if (!GetTextInputClient()) {
-    ui::EventDispatchDetails dispatch_details = DispatchKeyEventPostIME(event);
-    if (ack_callback) {
-      std::move(ack_callback)
-          .Run(event->handled() ? EventResult::HANDLED
-                                : EventResult::UNHANDLED);
-    }
-    return dispatch_details;
+  // If no text input client or the event is synthesized, dispatch the devent
+  // directly without forwarding it to the real input method.
+  if (!GetTextInputClient() || (event->flags() & ui::EF_IS_SYNTHESIZED)) {
+    return DispatchKeyEventPostIME(
+        event,
+        base::BindOnce(&OnDispatchKeyEventPostIME, std::move(ack_callback)));
   }
 
   return SendKeyEventToInputMethod(*event, std::move(ack_callback));
@@ -91,16 +152,29 @@ void InputMethodMus::OnTextInputTypeChanged(const ui::TextInputClient* client) {
 
   UpdateTextInputType();
 
-  if (input_method_)
-    input_method_->OnTextInputTypeChanged(client->GetTextInputType());
+  if (!input_method_)
+    return;
+
+  auto text_input_state = ws::mojom::TextInputState::New(
+      client->GetTextInputType(), client->GetTextInputMode(),
+      client->GetTextDirection(), client->GetTextInputFlags());
+  input_method_->OnTextInputStateChanged(std::move(text_input_state));
+
+  OnTextInputClientDataChanged(client);
 }
 
 void InputMethodMus::OnCaretBoundsChanged(const ui::TextInputClient* client) {
   if (!IsTextInputClientFocused(client))
     return;
 
+  // Sends text input client data (if changed) before caret change because
+  // InputMethodChromeOS accesses the data in its OnCaretBoundsChanged.
+  OnTextInputClientDataChanged(client);
+
   if (input_method_)
     input_method_->OnCaretBoundsChanged(client->GetCaretBounds());
+
+  NotifyTextInputCaretBoundsChanged(client);
 }
 
 void InputMethodMus::CancelComposition(const ui::TextInputClient* client) {
@@ -125,6 +199,7 @@ bool InputMethodMus::IsCandidatePopupOpen() const {
 }
 
 void InputMethodMus::ShowVirtualKeyboardIfEnabled() {
+  InputMethodBase::ShowVirtualKeyboardIfEnabled();
   if (input_method_)
     input_method_->ShowVirtualKeyboardIfEnabled();
 }
@@ -136,7 +211,8 @@ ui::EventDispatchDetails InputMethodMus::SendKeyEventToInputMethod(
     // This code path is hit in tests that don't connect to the server.
     DCHECK(!ack_callback);
     std::unique_ptr<ui::Event> event_clone = ui::Event::Clone(event);
-    return DispatchKeyEventPostIME(event_clone->AsKeyEvent());
+    return DispatchKeyEventPostIME(event_clone->AsKeyEvent(),
+                                   base::NullCallback());
   }
 
   // IME driver will notify us whether it handled the event or not by calling
@@ -160,31 +236,36 @@ void InputMethodMus::OnDidChangeFocusedClient(
   // We are about to close the pipe with pending callbacks. Closing the pipe
   // results in none of the callbacks being run. We have to run the callbacks
   // else mus won't process the next event immediately.
-  AckPendingCallbacksUnhandled();
+  AckPendingCallbacks();
 
   if (!focused) {
     input_method_ = nullptr;
     input_method_ptr_.reset();
     text_input_client_.reset();
+    last_sent_text_input_client_data_.reset();
     return;
   }
 
-  text_input_client_ =
-      std::make_unique<TextInputClientImpl>(focused, delegate());
+  text_input_client_ = std::make_unique<TextInputClientImpl>(
+      focused, delegate(),
+      base::BindRepeating(&InputMethodMus::OnTextInputClientDataChanged,
+                          base::Unretained(this)));
 
   if (ime_driver_) {
-    ws::mojom::StartSessionDetailsPtr details =
-        ws::mojom::StartSessionDetails::New();
-    details->client =
-        text_input_client_->CreateInterfacePtrAndBind().PassInterface();
-    details->input_method_request = MakeRequest(&input_method_ptr_);
-    input_method_ = input_method_ptr_.get();
-    details->text_input_type = focused->GetTextInputType();
-    details->text_input_mode = focused->GetTextInputMode();
-    details->text_direction = focused->GetTextDirection();
-    details->text_input_flags = focused->GetTextInputFlags();
+    ws::mojom::SessionDetailsPtr details = ws::mojom::SessionDetails::New();
+    details->state = ws::mojom::TextInputState::New(
+        focused->GetTextInputType(), focused->GetTextInputMode(),
+        focused->GetTextDirection(), focused->GetTextInputFlags());
     details->caret_bounds = focused->GetCaretBounds();
-    ime_driver_->StartSession(std::move(details));
+    details->data = GetTextInputClientData(focused);
+    last_sent_text_input_client_data_ = details->data->Clone();
+    details->focus_reason = focused->GetFocusReason();
+    details->client_source_for_metrics = focused->GetClientSourceForMetrics();
+    details->should_do_learning = focused->ShouldDoLearning();
+    ime_driver_->StartSession(MakeRequest(&input_method_ptr_),
+                              text_input_client_->CreateInterfacePtrAndBind(),
+                              std::move(details));
+    input_method_ = input_method_ptr_.get();
   }
 }
 
@@ -200,10 +281,10 @@ void InputMethodMus::UpdateTextInputType() {
   }
 }
 
-void InputMethodMus::AckPendingCallbacksUnhandled() {
+void InputMethodMus::AckPendingCallbacks() {
   for (auto& callback : pending_callbacks_) {
     if (callback)
-      std::move(callback).Run(EventResult::UNHANDLED);
+      std::move(callback).Run(EventResult::HANDLED);
   }
   pending_callbacks_.clear();
 }
@@ -216,14 +297,20 @@ void InputMethodMus::ProcessKeyEventCallback(
   DCHECK(!pending_callbacks_.empty());
   EventResultCallback ack_callback = std::move(pending_callbacks_.front());
   pending_callbacks_.pop_front();
+  CallEventResultCallback(std::move(ack_callback), handled);
+}
 
-  // |ack_callback| can be null if the standard form of DispatchKeyEvent() is
-  // called instead of the version which provides a callback. In mus+ash we
-  // use the version with callback, but some unittests use the standard form.
-  if (ack_callback) {
-    std::move(ack_callback)
-        .Run(handled ? EventResult::HANDLED : EventResult::UNHANDLED);
-  }
+void InputMethodMus::OnTextInputClientDataChanged(
+    const ui::TextInputClient* client) {
+  if (!input_method_ || !IsTextInputClientFocused(client))
+    return;
+
+  auto data = GetTextInputClientData(client);
+  if (last_sent_text_input_client_data_ == data)
+    return;
+
+  last_sent_text_input_client_data_ = data->Clone();
+  input_method_->OnTextInputClientDataChanged(std::move(data));
 }
 
 }  // namespace aura

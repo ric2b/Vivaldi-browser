@@ -5,7 +5,8 @@
 #include "components/sync/engine_impl/syncer_proto_util.h"
 
 #include "base/compiler_specific.h"
-#include "base/message_loop/message_loop.h"
+#include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_task_environment.h"
 #include "components/sync/base/cancelation_signal.h"
 #include "components/sync/base/model_type_test_util.h"
 #include "components/sync/engine_impl/cycle/sync_cycle_context.h"
@@ -123,7 +124,7 @@ class SyncerProtoUtilTest : public testing::Test {
   }
 
  protected:
-  base::MessageLoop message_loop_;
+  base::test::ScopedTaskEnvironment task_environment_;
   TestDirectorySetterUpper dir_maker_;
 };
 
@@ -233,13 +234,20 @@ TEST_F(SyncerProtoUtilTest, PostAndProcessHeaders) {
   msg.set_message_contents(ClientToServerMessage::GET_UPDATES);
   sync_pb::ClientToServerResponse response;
 
+  base::HistogramTester histogram_tester;
   dcm.set_send_error(true);
   EXPECT_FALSE(
       SyncerProtoUtil::PostAndProcessHeaders(&dcm, nullptr, msg, &response));
+  EXPECT_EQ(1,
+            histogram_tester.GetBucketCount("Sync.PostedClientToServerMessage",
+                                            /*GET_UPDATES=*/2));
 
   dcm.set_send_error(false);
   EXPECT_TRUE(
       SyncerProtoUtil::PostAndProcessHeaders(&dcm, nullptr, msg, &response));
+  EXPECT_EQ(2,
+            histogram_tester.GetBucketCount("Sync.PostedClientToServerMessage",
+                                            /*GET_UPDATES=*/2));
 }
 
 }  // namespace syncer

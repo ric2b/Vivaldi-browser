@@ -8,6 +8,7 @@
 #include <memory>
 #include <string>
 
+#include "ash/public/cpp/app_list/app_list_metrics.h"
 #include "base/macros.h"
 #include "chrome/browser/ui/app_icon_loader_delegate.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_icon_loader.h"
@@ -34,6 +35,7 @@ class ArcAppShortcutSearchResult : public ChromeSearchResult,
 
   // ChromeSearchResult:
   void Open(int event_flags) override;
+  SearchResultType GetSearchResultType() const override;
 
  private:
   // AppIconLoaderDelegate:
@@ -42,6 +44,9 @@ class ArcAppShortcutSearchResult : public ChromeSearchResult,
 
   // Gets app id of the app that publishes this app shortcut.
   std::string GetAppId() const;
+
+  // Gets accessible name for this app shortcut.
+  base::string16 ComputeAccessibleName() const;
 
   arc::mojom::AppShortcutItemPtr data_;
   std::unique_ptr<arc::IconDecodeRequest> icon_decode_request_;

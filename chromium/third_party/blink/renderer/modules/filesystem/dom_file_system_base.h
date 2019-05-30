@@ -42,10 +42,6 @@
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
 namespace blink {
-class WebFileSystem;
-}  // namespace blink
-
-namespace blink {
 
 class DirectoryReaderBase;
 class EntryBase;
@@ -78,12 +74,11 @@ class MODULES_EXPORT DOMFileSystemBase : public ScriptWrappable {
   virtual void RemovePendingCallbacks() {}
 
   // Overridden by subclasses to handle sync vs async error-handling.
-  virtual void ReportError(ErrorCallbackBase*, FileError::ErrorCode) = 0;
+  virtual void ReportError(ErrorCallbackBase*, base::File::Error error) = 0;
 
   const String& name() const { return name_; }
   mojom::blink::FileSystemType GetType() const { return type_; }
   KURL RootURL() const { return filesystem_root_url_; }
-  WebFileSystem* FileSystem() const;
   const SecurityOrigin* GetSecurityOrigin() const;
 
   // The clonable flag is used in the structured clone algorithm to test
@@ -140,21 +135,21 @@ class MODULES_EXPORT DOMFileSystemBase : public ScriptWrappable {
                  ErrorCallbackBase*);
   void GetFile(const EntryBase*,
                const String& path,
-               const FileSystemFlags&,
+               const FileSystemFlags*,
                EntryCallbacks::OnDidGetEntryCallback*,
                ErrorCallbackBase*,
                SynchronousType = kAsynchronous);
   void GetDirectory(const EntryBase*,
                     const String& path,
-                    const FileSystemFlags&,
+                    const FileSystemFlags*,
                     EntryCallbacks::OnDidGetEntryCallback*,
                     ErrorCallbackBase*,
                     SynchronousType = kAsynchronous);
-  int ReadDirectory(DirectoryReaderBase*,
-                    const String& path,
-                    EntriesCallbacks::OnDidGetEntriesCallback*,
-                    ErrorCallbackBase*,
-                    SynchronousType = kAsynchronous);
+  void ReadDirectory(DirectoryReaderBase*,
+                     const String& path,
+                     EntriesCallbacks::OnDidGetEntriesCallback*,
+                     ErrorCallbackBase*,
+                     SynchronousType = kAsynchronous);
 
   void Trace(blink::Visitor*) override;
 

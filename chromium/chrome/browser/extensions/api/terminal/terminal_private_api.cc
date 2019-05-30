@@ -11,7 +11,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/json/json_writer.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "base/task/post_task.h"
 #include "base/values.h"
 #include "chrome/browser/extensions/api/terminal/terminal_extension_helper.h"
@@ -21,6 +21,7 @@
 #include "chrome/common/extensions/api/terminal_private.h"
 #include "chromeos/process_proxy/process_proxy_registry.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/app_window/app_window.h"
@@ -80,12 +81,12 @@ bool CommandSupportsArguments(const std::string& name) {
 void NotifyProcessOutput(content::BrowserContext* browser_context,
                          const std::string& extension_id,
                          int tab_id,
-                         int terminal_id,
+                         const std::string& terminal_id,
                          const std::string& output_type,
                          const std::string& output) {
   if (!content::BrowserThread::CurrentlyOn(content::BrowserThread::UI)) {
-    content::BrowserThread::PostTask(
-        content::BrowserThread::UI, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {content::BrowserThread::UI},
         base::BindOnce(&NotifyProcessOutput, browser_context, extension_id,
                        tab_id, terminal_id, output_type, output));
     return;
@@ -93,7 +94,7 @@ void NotifyProcessOutput(content::BrowserContext* browser_context,
 
   std::unique_ptr<base::ListValue> args(new base::ListValue());
   args->AppendInteger(tab_id);
-  args->AppendInteger(terminal_id);
+  args->AppendString(terminal_id);
   args->AppendString(output_type);
   args->AppendString(output);
 
@@ -196,18 +197,20 @@ void TerminalPrivateOpenTerminalProcessFunction::OpenOnRegistryTaskRunner(
       chromeos::ProcessProxyRegistry::Get();
   const base::CommandLine cmdline{arguments};
 
-  int terminal_id =
-      registry->OpenProcess(cmdline, user_id_hash, output_callback);
+  std::string terminal_id;
+  bool success = registry->OpenProcess(cmdline, user_id_hash, output_callback,
+                                       &terminal_id);
 
-  content::BrowserThread::PostTask(content::BrowserThread::UI, FROM_HERE,
-                                   base::BindOnce(callback, terminal_id));
+  base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::UI},
+                           base::BindOnce(callback, success, terminal_id));
 }
 
 TerminalPrivateSendInputFunction::~TerminalPrivateSendInputFunction() {}
 
 void TerminalPrivateOpenTerminalProcessFunction::RespondOnUIThread(
-    int terminal_id) {
-  if (terminal_id < 0) {
+    bool success,
+    const std::string& terminal_id) {
+  if (!success) {
     Respond(Error("Failed to open process."));
     return;
   }
@@ -223,18 +226,18 @@ ExtensionFunction::ResponseAction TerminalPrivateSendInputFunction::Run() {
       FROM_HERE,
       base::BindOnce(
           &TerminalPrivateSendInputFunction::SendInputOnRegistryTaskRunner,
-          this, params->pid, params->input));
+          this, params->id, params->input));
   return RespondLater();
 }
 
 void TerminalPrivateSendInputFunction::SendInputOnRegistryTaskRunner(
-    int terminal_id,
+    const std::string& terminal_id,
     const std::string& text) {
   bool success =
       chromeos::ProcessProxyRegistry::Get()->SendInput(terminal_id, text);
 
-  content::BrowserThread::PostTask(
-      content::BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::UI},
       base::BindOnce(&TerminalPrivateSendInputFunction::RespondOnUIThread, this,
                      success));
 }
@@ -256,18 +259,18 @@ TerminalPrivateCloseTerminalProcessFunction::Run() {
   chromeos::ProcessProxyRegistry::GetTaskRunner()->PostTask(
       FROM_HERE, base::BindOnce(&TerminalPrivateCloseTerminalProcessFunction::
                                     CloseOnRegistryTaskRunner,
-                                this, params->pid));
+                                this, params->id));
 
   return RespondLater();
 }
 
 void TerminalPrivateCloseTerminalProcessFunction::CloseOnRegistryTaskRunner(
-    int terminal_id) {
+    const std::string& terminal_id) {
   bool success =
       chromeos::ProcessProxyRegistry::Get()->CloseProcess(terminal_id);
 
-  content::BrowserThread::PostTask(
-      content::BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::UI},
       base::BindOnce(
           &TerminalPrivateCloseTerminalProcessFunction::RespondOnUIThread, this,
           success));
@@ -292,20 +295,20 @@ TerminalPrivateOnTerminalResizeFunction::Run() {
       FROM_HERE,
       base::BindOnce(&TerminalPrivateOnTerminalResizeFunction::
                          OnResizeOnRegistryTaskRunner,
-                     this, params->pid, params->width, params->height));
+                     this, params->id, params->width, params->height));
 
   return RespondLater();
 }
 
 void TerminalPrivateOnTerminalResizeFunction::OnResizeOnRegistryTaskRunner(
-    int terminal_id,
+    const std::string& terminal_id,
     int width,
     int height) {
   bool success = chromeos::ProcessProxyRegistry::Get()->OnTerminalResize(
       terminal_id, width, height);
 
-  content::BrowserThread::PostTask(
-      content::BrowserThread::UI, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::UI},
       base::BindOnce(
           &TerminalPrivateOnTerminalResizeFunction::RespondOnUIThread, this,
           success));
@@ -337,13 +340,13 @@ ExtensionFunction::ResponseAction TerminalPrivateAckOutputFunction::Run() {
       FROM_HERE,
       base::BindOnce(
           &TerminalPrivateAckOutputFunction::AckOutputOnRegistryTaskRunner,
-          this, params->pid));
+          this, params->id));
 
   return RespondNow(NoArguments());
 }
 
 void TerminalPrivateAckOutputFunction::AckOutputOnRegistryTaskRunner(
-    int terminal_id) {
+    const std::string& terminal_id) {
   chromeos::ProcessProxyRegistry::Get()->AckOutput(terminal_id);
 }
 

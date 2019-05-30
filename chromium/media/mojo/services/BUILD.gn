@@ -2,12 +2,10 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/chromecast_build.gni")
 import("//build/config/jumbo.gni")
 import("//media/media_options.gni")
-import("//services/catalog/public/tools/catalog.gni")
-import("//services/service_manager/public/cpp/service.gni")
-import("//services/service_manager/public/service_manifest.gni")
-import("//services/service_manager/public/tools/test/service_test.gni")
+import("//services/service_manager/public/cpp/service_executable.gni")
 import("//testing/test.gni")
 
 jumbo_component("services") {
@@ -95,11 +93,13 @@ jumbo_component("services") {
 
   deps = [
     "//gpu/ipc/service",
+    "//media",
     "//media:shared_memory_support",
     "//media/cdm:cdm_manager",
     "//media/gpu",
     "//media/gpu:buildflags",
     "//media/gpu/ipc/service",
+    "//media/learning/impl",
     "//media/mojo/common",
     "//media/mojo/common:mojo_shared_buffer_video_frame",
     "//services/metrics/public/cpp:metrics_cpp",
@@ -147,14 +147,34 @@ jumbo_component("services") {
   }
 }
 
-service_manifest("cdm_manifest") {
-  name = "cdm"
-  source = "cdm_manifest.json"
+source_set("cdm_manifest") {
+  sources = [
+    "cdm_manifest.cc",
+    "cdm_manifest.h",
+  ]
+  deps = [
+    "//base",
+    "//media/mojo/interfaces",
+    "//media/mojo/interfaces:constants",
+    "//services/service_manager/public/cpp",
+  ]
 }
 
-service_manifest("media_manifest") {
-  name = "media"
-  source = "media_manifest.json"
+source_set("media_manifest") {
+  sources = [
+    "media_manifest.cc",
+    "media_manifest.h",
+  ]
+  deps = [
+    "//base",
+    "//media/mojo/interfaces",
+    "//media/mojo/interfaces:constants",
+    "//services/service_manager/public/cpp",
+  ]
+  if (is_chromecast) {
+    defines = [ "IS_CHROMECAST" ]
+    deps += [ "//chromecast/common/mojom" ]
+  }
 }
 
 # Unit Tests
@@ -170,7 +190,10 @@ source_set("unit_tests") {
     "mojo_audio_output_stream_unittest.cc",
     "mojo_jpeg_decode_accelerator_service_unittest.cc",
     "mojo_video_encode_accelerator_service_unittest.cc",
+    "test_helpers.cc",
+    "test_helpers.h",
     "video_decode_perf_history_unittest.cc",
+    "video_decode_stats_recorder_unittest.cc",
     "watch_time_recorder_unittest.cc",
   ]
 
@@ -179,6 +202,7 @@ source_set("unit_tests") {
     "//base/test:test_support",
     "//components/ukm:test_support",
     "//media:test_support",
+    "//media/learning/common",
     "//media/mojo:test_support",
     "//mojo/core/embedder",
     "//mojo/public/interfaces/bindings/tests:test_interfaces",
@@ -205,7 +229,7 @@ source_set("unit_tests") {
 # service out-of-process. While CdmService is tested as a packaged service,
 # which runs the service in-process.
 
-service("media") {
+service_executable("media") {
   testonly = true
 
   sources = [
@@ -224,7 +248,7 @@ service("media") {
   ]
 }
 
-service_test("media_service_unittests") {
+test("media_service_unittests") {
   testonly = true
 
   sources = [
@@ -235,18 +259,20 @@ service_test("media_service_unittests") {
     sources += [ "cdm_service_unittest.cc" ]
   }
 
-  catalog = ":service_tests_catalog"
-
   deps = [
+    ":media_manifest",
     ":services",
     "//base",
+    "//base/test:test_support",
     "//media:test_support",
     "//media/cdm:cdm_paths",
     "//media/mojo/clients",
     "//media/mojo/common",
     "//media/mojo/interfaces",
     "//media/mojo/interfaces:constants",
-    "//services/service_manager/public/cpp:service_test_support",
+    "//mojo/core/test:run_all_unittests",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/cpp/test:test_support",
     "//testing/gmock",
     "//testing/gtest",
   ]
@@ -256,57 +282,16 @@ service_test("media_service_unittests") {
   ]
 }
 
-service_manifest("media_service_unittest_manifest") {
-  name = "media_service_unittests"
-  source = "test_manifest.json"
-}
-
-catalog("media_service_unittest_catalog") {
-  testonly = true
-  embedded_services = [ ":media_service_unittest_manifest" ]
-  standalone_services = [ ":media_manifest" ]
-}
-
-service_manifest("cdm_service_unittest_manifest") {
-  name = "cdm_service_unittest"
-  source = "cdm_service_unittest_manifest.json"
-  packaged_services = [ ":cdm_manifest" ]
-}
-
-catalog("cdm_service_unittest_catalog") {
-  testonly = true
-  embedded_services = [ ":cdm_service_unittest_manifest" ]
-}
-
-catalog("service_tests_catalog") {
-  testonly = true
-  catalog_deps = [
-    ":cdm_service_unittest_catalog",
-    ":media_service_unittest_catalog",
-  ]
-}
-
 # media_pipeline_integration_unittests is out of date and disabled by default.
-service_test("media_pipeline_integration_unittests") {
+test("media_pipeline_integration_unittests") {
   testonly = true
-
-  catalog = ":media_pipeline_integration_unittests_catalog"
 
   deps = [
     "//media/test:mojo_pipeline_integration_tests",
+    "//mojo/core/test:run_all_unittests",
   ]
 
   data_deps = [
     ":media",
   ]
-}
-
-service_manifest("pipeline_test_manifest") {
-  name = "media_pipeline_integration_unittests"
-  source = "pipeline_test_manifest.json"
-}
-
-catalog("media_pipeline_integration_unittests_catalog") {
-  embedded_services = [ ":pipeline_test_manifest" ]
-  standalone_services = [ ":media_manifest" ]
 }

@@ -10,6 +10,7 @@ import android.support.annotation.IntDef;
 import android.view.animation.Interpolator;
 
 import org.chromium.chrome.browser.ChromeFeatureList;
+import org.chromium.chrome.browser.compositor.animation.CompositorAnimator;
 import org.chromium.chrome.browser.compositor.layouts.ChromeAnimation;
 import org.chromium.chrome.browser.compositor.layouts.ChromeAnimation.Animatable;
 import org.chromium.chrome.browser.compositor.layouts.Layout.Orientation;
@@ -130,7 +131,8 @@ public abstract class StackAnimation {
      */
     public static StackAnimation createAnimationFactory(Stack stack, float width, float height,
             float topBrowserControlsHeight, float borderFramePaddingTop,
-            float borderFramePaddingTopOpaque, float borderFramePaddingLeft, int orientation) {
+            float borderFramePaddingTopOpaque, float borderFramePaddingLeft,
+            @Orientation int orientation) {
         StackAnimation factory = null;
         switch (orientation) {
             case Orientation.LANDSCAPE:
@@ -406,7 +408,7 @@ public abstract class StackAnimation {
         for (int i = 0; i < tabs.length; i++) {
             addAnimation(set, tabs[i], StackTab.Property.SCROLL_OFFSET, tabs[i].getScrollOffset(),
                     0.0f, TAB_OPENED_ANIMATION_DURATION, 0, false,
-                    ChromeAnimation.getDecelerateInterpolator());
+                    CompositorAnimator.DECELERATE_INTERPOLATOR);
         }
 
         return set;

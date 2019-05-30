@@ -15,6 +15,7 @@
 #import "ios/chrome/browser/web/chrome_web_test.h"
 #import "ios/web/public/test/js_test_util.h"
 #import "ios/web/public/web_state/js/crw_js_injection_receiver.h"
+#include "ios/web/public/web_state/web_frame_util.h"
 #import "ios/web/public/web_state/web_state.h"
 #import "testing/gtest_mac.h"
 
@@ -90,18 +91,27 @@ TEST_F(JsAutofillManagerTest, InitAndInject) {
 // Tests forms extraction method
 // (fetchFormsWithRequirements:minimumRequiredFieldsCount:completionHandler:).
 TEST_F(JsAutofillManagerTest, ExtractForms) {
-  LoadHtml(
-      @"<html><body><form name='testform' method='post'>"
-       "<input type='text' id='firstname' name='firstname'/>"
-       "<input type='text' id='lastname' name='lastname'/>"
-       "<input type='email' id='email' name='email'/>"
-       "</form></body></html>");
+  LoadHtml(@"<html><body><form name='testform' method='post'>"
+            "<div id='div1'>Last Name</div>"
+            "<div id='div2'>Email Address</div>"
+            "<input type='text' id='firstname' name='firstname'/"
+            "    aria-label='First Name'>"
+            "<input type='text' id='lastname' name='lastname'"
+            "    aria-labelledby='div1'/>"
+            "<input type='email' id='email' name='email'"
+            "    aria-describedby='div2'/>"
+            "</form>"
+            "</body></html>");
 
   NSDictionary* expected = @{
     @"name" : @"testform",
     @"fields" : @[
       @{
+        @"aria_description" : @"",
+        @"aria_label" : @"First Name",
         @"name" : @"firstname",
+        @"name_attribute" : @"firstname",
+        @"id_attribute" : @"firstname",
         @"identifier" : @"firstname",
         @"form_control_type" : @"text",
         @"max_length" : GetDefaultMaxLength(),
@@ -109,10 +119,14 @@ TEST_F(JsAutofillManagerTest, ExtractForms) {
         @"is_checkable" : @false,
         @"is_focusable" : @true,
         @"value" : @"",
-        @"label" : @""
+        @"label" : @"First Name"
       },
       @{
+        @"aria_description" : @"",
+        @"aria_label" : @"Last Name",
         @"name" : @"lastname",
+        @"name_attribute" : @"lastname",
+        @"id_attribute" : @"lastname",
         @"identifier" : @"lastname",
         @"form_control_type" : @"text",
         @"max_length" : GetDefaultMaxLength(),
@@ -123,7 +137,11 @@ TEST_F(JsAutofillManagerTest, ExtractForms) {
         @"label" : @""
       },
       @{
+        @"aria_description" : @"Email Address",
+        @"aria_label" : @"",
         @"name" : @"email",
+        @"name_attribute" : @"email",
+        @"id_attribute" : @"email",
         @"identifier" : @"email",
         @"form_control_type" : @"email",
         @"max_length" : GetDefaultMaxLength(),
@@ -138,12 +156,106 @@ TEST_F(JsAutofillManagerTest, ExtractForms) {
 
   __block BOOL block_was_called = NO;
   __block NSString* result;
-  [manager_ fetchFormsWithMinimumRequiredFieldsCount:
-                autofill::MinRequiredFieldsForHeuristics()
-                                   completionHandler:^(NSString* actualResult) {
-                                     block_was_called = YES;
-                                     result = [actualResult copy];
-                                   }];
+  [manager_
+      fetchFormsWithMinimumRequiredFieldsCount:
+          autofill::MinRequiredFieldsForHeuristics()
+                                       inFrame:web::GetMainWebFrame(web_state())
+                             completionHandler:^(NSString* actualResult) {
+                               block_was_called = YES;
+                               result = [actualResult copy];
+                             }];
+  base::test::ios::WaitUntilCondition(^bool() {
+    return block_was_called;
+  });
+
+  NSArray* resultArray = [NSJSONSerialization
+      JSONObjectWithData:[result dataUsingEncoding:NSUTF8StringEncoding]
+                 options:0
+                   error:nil];
+  EXPECT_NSNE(nil, resultArray);
+
+  NSDictionary* form = [resultArray firstObject];
+  [expected enumerateKeysAndObjectsUsingBlock:^(id key, id obj, BOOL* stop) {
+    EXPECT_NSEQ(form[key], obj);
+  }];
+}
+
+// Tests forms extraction method
+// (fetchFormsWithRequirements:minimumRequiredFieldsCount:completionHandler:).
+TEST_F(JsAutofillManagerTest, ExtractForms2) {
+  LoadHtml(@"<html><body><form name='testform' method='post'>"
+            "<input type='text' id='firstname' name='firstname'/"
+            "    aria-label='First Name'>"
+            "<input type='text' id='lastname' name='lastname'"
+            "    aria-labelledby='div1'/>"
+            "<input type='email' id='email' name='email'"
+            "    aria-describedby='div2'/>"
+            "</form>"
+            "<div id='div1'>Last Name</div>"
+            "<div id='div2'>Email Address</div>"
+            "</body></html>");
+
+  NSDictionary* expected = @{
+    @"name" : @"testform",
+    @"fields" : @[
+      @{
+        @"aria_description" : @"",
+        @"aria_label" : @"First Name",
+        @"name" : @"firstname",
+        @"name_attribute" : @"firstname",
+        @"id_attribute" : @"firstname",
+        @"identifier" : @"firstname",
+        @"form_control_type" : @"text",
+        @"max_length" : GetDefaultMaxLength(),
+        @"should_autocomplete" : @true,
+        @"is_checkable" : @false,
+        @"is_focusable" : @true,
+        @"value" : @"",
+        @"label" : @"First Name"
+      },
+      @{
+        @"aria_description" : @"",
+        @"aria_label" : @"Last Name",
+        @"name" : @"lastname",
+        @"name_attribute" : @"lastname",
+        @"id_attribute" : @"lastname",
+        @"identifier" : @"lastname",
+        @"form_control_type" : @"text",
+        @"max_length" : GetDefaultMaxLength(),
+        @"should_autocomplete" : @true,
+        @"is_checkable" : @false,
+        @"is_focusable" : @true,
+        @"value" : @"",
+        @"label" : @""
+      },
+      @{
+        @"aria_description" : @"Email Address",
+        @"aria_label" : @"",
+        @"name" : @"email",
+        @"name_attribute" : @"email",
+        @"id_attribute" : @"email",
+        @"identifier" : @"email",
+        @"form_control_type" : @"email",
+        @"max_length" : GetDefaultMaxLength(),
+        @"should_autocomplete" : @true,
+        @"is_checkable" : @false,
+        @"is_focusable" : @true,
+        @"value" : @"",
+        @"label" : @""
+      }
+    ]
+  };
+
+  __block BOOL block_was_called = NO;
+  __block NSString* result;
+  [manager_
+      fetchFormsWithMinimumRequiredFieldsCount:
+          autofill::MinRequiredFieldsForHeuristics()
+                                       inFrame:web::GetMainWebFrame(web_state())
+                             completionHandler:^(NSString* actualResult) {
+                               block_was_called = YES;
+                               result = [actualResult copy];
+                             }];
   base::test::ios::WaitUntilCondition(^bool() {
     return block_was_called;
   });
@@ -174,12 +286,14 @@ TEST_F(JsAutofillManagerTest, ExtractFormlessForms_RestrictToFormlessCheckout) {
 
   __block BOOL block_was_called = NO;
   __block NSString* result;
-  [manager_ fetchFormsWithMinimumRequiredFieldsCount:
-                autofill::MinRequiredFieldsForHeuristics()
-                                   completionHandler:^(NSString* actualResult) {
-                                     block_was_called = YES;
-                                     result = [actualResult copy];
-                                   }];
+  [manager_
+      fetchFormsWithMinimumRequiredFieldsCount:
+          autofill::MinRequiredFieldsForHeuristics()
+                                       inFrame:web::GetMainWebFrame(web_state())
+                             completionHandler:^(NSString* actualResult) {
+                               block_was_called = YES;
+                               result = [actualResult copy];
+                             }];
   base::test::ios::WaitUntilCondition(^bool() {
     return block_was_called;
   });
@@ -207,12 +321,14 @@ TEST_F(JsAutofillManagerTest, ExtractFormlessForms_AllFormlessForms) {
 
   __block BOOL block_was_called = NO;
   __block NSString* result;
-  [manager_ fetchFormsWithMinimumRequiredFieldsCount:
-                autofill::MinRequiredFieldsForHeuristics()
-                                   completionHandler:^(NSString* actualResult) {
-                                     block_was_called = YES;
-                                     result = [actualResult copy];
-                                   }];
+  [manager_
+      fetchFormsWithMinimumRequiredFieldsCount:
+          autofill::MinRequiredFieldsForHeuristics()
+                                       inFrame:web::GetMainWebFrame(web_state())
+                             completionHandler:^(NSString* actualResult) {
+                               block_was_called = YES;
+                               result = [actualResult copy];
+                             }];
   base::test::ios::WaitUntilCondition(^bool() {
     return block_was_called;
   });
@@ -237,12 +353,20 @@ TEST_F(JsAutofillManagerTest, FillActiveFormField) {
   NSString* focus_element_javascript =
       [NSString stringWithFormat:@"%@.focus()", get_element_javascript];
   ExecuteJavaScript(focus_element_javascript);
-  [manager_ fillActiveFormField:
-                @"{\"name\":\"email\",\"identifier\":\"email\",\"value\":"
-                @"\"newemail@com\"}"
+  auto data = std::make_unique<base::DictionaryValue>();
+  data->SetString("name", "email");
+  data->SetString("identifier", "email");
+  data->SetString("value", "newemail@com");
+  __block BOOL block_was_called = NO;
+  [manager_ fillActiveFormField:std::move(data)
+                        inFrame:web::GetMainWebFrame(web_state())
               completionHandler:^{
+                block_was_called = YES;
               }];
-
+  EXPECT_TRUE(base::test::ios::WaitUntilConditionOrTimeout(
+      base::test::ios::kWaitForActionTimeout, ^bool() {
+        return block_was_called;
+      }));
   NSString* element_value_javascript =
       [NSString stringWithFormat:@"%@.value", get_element_javascript];
   EXPECT_NSEQ(@"newemail@com", ExecuteJavaScript(element_value_javascript));
@@ -262,12 +386,14 @@ TEST_F(JsAutofillManagerTest, TestExtractedFieldsNames) {
 
   __block BOOL block_was_called = NO;
   __block NSString* result;
-  [manager_ fetchFormsWithMinimumRequiredFieldsCount:
-                autofill::MinRequiredFieldsForHeuristics()
-                                   completionHandler:^(NSString* actualResult) {
-                                     block_was_called = YES;
-                                     result = [actualResult copy];
-                                   }];
+  [manager_
+      fetchFormsWithMinimumRequiredFieldsCount:
+          autofill::MinRequiredFieldsForHeuristics()
+                                       inFrame:web::GetMainWebFrame(web_state())
+                             completionHandler:^(NSString* actualResult) {
+                               block_was_called = YES;
+                               result = [actualResult copy];
+                             }];
   base::test::ios::WaitUntilCondition(^bool() {
     return block_was_called;
   });
@@ -331,12 +457,14 @@ TEST_F(JsAutofillManagerTest, TestExtractedFieldsIDs) {
 
   __block BOOL block_was_called = NO;
   __block NSString* result;
-  [manager_ fetchFormsWithMinimumRequiredFieldsCount:
-                autofill::MinRequiredFieldsForHeuristics()
-                                   completionHandler:^(NSString* actualResult) {
-                                     block_was_called = YES;
-                                     result = [actualResult copy];
-                                   }];
+  [manager_
+      fetchFormsWithMinimumRequiredFieldsCount:
+          autofill::MinRequiredFieldsForHeuristics()
+                                       inFrame:web::GetMainWebFrame(web_state())
+                             completionHandler:^(NSString* actualResult) {
+                               block_was_called = YES;
+                               result = [actualResult copy];
+                             }];
   base::test::ios::WaitUntilCondition(^bool() {
     return block_was_called;
   });

@@ -64,7 +64,7 @@ namespace {
 
 GURL GetStartupURL() {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(switches::kContentBrowserTest))
+  if (command_line->HasSwitch(switches::kBrowserTest))
     return GURL();
   const base::CommandLine::StringVector& args = command_line->GetArgs();
 
@@ -116,9 +116,7 @@ void ShellBrowserMainParts::PreMainMessageLoopStart() {
 void ShellBrowserMainParts::PostMainMessageLoopStart() {
 #if defined(OS_CHROMEOS)
   chromeos::DBusThreadManager::Initialize();
-  bluez::BluezDBusManager::Initialize(
-      chromeos::DBusThreadManager::Get()->GetSystemBus(),
-      chromeos::DBusThreadManager::Get()->IsUsingFakes());
+  bluez::BluezDBusManager::Initialize();
 #elif defined(OS_LINUX)
   bluez::DBusBluezManagerWrapperLinux::Initialize();
 #endif
@@ -135,7 +133,6 @@ int ShellBrowserMainParts::PreEarlyInitialization() {
   net::NetworkChangeNotifier::SetFactory(
       new net::NetworkChangeNotifierFactoryAndroid());
 #endif
-  SetupFieldTrials();
   return service_manager::RESULT_CODE_NORMAL_EXIT;
 }
 
@@ -151,36 +148,14 @@ void ShellBrowserMainParts::InitializeMessageLoopContext() {
                          gfx::Size());
 }
 
-void ShellBrowserMainParts::SetupFieldTrials() {
-  DCHECK(!field_trial_list_);
-  field_trial_list_.reset(new base::FieldTrialList(nullptr));
-
-  const base::CommandLine* command_line =
-      base::CommandLine::ForCurrentProcess();
-
-  // Ensure any field trials specified on the command line are initialized.
-  if (command_line->HasSwitch(::switches::kForceFieldTrials)) {
-    // Create field trials without activating them, so that this behaves in a
-    // consistent manner with field trials created from the server.
-    bool result = base::FieldTrialList::CreateTrialsFromString(
-        command_line->GetSwitchValueASCII(::switches::kForceFieldTrials),
-        std::set<std::string>());
-    CHECK(result) << "Invalid --" << ::switches::kForceFieldTrials
-                  << " list specified.";
-  }
-}
-
 int ShellBrowserMainParts::PreCreateThreads() {
 #if defined(OS_ANDROID)
   const base::CommandLine* command_line =
       base::CommandLine::ForCurrentProcess();
   crash_reporter::ChildExitObserver::Create();
   if (command_line->HasSwitch(switches::kEnableCrashReporter)) {
-    base::FilePath crash_dumps_dir =
-        command_line->GetSwitchValuePath(switches::kCrashDumpsDir);
     crash_reporter::ChildExitObserver::GetInstance()->RegisterClient(
-        std::make_unique<crash_reporter::ChildProcessCrashObserver>(
-            crash_dumps_dir, kAndroidMinidumpDescriptor));
+        std::make_unique<crash_reporter::ChildProcessCrashObserver>());
   }
 #endif
 

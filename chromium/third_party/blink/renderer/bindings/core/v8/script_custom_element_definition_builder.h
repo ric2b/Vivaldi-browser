@@ -5,77 +5,54 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_BINDINGS_CORE_V8_SCRIPT_CUSTOM_ELEMENT_DEFINITION_BUILDER_H_
 #define THIRD_PARTY_BLINK_RENDERER_BINDINGS_CORE_V8_SCRIPT_CUSTOM_ELEMENT_DEFINITION_BUILDER_H_
 
-#include "base/memory/scoped_refptr.h"
+#include "base/macros.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_custom_element_definition_data.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/html/custom/custom_element_definition_builder.h"
-#include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
-#include "third_party/blink/renderer/platform/wtf/hash_set.h"
-#include "third_party/blink/renderer/platform/wtf/noncopyable.h"
-#include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
-#include "third_party/blink/renderer/platform/wtf/text/atomic_string_hash.h"
-#include "third_party/blink/renderer/platform/wtf/text/string_view.h"
 #include "v8/include/v8.h"
 
 namespace blink {
 
-class CSSStyleSheet;
-class CustomElementRegistry;
 class ExceptionState;
-class ScriptState;
-class ScriptValue;
 
 class CORE_EXPORT ScriptCustomElementDefinitionBuilder
     : public CustomElementDefinitionBuilder {
   STACK_ALLOCATED();
-  WTF_MAKE_NONCOPYABLE(ScriptCustomElementDefinitionBuilder);
 
  public:
-  ScriptCustomElementDefinitionBuilder(
-      ScriptState*,
-      CustomElementRegistry*,
-      CSSStyleSheet*,
-      const ScriptValue& constructor_script_value,
-      ExceptionState&);
+  ScriptCustomElementDefinitionBuilder(ScriptState*,
+                                       CustomElementRegistry*,
+                                       V8CustomElementConstructor* constructor,
+                                       ExceptionState&);
   ~ScriptCustomElementDefinitionBuilder() = default;
 
   bool CheckConstructorIntrinsics() override;
   bool CheckConstructorNotRegistered() override;
-  bool CheckPrototype() override;
   bool RememberOriginalProperties() override;
   CustomElementDefinition* Build(const CustomElementDescriptor&,
                                  CustomElementDefinition::Id) override;
 
  private:
-  static ScriptCustomElementDefinitionBuilder* stack_;
+  ScriptState* GetScriptState() { return data_.script_state_; }
+  v8::Isolate* Isolate();
+  V8CustomElementConstructor* Constructor() { return data_.constructor_; }
 
-  Member<ScriptState> script_state_;
-  Member<CustomElementRegistry> registry_;
-  const Member<CSSStyleSheet> default_style_sheet_;
-  v8::Local<v8::Value> constructor_value_;
-  v8::Local<v8::Object> constructor_;
-  v8::Local<v8::Object> prototype_;
-  v8::Local<v8::Function> connected_callback_;
-  v8::Local<v8::Function> disconnected_callback_;
-  v8::Local<v8::Function> adopted_callback_;
-  v8::Local<v8::Function> attribute_changed_callback_;
-  HashSet<AtomicString> observed_attributes_;
   ExceptionState& exception_state_;
+  ScriptCustomElementDefinitionData data_;
+  // These v8::Local handles on stack make the function objects alive until we
+  // finish building the CustomElementDefinition and wrapper-tracing on it gets
+  // available.
+  v8::Local<v8::Value> v8_connected_callback_;
+  v8::Local<v8::Value> v8_disconnected_callback_;
+  v8::Local<v8::Value> v8_adopted_callback_;
+  v8::Local<v8::Value> v8_attribute_changed_callback_;
+  v8::Local<v8::Value> v8_form_associated_callback_;
+  v8::Local<v8::Value> v8_form_reset_callback_;
+  v8::Local<v8::Value> v8_disabled_state_changed_callback_;
+  v8::Local<v8::Value> v8_restore_value_callback_;
 
-  bool ValueForName(v8::Isolate*,
-                    v8::Local<v8::Context>&,
-                    const v8::TryCatch&,
-                    const v8::Local<v8::Object>&,
-                    const StringView&,
-                    v8::Local<v8::Value>&) const;
-  bool CallableForName(v8::Isolate*,
-                       v8::Local<v8::Context>&,
-                       const v8::TryCatch&,
-                       const StringView&,
-                       v8::Local<v8::Function>&) const;
-  bool RetrieveObservedAttributes(v8::Isolate*,
-                                  v8::Local<v8::Context>&,
-                                  const v8::TryCatch&);
+  DISALLOW_COPY_AND_ASSIGN(ScriptCustomElementDefinitionBuilder);
 };
 
 }  // namespace blink

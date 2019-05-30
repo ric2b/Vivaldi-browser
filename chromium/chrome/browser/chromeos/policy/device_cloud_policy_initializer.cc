@@ -22,18 +22,19 @@
 #include "chrome/browser/chromeos/policy/enrollment_handler_chromeos.h"
 #include "chrome/browser/chromeos/policy/enrollment_status_chromeos.h"
 #include "chrome/browser/chromeos/policy/server_backed_device_state.h"
-#include "chrome/browser/chromeos/settings/install_attributes.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/common/chrome_content_client.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/attestation/attestation_flow.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/cryptohome/async_method_caller.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/attestation/attestation.pb.h"
 #include "chromeos/system/statistics_provider.h"
+#include "chromeos/tpm/install_attributes.h"
 #include "components/policy/core/common/cloud/cloud_policy_core.h"
 #include "components/policy/core/common/cloud/device_management_service.h"
+#include "components/policy/core/common/cloud/dm_auth.h"
 #include "components/prefs/pref_service.h"
 #include "net/url_request/url_request_context_getter.h"
 
@@ -105,7 +106,7 @@ void DeviceCloudPolicyInitializer::PrepareEnrollment(
     DeviceManagementService* device_management_service,
     chromeos::ActiveDirectoryJoinDelegate* ad_join_delegate,
     const EnrollmentConfig& enrollment_config,
-    const std::string& auth_token,
+    std::unique_ptr<DMAuth> dm_auth,
     const EnrollmentCallback& enrollment_callback) {
   DCHECK(is_initialized_);
   DCHECK(!enrollment_handler_);
@@ -115,8 +116,9 @@ void DeviceCloudPolicyInitializer::PrepareEnrollment(
   enrollment_handler_.reset(new EnrollmentHandlerChromeOS(
       device_store_, install_attributes_, state_keys_broker_,
       attestation_flow_.get(), CreateClient(device_management_service),
-      background_task_runner_, ad_join_delegate, enrollment_config, auth_token,
-      install_attributes_->GetDeviceId(), manager_->GetDeviceRequisition(),
+      background_task_runner_, ad_join_delegate, enrollment_config,
+      std::move(dm_auth), install_attributes_->GetDeviceId(),
+      manager_->GetDeviceRequisition(), manager_->GetSubOrganization(),
       base::Bind(&DeviceCloudPolicyInitializer::EnrollmentCompleted,
                  base::Unretained(this), enrollment_callback)));
 }
@@ -204,11 +206,10 @@ EnrollmentConfig DeviceCloudPolicyInitializer::GetPrescribedEnrollmentConfig()
   // Gather enrollment signals from various sources.
   const base::DictionaryValue* device_state =
       local_state_->GetDictionary(prefs::kServerBackedDeviceState);
-  std::string device_state_restore_mode;
+  std::string device_state_mode;
   std::string device_state_management_domain;
   if (device_state) {
-    device_state->GetString(kDeviceStateRestoreMode,
-                            &device_state_restore_mode);
+    device_state->GetString(kDeviceStateMode, &device_state_mode);
     device_state->GetString(kDeviceStateManagementDomain,
                             &device_state_management_domain);
   }
@@ -229,13 +230,19 @@ EnrollmentConfig DeviceCloudPolicyInitializer::GetPrescribedEnrollmentConfig()
       chromeos::system::kOemCanExitEnterpriseEnrollmentKey, true);
 
   // Decide enrollment mode. Give precedence to forced variants.
-  if (device_state_restore_mode ==
-      kDeviceStateRestoreModeReEnrollmentEnforced) {
+  if (device_state_mode == kDeviceStateRestoreModeReEnrollmentEnforced) {
     config.mode = EnrollmentConfig::MODE_SERVER_FORCED;
     config.management_domain = device_state_management_domain;
-  } else if (device_state_restore_mode ==
+  } else if (device_state_mode == kDeviceStateInitialModeEnrollmentEnforced) {
+    config.mode = EnrollmentConfig::MODE_INITIAL_SERVER_FORCED;
+    config.management_domain = device_state_management_domain;
+  } else if (device_state_mode ==
              kDeviceStateRestoreModeReEnrollmentZeroTouch) {
     config.mode = EnrollmentConfig::MODE_ATTESTATION_SERVER_FORCED;
+    config.auth_mechanism = EnrollmentConfig::AUTH_MECHANISM_BEST_AVAILABLE;
+    config.management_domain = device_state_management_domain;
+  } else if (device_state_mode == kDeviceStateInitialModeEnrollmentZeroTouch) {
+    config.mode = EnrollmentConfig::MODE_ATTESTATION_INITIAL_SERVER_FORCED;
     config.auth_mechanism = EnrollmentConfig::AUTH_MECHANISM_BEST_AVAILABLE;
     config.management_domain = device_state_management_domain;
   } else if (pref_enrollment_auto_start_present &&
@@ -249,7 +256,7 @@ EnrollmentConfig DeviceCloudPolicyInitializer::GetPrescribedEnrollmentConfig()
     // If OOBE is complete, don't return advertised modes as there's currently
     // no way to make sure advertised enrollment only gets shown once.
     config.mode = EnrollmentConfig::MODE_NONE;
-  } else if (device_state_restore_mode ==
+  } else if (device_state_mode ==
              kDeviceStateRestoreModeReEnrollmentRequested) {
     config.mode = EnrollmentConfig::MODE_SERVER_ADVERTISED;
     config.management_domain = device_state_management_domain;

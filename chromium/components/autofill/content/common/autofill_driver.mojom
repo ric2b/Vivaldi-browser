@@ -23,8 +23,7 @@ interface AutofillDriver {
   // succeeds if the form is removed.
   FormSubmitted(FormData form,
                 bool known_success,
-                SubmissionSource source,
-                mojo_base.mojom.TimeTicks timestamp);
+                SubmissionSource source);
 
   // Notification that a form field's value has changed.
   TextFieldDidChange(FormData form,
@@ -78,8 +77,9 @@ interface AutofillDriver {
               array<mojo_base.mojom.String16> labels);
 };
 
-// There is one instance of this interface per render frame host in the browser
-// process.
+// There is one instance of this interface per web contents in the browser
+// process that handles all the frames. The motivation was to make the interface
+// associated with PasswordGenerationDriver.
 interface PasswordManagerDriver {
   // Notification that password forms have been seen that are candidates for
   // filling/submitting by the password manager.
@@ -116,11 +116,9 @@ interface PasswordManagerDriver {
   // password field.
   UserModifiedPasswordField();
 
-  // Instructs the browser to show a popup with suggestions filled from data
-  // associated with |key|. The popup will use |text_direction| for displaying
-  // text.
-  ShowPasswordSuggestions(int32 key,
-                          mojo_base.mojom.TextDirection text_direction,
+  // Instructs the browser to show a popup with password suggestions. The popup
+  // will use |text_direction| for displaying text.
+  ShowPasswordSuggestions(mojo_base.mojom.TextDirection text_direction,
                           mojo_base.mojom.String16 typed_username,
                           int32 options, gfx.mojom.RectF bounds);
 
@@ -132,11 +130,18 @@ interface PasswordManagerDriver {
   // The focus changed to a different input in the same frame (e.g. tabbed from
   // email to password field).
   FocusedInputChanged(bool is_fillable, bool is_password_field);
+
+  // Sends the success state of filling credentials into a form. This happens
+  // only if the form being filled has a renderer_id. |result| is an
+  // integer serialization of autofill::FillingResult. It is passed as an
+  // integer as no further interpretation of the value is necessary in the
+  // browser.
+  LogFirstFillingResult(uint32 form_renderer_id, int32 result);
 };
 
 // There is one instance of this interface per web contents in the browser
 // process.
-interface PasswordManagerClient {
+interface PasswordGenerationDriver {
   // Instructs the browser that generation is available for this particular
   // form. This is used for UMA stats.
   GenerationAvailableForForm(PasswordForm password_form);
@@ -145,14 +150,6 @@ interface PasswordManagerClient {
   // unavailable and provides data needed by the UI.
   AutomaticGenerationStatusChanged(
       bool available, PasswordGenerationUIData? password_generation_ui_data);
-
-  // Instructs the browser to show the password generation popup for manual
-  // generation and provides the data necessary to display it.
-  // TODO(crbug.com/845458): Replace this with a method called from the browser
-  // when user triggers generation manually which returns a boolean signaling
-  // whether the state for generation could be saved or not.
-  ShowManualPasswordGenerationPopup(
-      PasswordGenerationUIData password_generation_ui_data);
 
   // Instructs the browser to show the popup for editing a generated password.
   // The location should be specified in the renderers coordinate system. Form

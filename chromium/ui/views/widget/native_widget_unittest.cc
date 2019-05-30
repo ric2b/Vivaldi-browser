@@ -62,7 +62,7 @@ class NativeWidgetTest : public ViewsTestBase {
 
 TEST_F(NativeWidgetTest, CreateNativeWidget) {
   ScopedTestWidget widget(CreateNativeWidget());
-  EXPECT_TRUE(widget->GetWidget()->GetNativeView() != NULL);
+  EXPECT_TRUE(widget->GetWidget()->GetNativeView());
 }
 
 TEST_F(NativeWidgetTest, GetNativeWidgetForNativeView) {
@@ -82,10 +82,6 @@ TEST_F(NativeWidgetTest, GetTopLevelNativeWidget1) {
 
 // |toplevel_widget| has the toplevel NativeWidget.
 TEST_F(NativeWidgetTest, GetTopLevelNativeWidget2) {
-  // This test relies on GetContext(). http://crbug.com/663809.
-  if (IsMus())
-    return;
-
   internal::NativeWidgetPrivate* child_widget = CreateNativeSubWidget();
   {
     ScopedTestWidget toplevel_widget(CreateNativeWidget());

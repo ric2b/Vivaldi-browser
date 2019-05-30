@@ -21,6 +21,16 @@
 
 namespace network {
 
+// Defines the type of a callback that will return a NetworkConnectionTracker
+// instance.
+class NetworkConnectionTracker;
+using NetworkConnectionTrackerGetter =
+    base::RepeatingCallback<NetworkConnectionTracker*()>;
+// Defines the type of a callback that can be used to asynchronously get a
+// NetworkConnectionTracker instance.
+using NetworkConnectionTrackerAsyncGetter = base::RepeatingCallback<void(
+    base::OnceCallback<void(NetworkConnectionTracker*)>)>;
+
 // This class subscribes to network change events from
 // network::mojom::NetworkChangeManager and propogates these notifications to
 // its NetworkConnectionObservers registered through
@@ -52,13 +62,16 @@ class COMPONENT_EXPORT(NETWORK_CPP) NetworkConnectionTracker
   ~NetworkConnectionTracker() override;
 
   // If connection type can be retrieved synchronously, returns true and |type|
-  // will contain the current connection type; Otherwise, returns false and
-  // does not modify |type|, in which case, |callback| will be called on the
-  // calling thread when connection type is ready. This method is thread safe.
-  // Please also refer to net::NetworkChangeNotifier::GetConnectionType() for
-  // documentation.
+  // will contain the current connection type, and |callback| will not be
+  // called; Otherwise, returns false and does not modify |type|, in which
+  // case, |callback| will be called on the calling thread when connection type
+  // is ready. This method is thread safe. Please also refer to
+  // net::NetworkChangeNotifier::GetConnectionType() for documentation.
   virtual bool GetConnectionType(network::mojom::ConnectionType* type,
                                  ConnectionTypeCallback callback);
+
+  // Returns true if the network is currently in an offline or unknown state.
+  bool IsOffline();
 
   // Returns true if |type| is a cellular connection.
   // Returns false if |type| is CONNECTION_UNKNOWN, and thus, depending on the

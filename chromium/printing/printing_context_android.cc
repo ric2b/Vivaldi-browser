@@ -11,6 +11,7 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
+#include "base/files/file.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -20,17 +21,15 @@
 #include "printing/print_job_constants.h"
 #include "printing/units.h"
 #include "third_party/icu/source/i18n/unicode/ulocdata.h"
+#include "ui/android/window_android.h"
 
 using base::android::JavaParamRef;
+using base::android::JavaRef;
 using base::android::ScopedJavaLocalRef;
 
 namespace printing {
 
 namespace {
-
-int Round(double x) {
-  return static_cast<int>(x + 0.5);
-}
 
 // Sets the page sizes for a |PrintSettings| object.  |width| and |height|
 // arguments should be in device units.
@@ -45,7 +44,9 @@ void SetSizes(PrintSettings* settings, int dpi, int width, int height) {
                                     false);
 }
 
-void GetPageRanges(JNIEnv* env, jintArray int_arr, PageRanges* range_vector) {
+void GetPageRanges(JNIEnv* env,
+                   const JavaRef<jintArray>& int_arr,
+                   PageRanges* range_vector) {
   std::vector<int> pages;
   base::android::JavaIntArrayToIntVector(env, int_arr, &pages);
   for (int page : pages) {
@@ -64,9 +65,20 @@ std::unique_ptr<PrintingContext> PrintingContext::Create(Delegate* delegate) {
 }
 
 // static
-void PrintingContextAndroid::PdfWritingDone(int fd, int page_count) {
+void PrintingContextAndroid::PdfWritingDone(int page_count) {
   JNIEnv* env = base::android::AttachCurrentThread();
-  Java_PrintingContext_pdfWritingDone(env, fd, page_count);
+  Java_PrintingContext_pdfWritingDone(env, page_count);
+}
+
+// static
+void PrintingContextAndroid::SetPendingPrint(
+    ui::WindowAndroid* window,
+    const ScopedJavaLocalRef<jobject>& printable,
+    int render_process_id,
+    int render_frame_id) {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  Java_PrintingContext_setPendingPrint(env, window->GetJavaObject(), printable,
+                                       render_process_id, render_frame_id);
 }
 
 PrintingContextAndroid::PrintingContextAndroid(Delegate* delegate)
@@ -114,22 +126,24 @@ void PrintingContextAndroid::AskUserForSettingsReply(
   // We use device name variable to store the file descriptor.  This is hacky
   // but necessary. Since device name is not necessary for the upstream
   // printing code for Android, this is harmless.
-  int fd = Java_PrintingContext_getFileDescriptor(env, j_printing_context_);
-  settings_.set_device_name(base::IntToString16(fd));
+  // TODO(thestig): See if the call to set_device_name() can be removed.
+  fd_ = Java_PrintingContext_getFileDescriptor(env, j_printing_context_);
+  DCHECK(is_file_descriptor_valid());
+  settings_.set_device_name(base::NumberToString16(fd_));
 
   ScopedJavaLocalRef<jintArray> intArr =
       Java_PrintingContext_getPages(env, j_printing_context_);
-  if (intArr.obj()) {
+  if (!intArr.is_null()) {
     PageRanges range_vector;
-    GetPageRanges(env, intArr.obj(), &range_vector);
+    GetPageRanges(env, intArr, &range_vector);
     settings_.set_ranges(range_vector);
   }
 
   int dpi = Java_PrintingContext_getDpi(env, j_printing_context_);
   int width = Java_PrintingContext_getWidth(env, j_printing_context_);
   int height = Java_PrintingContext_getHeight(env, j_printing_context_);
-  width = Round(ConvertUnitDouble(width, kMilsPerInch, 1.0) * dpi);
-  height = Round(ConvertUnitDouble(height, kMilsPerInch, 1.0) * dpi);
+  width = ConvertUnit(width, kMilsPerInch, dpi);
+  height = ConvertUnit(height, kMilsPerInch, dpi);
   SetSizes(&settings_, dpi, width, height);
 
   std::move(callback_).Run(OK);
@@ -141,6 +155,14 @@ void PrintingContextAndroid::ShowSystemDialogDone(
   DCHECK(callback_);
   // Settings are not updated, callback is called only to unblock javascript.
   std::move(callback_).Run(CANCEL);
+}
+
+void PrintingContextAndroid::PrintDocument(const MetafilePlayer& metafile) {
+  DCHECK(is_file_descriptor_valid());
+
+  base::File file(fd_);
+  metafile.SaveTo(&file);
+  file.TakePlatformFile();
 }
 
 PrintingContext::Result PrintingContextAndroid::UseDefaultSettings() {

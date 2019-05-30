@@ -16,7 +16,6 @@
 #include "components/ui_devtools/Protocol.h"
 #include "components/ui_devtools/devtools_client.h"
 #include "components/ui_devtools/devtools_export.h"
-#include "components/ui_devtools/string_util.h"
 #include "services/network/public/cpp/server/http_server.h"
 
 namespace ui_devtools {
@@ -24,30 +23,52 @@ namespace ui_devtools {
 class UI_DEVTOOLS_EXPORT UiDevToolsServer
     : public network::server::HttpServer::Delegate {
  public:
+  // Network tags to be used for the UI and the Viz devtools servers.
+  static const net::NetworkTrafficAnnotationTag kUIDevtoolsServerTag;
+  static const net::NetworkTrafficAnnotationTag kVizDevtoolsServerTag;
+
   ~UiDevToolsServer() override;
 
   // Returns an empty unique_ptr if ui devtools flag isn't enabled or if a
-  // server instance has already been created. Server doesn't know anything
-  // about the caller, so both UI and Viz pass their corresponding params.
-  static std::unique_ptr<UiDevToolsServer> Create(
+  // server instance has already been created.
+  static std::unique_ptr<UiDevToolsServer> CreateForViews(
       network::mojom::NetworkContext* network_context,
-      const char* enable_devtools_flag,
-      int default_port);
+      int port);
+
+  // Assumes that the devtools flag is enabled, and was checked when the socket
+  // was created.
+  static std::unique_ptr<UiDevToolsServer> CreateForViz(
+      network::mojom::TCPServerSocketPtr server_socket,
+      int port);
+
+  // Creates a TCPServerSocket to be used by a UiDevToolsServer.
+  static void CreateTCPServerSocket(
+      network::mojom::TCPServerSocketRequest server_socket_request,
+      network::mojom::NetworkContext* network_context,
+      int port,
+      net::NetworkTrafficAnnotationTag tag,
+      network::mojom::NetworkContext::CreateTCPServerSocketCallback callback);
 
   // Returns a list of attached UiDevToolsClient name + URL
   using NameUrlPair = std::pair<std::string, std::string>;
   static std::vector<NameUrlPair> GetClientNamesAndUrls();
 
+  // Returns true if UI Devtools is enabled by the given commandline switch.
+  static bool IsUiDevToolsEnabled(const char* enable_devtools_flag);
+
+  // Returns the port number specified by a command line flag. If a number is
+  // not specified as a command line argument, returns the |default_port|.
+  static int GetUiDevToolsPort(const char* enable_devtools_flag,
+                               int default_port);
+
   void AttachClient(std::unique_ptr<UiDevToolsClient> client);
-  void SendOverWebSocket(int connection_id, const String& message);
+  void SendOverWebSocket(int connection_id, const protocol::String& message);
 
   int port() const { return port_; }
 
  private:
-  UiDevToolsServer(const char* enable_devtools_flag, int default_port);
+  UiDevToolsServer(int port, const net::NetworkTrafficAnnotationTag tag);
 
-  void Start(network::mojom::NetworkContext* network_context,
-             const std::string& address_string);
   void MakeServer(network::mojom::TCPServerSocketPtr server_socket,
                   int result,
                   const base::Optional<net::IPEndPoint>& local_addr);
@@ -73,7 +94,9 @@ class UI_DEVTOOLS_EXPORT UiDevToolsServer
   // The port the devtools server listens on
   const int port_;
 
-  // The server (owned by ash for now)
+  const net::NetworkTrafficAnnotationTag tag_;
+
+  // The server (owned by Chrome for now)
   static UiDevToolsServer* devtools_server_;
 
   SEQUENCE_CHECKER(devtools_server_sequence_);

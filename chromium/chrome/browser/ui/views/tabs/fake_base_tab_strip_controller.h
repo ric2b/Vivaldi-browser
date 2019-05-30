@@ -31,12 +31,12 @@ class FakeBaseTabStripController : public TabStripController {
   int GetActiveIndex() const override;
   bool IsTabSelected(int index) const override;
   bool IsTabPinned(int index) const override;
-  void SelectTab(int index) override;
+  void SelectTab(int index, const ui::Event& event) override;
   void ExtendSelectionTo(int index) override;
   void ToggleSelected(int index) override;
   void AddSelectionFromAnchorTo(int index) override;
+  bool BeforeCloseTab(int index, CloseTabSource source) override;
   void CloseTab(int index, CloseTabSource source) override;
-  void ToggleTabAudioMute(int index) override;
   void ShowContextMenuForTab(Tab* tab,
                              const gfx::Point& p,
                              ui::MenuSourceType source_type) override;
@@ -46,19 +46,18 @@ class FakeBaseTabStripController : public TabStripController {
   NewTabButtonPosition GetNewTabButtonPosition() const override;
   void CreateNewTab() override;
   void CreateNewTabWithLocation(const base::string16& loc) override;
-  bool IsIncognito() override;
   void StackedLayoutMaybeChanged() override;
-  bool IsSingleTabModeAvailable() override;
-  bool ShouldDrawStrokes() const override;
   void OnStartedDraggingTabs() override;
   void OnStoppedDraggingTabs() override;
   bool IsFrameCondensed() const override;
   bool HasVisibleBackgroundTabShapes() const override;
   bool EverHasVisibleBackgroundTabShapes() const override;
-  SkColor GetFrameColor() const override;
+  bool ShouldPaintAsActiveFrame() const override;
+  bool CanDrawStrokes() const override;
+  SkColor GetFrameColor(
+      BrowserNonClientFrameView::ActiveState active_state =
+          BrowserNonClientFrameView::kUseCurrent) const override;
   SkColor GetToolbarTopSeparatorColor() const override;
-  SkColor GetTabBackgroundColor(TabState state, bool opaque) const override;
-  SkColor GetTabForegroundColor(TabState state) const override;
   int GetTabBackgroundResourceId(
       BrowserNonClientFrameView::ActiveState active_state,
       bool* has_custom_image) const override;

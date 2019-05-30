@@ -11,7 +11,6 @@
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
-#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/test/navigation_simulator.h"
 #include "content/public/test/test_renderer_host.h"
 #include "content/public/test/test_utils.h"
@@ -23,8 +22,6 @@ namespace {
 
 const char kNavigationEventCleanUpHistogramName[] =
     "SafeBrowsing.NavigationObserver.NavigationEventCleanUpCount";
-const char kIPAddressCleanUpHistogramName[] =
-    "SafeBrowsing.NavigationObserver.IPAddressCleanUpCount";
 }  // namespace
 
 namespace safe_browsing {
@@ -276,7 +273,7 @@ TEST_F(SBNavigationObserverTest, TestCleanUpStaleUserGestures) {
   // Verifies all stale and invalid user gestures are removed.
   ASSERT_EQ(1U, user_gesture_map()->size());
   EXPECT_NE(user_gesture_map()->end(), user_gesture_map()->find(content0));
-  EXPECT_EQ(now, user_gesture_map()->at(content0));
+  EXPECT_EQ(now, (*user_gesture_map())[content0]);
 }
 
 TEST_F(SBNavigationObserverTest, TestCleanUpStaleIPAddresses) {
@@ -291,17 +288,14 @@ TEST_F(SBNavigationObserverTest, TestCleanUpStaleIPAddresses) {
   std::string host_1 = GURL("http://bar/1").host();
   host_to_ip_map()->insert(
       std::make_pair(host_0, std::vector<ResolvedIPAddress>()));
-  host_to_ip_map()->at(host_0).push_back(ResolvedIPAddress(now, "1.1.1.1"));
-  host_to_ip_map()->at(host_0).push_back(
+  (*host_to_ip_map())[host_0].push_back(ResolvedIPAddress(now, "1.1.1.1"));
+  (*host_to_ip_map())[host_0].push_back(
       ResolvedIPAddress(one_hour_ago, "2.2.2.2"));
   host_to_ip_map()->insert(
       std::make_pair(host_1, std::vector<ResolvedIPAddress>()));
-  host_to_ip_map()->at(host_1).push_back(
+  (*host_to_ip_map())[host_1].push_back(
       ResolvedIPAddress(in_an_hour, "3.3.3.3"));
   ASSERT_EQ(2U, host_to_ip_map()->size());
-
-  base::HistogramTester histograms;
-  histograms.ExpectTotalCount(kIPAddressCleanUpHistogramName, 0);
 
   // Cleans up host_to_ip_map()
   CleanUpIpAddresses();
@@ -309,10 +303,8 @@ TEST_F(SBNavigationObserverTest, TestCleanUpStaleIPAddresses) {
   // Verifies all stale and invalid IP addresses are removed.
   ASSERT_EQ(1U, host_to_ip_map()->size());
   EXPECT_EQ(host_to_ip_map()->end(), host_to_ip_map()->find(host_1));
-  ASSERT_EQ(1U, host_to_ip_map()->at(host_0).size());
-  EXPECT_EQ(now, host_to_ip_map()->at(host_0).front().timestamp);
-  EXPECT_THAT(histograms.GetAllSamples(kIPAddressCleanUpHistogramName),
-              testing::ElementsAre(base::Bucket(2, 1)));
+  ASSERT_EQ(1U, (*host_to_ip_map())[host_0].size());
+  EXPECT_EQ(now, (*host_to_ip_map())[host_0].front().timestamp);
 }
 
 TEST_F(SBNavigationObserverTest, TestRecordHostToIpMapping) {
@@ -323,32 +315,32 @@ TEST_F(SBNavigationObserverTest, TestRecordHostToIpMapping) {
   std::string host_0 = GURL("http://foo/0").host();
   host_to_ip_map()->insert(
       std::make_pair(host_0, std::vector<ResolvedIPAddress>()));
-  host_to_ip_map()->at(host_0).push_back(ResolvedIPAddress(now, "1.1.1.1"));
-  host_to_ip_map()->at(host_0).push_back(
+  (*host_to_ip_map())[host_0].push_back(ResolvedIPAddress(now, "1.1.1.1"));
+  (*host_to_ip_map())[host_0].push_back(
       ResolvedIPAddress(one_hour_ago, "2.2.2.2"));
 
   // Record a host-IP pair, where host is already in the map, and IP has
   // never been seen before.
   RecordHostToIpMapping(host_0, "3.3.3.3");
   ASSERT_EQ(1U, host_to_ip_map()->size());
-  EXPECT_EQ(3U, host_to_ip_map()->at(host_0).size());
-  EXPECT_EQ("3.3.3.3", host_to_ip_map()->at(host_0).at(2).ip);
+  EXPECT_EQ(3U, (*host_to_ip_map())[host_0].size());
+  EXPECT_EQ("3.3.3.3", (*host_to_ip_map())[host_0][2].ip);
 
   // Record a host-IP pair which is already in the map. It should simply update
   // its timestamp.
-  ASSERT_EQ(now, host_to_ip_map()->at(host_0).at(0).timestamp);
+  ASSERT_EQ(now, (*host_to_ip_map())[host_0][0].timestamp);
   RecordHostToIpMapping(host_0, "1.1.1.1");
   ASSERT_EQ(1U, host_to_ip_map()->size());
-  EXPECT_EQ(3U, host_to_ip_map()->at(host_0).size());
-  EXPECT_LT(now, host_to_ip_map()->at(host_0).at(2).timestamp);
+  EXPECT_EQ(3U, (*host_to_ip_map())[host_0].size());
+  EXPECT_LT(now, (*host_to_ip_map())[host_0][2].timestamp);
 
   // Record a host-ip pair, neither of which has been seen before.
   std::string host_1 = GURL("http://bar/1").host();
   RecordHostToIpMapping(host_1, "9.9.9.9");
   ASSERT_EQ(2U, host_to_ip_map()->size());
-  EXPECT_EQ(3U, host_to_ip_map()->at(host_0).size());
-  EXPECT_EQ(1U, host_to_ip_map()->at(host_1).size());
-  EXPECT_EQ("9.9.9.9", host_to_ip_map()->at(host_1).at(0).ip);
+  EXPECT_EQ(3U, (*host_to_ip_map())[host_0].size());
+  EXPECT_EQ(1U, (*host_to_ip_map())[host_1].size());
+  EXPECT_EQ("9.9.9.9", (*host_to_ip_map())[host_1][0].ip);
 }
 
 TEST_F(SBNavigationObserverTest, TestContentSettingChange) {
@@ -496,6 +488,52 @@ TEST_F(SBNavigationObserverTest, ChainContinuesThroughBrowserInitiated) {
       GURL("http://b.com/"), SessionID::InvalidValue(), 10, &referrer_chain);
 
   EXPECT_EQ(2, referrer_chain.size());
+}
+
+TEST_F(SBNavigationObserverTest,
+       CanceledRetargetingNavigationHasCorrectEventUrl) {
+  base::Time now = base::Time::Now();
+  base::Time one_hour_ago =
+      base::Time::FromDoubleT(now.ToDoubleT() - 60.0 * 60.0);
+
+  SessionID source_tab = SessionID::NewUnique();
+  SessionID target_tab = SessionID::NewUnique();
+
+  // Add two navigations. A initially opens a new tab with url B, but cancels
+  // that before it completes. It then navigates the new tab to C. We expect
+  // that asking for the referrer chain for C has C as the event url.
+  std::unique_ptr<NavigationEvent> first_navigation =
+      std::make_unique<NavigationEvent>();
+  first_navigation->source_url = GURL("http://example.com/a");
+  first_navigation->original_request_url = GURL("http://example.com/b");
+  first_navigation->last_updated = one_hour_ago;
+  first_navigation->navigation_initiation =
+      ReferrerChainEntry::RENDERER_INITIATED_WITH_USER_GESTURE;
+  first_navigation->source_tab_id = source_tab;
+  first_navigation->target_tab_id = target_tab;
+  first_navigation->has_committed = false;
+  navigation_event_list()->RecordNavigationEvent(std::move(first_navigation));
+
+  std::unique_ptr<NavigationEvent> second_navigation =
+      std::make_unique<NavigationEvent>();
+  second_navigation->original_request_url = GURL("http://example.com/c");
+  second_navigation->last_updated = now;
+  second_navigation->navigation_initiation =
+      ReferrerChainEntry::BROWSER_INITIATED;
+  second_navigation->source_tab_id = target_tab;
+  second_navigation->target_tab_id = target_tab;
+  navigation_event_list()->RecordNavigationEvent(std::move(second_navigation));
+
+  ReferrerChain referrer_chain;
+  navigation_observer_manager_->IdentifyReferrerChainByEventURL(
+      GURL("http://example.com/c"), SessionID::InvalidValue(), 10,
+      &referrer_chain);
+
+  ASSERT_EQ(1, referrer_chain.size());
+
+  EXPECT_EQ("http://example.com/c", referrer_chain[0].url());
+  EXPECT_EQ("http://example.com/a", referrer_chain[0].referrer_url());
+  EXPECT_TRUE(referrer_chain[0].is_retargeting());
 }
 
 }  // namespace safe_browsing

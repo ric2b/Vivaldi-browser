@@ -42,6 +42,10 @@ class ModulatorImplBase : public Modulator {
 
   bool IsScriptingDisabled() const override;
 
+  bool BuiltInModuleInfraEnabled() const override;
+  bool BuiltInModuleEnabled(blink::layered_api::Module) const override;
+  void BuiltInModuleUseCount(blink::layered_api::Module) const override;
+
   ScriptModuleResolver* GetScriptModuleResolver() override {
     return script_module_resolver_.Get();
   }
@@ -49,24 +53,22 @@ class ModulatorImplBase : public Modulator {
     return task_runner_.get();
   }
 
-  void FetchTree(
-      const KURL&,
-      FetchClientSettingsObjectSnapshot* fetch_client_settings_object,
-      WebURLRequest::RequestContext destination,
-      const ScriptFetchOptions&,
-      ModuleScriptCustomFetchType,
-      ModuleTreeClient*) override;
+  void FetchTree(const KURL&,
+                 ResourceFetcher* fetch_client_settings_object_fetcher,
+                 mojom::RequestContextType destination,
+                 const ScriptFetchOptions&,
+                 ModuleScriptCustomFetchType,
+                 ModuleTreeClient*) override;
   void FetchDescendantsForInlineScript(
       ModuleScript*,
-      FetchClientSettingsObjectSnapshot* fetch_client_settings_object,
-      WebURLRequest::RequestContext destination,
+      ResourceFetcher* fetch_client_settings_object_fetcher,
+      mojom::RequestContextType destination,
       ModuleTreeClient*) override;
-  void FetchSingle(
-      const ModuleScriptFetchRequest&,
-      FetchClientSettingsObjectSnapshot* fetch_client_settings_object,
-      ModuleGraphLevel,
-      ModuleScriptCustomFetchType,
-      SingleModuleClient*) override;
+  void FetchSingle(const ModuleScriptFetchRequest&,
+                   ResourceFetcher* fetch_client_settings_object_fetcher,
+                   ModuleGraphLevel,
+                   ModuleScriptCustomFetchType,
+                   SingleModuleClient*) override;
   ModuleScript* GetFetchedModuleScript(const KURL&) override;
   bool HasValidContext() override;
   KURL ResolveModuleSpecifier(const String& module_request,
@@ -76,10 +78,13 @@ class ModulatorImplBase : public Modulator {
                           const KURL&,
                           const ReferrerScriptInfo&,
                           ScriptPromiseResolver*) override;
+  void RegisterImportMap(const ImportMap*) final;
+  bool IsAcquiringImportMaps() const final { return acquiring_import_maps_; }
+  void ClearIsAcquiringImportMaps() final { acquiring_import_maps_ = false; }
   ModuleImportMeta HostGetImportMetaProperties(ScriptModule) const override;
   ScriptValue InstantiateModule(ScriptModule) override;
   Vector<ModuleRequest> ModuleRequestsFromScriptModule(ScriptModule) override;
-  ScriptValue ExecuteModule(const ModuleScript*, CaptureEvalErrorFlag) override;
+  ScriptValue ExecuteModule(ModuleScript*, CaptureEvalErrorFlag) override;
 
   // Populates |reason| and returns true if the dynamic import is disallowed on
   // the associated execution context. In that case, a caller of this function
@@ -88,12 +93,23 @@ class ModulatorImplBase : public Modulator {
   // modification of |reason|.
   virtual bool IsDynamicImportForbidden(String* reason) = 0;
 
+  void ProduceCacheModuleTreeTopLevel(ModuleScript*);
+  void ProduceCacheModuleTree(ModuleScript*,
+                              HeapHashSet<Member<const ModuleScript>>*);
+
   Member<ScriptState> script_state_;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   TraceWrapperMember<ModuleMap> map_;
   TraceWrapperMember<ModuleTreeLinkerRegistry> tree_linker_registry_;
   Member<ScriptModuleResolver> script_module_resolver_;
   Member<DynamicModuleResolver> dynamic_module_resolver_;
+
+  Member<const ImportMap> import_map_;
+
+  // https://github.com/WICG/import-maps/blob/master/spec.md#when-import-maps-can-be-encountered
+  // Each realm (environment settings object) has a boolean, acquiring import
+  // maps. It is initially true. [spec text]
+  bool acquiring_import_maps_ = true;
 };
 
 }  // namespace blink

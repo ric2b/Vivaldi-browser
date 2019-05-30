@@ -47,7 +47,6 @@ class NetworkTimeTracker;
 extern const base::Feature kMITMSoftwareInterstitial;
 extern const base::Feature kCaptivePortalInterstitial;
 extern const base::Feature kCaptivePortalCertificateList;
-extern const base::Feature kSuperfishInterstitial;
 
 // This class is responsible for deciding what type of interstitial to display
 // for an SSL validation error and actually displaying it. The display of the
@@ -130,6 +129,8 @@ class SSLErrorHandler : public content::WebContentsUserData<SSLErrorHandler>,
   // |blocking_page_ready_callback| is null, this function will create a
   // blocking page and call Show() on it. Otherwise, this function creates an
   // interstitial and passes it to |blocking_page_ready_callback|.
+  // |blocking_page_ready_callback| is guaranteed not to be called
+  // synchronously.
   static void HandleSSLError(
       content::WebContents* web_contents,
       int cert_error,
@@ -183,6 +184,7 @@ class SSLErrorHandler : public content::WebContentsUserData<SSLErrorHandler>,
   void StartHandlingError();
 
  private:
+  friend class content::WebContentsUserData<SSLErrorHandler>;
   FRIEND_TEST_ALL_PREFIXES(SSLErrorHandlerTest, CalculateOptionsMask);
 
   void ShowCaptivePortalInterstitial(const GURL& landing_url);
@@ -225,7 +227,6 @@ class SSLErrorHandler : public content::WebContentsUserData<SSLErrorHandler>,
   static int CalculateOptionsMask(int cert_error,
                                   bool hard_override_disabled,
                                   bool should_ssl_errors_be_fatal,
-                                  bool is_superfish,
                                   bool expired_previous_decision);
 
   std::unique_ptr<Delegate> delegate_;
@@ -243,6 +244,8 @@ class SSLErrorHandler : public content::WebContentsUserData<SSLErrorHandler>,
   std::unique_ptr<CommonNameMismatchHandler> common_name_mismatch_handler_;
 
   base::WeakPtrFactory<SSLErrorHandler> weak_ptr_factory_;
+
+  WEB_CONTENTS_USER_DATA_KEY_DECL();
 
   DISALLOW_COPY_AND_ASSIGN(SSLErrorHandler);
 };

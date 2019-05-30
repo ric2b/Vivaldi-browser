@@ -13,9 +13,9 @@
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
+#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "chrome/common/chrome_paths.h"
@@ -90,7 +90,7 @@ TEST(ExtensionAPITest, Creation) {
     { &empty_instance, false }
   };
 
-  for (size_t i = 0; i < arraysize(test_data); ++i) {
+  for (size_t i = 0; i < base::size(test_data); ++i) {
     EXPECT_EQ(test_data[i].expect_populated,
               test_data[i].api->GetSchema("bookmarks.create") != nullptr);
   }
@@ -108,7 +108,7 @@ TEST(ExtensionAPITest, SplitDependencyName) {
                    {"foo:bar", "foo", "bar"},
                    {"foo:bar.baz", "foo", "bar.baz"}};
 
-  for (size_t i = 0; i < arraysize(test_data); ++i) {
+  for (size_t i = 0; i < base::size(test_data); ++i) {
     std::string feature_type;
     std::string feature_name;
     ExtensionAPI::SplitDependencyName(
@@ -195,7 +195,7 @@ TEST(ExtensionAPITest, APIFeatures) {
   FeatureProvider api_feature_provider;
   AddUnittestAPIFeatures(&api_feature_provider);
 
-  for (size_t i = 0; i < arraysize(test_data); ++i) {
+  for (size_t i = 0; i < base::size(test_data); ++i) {
     TestExtensionAPI api;
     api.RegisterDependencyProvider("api", &api_feature_provider);
     for (auto* key : kTestFeatures)
@@ -320,7 +320,7 @@ TEST(ExtensionAPITest, IsAnyFeatureAvailableToContext) {
   FeatureProvider api_feature_provider;
   AddUnittestAPIFeatures(&api_feature_provider);
 
-  for (size_t i = 0; i < arraysize(test_data); ++i) {
+  for (size_t i = 0; i < base::size(test_data); ++i) {
     TestExtensionAPI api;
     api.RegisterDependencyProvider("api", &api_feature_provider);
     for (auto* key : kTestFeatures)
@@ -429,8 +429,7 @@ scoped_refptr<Extension> CreateExtensionWithPermissions(
   manifest.SetInteger("manifest_version", 2);
   {
     std::unique_ptr<base::ListValue> permissions_list(new base::ListValue());
-    for (std::set<std::string>::const_iterator i = permissions.begin();
-        i != permissions.end(); ++i) {
+    for (auto i = permissions.begin(); i != permissions.end(); ++i) {
       permissions_list->AppendString(*i);
     }
     manifest.Set("permissions", std::move(permissions_list));
@@ -542,8 +541,7 @@ scoped_refptr<Extension> CreatePackagedAppWithPermissions(
   values.Set(manifest_keys::kApp, std::move(app));
   {
     auto permissions_list = std::make_unique<base::ListValue>();
-    for (std::set<std::string>::const_iterator i = permissions.begin();
-        i != permissions.end(); ++i) {
+    for (auto i = permissions.begin(); i != permissions.end(); ++i) {
       permissions_list->AppendString(*i);
     }
     values.Set("permissions", std::move(permissions_list));
@@ -743,7 +741,7 @@ TEST(ExtensionAPITest, GetAPINameFromFullName) {
 
   std::unique_ptr<ExtensionAPI> api(
       ExtensionAPI::CreateWithDefaultConfiguration());
-  for (size_t i = 0; i < arraysize(test_data); ++i) {
+  for (size_t i = 0; i < base::size(test_data); ++i) {
     std::string child_name;
     std::string api_name = api->GetAPINameFromFullName(test_data[i].input,
                                                        &child_name);
@@ -767,7 +765,7 @@ TEST(ExtensionAPITest, DefaultConfigurationFeatures) {
     // TODO(aa): More stuff to test over time.
   } test_data[] = {{browser_action}, {browser_action_set_title}};
 
-  for (size_t i = 0; i < arraysize(test_data); ++i) {
+  for (size_t i = 0; i < base::size(test_data); ++i) {
     const SimpleFeature* feature = test_data[i].feature;
     ASSERT_TRUE(feature) << i;
 
@@ -918,9 +916,9 @@ TEST(ExtensionAPITest, NoPermissions) {
 
   std::unique_ptr<ExtensionAPI> extension_api(
       ExtensionAPI::CreateWithDefaultConfiguration());
-  scoped_refptr<Extension> extension = ExtensionBuilder("Test").Build();
+  scoped_refptr<const Extension> extension = ExtensionBuilder("Test").Build();
 
-  for (size_t i = 0; i < arraysize(kTests); ++i) {
+  for (size_t i = 0; i < base::size(kTests); ++i) {
     EXPECT_EQ(kTests[i].expect_success,
               extension_api
                   ->IsAvailable(kTests[i].permission_name, extension.get(),
@@ -937,7 +935,7 @@ TEST(ExtensionAPITest, ManifestKeys) {
   std::unique_ptr<ExtensionAPI> extension_api(
       ExtensionAPI::CreateWithDefaultConfiguration());
 
-  scoped_refptr<Extension> extension =
+  scoped_refptr<const Extension> extension =
       ExtensionBuilder("Test")
           .SetAction(ExtensionBuilder::ActionType::BROWSER_ACTION)
           .Build();

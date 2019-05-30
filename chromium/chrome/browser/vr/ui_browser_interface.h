@@ -8,7 +8,7 @@
 #include "chrome/browser/vr/exit_vr_prompt_choice.h"
 #include "chrome/browser/vr/model/omnibox_suggestions.h"
 #include "chrome/browser/vr/ui_unsupported_mode.h"
-#include "chrome/browser/vr/vr_export.h"
+#include "chrome/browser/vr/vr_base_export.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "url/gurl.h"
 
@@ -23,7 +23,7 @@ enum NavigationMethod {
 
 // An interface for the VR UI to communicate with VrShell. Many of the functions
 // in this interface are proxies to methods on VrShell.
-class VR_EXPORT UiBrowserInterface {
+class VR_BASE_EXPORT UiBrowserInterface {
  public:
   virtual ~UiBrowserInterface() = default;
 
@@ -34,15 +34,12 @@ class VR_EXPORT UiBrowserInterface {
   virtual void NavigateForward() = 0;
   virtual void ReloadTab() = 0;
   virtual void OpenNewTab(bool incognito) = 0;
-  virtual void SelectTab(int id, bool incognito) = 0;
   virtual void OpenBookmarks() = 0;
   virtual void OpenRecentTabs() = 0;
   virtual void OpenHistory() = 0;
   virtual void OpenDownloads() = 0;
   virtual void OpenShare() = 0;
   virtual void OpenSettings() = 0;
-  virtual void CloseTab(int id, bool incognito) = 0;
-  virtual void CloseAllTabs() = 0;
   virtual void CloseAllIncognitoTabs() = 0;
   virtual void OpenFeedback() = 0;
   virtual void CloseHostedDialog() = 0;

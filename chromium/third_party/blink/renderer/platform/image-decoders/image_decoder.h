@@ -28,6 +28,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_IMAGE_DECODERS_IMAGE_DECODER_H_
 
 #include <memory>
+
 #include "base/memory/scoped_refptr.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/platform/graphics/color_behavior.h"
@@ -41,8 +42,9 @@
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/time.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
-#include "third_party/skia/include/core/SkColorSpaceXform.h"
 #include "third_party/skia/third_party/skcms/skcms.h"
+
+class SkColorSpace;
 
 namespace blink {
 
@@ -60,7 +62,6 @@ inline skcms_PixelFormat XformColorFormat() {
 // instead of using an ImageFrame.
 class PLATFORM_EXPORT ImagePlanes final {
   USING_FAST_MALLOC(ImagePlanes);
-  WTF_MAKE_NONCOPYABLE(ImagePlanes);
 
  public:
   ImagePlanes();
@@ -72,11 +73,12 @@ class PLATFORM_EXPORT ImagePlanes final {
  private:
   void* planes_[3];
   size_t row_bytes_[3];
+
+  DISALLOW_COPY_AND_ASSIGN(ImagePlanes);
 };
 
 class PLATFORM_EXPORT ColorProfile final {
   USING_FAST_MALLOC(ColorProfile);
-  WTF_MAKE_NONCOPYABLE(ColorProfile);
 
  public:
   ColorProfile(const skcms_ICCProfile&, std::unique_ptr<uint8_t[]> = nullptr);
@@ -87,11 +89,12 @@ class PLATFORM_EXPORT ColorProfile final {
  private:
   skcms_ICCProfile profile_;
   std::unique_ptr<uint8_t[]> buffer_;
+
+  DISALLOW_COPY_AND_ASSIGN(ColorProfile);
 };
 
 class PLATFORM_EXPORT ColorProfileTransform final {
   USING_FAST_MALLOC(ColorProfileTransform);
-  WTF_MAKE_NONCOPYABLE(ColorProfileTransform);
 
  public:
   ColorProfileTransform(const skcms_ICCProfile* src_profile,
@@ -103,13 +106,14 @@ class PLATFORM_EXPORT ColorProfileTransform final {
  private:
   const skcms_ICCProfile* src_profile_;
   skcms_ICCProfile dst_profile_;
+
+  DISALLOW_COPY_AND_ASSIGN(ColorProfileTransform);
 };
 
 // ImageDecoder is a base for all format-specific decoders
 // (e.g. JPEGImageDecoder). This base manages the ImageFrame cache.
 //
 class PLATFORM_EXPORT ImageDecoder {
-  WTF_MAKE_NONCOPYABLE(ImageDecoder);
   USING_FAST_MALLOC(ImageDecoder);
 
  public:
@@ -118,7 +122,7 @@ class PLATFORM_EXPORT ImageDecoder {
 
   enum AlphaOption { kAlphaPremultiplied, kAlphaNotPremultiplied };
   enum HighBitDepthDecodingOption {
-    // Decode everything to 8-8-8-8 pixel format (kN32 channel order).
+    // Decode everything to uint8 pixel format (kN32 channel order).
     kDefaultBitDepth,
     // Decode high bit depth images to half float pixel format.
     kHighBitDepthToHalfFloat
@@ -190,7 +194,7 @@ class PLATFORM_EXPORT ImageDecoder {
   bool IsDecodedSizeAvailable() const { return !failed_ && size_available_; }
 
   virtual IntSize Size() const { return size_; }
-  virtual std::vector<SkISize> GetSupportedDecodeSizes() const { return {}; };
+  virtual std::vector<SkISize> GetSupportedDecodeSizes() const { return {}; }
 
   // Decoders which downsample images should override this method to
   // return the actual decoded size.
@@ -302,15 +306,6 @@ class PLATFORM_EXPORT ImageDecoder {
   // Callers may pass WTF::kNotFound to clear all frames.
   // Note: If |frame_buffer_cache_| contains only one frame, it won't be
   // cleared. Returns the number of bytes of frame data actually cleared.
-  //
-  // This is a virtual method because MockImageDecoder needs to override it in
-  // order to run the test ImageFrameGeneratorTest::ClearMultiFrameDecode.
-  //
-  // @TODO  Let MockImageDecoder override ImageFrame::ClearFrameBuffer instead,
-  //        so this method can be made non-virtual. It is used in the test
-  //        ImageFrameGeneratorTest::ClearMultiFrameDecode. The test needs to
-  //        be modified since two frames may be kept in cache, instead of
-  //        always just one, with this ClearCacheExceptFrame implementation.
   virtual size_t ClearCacheExceptFrame(size_t);
 
   // If the image has a cursor hot-spot, stores it in the argument
@@ -330,7 +325,9 @@ class PLATFORM_EXPORT ImageDecoder {
   }
 
   virtual bool CanDecodeToYUV() { return false; }
-  virtual bool DecodeToYUV() { return false; }
+  // Should only be called if CanDecodeToYuv() returns true, in which case
+  // the subclass of ImageDecoder must override this method.
+  virtual void DecodeToYUV() { NOTREACHED(); }
   virtual void SetImagePlanes(std::unique_ptr<ImagePlanes>) {}
 
  protected:
@@ -451,9 +448,11 @@ class PLATFORM_EXPORT ImageDecoder {
   //
   // Before calling this, verify that frame |index| exists by checking that
   // |index| is smaller than |frame_buffer_cache_|.size().
-  virtual bool FrameStatusSufficientForSuccessors(size_t index) {
+  virtual bool FrameStatusSufficientForSuccessors(wtf_size_t index) {
     DCHECK(index < frame_buffer_cache_.size());
-    return frame_buffer_cache_[index].GetStatus() != ImageFrame::kFrameEmpty;
+    ImageFrame::Status frame_status = frame_buffer_cache_[index].GetStatus();
+    return frame_status == ImageFrame::kFramePartial ||
+           frame_status == ImageFrame::kFrameComplete;
   }
 
  private:
@@ -473,7 +472,7 @@ class PLATFORM_EXPORT ImageDecoder {
 
   // This methods gets called at the end of InitFrameBuffer. Subclasses can do
   // format specific initialization, for e.g. alpha settings, here.
-  virtual void OnInitFrameBuffer(size_t){};
+  virtual void OnInitFrameBuffer(size_t) {}
 
   // Called by InitFrameBuffer to determine if it can take the bitmap of the
   // previous frame. This condition is different for GIF and WEBP.
@@ -490,6 +489,8 @@ class PLATFORM_EXPORT ImageDecoder {
 
   bool source_to_target_color_transform_needs_update_ = false;
   std::unique_ptr<ColorProfileTransform> source_to_target_color_transform_;
+
+  DISALLOW_COPY_AND_ASSIGN(ImageDecoder);
 };
 
 }  // namespace blink

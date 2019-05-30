@@ -410,7 +410,7 @@ Timeline.TimelinePanel = class extends UI.Panel {
     this._overviewControls.push(new Timeline.TimelineEventOverviewCPUActivity());
     this._overviewControls.push(new Timeline.TimelineEventOverviewNetwork());
     if (this._showScreenshotsSetting.get() && this._performanceModel &&
-        this._performanceModel.frameModel().frames().length)
+        this._performanceModel.filmStripModel().frames().length)
       this._overviewControls.push(new Timeline.TimelineFilmStripOverview());
     if (this._showMemorySetting.get())
       this._overviewControls.push(new Timeline.TimelineEventOverviewMemory());
@@ -549,7 +549,7 @@ Timeline.TimelinePanel = class extends UI.Panel {
   }
 
   _reset() {
-    PerfUI.LineLevelProfile.instance().reset();
+    PerfUI.LineLevelProfile.Performance.instance().reset();
     this._setModel(null);
   }
 
@@ -559,7 +559,7 @@ Timeline.TimelinePanel = class extends UI.Panel {
   _applyFilters(model) {
     if (model.timelineModel().isGenericTrace() || Runtime.experiments.isEnabled('timelineShowAllEvents'))
       return;
-    model.setFilters([Timeline.TimelineUIUtils.visibleEventsFilter(), new TimelineModel.ExcludeTopLevelFilter()]);
+    model.setFilters([Timeline.TimelineUIUtils.visibleEventsFilter()]);
   }
 
   /**
@@ -582,8 +582,10 @@ Timeline.TimelinePanel = class extends UI.Panel {
           Timeline.PerformanceModel.Events.WindowChanged, this._onModelWindowChanged, this);
       this._overviewPane.setBounds(
           model.timelineModel().minimumRecordTime(), model.timelineModel().maximumRecordTime());
+      const lineLevelProfile = PerfUI.LineLevelProfile.Performance.instance();
+      lineLevelProfile.reset();
       for (const profile of model.timelineModel().cpuProfiles())
-        PerfUI.LineLevelProfile.instance().appendCPUProfile(profile);
+        lineLevelProfile.appendCPUProfile(profile);
       this._setMarkers(model.timelineModel());
       this._flameChart.setSelection(null);
       this._overviewPane.setWindowTimes(model.window().left, model.window().right);
@@ -746,11 +748,8 @@ Timeline.TimelinePanel = class extends UI.Panel {
     const markers = new Map();
     const recordTypes = TimelineModel.TimelineModel.RecordType;
     const zeroTime = timelineModel.minimumRecordTime();
-    const filter = Timeline.TimelineUIUtils.paintEventsFilter();
     for (const event of timelineModel.timeMarkerEvents()) {
       if (event.name === recordTypes.TimeStamp || event.name === recordTypes.ConsoleTime)
-        continue;
-      if (!filter.accept(event))
         continue;
       markers.set(event.startTime, Timeline.TimelineUIUtils.createEventDivider(event, zeroTime));
     }

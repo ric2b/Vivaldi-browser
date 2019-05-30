@@ -125,9 +125,9 @@ class TCPSocketUnitTest : public TCPSocketUnitTestBase,
   net::MockClientSocketFactory mock_client_socket_factory_;
 };
 
-INSTANTIATE_TEST_CASE_P(/* no prefix */,
-                        TCPSocketUnitTest,
-                        testing::Values(net::SYNCHRONOUS, net::ASYNC));
+INSTANTIATE_TEST_SUITE_P(/* no prefix */,
+                         TCPSocketUnitTest,
+                         testing::Values(net::SYNCHRONOUS, net::ASYNC));
 
 TEST_F(TCPSocketUnitTest, SocketConnectError) {
   net::IPEndPoint ip_end_point(net::IPAddress::IPv4Localhost(), 1234);
@@ -165,6 +165,26 @@ TEST_P(TCPSocketUnitTest, SocketConnectAfterDisconnect) {
   EXPECT_TRUE(data_provider1.AllWriteDataConsumed());
   EXPECT_TRUE(data_provider2.AllReadDataConsumed());
   EXPECT_TRUE(data_provider2.AllWriteDataConsumed());
+}
+
+TEST_F(TCPSocketUnitTest, SocketConnectDisconnectRace) {
+  // Regression test for https://crbug.com/882585, disconnect while connect
+  // is pending.
+  net::IPEndPoint ip_end_point(net::IPAddress::IPv4Localhost(), 1234);
+  net::StaticSocketDataProvider data_provider((base::span<net::MockRead>()),
+                                              base::span<net::MockWrite>());
+  data_provider.set_connect_data(
+      net::MockConnect(net::SYNCHRONOUS, net::ERR_FAILED, ip_end_point));
+  mock_client_socket_factory()->AddSocketDataProvider(&data_provider);
+  std::unique_ptr<TCPSocket> socket = CreateSocket();
+
+  net::AddressList address(ip_end_point);
+  net::TestCompletionCallback callback;
+  socket->Connect(address, callback.callback());
+  socket->Disconnect(false /* socket_destroying */);
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_FALSE(callback.have_result());
 }
 
 TEST_F(TCPSocketUnitTest, DestroyWhileReadPending) {
@@ -491,7 +511,7 @@ class TestSocketFactory : public net::ClientSocketFactory {
                                                         success_);
   }
   std::unique_ptr<net::SSLClientSocket> CreateSSLClientSocket(
-      std::unique_ptr<net::ClientSocketHandle>,
+      std::unique_ptr<net::StreamSocket>,
       const net::HostPortPair&,
       const net::SSLConfig&,
       const net::SSLClientSocketContext&) override {
@@ -499,19 +519,20 @@ class TestSocketFactory : public net::ClientSocketFactory {
     return std::unique_ptr<net::SSLClientSocket>();
   }
   std::unique_ptr<net::ProxyClientSocket> CreateProxyClientSocket(
-      std::unique_ptr<net::ClientSocketHandle> transport_socket,
+      std::unique_ptr<net::StreamSocket> stream_socket,
       const std::string& user_agent,
       const net::HostPortPair& endpoint,
+      const net::ProxyServer& proxy_server,
       net::HttpAuthController* http_auth_controller,
       bool tunnel,
       bool using_spdy,
       net::NextProto negotiated_protocol,
+      net::ProxyDelegate* proxy_delegate,
       bool is_https_proxy,
       const net::NetworkTrafficAnnotationTag& traffic_annotation) override {
     NOTIMPLEMENTED();
     return nullptr;
   }
-  void ClearSSLSessionCache() override { NOTIMPLEMENTED(); }
 
  private:
   std::vector<std::unique_ptr<net::StaticSocketDataProvider>> providers_;
@@ -538,9 +559,9 @@ class TCPSocketSettingsTest : public TCPSocketUnitTestBase,
   TestSocketFactory client_socket_factory_;
 };
 
-INSTANTIATE_TEST_CASE_P(/* no prefix */,
-                        TCPSocketSettingsTest,
-                        testing::Bool());
+INSTANTIATE_TEST_SUITE_P(/* no prefix */,
+                         TCPSocketSettingsTest,
+                         testing::Bool());
 
 TEST_P(TCPSocketSettingsTest, SetNoDelay) {
   std::unique_ptr<TCPSocket> socket = CreateAndConnectSocket();
@@ -634,6 +655,21 @@ TEST_F(TCPSocketServerTest, ListenAccept) {
   EXPECT_TRUE(client_socket->GetLocalAddress(&client_addr));
   EXPECT_EQ(server_addr, peer_addr);
   EXPECT_EQ(client_addr, accept_client_addr);
+}
+
+TEST_F(TCPSocketServerTest, ListenDisconnectRace) {
+  // Create a server socket.
+  std::unique_ptr<TCPSocket> socket = CreateSocket();
+  net::TestCompletionCallback callback;
+  bool callback_ran = false;
+  socket->Listen(
+      "127.0.0.1", 0 /* port */, 1 /* backlog */,
+      base::BindLambdaForTesting([&](int result, const std::string& error_msg) {
+        callback_ran = true;
+      }));
+  socket->Disconnect(false /* socket_destroying */);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(callback_ran);
 }
 
 TEST_F(TCPSocketServerTest, ReadAndWrite) {

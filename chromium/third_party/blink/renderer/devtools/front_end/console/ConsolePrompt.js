@@ -12,13 +12,15 @@ Console.ConsolePrompt = class extends UI.Widget {
     this._initialText = '';
     /** @type {?UI.TextEditor} */
     this._editor = null;
-    this._isBelowPromptEnabled = Runtime.experiments.isEnabled('consoleBelowPrompt');
     this._eagerPreviewElement = createElementWithClass('div', 'console-eager-preview');
     this._textChangeThrottler = new Common.Throttler(150);
     this._formatter = new ObjectUI.RemoteObjectPreviewFormatter();
     this._requestPreviewBound = this._requestPreview.bind(this);
     this._innerPreviewElement = this._eagerPreviewElement.createChild('div', 'console-eager-inner-preview');
     this._eagerPreviewElement.appendChild(UI.Icon.create('smallicon-command-result', 'preview-result-icon'));
+
+    const editorContainerElement = this.element.createChild('div', 'console-prompt-editor-container');
+    this.element.appendChild(this._eagerPreviewElement);
 
     this._eagerEvalSetting = Common.settings.moduleSetting('consoleEagerEval');
     this._eagerEvalSetting.addChangeListener(this._eagerSettingChanged.bind(this));
@@ -46,15 +48,12 @@ Console.ConsolePrompt = class extends UI.Widget {
       this._defaultAutocompleteConfig = ObjectUI.JavaScriptAutocompleteConfig.createConfigForEditor(this._editor);
       this._editor.configureAutocomplete(Object.assign({}, this._defaultAutocompleteConfig, {
         suggestionsCallback: this._wordsWithQuery.bind(this),
-        anchorBehavior: this._isBelowPromptEnabled ? UI.GlassPane.AnchorBehavior.PreferTop :
-                                                     UI.GlassPane.AnchorBehavior.PreferBottom
+        anchorBehavior: UI.GlassPane.AnchorBehavior.PreferTop
       }));
       this._editor.widget().element.addEventListener('keydown', this._editorKeyDown.bind(this), true);
-      this._editor.widget().show(this.element);
+      this._editor.widget().show(editorContainerElement);
       this._editor.addEventListener(UI.TextEditor.Events.TextChanged, this._onTextChanged, this);
       this._editor.addEventListener(UI.TextEditor.Events.SuggestionChanged, this._onTextChanged, this);
-      if (this._isBelowPromptEnabled)
-        this.element.appendChild(this._eagerPreviewElement);
 
       this.setText(this._initialText);
       delete this._initialText;
@@ -84,7 +83,7 @@ Console.ConsolePrompt = class extends UI.Widget {
   _onTextChanged() {
     // ConsoleView and prompt both use a throttler, so we clear the preview
     // ASAP to avoid inconsistency between a fresh viewport and stale preview.
-    if (this._isBelowPromptEnabled && this._eagerEvalSetting.get()) {
+    if (this._eagerEvalSetting.get()) {
       const asSoonAsPossible = !this._editor.textWithCurrentSuggestion();
       this._previewRequestForTest = this._textChangeThrottler.schedule(this._requestPreviewBound, asSoonAsPossible);
     }
@@ -96,6 +95,7 @@ Console.ConsolePrompt = class extends UI.Widget {
    */
   async _requestPreview() {
     const text = this._editor.textWithCurrentSuggestion().trim();
+    const executionContext = UI.context.flavor(SDK.ExecutionContext);
     const {preview, result} =
         await ObjectUI.JavaScriptREPL.evaluateAndBuildPreview(text, true /* throwOnSideEffect */, 500);
     this._innerPreviewElement.removeChildren();
@@ -108,6 +108,8 @@ Console.ConsolePrompt = class extends UI.Widget {
       this._highlightingNode = false;
       SDK.OverlayModel.hideDOMNodeHighlight();
     }
+    if (result)
+      executionContext.runtimeModel.releaseEvaluationResult(result);
   }
 
   /**
@@ -236,6 +238,8 @@ Console.ConsolePrompt = class extends UI.Widget {
 
     event.consume(true);
 
+    // Since we prevent default, manually emulate the native "scroll on key input" behavior.
+    this.element.scrollIntoView();
     this.clearAutocomplete();
 
     const str = this.text();

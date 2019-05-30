@@ -29,7 +29,7 @@ class CONTENT_EXPORT MemoryMonitorAndroid : public MemoryMonitor {
   class Delegate {
    public:
     Delegate() {}
-    virtual ~Delegate() {};
+    virtual ~Delegate() {}
 
     // Get MemoryInfo. Implementations should fill |out| accordingly.
     virtual void GetMemoryInfo(MemoryInfo* out) = 0;
@@ -47,11 +47,7 @@ class CONTENT_EXPORT MemoryMonitorAndroid : public MemoryMonitor {
   Delegate* delegate() { return delegate_.get(); }
 
  private:
-  void OnApplicationStateChange(base::android::ApplicationState state);
-
   std::unique_ptr<Delegate> delegate_;
-  std::unique_ptr<base::android::ApplicationStatusListener>
-      application_state_listener_;
 
   DISALLOW_COPY_AND_ASSIGN(MemoryMonitorAndroid);
 };

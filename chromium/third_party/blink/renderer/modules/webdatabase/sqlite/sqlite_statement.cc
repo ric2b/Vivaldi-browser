@@ -102,7 +102,7 @@ int SQLiteStatement::Prepare() {
 
     // Pass the length of the string including the null character to
     // sqlite3_prepare_v2; this lets SQLite avoid an extra string copy.
-    size_t length_including_null_character = query.length() + 1;
+    wtf_size_t length_including_null_character = query.length() + 1;
 
     error = sqlite3_prepare_v2(database_.Sqlite3Handle(), query.data(),
                                length_including_null_character, statement.get(),
@@ -254,24 +254,21 @@ SQLValue SQLiteStatement::GetColumnValue(int col) {
 
   // SQLite is typed per value. optional column types are
   // "(mostly) ignored"
-  sqlite3_value* value = sqlite3_column_value(statement_, col);
-  switch (sqlite3_value_type(value)) {
+  switch (sqlite3_column_type(statement_, col)) {
     case SQLITE_INTEGER:  // SQLValue and JS don't represent integers, so use
                           // FLOAT -case
     case SQLITE_FLOAT:
-      return SQLValue(sqlite3_value_double(value));
+      return SQLValue(sqlite3_column_double(statement_, col));
     case SQLITE_BLOB:  // SQLValue and JS don't represent blobs, so use TEXT
                        // -case
     case SQLITE_TEXT: {
-      const UChar* string =
-          reinterpret_cast<const UChar*>(sqlite3_value_text16(value));
-      unsigned length = sqlite3_value_bytes16(value) / sizeof(UChar);
+      const UChar* string = reinterpret_cast<const UChar*>(
+          sqlite3_column_text16(statement_, col));
+      unsigned length = sqlite3_column_bytes16(statement_, col) / sizeof(UChar);
       return SQLValue(StringImpl::Create8BitIfPossible(string, length));
     }
     case SQLITE_NULL:
       return SQLValue();
-    default:
-      break;
   }
   NOTREACHED();
   return SQLValue();

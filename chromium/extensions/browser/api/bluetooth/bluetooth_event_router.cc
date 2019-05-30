@@ -41,9 +41,9 @@ namespace {
 void IgnoreAdapterResult(scoped_refptr<device::BluetoothAdapter> adapter) {}
 
 void IgnoreAdapterResultAndThen(
-    const base::Closure& callback,
+    base::OnceClosure callback,
     scoped_refptr<device::BluetoothAdapter> adapter) {
-  callback.Run();
+  std::move(callback).Run();
 }
 
 std::string GetListenerId(const extensions::EventListenerInfo& details) {
@@ -84,17 +84,17 @@ bool BluetoothEventRouter::IsBluetoothSupported() const {
 }
 
 void BluetoothEventRouter::GetAdapter(
-    const device::BluetoothAdapterFactory::AdapterCallback& callback) {
+    device::BluetoothAdapterFactory::AdapterCallback callback) {
   if (adapter_.get()) {
-    callback.Run(scoped_refptr<device::BluetoothAdapter>(adapter_));
+    std::move(callback).Run(adapter_);
     return;
   }
 
   // Note: On ChromeOS this will return an adapter that also supports Bluetooth
   // Low Energy.
   device::BluetoothAdapterFactory::GetClassicAdapter(
-      base::Bind(&BluetoothEventRouter::OnAdapterInitialized,
-                 weak_ptr_factory_.GetWeakPtr(), callback));
+      base::BindOnce(&BluetoothEventRouter::OnAdapterInitialized,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void BluetoothEventRouter::StartDiscoverySession(
@@ -105,11 +105,12 @@ void BluetoothEventRouter::StartDiscoverySession(
   if (!adapter_.get() && IsBluetoothSupported()) {
     // If |adapter_| isn't set yet, call GetAdapter() which will synchronously
     // invoke the callback (StartDiscoverySessionImpl).
-    GetAdapter(base::Bind(
+    GetAdapter(base::BindOnce(
         &IgnoreAdapterResultAndThen,
-        base::Bind(&BluetoothEventRouter::StartDiscoverySessionImpl,
-                   weak_ptr_factory_.GetWeakPtr(), base::RetainedRef(adapter),
-                   extension_id, callback, error_callback)));
+        base::BindOnce(&BluetoothEventRouter::StartDiscoverySessionImpl,
+                       weak_ptr_factory_.GetWeakPtr(),
+                       base::RetainedRef(adapter), extension_id, callback,
+                       error_callback)));
     return;
   }
   StartDiscoverySessionImpl(adapter, extension_id, callback, error_callback);
@@ -130,8 +131,7 @@ void BluetoothEventRouter::StartDiscoverySessionImpl(
     error_callback.Run();
     return;
   }
-  DiscoverySessionMap::iterator iter =
-      discovery_session_map_.find(extension_id);
+  auto iter = discovery_session_map_.find(extension_id);
   if (iter != discovery_session_map_.end() && iter->second->IsActive()) {
     BLUETOOTH_LOG(DEBUG) << "An active discovery session exists for extension: "
                          << extension_id;
@@ -144,8 +144,7 @@ void BluetoothEventRouter::StartDiscoverySessionImpl(
   // Check whether user pre set discovery filter by calling SetDiscoveryFilter
   // before. If the user has set a discovery filter then start a filtered
   // discovery session, otherwise start a regular session
-  PreSetFilterMap::iterator pre_set_iter =
-      pre_set_filter_map_.find(extension_id);
+  auto pre_set_iter = pre_set_filter_map_.find(extension_id);
   if (pre_set_iter != pre_set_filter_map_.end()) {
     adapter->StartDiscoverySessionWithFilter(
         std::unique_ptr<device::BluetoothDiscoveryFilter>(pre_set_iter->second),
@@ -170,8 +169,7 @@ void BluetoothEventRouter::StopDiscoverySession(
     error_callback.Run();
     return;
   }
-  DiscoverySessionMap::iterator iter =
-      discovery_session_map_.find(extension_id);
+  auto iter = discovery_session_map_.find(extension_id);
   if (iter == discovery_session_map_.end() || !iter->second->IsActive()) {
     BLUETOOTH_LOG(DEBUG) << "No active discovery session exists for extension.";
     error_callback.Run();
@@ -194,8 +192,7 @@ void BluetoothEventRouter::SetDiscoveryFilter(
     return;
   }
 
-  DiscoverySessionMap::iterator iter =
-      discovery_session_map_.find(extension_id);
+  auto iter = discovery_session_map_.find(extension_id);
   if (iter == discovery_session_map_.end() || !iter->second->IsActive()) {
     BLUETOOTH_LOG(DEBUG) << "No active discovery session exists for extension, "
                          << "so caching filter for later use.";
@@ -217,14 +214,14 @@ BluetoothApiPairingDelegate* BluetoothEventRouter::GetPairingDelegate(
 }
 
 void BluetoothEventRouter::OnAdapterInitialized(
-    const device::BluetoothAdapterFactory::AdapterCallback& callback,
+    device::BluetoothAdapterFactory::AdapterCallback callback,
     scoped_refptr<device::BluetoothAdapter> adapter) {
   if (!adapter_.get()) {
     adapter_ = adapter;
     adapter_->AddObserver(this);
   }
 
-  callback.Run(adapter);
+  std::move(callback).Run(adapter);
 }
 
 void BluetoothEventRouter::MaybeReleaseAdapter() {
@@ -238,10 +235,10 @@ void BluetoothEventRouter::MaybeReleaseAdapter() {
 
 void BluetoothEventRouter::AddPairingDelegate(const std::string& extension_id) {
   if (!adapter_.get() && IsBluetoothSupported()) {
-    GetAdapter(
-        base::Bind(&IgnoreAdapterResultAndThen,
-                   base::Bind(&BluetoothEventRouter::AddPairingDelegateImpl,
-                              weak_ptr_factory_.GetWeakPtr(), extension_id)));
+    GetAdapter(base::BindOnce(
+        &IgnoreAdapterResultAndThen,
+        base::BindOnce(&BluetoothEventRouter::AddPairingDelegateImpl,
+                       weak_ptr_factory_.GetWeakPtr(), extension_id)));
     return;
   }
   AddPairingDelegateImpl(extension_id);
@@ -317,7 +314,7 @@ void BluetoothEventRouter::AdapterDiscoveringChanged(
   if (!discovering) {
     // If any discovery sessions are inactive, clean them up.
     DiscoverySessionMap active_session_map;
-    for (DiscoverySessionMap::iterator iter = discovery_session_map_.begin();
+    for (auto iter = discovery_session_map_.begin();
          iter != discovery_session_map_.end(); ++iter) {
       device::BluetoothDiscoverySession* session = iter->second;
       if (session->IsActive()) {
@@ -334,8 +331,8 @@ void BluetoothEventRouter::AdapterDiscoveringChanged(
   // Release the adapter after dispatching the event.
   if (!discovering) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&BluetoothEventRouter::MaybeReleaseAdapter,
-                              weak_ptr_factory_.GetWeakPtr()));
+        FROM_HERE, base::BindOnce(&BluetoothEventRouter::MaybeReleaseAdapter,
+                                  weak_ptr_factory_.GetWeakPtr()));
   }
 }
 
@@ -384,7 +381,7 @@ void BluetoothEventRouter::OnListenerAdded(const EventListenerInfo& details) {
   int count = ++event_listener_count_[id];
   BLUETOOTH_LOG(EVENT) << "Event Listener Added: " << id << " Count: " << count;
   if (!adapter_.get())
-    GetAdapter(base::Bind(&IgnoreAdapterResult));
+    GetAdapter(base::BindOnce(&IgnoreAdapterResult));
 }
 
 void BluetoothEventRouter::OnListenerRemoved(const EventListenerInfo& details) {
@@ -439,16 +436,14 @@ void BluetoothEventRouter::CleanUpForExtension(
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   RemovePairingDelegate(extension_id);
 
-  PreSetFilterMap::iterator pre_set_iter =
-      pre_set_filter_map_.find(extension_id);
+  auto pre_set_iter = pre_set_filter_map_.find(extension_id);
   if (pre_set_iter != pre_set_filter_map_.end()) {
     delete pre_set_iter->second;
     pre_set_filter_map_.erase(pre_set_iter);
   }
 
   // Remove any discovery session initiated by the extension.
-  DiscoverySessionMap::iterator session_iter =
-      discovery_session_map_.find(extension_id);
+  auto session_iter = discovery_session_map_.find(extension_id);
   if (session_iter == discovery_session_map_.end())
     return;
 
@@ -475,7 +470,7 @@ void BluetoothEventRouter::CleanUpAllExtensions() {
   }
   discovery_session_map_.clear();
 
-  PairingDelegateMap::iterator pairing_iter = pairing_delegate_map_.begin();
+  auto pairing_iter = pairing_delegate_map_.begin();
   while (pairing_iter != pairing_delegate_map_.end())
     RemovePairingDelegate(pairing_iter++->first);
 }
@@ -486,8 +481,7 @@ void BluetoothEventRouter::OnStartDiscoverySession(
     std::unique_ptr<device::BluetoothDiscoverySession> discovery_session) {
   BLUETOOTH_LOG(EVENT) << "OnStartDiscoverySession: " << extension_id;
   // Clean up any existing session instance for the extension.
-  DiscoverySessionMap::iterator iter =
-      discovery_session_map_.find(extension_id);
+  auto iter = discovery_session_map_.find(extension_id);
   if (iter != discovery_session_map_.end())
     delete iter->second;
   discovery_session_map_[extension_id] = discovery_session.release();

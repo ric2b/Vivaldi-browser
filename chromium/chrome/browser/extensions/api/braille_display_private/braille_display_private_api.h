@@ -92,7 +92,7 @@ class BrailleDisplayPrivateGetDisplayStateFunction : public AsyncApiFunction {
 
 class BrailleDisplayPrivateWriteDotsFunction : public AsyncApiFunction {
   DECLARE_EXTENSION_FUNCTION("brailleDisplayPrivate.writeDots",
-                             BRAILLEDISPLAYPRIVATE_WRITEDOTS);
+                             BRAILLEDISPLAYPRIVATE_WRITEDOTS)
  public:
   BrailleDisplayPrivateWriteDotsFunction();
 
@@ -104,6 +104,16 @@ class BrailleDisplayPrivateWriteDotsFunction : public AsyncApiFunction {
 
  private:
   std::unique_ptr<braille_display_private::WriteDots::Params> params_;
+};
+
+class BrailleDisplayPrivateUpdateBluetoothBrailleDisplayAddressFunction
+    : public UIThreadExtensionFunction {
+  ~BrailleDisplayPrivateUpdateBluetoothBrailleDisplayAddressFunction()
+      override {}
+  ResponseAction Run() override;
+  DECLARE_EXTENSION_FUNCTION(
+      "brailleDisplayPrivate.updateBluetoothBrailleDisplayAddress",
+      BRAILLEDISPLAYPRIVATE_UPDATEBLUETOOTHBRAILLEDISPLAYADDRESS)
 };
 
 }  // namespace api

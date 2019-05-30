@@ -5,6 +5,7 @@
 #include "components/exo/keyboard.h"
 
 #include "ash/public/cpp/app_types.h"
+#include "base/bind.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/exo/keyboard_delegate.h"
 #include "components/exo/keyboard_device_configuration_delegate.h"
@@ -17,9 +18,9 @@
 #include "ui/aura/window.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/events/base_event_utils.h"
-#include "ui/events/devices/input_device.h"
-#include "ui/events/devices/input_device_manager.h"
 #include "ui/events/event.h"
+#include "ui/keyboard/keyboard_controller.h"
+#include "ui/keyboard/keyboard_util.h"
 #include "ui/views/widget/widget.h"
 
 namespace exo {
@@ -42,7 +43,8 @@ const struct {
   int modifiers;
 } kReservedAccelerators[] = {
     {ui::VKEY_F13, ui::EF_NONE},
-    {ui::VKEY_I, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN}};
+    {ui::VKEY_I, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN},
+    {ui::VKEY_Z, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN}};
 
 bool ProcessAccelerator(Surface* surface, const ui::KeyEvent* event) {
   views::Widget* widget =
@@ -112,17 +114,12 @@ bool ConsumedByIme(Surface* focus, const ui::KeyEvent* event) {
   return false;
 }
 
-bool IsPhysicalKeyboardEnabled() {
-  // The internal keyboard is enabled if tablet mode is not enabled.
-  if (!WMHelper::GetInstance()->IsTabletModeWindowManagerEnabled())
-    return true;
-
-  for (auto& keyboard :
-       ui::InputDeviceManager::GetInstance()->GetKeyboardDevices()) {
-    if (keyboard.type != ui::InputDeviceType::INPUT_DEVICE_INTERNAL)
-      return true;
-  }
-  return false;
+bool IsVirtualKeyboardEnabled() {
+  return keyboard::GetAccessibilityKeyboardEnabled() ||
+         keyboard::GetTouchKeyboardEnabled() ||
+         (keyboard::KeyboardController::HasInstance() &&
+          keyboard::KeyboardController::Get()->IsEnableFlagSet(
+              keyboard::mojom::KeyboardEnableFlag::kCommandLineEnabled));
 }
 
 bool IsReservedAccelerator(const ui::KeyEvent* event) {
@@ -165,11 +162,9 @@ Keyboard::Keyboard(KeyboardDelegate* delegate, Seat* seat)
       expiration_delay_for_pending_key_acks_(base::TimeDelta::FromMilliseconds(
           kExpirationDelayForPendingKeyAcksMs)),
       weak_ptr_factory_(this) {
-  auto* helper = WMHelper::GetInstance();
   AddEventHandler();
   seat_->AddObserver(this);
-  helper->AddTabletModeObserver(this);
-  helper->AddInputDeviceEventObserver(this);
+  keyboard::KeyboardController::Get()->AddObserver(this);
   OnSurfaceFocused(seat_->GetFocusedSurface());
 }
 
@@ -178,11 +173,9 @@ Keyboard::~Keyboard() {
     observer.OnKeyboardDestroying(this);
   if (focus_)
     focus_->RemoveSurfaceObserver(this);
-  auto* helper = WMHelper::GetInstance();
   RemoveEventHandler();
   seat_->RemoveObserver(this);
-  helper->RemoveTabletModeObserver(this);
-  helper->RemoveInputDeviceEventObserver(this);
+  keyboard::KeyboardController::Get()->RemoveObserver(this);
 }
 
 bool Keyboard::HasDeviceConfigurationDelegate() const {
@@ -192,7 +185,7 @@ bool Keyboard::HasDeviceConfigurationDelegate() const {
 void Keyboard::SetDeviceConfigurationDelegate(
     KeyboardDeviceConfigurationDelegate* delegate) {
   device_configuration_delegate_ = delegate;
-  OnKeyboardDeviceConfigurationChanged();
+  OnKeyboardEnabledChanged(IsVirtualKeyboardEnabled());
 }
 
 void Keyboard::AddObserver(KeyboardObserver* observer) {
@@ -331,29 +324,6 @@ void Keyboard::OnSurfaceDestroying(Surface* surface) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// ui::InputDeviceEventObserver overrides:
-
-void Keyboard::OnKeyboardDeviceConfigurationChanged() {
-  if (device_configuration_delegate_) {
-    device_configuration_delegate_->OnKeyboardTypeChanged(
-        IsPhysicalKeyboardEnabled());
-  }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// ash::TabletModeObserver overrides:
-
-void Keyboard::OnTabletModeStarted() {
-  OnKeyboardDeviceConfigurationChanged();
-}
-
-void Keyboard::OnTabletModeEnding() {}
-
-void Keyboard::OnTabletModeEnded() {
-  OnKeyboardDeviceConfigurationChanged();
-}
-
-////////////////////////////////////////////////////////////////////////////////
 // SeatObserver overrides:
 
 void Keyboard::OnSurfaceFocusing(Surface* gaining_focus) {}
@@ -365,6 +335,19 @@ void Keyboard::OnSurfaceFocused(Surface* gained_focus) {
           : nullptr;
   if (gained_focus_surface != focus_)
     SetFocus(gained_focus_surface);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// keyboard::KeyboardControllerObserver overrides:
+
+void Keyboard::OnKeyboardEnabledChanged(bool enabled) {
+  if (device_configuration_delegate_) {
+    // Ignore kAndroidDisabled which affects |enabled| and just test for a11y
+    // and touch enabled keyboards. TODO(yhanada): Fix this using an Android
+    // specific KeyboardUI implementation. https://crbug.com/897655.
+    bool is_physical = !IsVirtualKeyboardEnabled();
+    device_configuration_delegate_->OnKeyboardTypeChanged(is_physical);
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -392,7 +375,7 @@ void Keyboard::ProcessExpiredPendingKeyAcks() {
   DCHECK(process_expired_pending_key_acks_pending_);
   process_expired_pending_key_acks_pending_ = false;
 
-  // Check pending acks and process them as if it's not handled if
+  // Check pending acks and process them as if it is handled if
   // expiration time passed.
   base::TimeTicks current_time = base::TimeTicks::Now();
 
@@ -403,12 +386,8 @@ void Keyboard::ProcessExpiredPendingKeyAcks() {
     if (it->second.second > current_time)
       break;
 
+    // Expiration time has passed, assume the event was handled.
     pending_key_acks_.erase(it);
-
-    // |pending_key_acks_| may change and an iterator of it become invalid when
-    // |ProcessAccelerator| is called.
-    if (focus_)
-      ProcessAccelerator(focus_, &event);
   }
 
   if (pending_key_acks_.empty())

@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/message_loop/message_loop_current.h"
@@ -16,6 +17,9 @@
 #include "chrome/renderer/chrome_render_thread_observer.h"
 #include "chrome/renderer/prerender/prerender_dispatcher.h"
 #include "chrome/renderer/prerender/prerender_helper.h"
+#include "components/data_reduction_proxy/content/common/data_reduction_proxy_url_loader_throttle.h"
+#include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
+#include "components/data_reduction_proxy/core/common/data_reduction_proxy_throttle_manager.h"
 #include "components/safe_browsing/features.h"
 #include "components/safe_browsing/renderer/renderer_url_loader_throttle.h"
 #include "components/subresource_filter/content/renderer/ad_delay_renderer_metadata_provider.h"
@@ -33,6 +37,10 @@
 #include "extensions/renderer/extension_throttle_manager.h"
 #include "extensions/renderer/guest_view/mime_handler_view/mime_handler_view_container.h"
 #endif
+
+#if defined(OS_CHROMEOS)
+#include "chrome/renderer/chromeos_merge_session_loader_throttle.h"
+#endif  // defined(OS_CHROMEOS)
 
 namespace {
 
@@ -116,6 +124,17 @@ URLLoaderThrottleProviderImpl::URLLoaderThrottleProviderImpl(
         content::mojom::kBrowserServiceName,
         mojo::MakeRequest(&safe_browsing_info_));
   }
+
+  if (data_reduction_proxy::params::IsEnabledWithNetworkService()) {
+    data_reduction_proxy::mojom::DataReductionProxyPtr drp;
+    content::RenderThread::Get()->GetConnector()->BindInterface(
+        content::mojom::kBrowserServiceName, mojo::MakeRequest(&drp));
+
+    data_reduction_proxy_manager_ = std::make_unique<
+        data_reduction_proxy::DataReductionProxyThrottleManager>(
+        std::move(drp),
+        data_reduction_proxy::mojom::DataReductionProxyThrottleConfigPtr());
+  }
 }
 
 URLLoaderThrottleProviderImpl::~URLLoaderThrottleProviderImpl() {
@@ -129,6 +148,10 @@ URLLoaderThrottleProviderImpl::URLLoaderThrottleProviderImpl(
   DETACH_FROM_THREAD(thread_checker_);
   if (other.safe_browsing_)
     other.safe_browsing_->Clone(mojo::MakeRequest(&safe_browsing_info_));
+  if (other.data_reduction_proxy_manager_) {
+    data_reduction_proxy_manager_ =
+        other.data_reduction_proxy_manager_->Clone();
+  }
   // An ad_delay_factory_ is created, rather than cloning the existing one.
 }
 
@@ -157,6 +180,13 @@ URLLoaderThrottleProviderImpl::CreateThrottles(
 
   DCHECK(!is_frame_resource ||
          type_ == content::URLLoaderThrottleProviderType::kFrame);
+
+  if (data_reduction_proxy_manager_) {
+    throttles.push_back(
+        std::make_unique<
+            data_reduction_proxy::DataReductionProxyURLLoaderThrottle>(
+            net::HttpRequestHeaders(), data_reduction_proxy_manager_.get()));
+  }
 
   if ((network_service_enabled ||
        base::FeatureList::IsEnabled(
@@ -245,10 +275,13 @@ URLLoaderThrottleProviderImpl::CreateThrottles(
 
   throttles.push_back(std::make_unique<GoogleURLLoaderThrottle>(
       ChromeRenderThreadObserver::is_incognito_process(),
-      ChromeRenderThreadObserver::force_safe_search(),
-      ChromeRenderThreadObserver::youtube_restrict(),
-      ChromeRenderThreadObserver::allowed_domains_for_apps(),
-      ChromeRenderThreadObserver::variation_ids_header()));
+      ChromeRenderThreadObserver::GetDynamicParams()));
+
+#if defined(OS_CHROMEOS)
+  throttles.push_back(std::make_unique<MergeSessionLoaderThrottle>(
+      chrome_content_renderer_client_->GetChromeObserver()
+          ->chromeos_listener()));
+#endif  // defined(OS_CHROMEOS)
 
   return throttles;
 }

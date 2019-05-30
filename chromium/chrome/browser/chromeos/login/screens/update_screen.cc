@@ -10,6 +10,7 @@
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/no_destructor.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_restrictions.h"
@@ -30,7 +31,6 @@
 #include "ui/base/l10n/l10n_util.h"
 
 using content::BrowserThread;
-using pairing_chromeos::HostPairingController;
 
 namespace chromeos {
 
@@ -43,6 +43,13 @@ constexpr const char kContextKeyShowCurtain[] = "show-curtain";
 constexpr const char kContextKeyShowProgressMessage[] = "show-progress-msg";
 constexpr const char kContextKeyProgress[] = "progress";
 constexpr const char kContextKeyProgressMessage[] = "progress-msg";
+constexpr const char kContextKeyRequiresPermissionForCelluar[] =
+    "requires-permission-for-cellular";
+
+constexpr const char kUserActionAcceptUpdateOverCellular[] =
+    "update-accept-cellular";
+constexpr const char kUserActionRejectUpdateOverCellular[] =
+    "update-reject-cellular";
 
 #if !defined(OFFICIAL_BUILD)
 constexpr const char kUserActionCancelUpdateShortcut[] = "cancel-update";
@@ -88,35 +95,7 @@ const double kMaxTimeLeft = 24 * 60 * 60;
 // its login page before error message appears.
 const int kDelayErrorMessageSec = 10;
 
-// The delay in milliseconds at which we will send the host status to the Master
-// device periodically during the updating process.
-const int kHostStatusReportDelay = 5 * 60 * 1000;
-
-// Invoked from call to RequestUpdateCheck upon completion of the DBus call.
-void StartUpdateCallback(UpdateScreen* screen,
-                         UpdateEngineClient::UpdateCheckResult result) {
-  VLOG(1) << "Callback from RequestUpdateCheck, result " << result;
-  if (UpdateScreen::HasInstance(screen) &&
-      result != UpdateEngineClient::UPDATE_RESULT_SUCCESS) {
-    screen->ExitUpdate(UpdateScreen::REASON_UPDATE_INIT_FAILED);
-  }
-}
-
 }  // anonymous namespace
-
-// static
-UpdateScreen::InstanceSet& UpdateScreen::GetInstanceSet() {
-  CR_DEFINE_STATIC_LOCAL(std::set<UpdateScreen*>, instance_set, ());
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);  // not threadsafe.
-  return instance_set;
-}
-
-// static
-bool UpdateScreen::HasInstance(UpdateScreen* inst) {
-  InstanceSet& instance_set = GetInstanceSet();
-  InstanceSet::iterator found = instance_set.find(inst);
-  return (found != instance_set.end());
-}
 
 // static
 UpdateScreen* UpdateScreen::Get(ScreenManager* manager) {
@@ -126,17 +105,15 @@ UpdateScreen* UpdateScreen::Get(ScreenManager* manager) {
 
 UpdateScreen::UpdateScreen(BaseScreenDelegate* base_screen_delegate,
                            UpdateView* view,
-                           HostPairingController* remora_controller)
+                           const ScreenExitCallback& exit_callback)
     : BaseScreen(base_screen_delegate, OobeScreen::SCREEN_OOBE_UPDATE),
       reboot_check_delay_(kWaitForRebootTimeSec),
       view_(view),
-      remora_controller_(remora_controller),
+      exit_callback_(exit_callback),
       histogram_helper_(new ErrorScreensHistogramHelper("Update")),
       weak_factory_(this) {
   if (view_)
     view_->Bind(this);
-
-  GetInstanceSet().insert(this);
 }
 
 UpdateScreen::~UpdateScreen() {
@@ -145,7 +122,6 @@ UpdateScreen::~UpdateScreen() {
 
   DBusThreadManager::Get()->GetUpdateEngineClient()->RemoveObserver(this);
   network_portal_detector::GetInstance()->RemoveObserver(this);
-  GetInstanceSet().erase(this);
 }
 
 void UpdateScreen::OnViewDestroyed(UpdateView* view) {
@@ -171,60 +147,20 @@ void UpdateScreen::SetIgnoreIdleStatus(bool ignore_idle_status) {
   ignore_idle_status_ = ignore_idle_status;
 }
 
-void UpdateScreen::ExitUpdate(UpdateScreen::ExitReason reason) {
+void UpdateScreen::ExitUpdate(Result result) {
   DBusThreadManager::Get()->GetUpdateEngineClient()->RemoveObserver(this);
   network_portal_detector::GetInstance()->RemoveObserver(this);
-  SetHostPairingControllerStatus(HostPairingController::UPDATE_STATUS_UPDATED);
 
-  switch (reason) {
-    case REASON_UPDATE_CANCELED:
-      Finish(ScreenExitCode::UPDATE_NOUPDATE);
-      break;
-    case REASON_UPDATE_INIT_FAILED:
-      Finish(ScreenExitCode::UPDATE_ERROR_CHECKING_FOR_UPDATE);
-      break;
-    case REASON_UPDATE_NON_CRITICAL:
-    case REASON_UPDATE_ENDED: {
-      UpdateEngineClient* update_engine_client =
-          DBusThreadManager::Get()->GetUpdateEngineClient();
-      switch (update_engine_client->GetLastStatus().status) {
-        case UpdateEngineClient::UPDATE_STATUS_ATTEMPTING_ROLLBACK:
-          break;
-        case UpdateEngineClient::UPDATE_STATUS_UPDATE_AVAILABLE:
-        case UpdateEngineClient::UPDATE_STATUS_UPDATED_NEED_REBOOT:
-        case UpdateEngineClient::UPDATE_STATUS_DOWNLOADING:
-        case UpdateEngineClient::UPDATE_STATUS_FINALIZING:
-        case UpdateEngineClient::UPDATE_STATUS_VERIFYING:
-        case UpdateEngineClient::UPDATE_STATUS_NEED_PERMISSION_TO_UPDATE:
-          DCHECK(!HasCriticalUpdate());
-          // Noncritical update, just exit screen as if there is no update.
-          FALLTHROUGH;
-        case UpdateEngineClient::UPDATE_STATUS_IDLE:
-          Finish(ScreenExitCode::UPDATE_NOUPDATE);
-          break;
-        case UpdateEngineClient::UPDATE_STATUS_ERROR:
-        case UpdateEngineClient::UPDATE_STATUS_REPORTING_ERROR_EVENT:
-          if (is_checking_for_update_) {
-            Finish(ScreenExitCode::UPDATE_ERROR_CHECKING_FOR_UPDATE);
-          } else if (HasCriticalUpdate()) {
-            Finish(ScreenExitCode::UPDATE_ERROR_UPDATING_CRITICAL_UPDATE);
-          } else {
-            Finish(ScreenExitCode::UPDATE_ERROR_UPDATING);
-          }
-          break;
-        default:
-          NOTREACHED();
-      }
-    } break;
-    default:
-      NOTREACHED();
-  }
+  exit_callback_.Run(result);
 }
 
 void UpdateScreen::UpdateStatusChanged(
     const UpdateEngineClient::Status& status) {
   if (is_checking_for_update_ &&
-      status.status > UpdateEngineClient::UPDATE_STATUS_CHECKING_FOR_UPDATE) {
+      status.status > UpdateEngineClient::UPDATE_STATUS_CHECKING_FOR_UPDATE &&
+      status.status != UpdateEngineClient::UPDATE_STATUS_ERROR &&
+      status.status !=
+          UpdateEngineClient::UPDATE_STATUS_REPORTING_ERROR_EVENT) {
     is_checking_for_update_ = false;
   }
   if (ignore_idle_status_ &&
@@ -236,8 +172,6 @@ void UpdateScreen::UpdateStatusChanged(
     case UpdateEngineClient::UPDATE_STATUS_CHECKING_FOR_UPDATE:
       // Do nothing in these cases, we don't want to notify the user of the
       // check unless there is an update.
-      SetHostPairingControllerStatus(
-          HostPairingController::UPDATE_STATUS_UPDATING);
       break;
     case UpdateEngineClient::UPDATE_STATUS_UPDATE_AVAILABLE:
       MakeSureScreenIsShown();
@@ -246,7 +180,7 @@ void UpdateScreen::UpdateStatusChanged(
           .SetBoolean(kContextKeyShowEstimatedTimeLeft, false);
       if (!HasCriticalUpdate()) {
         VLOG(1) << "Noncritical update available: " << status.new_version;
-        ExitUpdate(REASON_UPDATE_NON_CRITICAL);
+        ExitUpdate(Result::UPDATE_NOT_REQUIRED);
       } else {
         VLOG(1) << "Critical update available: " << status.new_version;
         GetContextEditor()
@@ -269,7 +203,7 @@ void UpdateScreen::UpdateStatusChanged(
         download_average_speed_ = 0.0;
         if (!HasCriticalUpdate()) {
           VLOG(1) << "Non-critical update available: " << status.new_version;
-          ExitUpdate(REASON_UPDATE_NON_CRITICAL);
+          ExitUpdate(Result::UPDATE_NOT_REQUIRED);
         } else {
           VLOG(1) << "Critical update available: " << status.new_version;
           GetContextEditor()
@@ -305,32 +239,47 @@ void UpdateScreen::UpdateStatusChanged(
       if (HasCriticalUpdate()) {
         GetContextEditor().SetBoolean(kContextKeyShowCurtain, false);
         VLOG(1) << "Initiate reboot after update";
-        SetHostPairingControllerStatus(
-            HostPairingController::UPDATE_STATUS_REBOOTING);
         DBusThreadManager::Get()->GetUpdateEngineClient()->RebootAfterUpdate();
         reboot_timer_.Start(FROM_HERE,
                             base::TimeDelta::FromSeconds(reboot_check_delay_),
                             this, &UpdateScreen::OnWaitForRebootTimeElapsed);
       } else {
-        ExitUpdate(REASON_UPDATE_NON_CRITICAL);
+        ExitUpdate(Result::UPDATE_NOT_REQUIRED);
       }
+      break;
+    case UpdateEngineClient::UPDATE_STATUS_NEED_PERMISSION_TO_UPDATE:
+      VLOG(1) << "Update requires user permission to proceed.";
+      state_ = State::STATE_REQUESTING_USER_PERMISSION;
+      pending_update_version_ = status.new_version;
+      pending_update_size_ = status.new_size;
+
+      DBusThreadManager::Get()->GetUpdateEngineClient()->RemoveObserver(this);
+
+      MakeSureScreenIsShown();
+      GetContextEditor()
+          .SetBoolean(kContextKeyRequiresPermissionForCelluar, true)
+          .SetBoolean(kContextKeyShowCurtain, false);
       break;
     case UpdateEngineClient::UPDATE_STATUS_ATTEMPTING_ROLLBACK:
       VLOG(1) << "Attempting rollback";
       break;
     case UpdateEngineClient::UPDATE_STATUS_IDLE:
-      if (ignore_idle_status_) {
-        // It is first IDLE status that is sent before we initiated the check.
-        break;
-      }
-      FALLTHROUGH;
+      // Exit update only if update engine was in non-idle status before.
+      // Otherwise, it's possible that the update request has not yet been
+      // started.
+      if (!ignore_idle_status_)
+        ExitUpdate(Result::UPDATE_NOT_REQUIRED);
+      break;
     case UpdateEngineClient::UPDATE_STATUS_ERROR:
     case UpdateEngineClient::UPDATE_STATUS_REPORTING_ERROR_EVENT:
-    case UpdateEngineClient::UPDATE_STATUS_NEED_PERMISSION_TO_UPDATE:
-      ExitUpdate(REASON_UPDATE_ENDED);
-      break;
-    default:
-      NOTREACHED();
+      // Ignore update errors for non-critical updates to prevent blocking the
+      // user from getting to login screen during OOBE if the pending update is
+      // not critical.
+      if (is_checking_for_update_ || !HasCriticalUpdate()) {
+        ExitUpdate(Result::UPDATE_NOT_REQUIRED);
+      } else {
+        ExitUpdate(Result::UPDATE_ERROR);
+      }
       break;
   }
 }
@@ -389,7 +338,7 @@ void UpdateScreen::OnPortalDetectionCompleted(
 
 void UpdateScreen::CancelUpdate() {
   VLOG(1) << "Forced update cancel";
-  ExitUpdate(REASON_UPDATE_CANCELED);
+  ExitUpdate(Result::UPDATE_NOT_REQUIRED);
 }
 
 // TODO(jdufault): This should return a pointer. See crbug.com/672142.
@@ -404,8 +353,9 @@ void UpdateScreen::Show() {
 #if !defined(OFFICIAL_BUILD)
   GetContextEditor().SetBoolean(kContextKeyCancelUpdateShortcutEnabled, true);
 #endif
-  GetContextEditor().SetInteger(kContextKeyProgress,
-                                kBeforeUpdateCheckProgress);
+  GetContextEditor()
+      .SetInteger(kContextKeyProgress, kBeforeUpdateCheckProgress)
+      .SetBoolean(kContextKeyRequiresPermissionForCelluar, false);
 
   if (view_)
     view_->Show();
@@ -423,7 +373,40 @@ void UpdateScreen::OnUserAction(const std::string& action_id) {
     CancelUpdate();
   else
 #endif
+      if (action_id == kUserActionAcceptUpdateOverCellular) {
+    DBusThreadManager::Get()
+        ->GetUpdateEngineClient()
+        ->SetUpdateOverCellularOneTimePermission(
+            pending_update_version_, pending_update_size_,
+            base::BindRepeating(
+                &UpdateScreen::RetryUpdateWithUpdateOverCellularPermissionSet,
+                weak_factory_.GetWeakPtr()));
+  } else if (action_id == kUserActionRejectUpdateOverCellular) {
+    // Reset UI context to show curtain again when the user goes back to the
+    // update screen.
+    GetContextEditor()
+        .SetBoolean(kContextKeyShowCurtain, true)
+        .SetBoolean(kContextKeyRequiresPermissionForCelluar, false);
+    ExitUpdate(Result::UPDATE_ERROR);
+  } else {
     BaseScreen::OnUserAction(action_id);
+  }
+}
+
+void UpdateScreen::RetryUpdateWithUpdateOverCellularPermissionSet(
+    bool success) {
+  if (success) {
+    GetContextEditor().SetBoolean(kContextKeyRequiresPermissionForCelluar,
+                                  false);
+    StartUpdateCheck();
+  } else {
+    // Reset UI context to show curtain again when the user goes back to the
+    // update screen.
+    GetContextEditor()
+        .SetBoolean(kContextKeyShowCurtain, true)
+        .SetBoolean(kContextKeyRequiresPermissionForCelluar, false);
+    ExitUpdate(Result::UPDATE_ERROR);
+  }
 }
 
 void UpdateScreen::UpdateDownloadingStats(
@@ -505,35 +488,6 @@ void UpdateScreen::MakeSureScreenIsShown() {
     get_base_screen_delegate()->ShowCurrentScreen();
 }
 
-void UpdateScreen::SetHostPairingControllerStatus(
-    HostPairingController::UpdateStatus update_status) {
-  if (!remora_controller_)
-    return;
-
-  static bool is_update_in_progress = true;
-
-  if (update_status > HostPairingController::UPDATE_STATUS_UPDATING) {
-    // Set |is_update_in_progress| to false to prevent sending the scheduled
-    // UPDATE_STATUS_UPDATING message after UPDATE_STATUS_UPDATED or
-    // UPDATE_STATUS_REBOOTING is received.
-    is_update_in_progress = false;
-    remora_controller_->OnUpdateStatusChanged(update_status);
-    return;
-  }
-
-  if (is_update_in_progress) {
-    DCHECK_EQ(update_status, HostPairingController::UPDATE_STATUS_UPDATING);
-    remora_controller_->OnUpdateStatusChanged(update_status);
-
-    // Send UPDATE_STATUS_UPDATING message every |kHostStatusReportDelay|ms.
-    base::SequencedTaskRunnerHandle::Get()->PostNonNestableDelayedTask(
-        FROM_HERE,
-        base::BindOnce(&UpdateScreen::SetHostPairingControllerStatus,
-                       weak_factory_.GetWeakPtr(), update_status),
-        base::TimeDelta::FromMilliseconds(kHostStatusReportDelay));
-  }
-}
-
 ErrorScreen* UpdateScreen::GetErrorScreen() {
   return get_base_screen_delegate()->GetErrorScreen();
 }
@@ -547,11 +501,15 @@ void UpdateScreen::StartUpdateCheck() {
   if (state_ == State::STATE_ERROR)
     HideErrorMessage();
 
+  pending_update_version_ = std::string();
+  pending_update_size_ = 0;
+
   state_ = State::STATE_UPDATE;
   DBusThreadManager::Get()->GetUpdateEngineClient()->AddObserver(this);
   VLOG(1) << "Initiate update check";
   DBusThreadManager::Get()->GetUpdateEngineClient()->RequestUpdateCheck(
-      base::Bind(StartUpdateCallback, this));
+      base::BindRepeating(&UpdateScreen::OnUpdateCheckStarted,
+                          weak_factory_.GetWeakPtr()));
 }
 
 void UpdateScreen::ShowErrorMessage() {
@@ -613,6 +571,13 @@ void UpdateScreen::DelayErrorMessage() {
   error_message_timer_.Start(
       FROM_HERE, base::TimeDelta::FromSeconds(kDelayErrorMessageSec), this,
       &UpdateScreen::ShowErrorMessage);
+}
+
+void UpdateScreen::OnUpdateCheckStarted(
+    UpdateEngineClient::UpdateCheckResult result) {
+  VLOG(1) << "Callback from RequestUpdateCheck, result " << result;
+  if (result != UpdateEngineClient::UPDATE_RESULT_SUCCESS)
+    ExitUpdate(Result::UPDATE_NOT_REQUIRED);
 }
 
 void UpdateScreen::OnConnectRequested() {

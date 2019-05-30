@@ -1,6 +1,5 @@
+file://components/sync/OWNERS
 battre@chromium.org
-bauerb@chromium.org
 gab@chromium.org
-pam@chromium.org
 
 # COMPONENT: UI>Browser>Preferences

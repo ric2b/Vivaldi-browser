@@ -10,11 +10,12 @@
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
 #include "base/process/process.h"
+#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/plugins/plugin_prefs.h"
 #include "chrome/browser/profiles/profile.h"
@@ -24,6 +25,7 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_child_process_host_iterator.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_data.h"
 #include "content/public/browser/plugin_service.h"
@@ -110,8 +112,8 @@ class ChromePluginTest : public InProcessBrowserTest {
   static void CrashFlash() {
     scoped_refptr<content::MessageLoopRunner> runner =
         new content::MessageLoopRunner;
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::IO},
         base::BindOnce(&CrashFlashInternal, runner->QuitClosure()));
     runner->Run();
   }
@@ -140,8 +142,8 @@ class ChromePluginTest : public InProcessBrowserTest {
     int actual = 0;
     scoped_refptr<content::MessageLoopRunner> runner =
         new content::MessageLoopRunner;
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, {BrowserThread::IO},
         base::BindOnce(&CountPluginProcesses, &actual, runner->QuitClosure()));
     runner->Run();
     ASSERT_EQ(expected, actual);
@@ -153,13 +155,11 @@ class ChromePluginTest : public InProcessBrowserTest {
     for (content::BrowserChildProcessHostIterator iter; !iter.Done(); ++iter) {
       if (iter.GetData().process_type != content::PROCESS_TYPE_PPAPI_PLUGIN)
         continue;
-      base::Process process = base::Process::DeprecatedGetProcessFromHandle(
-          iter.GetData().GetHandle());
-      process.Terminate(0, true);
+      iter.GetData().GetProcess().Terminate(0, true);
       found = true;
     }
     ASSERT_TRUE(found) << "Didn't find Flash process!";
-    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE, quit_task);
+    base::PostTaskWithTraits(FROM_HERE, {BrowserThread::UI}, quit_task);
   }
 
   static void GetPluginsInfoCallback(
@@ -175,7 +175,7 @@ class ChromePluginTest : public InProcessBrowserTest {
       if (iter.GetData().process_type == content::PROCESS_TYPE_PPAPI_PLUGIN)
         (*count)++;
     }
-    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE, quit_task);
+    base::PostTaskWithTraits(FROM_HERE, {BrowserThread::UI}, quit_task);
   }
 };
 
@@ -224,7 +224,7 @@ IN_PROC_BROWSER_TEST_F(ChromePluginTest, InstalledPlugins) {
   };
 
   std::vector<content::WebPluginInfo> plugins = GetPlugins();
-  for (size_t i = 0; i < arraysize(expected); ++i) {
+  for (size_t i = 0; i < base::size(expected); ++i) {
     size_t j = 0;
     for (; j < plugins.size(); ++j) {
       if (plugins[j].name == base::ASCIIToUTF16(expected[i]))

@@ -4,12 +4,16 @@
 
 #include "ios/web/service_manager_connection_impl.h"
 
-#include "base/synchronization/waitable_event.h"
+#include "base/bind_helpers.h"
+#include "base/run_loop.h"
+#include "base/task/post_task.h"
+#include "base/test/bind_test_util.h"
 #include "ios/web/public/test/test_web_thread_bundle.h"
+#include "ios/web/public/web_task_traits.h"
 #include "ios/web/public/web_thread.h"
+#include "services/service_manager/public/cpp/constants.h"
 #include "services/service_manager/public/cpp/identity.h"
 #include "services/service_manager/public/cpp/service.h"
-#include "services/service_manager/public/mojom/constants.mojom.h"
 #include "services/service_manager/public/mojom/service_factory.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
@@ -19,37 +23,30 @@ namespace {
 
 constexpr char kTestServiceName[] = "test service";
 
-std::unique_ptr<service_manager::Service> LaunchService(
-    base::WaitableEvent* event) {
-  event->Signal();
-  return std::make_unique<service_manager::Service>();
-}
-
 }  // namespace
 
 using ServiceManagerConnectionImplTest = PlatformTest;
 
-TEST_F(ServiceManagerConnectionImplTest, ServiceLaunchThreading) {
+TEST_F(ServiceManagerConnectionImplTest, ServiceLaunch) {
   TestWebThreadBundle thread_bundle(
       TestWebThreadBundle::Options::REAL_IO_THREAD);
-  // base::MessageLoop message_loop;
-  // base::Thread io_thread("ServiceManagerConnectionImplTest IO Thread");
-  // io_thread.Start();
   service_manager::mojom::ServicePtr service;
   ServiceManagerConnectionImpl connection_impl(
       mojo::MakeRequest(&service),
-      WebThread::GetTaskRunnerForThread(WebThread::IO));
+      base::CreateSingleThreadTaskRunnerWithTraits({WebThread::IO}));
   ServiceManagerConnection& connection = connection_impl;
-  service_manager::EmbeddedServiceInfo info;
-  base::WaitableEvent event(base::WaitableEvent::ResetPolicy::MANUAL,
-                            base::WaitableEvent::InitialState::NOT_SIGNALED);
-  info.factory = base::Bind(&LaunchService, &event);
-  info.task_runner = WebThread::GetTaskRunnerForThread(WebThread::IO);
-  connection.AddEmbeddedService(kTestServiceName, info);
+  base::RunLoop run_loop;
+  connection.SetDefaultServiceRequestHandler(base::BindLambdaForTesting(
+      [&run_loop](const std::string& service_name,
+                  service_manager::mojom::ServiceRequest request) {
+        EXPECT_EQ(kTestServiceName, service_name);
+        run_loop.Quit();
+      }));
   connection.Start();
   service_manager::BindSourceInfo source_info(
-      {service_manager::mojom::kServiceName,
-       service_manager::mojom::kRootUserID},
+      service_manager::Identity{service_manager::mojom::kServiceName,
+                                service_manager::kSystemInstanceGroup,
+                                base::Token{}, base::Token::CreateRandom()},
       service_manager::CapabilitySet());
   service_manager::mojom::ServiceFactoryPtr factory;
   service->OnBindInterface(
@@ -60,7 +57,7 @@ TEST_F(ServiceManagerConnectionImplTest, ServiceLaunchThreading) {
   mojo::MakeRequest(&pid_receiver);
   factory->CreateService(mojo::MakeRequest(&created_service), kTestServiceName,
                          std::move(pid_receiver));
-  event.Wait();
+  run_loop.Run();
 }
 
 }  // namespace web

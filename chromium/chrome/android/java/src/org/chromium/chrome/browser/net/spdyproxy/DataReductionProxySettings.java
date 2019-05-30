@@ -11,7 +11,6 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
-import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.preferences.datareduction.DataReductionDataUseItem;
 import org.chromium.chrome.browser.preferences.datareduction.DataReductionPromoUtils;
@@ -66,38 +65,12 @@ public class DataReductionProxySettings {
 
     private static DataReductionProxySettings sSettings;
 
-    private static final String DATA_REDUCTION_HAS_EVER_BEEN_ENABLED_PREF =
-            "BANDWIDTH_REDUCTION_PROXY_HAS_EVER_BEEN_ENABLED";
     public static final String DATA_REDUCTION_FIRST_ENABLED_TIME =
             "BANDWIDTH_REDUCTION_FIRST_ENABLED_TIME";
-
-    private static final String PARAM_PERSISTENT_MENU_ITEM_ENABLED = "persistent_menu_item_enabled";
 
     private static final long DATA_REDUCTION_MAIN_MENU_ITEM_SAVED_KB_THRESHOLD = 100;
 
     private Callback<List<DataReductionDataUseItem>> mQueryDataUsageCallback;
-
-    /**
-     * Returns whether the data reduction proxy is enabled.
-     *
-     * The knowledge of the data reduction proxy status is needed before the
-     * native library is loaded.
-     *
-     * Note that the returned value can be out-of-date if the Data Reduction
-     * Proxy is enabled/disabled from the native side without going through the
-     * UI. The discrepancy will however be fixed at the next launch, so the
-     * value returned here can be wrong (both false-positive and false-negative)
-     * right after such a change.
-     *
-     * @param context The application context.
-     * @return Whether the data reduction proxy is enabled.
-     */
-    public static boolean isEnabledBeforeNativeLoad(Context context) {
-        // TODO(lizeb): Add a listener for the native preference change to keep
-        // both in sync and avoid the false-positives and false-negatives.
-        return ContextUtils.getAppSharedPreferences().getBoolean(
-            DATA_REDUCTION_ENABLED_PREF, false);
-    }
 
     /**
      * Handles calls for data reduction proxy initialization that need to happen after the native
@@ -198,32 +171,10 @@ public class DataReductionProxySettings {
      * Returns true if the Data Reduction Proxy menu item should be shown in the main menu.
      */
     public boolean shouldUseDataReductionMainMenuItem() {
-        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.DATA_REDUCTION_MAIN_MENU)) return false;
+        if (!isDataReductionProxyEnabled()) return false;
 
-        boolean data_reduction_main_menu_item_allowed = false;
-        if (ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
-                    ChromeFeatureList.DATA_REDUCTION_MAIN_MENU, PARAM_PERSISTENT_MENU_ITEM_ENABLED,
-                    false)) {
-            // If the Data Reduction Proxy is enabled, set the pref storing that the proxy has
-            // ever been enabled.
-            if (isDataReductionProxyEnabled()) {
-                ContextUtils.getAppSharedPreferences()
-                        .edit()
-                        .putBoolean(DATA_REDUCTION_HAS_EVER_BEEN_ENABLED_PREF, true)
-                        .apply();
-            }
-            data_reduction_main_menu_item_allowed =
-                    ContextUtils.getAppSharedPreferences().getBoolean(
-                            DATA_REDUCTION_HAS_EVER_BEEN_ENABLED_PREF, false);
-        } else {
-            data_reduction_main_menu_item_allowed = isDataReductionProxyEnabled();
-        }
-
-        if (data_reduction_main_menu_item_allowed) {
-            return ConversionUtils.bytesToKilobytes(getContentLengthSavedInHistorySummary())
-                    >= DATA_REDUCTION_MAIN_MENU_ITEM_SAVED_KB_THRESHOLD;
-        }
-        return false;
+        return ConversionUtils.bytesToKilobytes(getContentLengthSavedInHistorySummary())
+                >= DATA_REDUCTION_MAIN_MENU_ITEM_SAVED_KB_THRESHOLD;
     }
 
     /** Returns true if the SPDY proxy is managed by an administrator's policy. */
@@ -253,9 +204,9 @@ public class DataReductionProxySettings {
      * @param reason from the DataReductionProxySavingsClearedReason enum
      */
     public void clearDataSavingStatistics(@DataReductionProxySavingsClearedReason int reason) {
-        // When the data saving statistics are cleared, reset the snackbar promo that tells the user
-        // how much data they have saved using Data Saver so far.
-        DataReductionPromoUtils.saveSnackbarPromoDisplayed(0);
+        // When the data saving statistics are cleared, reset the milestone promo that tells the
+        // user how much data they have saved using Data Saver so far.
+        DataReductionPromoUtils.saveMilestonePromoDisplayed(0);
         ContextUtils.getAppSharedPreferences()
                 .edit()
                 .putLong(DATA_REDUCTION_FIRST_ENABLED_TIME, System.currentTimeMillis())
@@ -341,10 +292,6 @@ public class DataReductionProxySettings {
     public Map<String, String> toFeedbackMap() {
         Map<String, String> map = new HashMap<>();
         map.put(DATA_REDUCTION_PROXY_ENABLED_KEY, String.valueOf(isDataReductionProxyEnabled()));
-        map.put("Data Reduction Proxy HTTP Proxies",
-                nativeGetHttpProxyList(mNativeDataReductionProxySettings));
-        map.put("Data Reduction Proxy Last Bypass",
-                nativeGetLastBypassEvent(mNativeDataReductionProxySettings));
         return map;
     }
 
@@ -419,8 +366,6 @@ public class DataReductionProxySettings {
             long nativeDataReductionProxySettingsAndroid);
     private native String nativeMaybeRewriteWebliteUrl(
             long nativeDataReductionProxySettingsAndroid, String url);
-    private native String nativeGetHttpProxyList(long nativeDataReductionProxySettingsAndroid);
-    private native String nativeGetLastBypassEvent(long nativeDataReductionProxySettingsAndroid);
     private native void nativeQueryDataUsage(long nativeDataReductionProxySettingsAndroid,
             List<DataReductionDataUseItem> items, int numDays);
 }

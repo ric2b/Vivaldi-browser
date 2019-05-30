@@ -5,8 +5,9 @@
 #include "extensions/renderer/script_context.h"
 
 #include "base/command_line.h"
+#include "base/containers/flat_set.h"
 #include "base/logging.h"
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -136,10 +137,10 @@ void ScriptContext::Invalidate() {
 
   // Swap |invalidate_observers_| to a local variable to clear it, and to make
   // sure it's not mutated as we iterate.
-  std::vector<base::Closure> observers;
+  std::vector<base::OnceClosure> observers;
   observers.swap(invalidate_observers_);
-  for (const base::Closure& observer : observers) {
-    observer.Run();
+  for (base::OnceClosure& observer : observers) {
+    std::move(observer).Run();
   }
   DCHECK(invalidate_observers_.empty())
       << "Invalidation observers cannot be added during invalidation";
@@ -147,9 +148,9 @@ void ScriptContext::Invalidate() {
   v8_context_.Reset();
 }
 
-void ScriptContext::AddInvalidationObserver(const base::Closure& observer) {
+void ScriptContext::AddInvalidationObserver(base::OnceClosure observer) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  invalidate_observers_.push_back(observer);
+  invalidate_observers_.push_back(std::move(observer));
 }
 
 const std::string& ScriptContext::GetExtensionID() const {
@@ -191,9 +192,10 @@ void ScriptContext::SafeCallFunction(
     web_frame_->RequestExecuteV8Function(v8_context(), function, global, argc,
                                          argv, wrapper_callback);
   } else {
-    // TODO(devlin): This probably isn't safe.
-    v8::Local<v8::Value> result = function->Call(global, argc, argv);
-    if (!callback.is_null()) {
+    v8::MaybeLocal<v8::Value> maybe_result =
+        function->Call(v8_context(), global, argc, argv);
+    v8::Local<v8::Value> result;
+    if (!callback.is_null() && maybe_result.ToLocal(&result)) {
       std::vector<v8::Local<v8::Value>> results(1, result);
       callback.Run(results);
     }
@@ -271,7 +273,7 @@ GURL ScriptContext::GetDocumentLoaderURLForFrame(
       frame->GetProvisionalDocumentLoader()
           ? frame->GetProvisionalDocumentLoader()
           : frame->GetDocumentLoader();
-  return document_loader ? GURL(document_loader->GetRequest().Url()) : GURL();
+  return document_loader ? GURL(document_loader->GetUrl()) : GURL();
 }
 
 // static
@@ -284,9 +286,9 @@ GURL ScriptContext::GetAccessCheckedFrameURL(
             ? frame->GetProvisionalDocumentLoader()
             : frame->GetDocumentLoader();
     if (document_loader &&
-        frame->GetSecurityOrigin().CanAccess(blink::WebSecurityOrigin::Create(
-            document_loader->GetRequest().Url()))) {
-      return GURL(document_loader->GetRequest().Url());
+        frame->GetSecurityOrigin().CanAccess(
+            blink::WebSecurityOrigin::Create(document_loader->GetUrl()))) {
+      return GURL(document_loader->GetUrl());
     }
   }
   return GURL(weburl);
@@ -307,13 +309,18 @@ GURL ScriptContext::GetEffectiveDocumentURL(blink::WebLocalFrame* frame,
   // hierarchy to find the closest non-about:-page and return its URL.
   blink::WebFrame* parent = frame;
   blink::WebDocument parent_document;
+  base::flat_set<blink::WebFrame*> already_visited_frames;
   do {
+    already_visited_frames.insert(parent);
     if (parent->Parent())
       parent = parent->Parent();
-    else if (parent->Opener() != parent)
-      parent = parent->Opener();
     else
-      parent = nullptr;
+      parent = parent->Opener();
+
+    // Avoid an infinite loop - see https://crbug.com/568432 and
+    // https://crbug.com/883526.
+    if (base::ContainsKey(already_visited_frames, parent))
+      return document_url;
 
     parent_document = parent && parent->IsWebLocalFrame()
                           ? parent->ToWebLocalFrame()->GetDocument()
@@ -346,14 +353,18 @@ void ScriptContext::OnResponseReceived(const std::string& name,
 
   v8::Local<v8::Value> argv[] = {
       v8::Integer::New(isolate(), request_id),
-      v8::String::NewFromUtf8(isolate(), name.c_str()),
+      v8::String::NewFromUtf8(isolate(), name.c_str(),
+                              v8::NewStringType::kNormal)
+          .ToLocalChecked(),
       v8::Boolean::New(isolate(), success),
       content::V8ValueConverter::Create()->ToV8Value(
           &response, v8::Local<v8::Context>::New(isolate(), v8_context_)),
-      v8::String::NewFromUtf8(isolate(), error.c_str())};
+      v8::String::NewFromUtf8(isolate(), error.c_str(),
+                              v8::NewStringType::kNormal)
+          .ToLocalChecked()};
 
   module_system()->CallModuleMethodSafe("sendRequest", "handleResponse",
-                                        arraysize(argv), argv);
+                                        base::size(argv), argv);
 }
 
 bool ScriptContext::HasAPIPermission(APIPermission::ID permission) const {
@@ -391,14 +402,18 @@ bool ScriptContext::HasAccessOrThrowError(const std::string& name) {
         "%s cannot be used within a sandboxed frame.";
     std::string error_msg = base::StringPrintf(kMessage, name.c_str());
     isolate()->ThrowException(v8::Exception::Error(
-        v8::String::NewFromUtf8(isolate(), error_msg.c_str())));
+        v8::String::NewFromUtf8(isolate(), error_msg.c_str(),
+                                v8::NewStringType::kNormal)
+            .ToLocalChecked()));
     return false;
   }
 
   Feature::Availability availability = GetAvailability(name);
   if (!availability.is_available()) {
     isolate()->ThrowException(v8::Exception::Error(
-        v8::String::NewFromUtf8(isolate(), availability.message().c_str())));
+        v8::String::NewFromUtf8(isolate(), availability.message().c_str(),
+                                v8::NewStringType::kNormal)
+            .ToLocalChecked()));
     return false;
   }
 
@@ -503,8 +518,16 @@ v8::Local<v8::Value> ScriptContext::CallFunction(
   }
 
   v8::Local<v8::Object> global = v8_context()->Global();
-  if (!web_frame_)
-    return handle_scope.Escape(function->Call(global, argc, argv));
+  if (!web_frame_) {
+    v8::MaybeLocal<v8::Value> maybe_result =
+        function->Call(v8_context(), global, argc, argv);
+    v8::Local<v8::Value> result;
+    if (!maybe_result.ToLocal(&result)) {
+      return handle_scope.Escape(
+          v8::Local<v8::Primitive>(v8::Undefined(isolate())));
+    }
+    return handle_scope.Escape(result);
+  }
 
   v8::MaybeLocal<v8::Value> result =
       web_frame_->CallFunctionEvenIfScriptDisabled(function, global, argc,

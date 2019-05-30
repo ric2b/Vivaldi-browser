@@ -107,8 +107,6 @@ class Preferences : public sync_preferences::PrefServiceSyncableObserver,
   // Overriden form user_manager::UserManager::UserSessionStateObserver.
   void ActiveUserChanged(const user_manager::User* active_user) override;
 
-  void ActivateInputMethods(const user_manager::User* active_user);
-
   sync_preferences::PrefServiceSyncable* prefs_;
 
   input_method::InputMethodManager* input_method_manager_;
@@ -126,6 +124,9 @@ class Preferences : public sync_preferences::PrefServiceSyncableObserver,
   BooleanPrefMember primary_mouse_button_right_;
   BooleanPrefMember mouse_reverse_scroll_;
   FilePathPrefMember download_default_directory_;
+
+  StringListPrefMember allowed_languages_;
+  StringPrefMember preferred_languages_;
 
   // Input method preferences.
   StringPrefMember preload_engines_;

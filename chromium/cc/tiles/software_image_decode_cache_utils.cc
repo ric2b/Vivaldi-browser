@@ -59,6 +59,7 @@ SoftwareImageDecodeCacheUtils::DoDecodeImage(
     const CacheKey& key,
     const PaintImage& paint_image,
     SkColorType color_type,
+    sk_sp<SkColorSpace> color_space,
     PaintImage::GeneratorClientId client_id) {
   SkISize target_size =
       SkISize::Make(key.target_size().width(), key.target_size().height());
@@ -74,7 +75,7 @@ SoftwareImageDecodeCacheUtils::DoDecodeImage(
                "SoftwareImageDecodeCacheUtils::DoDecodeImage - "
                "decode");
   bool result = paint_image.Decode(target_pixels->data(), &target_info,
-                                   key.target_color_space().ToSkColorSpace(),
+                                   std::move(color_space),
                                    key.frame_key().frame_index(), client_id);
   if (!result) {
     target_pixels->Unlock();
@@ -136,9 +137,16 @@ SoftwareImageDecodeCacheUtils::GenerateCacheEntryFromCandidate(
   DCHECK(!key.is_nearest_neighbor());
   SkPixmap target_pixmap(target_info, target_pixels->data(),
                          target_info.minRowBytes());
-  // Always use medium quality for scaling.
-  result = decoded_pixmap.scalePixels(target_pixmap, kMedium_SkFilterQuality);
+  SkFilterQuality filter_quality = kMedium_SkFilterQuality;
+  if (decoded_pixmap.colorType() == kRGBA_F16_SkColorType &&
+      !ImageDecodeCacheUtils::CanResizeF16Image(filter_quality)) {
+    result = ImageDecodeCacheUtils::ScaleToHalfFloatPixmapUsingN32Intermediate(
+        decoded_pixmap, &target_pixmap, filter_quality);
+  } else {
+    result = decoded_pixmap.scalePixels(target_pixmap, filter_quality);
+  }
   DCHECK(result) << key.ToString();
+
   return std::make_unique<CacheEntry>(
       target_info.makeColorSpace(candidate_image.image()->refColorSpace()),
       std::move(target_pixels),
@@ -173,7 +181,7 @@ SoftwareImageDecodeCacheUtils::CacheKey::FromDrawImage(const DrawImage& image,
   // the filter quality doesn't matter. Early out instead.
   if (target_size.IsEmpty()) {
     return CacheKey(frame_key, stable_id, kSubrectAndScale, false, src_rect,
-                    target_size, image.target_color_space());
+                    target_size);
   }
 
   ProcessingType type = kOriginal;
@@ -182,14 +190,12 @@ SoftwareImageDecodeCacheUtils::CacheKey::FromDrawImage(const DrawImage& image,
   // If any of the following conditions hold, then use at most low filter
   // quality and adjust the target size to match the original image:
   // - Quality is none: We need a pixelated image, so we can't upgrade it.
-  // - Format is 4444: Skia doesn't support scaling these, so use low
-  //   filter quality.
   // - Mip level is 0: The required mip is the original image, so just use low
   //   filter quality.
   // - Matrix is not decomposable: There's perspective on this image and we
   //   can't determine the size, so use the original.
-  if (is_nearest_neighbor || color_type == kARGB_4444_SkColorType ||
-      mip_level == 0 || !image.matrix_is_decomposable()) {
+  if (is_nearest_neighbor || mip_level == 0 ||
+      !image.matrix_is_decomposable()) {
     type = kOriginal;
     // Update the size to be the original image size.
     target_size =
@@ -197,14 +203,7 @@ SoftwareImageDecodeCacheUtils::CacheKey::FromDrawImage(const DrawImage& image,
   } else {
     type = kSubrectAndScale;
     // Update the target size to be a mip level size.
-    // TODO(vmpstr): MipMapUtil and JPEG decoders disagree on what to do with
-    // odd sizes. If width = 2k + 1, and the mip level is 1, then this will
-    // return width = k; JPEG decoder, however, will support decoding to width =
-    // k + 1. We need to figure out what to do in this case.
-    SkSize mip_scale_adjustment =
-        MipMapUtil::GetScaleAdjustmentForLevel(src_rect.size(), mip_level);
-    target_size.set_width(src_rect.width() * mip_scale_adjustment.width());
-    target_size.set_height(src_rect.height() * mip_scale_adjustment.height());
+    target_size = MipMapUtil::GetSizeForLevel(src_rect.size(), mip_level);
   }
 
   // If the original image is large, we might want to do a subrect instead if
@@ -235,7 +234,7 @@ SoftwareImageDecodeCacheUtils::CacheKey::FromDrawImage(const DrawImage& image,
   }
 
   return CacheKey(frame_key, stable_id, type, is_nearest_neighbor, src_rect,
-                  target_size, image.target_color_space());
+                  target_size);
 }
 
 SoftwareImageDecodeCacheUtils::CacheKey::CacheKey(
@@ -244,15 +243,13 @@ SoftwareImageDecodeCacheUtils::CacheKey::CacheKey(
     ProcessingType type,
     bool is_nearest_neighbor,
     const gfx::Rect& src_rect,
-    const gfx::Size& target_size,
-    const gfx::ColorSpace& target_color_space)
+    const gfx::Size& target_size)
     : frame_key_(frame_key),
       stable_id_(stable_id),
       type_(type),
       is_nearest_neighbor_(is_nearest_neighbor),
       src_rect_(src_rect),
-      target_size_(target_size),
-      target_color_space_(target_color_space) {
+      target_size_(target_size) {
   if (type == kOriginal) {
     hash_ = frame_key_.hash();
   } else {
@@ -269,8 +266,6 @@ SoftwareImageDecodeCacheUtils::CacheKey::CacheKey(
     hash_ = base::HashInts(base::HashInts(src_rect_hash, target_size_hash),
                            frame_key_.hash());
   }
-  // Include the target color space in the hash regardless of scaling.
-  hash_ = base::HashInts(hash_, target_color_space.GetHash());
 }
 
 SoftwareImageDecodeCacheUtils::CacheKey::CacheKey(const CacheKey& other) =
@@ -292,7 +287,6 @@ std::string SoftwareImageDecodeCacheUtils::CacheKey::ToString() const {
   }
   str << "]\nis_nearest_neightbor[" << is_nearest_neighbor_ << "]\nsrc_rect["
       << src_rect_.ToString() << "]\ntarget_size[" << target_size_.ToString()
-      << "]\ntarget_color_space[" << target_color_space_.ToString()
       << "]\nhash[" << hash_ << "]";
   return str.str();
 }

@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
@@ -14,8 +15,8 @@
 #include "chrome/browser/search_engines/chrome_template_url_service_client.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/search_engines/ui_thread_search_terms_data.h"
-#include "chrome/browser/signin/fake_gaia_cookie_manager_service_builder.h"
-#include "chrome/browser/signin/gaia_cookie_manager_service_factory.h"
+#include "chrome/browser/signin/chrome_signin_client_factory.h"
+#include "chrome/browser/signin/chrome_signin_client_test_util.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/web_data_service_factory.h"
@@ -26,8 +27,9 @@
 #include "components/omnibox/browser/test_scheme_classifier.h"
 #include "components/search_engines/search_terms_data.h"
 #include "components/search_engines/template_url_service.h"
-#include "components/signin/core/browser/fake_gaia_cookie_manager_service.h"
+#include "components/signin/core/browser/list_accounts_test_utils.h"
 #include "content/public/test/test_utils.h"
+#include "services/network/test/test_url_loader_factory.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/input_method/input_method_configuration.h"
@@ -61,14 +63,7 @@ std::unique_ptr<KeyedService> CreateAutocompleteClassifier(
 
 }  // namespace
 
-TestWithBrowserView::TestWithBrowserView() = default;
-
-TestWithBrowserView::TestWithBrowserView(Browser::Type browser_type,
-                                         bool hosted_app)
-    : BrowserWithTestWindowTest(browser_type, hosted_app) {}
-
-TestWithBrowserView::~TestWithBrowserView() {
-}
+TestWithBrowserView::~TestWithBrowserView() {}
 
 void TestWithBrowserView::SetUp() {
 #if defined(OS_CHROMEOS)
@@ -102,17 +97,14 @@ TestingProfile* TestWithBrowserView::CreateProfile() {
   // TemplateURLService is normally null during testing. Instant extended
   // needs this service so set a custom factory function.
   TemplateURLServiceFactory::GetInstance()->SetTestingFactory(
-      profile, &CreateTemplateURLService);
+      profile, base::BindRepeating(&CreateTemplateURLService));
   // TODO(jamescook): Eliminate this by introducing a mock toolbar or mock
   // location bar.
   AutocompleteClassifierFactory::GetInstance()->SetTestingFactory(
-      profile, &CreateAutocompleteClassifier);
+      profile, base::BindRepeating(&CreateAutocompleteClassifier));
 
   // Configure the GaiaCookieManagerService to return no accounts.
-  FakeGaiaCookieManagerService* gcms =
-      static_cast<FakeGaiaCookieManagerService*>(
-          GaiaCookieManagerServiceFactory::GetForProfile(profile));
-  gcms->SetListAccountsResponseHttpNotFound();
+  signin::SetListAccountsResponseHttpNotFound(test_url_loader_factory());
   return profile;
 }
 
@@ -123,6 +115,7 @@ BrowserWindow* TestWithBrowserView::CreateBrowserWindow() {
 }
 
 TestingProfile::TestingFactories TestWithBrowserView::GetTestingFactories() {
-  return {{GaiaCookieManagerServiceFactory::GetInstance(),
-           &BuildFakeGaiaCookieManagerService}};
+  return {{ChromeSigninClientFactory::GetInstance(),
+           base::BindRepeating(&BuildChromeSigninClientWithURLLoader,
+                               test_url_loader_factory())}};
 }

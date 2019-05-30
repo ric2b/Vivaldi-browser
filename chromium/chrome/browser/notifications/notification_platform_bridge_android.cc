@@ -10,11 +10,13 @@
 
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/strings/nullable_string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/notifications/notification_common.h"
 #include "chrome/browser/notifications/notification_display_service_impl.h"
@@ -23,11 +25,12 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/persistent_notification_status.h"
-#include "content/public/common/platform_notification_data.h"
 #include "jni/ActionInfo_jni.h"
 #include "jni/NotificationPlatformBridge_jni.h"
+#include "third_party/blink/public/common/notifications/platform_notification_data.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/android/java_bitmap.h"
 #include "ui/gfx/image/image.h"
@@ -106,14 +109,14 @@ ScopedJavaLocalRef<jobjectArray> ConvertToJavaActionInfos(
 // NotificationBridge has not been initialized yet. Enforce initialization of
 // the class.
 static void JNI_NotificationPlatformBridge_InitializeNotificationPlatformBridge(
-    JNIEnv* env,
-    const JavaParamRef<jclass>& clazz) {
+    JNIEnv* env) {
   g_browser_process->notification_platform_bridge();
 }
 
 // static
-NotificationPlatformBridge* NotificationPlatformBridge::Create() {
-  return new NotificationPlatformBridgeAndroid();
+std::unique_ptr<NotificationPlatformBridge>
+NotificationPlatformBridge::Create() {
+  return std::make_unique<NotificationPlatformBridgeAndroid>();
 }
 
 // static
@@ -317,14 +320,16 @@ void NotificationPlatformBridgeAndroid::Close(
       has_queried_webapk_package, j_webapk_package);
 }
 
+void NotificationPlatformBridgeAndroid::DisplayServiceShutDown(
+    Profile* profile) {}
+
 void NotificationPlatformBridgeAndroid::GetDisplayed(
     Profile* profile,
     GetDisplayedNotificationsCallback callback) const {
-  auto displayed_notifications = std::make_unique<std::set<std::string>>();
-  content::BrowserThread::PostTask(
-      content::BrowserThread::UI, FROM_HERE,
-      base::BindOnce(std::move(callback),
-                     base::Passed(&displayed_notifications),
+  std::set<std::string> displayed_notifications;
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::UI},
+      base::BindOnce(std::move(callback), std::move(displayed_notifications),
                      false /* supports_synchronization */));
 }
 

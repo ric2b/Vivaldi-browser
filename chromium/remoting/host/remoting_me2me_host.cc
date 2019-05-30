@@ -100,7 +100,7 @@
 #include "remoting/signaling/push_notification_subscriber.h"
 #include "remoting/signaling/xmpp_signal_strategy.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
-#include "third_party/webrtc/rtc_base/scoped_ref_ptr.h"
+#include "third_party/webrtc/api/scoped_refptr.h"
 
 #if defined(OS_POSIX)
 #include <signal.h>
@@ -112,7 +112,9 @@
 #endif  // defined(OS_POSIX)
 
 #if defined(OS_MACOSX)
+#include "base/mac/mac_util.h"
 #include "base/mac/scoped_cftyperef.h"
+#include "remoting/host/mac/permission_utils.h"
 #endif  // defined(OS_MACOSX)
 
 #if defined(OS_LINUX)
@@ -314,6 +316,7 @@ class HostProcess : public ConfigWatcher::Delegate,
   bool OnHostTokenUrlPolicyUpdate(base::DictionaryValue* policies);
   bool OnPairingPolicyUpdate(base::DictionaryValue* policies);
   bool OnGnubbyAuthPolicyUpdate(base::DictionaryValue* policies);
+  bool OnFileTransferPolicyUpdate(base::DictionaryValue* policies);
 
   void InitializeSignaling();
 
@@ -464,11 +467,6 @@ HostProcess::HostProcess(std::unique_ptr<ChromotingHostContext> context,
   // And remove the same line from me2me_desktop_environment.cc.
 
 
-  // TODO(jarhar): Replace this ifdef with a chrome policy.
-#ifdef CHROME_REMOTE_DESKTOP_FILE_TRANSFER_ENABLED
-  desktop_environment_options_.set_enable_file_transfer(true);
-#endif
-
   StartOnUiThread();
 }
 
@@ -588,8 +586,9 @@ bool HostProcess::InitWithCommandLine(const base::CommandLine* cmd_line) {
 void HostProcess::OnConfigUpdated(
     const std::string& serialized_config) {
   if (!context_->network_task_runner()->BelongsToCurrentThread()) {
-    context_->network_task_runner()->PostTask(FROM_HERE,
-        base::Bind(&HostProcess::OnConfigUpdated, this, serialized_config));
+    context_->network_task_runner()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&HostProcess::OnConfigUpdated, this, serialized_config));
     return;
   }
 
@@ -822,7 +821,7 @@ void HostProcess::OnChannelError() {
   // Shutdown the host if the daemon process disconnects the IPC channel.
   context_->network_task_runner()->PostTask(
       FROM_HERE,
-      base::Bind(&HostProcess::ShutdownHost, this, kSuccessExitCode));
+      base::BindOnce(&HostProcess::ShutdownHost, this, kSuccessExitCode));
 }
 
 void HostProcess::StartOnUiThread() {
@@ -837,7 +836,7 @@ void HostProcess::StartOnUiThread() {
   if (!report_offline_reason_.empty()) {
     // Don't need to do any UI initialization.
     context_->network_task_runner()->PostTask(
-        FROM_HERE, base::Bind(&HostProcess::StartOnNetworkThread, this));
+        FROM_HERE, base::BindOnce(&HostProcess::StartOnNetworkThread, this));
     return;
   }
 
@@ -896,8 +895,7 @@ void HostProcess::StartOnUiThread() {
   desktop_environment_factory_.reset(desktop_environment_factory);
 
   context_->network_task_runner()->PostTask(
-      FROM_HERE,
-      base::Bind(&HostProcess::StartOnNetworkThread, this));
+      FROM_HERE, base::BindOnce(&HostProcess::StartOnNetworkThread, this));
 }
 
 void HostProcess::ShutdownOnUiThread() {
@@ -952,9 +950,9 @@ void HostProcess::OnInitializePairingRegistry(
   DCHECK(context_->ui_task_runner()->BelongsToCurrentThread());
 
 #if defined(OS_WIN)
-  context_->network_task_runner()->PostTask(FROM_HERE, base::Bind(
-      &HostProcess::InitializePairingRegistry,
-      this, privileged_key, unprivileged_key));
+  context_->network_task_runner()->PostTask(
+      FROM_HERE, base::BindOnce(&HostProcess::InitializePairingRegistry, this,
+                                privileged_key, unprivileged_key));
 #else  // !defined(OS_WIN)
   NOTREACHED();
 #endif  // !defined(OS_WIN)
@@ -1062,8 +1060,8 @@ void HostProcess::OnPolicyUpdate(
     std::unique_ptr<base::DictionaryValue> policies) {
   if (!context_->network_task_runner()->BelongsToCurrentThread()) {
     context_->network_task_runner()->PostTask(
-        FROM_HERE, base::Bind(&HostProcess::OnPolicyUpdate, this,
-                              base::Passed(&policies)));
+        FROM_HERE, base::BindOnce(&HostProcess::OnPolicyUpdate, this,
+                                  std::move(policies)));
     return;
   }
 
@@ -1080,6 +1078,7 @@ void HostProcess::OnPolicyUpdate(
   restart_required |= OnHostTokenUrlPolicyUpdate(policies.get());
   restart_required |= OnPairingPolicyUpdate(policies.get());
   restart_required |= OnGnubbyAuthPolicyUpdate(policies.get());
+  restart_required |= OnFileTransferPolicyUpdate(policies.get());
 
   policy_state_ = POLICY_LOADED;
 
@@ -1094,7 +1093,7 @@ void HostProcess::OnPolicyUpdate(
 void HostProcess::OnPolicyError() {
   if (!context_->network_task_runner()->BelongsToCurrentThread()) {
     context_->network_task_runner()->PostTask(
-        FROM_HERE, base::Bind(&HostProcess::OnPolicyError, this));
+        FROM_HERE, base::BindOnce(&HostProcess::OnPolicyError, this));
     return;
   }
 
@@ -1405,6 +1404,26 @@ bool HostProcess::OnGnubbyAuthPolicyUpdate(base::DictionaryValue* policies) {
   return true;
 }
 
+bool HostProcess::OnFileTransferPolicyUpdate(base::DictionaryValue* policies) {
+  DCHECK(context_->network_task_runner()->BelongsToCurrentThread());
+
+  bool file_transfer_enabled;
+  if (!policies->GetBoolean(policy::key::kRemoteAccessHostAllowFileTransfer,
+                            &file_transfer_enabled)) {
+    return false;
+  }
+  desktop_environment_options_.set_enable_file_transfer(file_transfer_enabled);
+
+  if (file_transfer_enabled) {
+    HOST_LOG << "Policy enables file transfer.";
+  } else {
+    HOST_LOG << "Policy disables file transfer.";
+  }
+
+  // Restart required.
+  return true;
+}
+
 void HostProcess::InitializeSignaling() {
   DCHECK(!host_id_.empty());  // ApplyConfig() should already have been run.
 
@@ -1425,7 +1444,7 @@ void HostProcess::InitializeSignaling() {
 
   // Create SignalingConnector.
   std::unique_ptr<DnsBlackholeChecker> dns_blackhole_checker(
-      new DnsBlackholeChecker(context_->url_request_context_getter(),
+      new DnsBlackholeChecker(context_->url_loader_factory(),
                               talkgadget_prefix_));
   std::unique_ptr<OAuthTokenGetter::OAuthAuthorizationCredentials>
       oauth_credentials(new OAuthTokenGetter::OAuthAuthorizationCredentials(
@@ -1442,8 +1461,8 @@ void HostProcess::InitializeSignaling() {
   // Create objects to manage GCD state.
   ServiceUrls* service_urls = ServiceUrls::GetInstance();
   std::unique_ptr<GcdRestClient> gcd_rest_client(new GcdRestClient(
-      service_urls->gcd_base_url(), host_id_,
-      context_->url_request_context_getter(), oauth_token_getter_.get()));
+      service_urls->gcd_base_url(), host_id_, context_->url_loader_factory(),
+      oauth_token_getter_.get()));
   gcd_state_updater_.reset(new GcdStateUpdater(
       base::Bind(&HostProcess::OnHeartbeatSuccessful, base::Unretained(this)),
       base::Bind(&HostProcess::OnUnknownHostIdError, base::Unretained(this)),
@@ -1569,6 +1588,19 @@ void HostProcess::StartHost() {
       HostEventLogger::Create(host_->status_monitor(), kApplicationName);
 #endif  // !defined(REMOTING_MULTI_PROCESS)
 
+#if defined(OS_MACOSX)
+  // Ensure we are not running as root (i.e. at the login screen).
+  DCHECK_NE(getuid(), 0U);
+
+  // MacOs 10.14+ requires an addition, runtime permission for injecting input
+  // using CGEventPost (we use this in our input injector for Mac).  This method
+  // will request that the user enable this permission for us if they are on an
+  // affected platform and the permission has not already been approved.
+  if (base::mac::IsAtLeastOS10_14()) {
+    mac::PromptUserToChangeTrustStateIfNeeded(context_->ui_task_runner());
+  }
+#endif
+
   host_->Start(host_owner_email_);
 
   CreateAuthenticatorFactory();
@@ -1682,7 +1714,7 @@ void HostProcess::OnHostOfflineReasonAck(bool success) {
 
     // Complete the rest of shutdown on the main thread.
     context_->ui_task_runner()->PostTask(
-        FROM_HERE, base::Bind(&HostProcess::ShutdownOnUiThread, this));
+        FROM_HERE, base::BindOnce(&HostProcess::ShutdownOnUiThread, this));
   } else {
     NOTREACHED();
   }
@@ -1729,10 +1761,10 @@ int HostProcessMain() {
 
   // Create the main message loop and start helper threads.
   base::MessageLoopForUI message_loop;
+  base::RunLoop run_loop;
   std::unique_ptr<ChromotingHostContext> context =
       ChromotingHostContext::Create(new AutoThreadTaskRunner(
-          message_loop.task_runner(),
-          base::RunLoop::QuitCurrentWhenIdleClosureDeprecated()));
+          message_loop.task_runner(), run_loop.QuitClosure()));
   if (!context)
     return kInitializationFailed;
 
@@ -1749,7 +1781,7 @@ int HostProcessMain() {
   new HostProcess(std::move(context), &exit_code, &shutdown_watchdog);
 
   // Run the main (also UI) message loop until the host no longer needs it.
-  base::RunLoop().Run();
+  run_loop.Run();
 
   // Block until tasks blocking shutdown have completed their execution.
   base::TaskScheduler::GetInstance()->Shutdown();

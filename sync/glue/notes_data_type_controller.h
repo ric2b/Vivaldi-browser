@@ -19,6 +19,7 @@ class NotesDataTypeController : public syncer::FrontendDataTypeController,
                                 public vivaldi::NotesModelObserver {
  public:
   NotesDataTypeController(const base::Closure& dump_stack,
+                          syncer::SyncService* sync_service,
                           syncer::SyncClient* sync_client);
   ~NotesDataTypeController() override;
 
@@ -36,6 +37,8 @@ class NotesDataTypeController : public syncer::FrontendDataTypeController,
   bool DependentsLoaded();
 
   ScopedObserver<Notes_Model, NotesModelObserver> notes_model_observer_;
+
+  syncer::SyncClient* const sync_client_;
 
   DISALLOW_COPY_AND_ASSIGN(NotesDataTypeController);
 };

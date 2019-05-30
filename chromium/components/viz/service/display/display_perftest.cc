@@ -7,7 +7,7 @@
 #include "base/bind.h"
 #include "base/test/null_task_runner.h"
 #include "base/time/time.h"
-#include "cc/base/lap_timer.h"
+#include "base/timer/lap_timer.h"
 #include "components/viz/common/display/renderer_settings.h"
 #include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/common/quads/draw_quad.h"
@@ -99,7 +99,8 @@ class RemoveOverdrawQuadPerfTest : public testing::Test {
         quad->SetNew(shared_quad_state, rect, rect, needs_blending, resource_id,
                      premultiplied_alpha, uv_top_left, uv_bottom_right,
                      background_color, vertex_opacity, y_flipped,
-                     nearest_neighbor, false);
+                     nearest_neighbor, /*secure_output_only=*/false,
+                     ui::ProtectedVideoType::kClear);
         j += quad_height;
       }
       j = y_top;
@@ -289,7 +290,7 @@ class RemoveOverdrawQuadPerfTest : public testing::Test {
 
  private:
   CompositorFrame frame_;
-  cc::LapTimer timer_;
+  base::LapTimer timer_;
   StubBeginFrameSource begin_frame_source_;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   ServerSharedBitmapManager bitmap_manager_;

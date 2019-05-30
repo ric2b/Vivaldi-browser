@@ -8,23 +8,24 @@
 // DO NOT MODIFY!
 
 // clang-format off
-
-#ifndef V8VoidCallbackFunction_h
-#define V8VoidCallbackFunction_h
+#ifndef THIRD_PARTY_BLINK_RENDERER_BINDINGS_TESTS_RESULTS_CORE_V8_VOID_CALLBACK_FUNCTION_H_
+#define THIRD_PARTY_BLINK_RENDERER_BINDINGS_TESTS_RESULTS_CORE_V8_VOID_CALLBACK_FUNCTION_H_
 
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/platform/bindings/callback_function_base.h"
+#include "third_party/blink/renderer/platform/bindings/v8_value_or_script_wrappable_adapter.h"
+#include "third_party/blink/renderer/platform/wtf/forward.h"
 
 namespace blink {
-
-class ScriptWrappable;
 
 class CORE_EXPORT V8VoidCallbackFunction final : public CallbackFunctionBase {
  public:
   static V8VoidCallbackFunction* Create(v8::Local<v8::Function> callback_function) {
-    return new V8VoidCallbackFunction(callback_function);
+    return MakeGarbageCollected<V8VoidCallbackFunction>(callback_function);
   }
 
+  explicit V8VoidCallbackFunction(v8::Local<v8::Function> callback_function)
+      : CallbackFunctionBase(callback_function) {}
   ~V8VoidCallbackFunction() override = default;
 
   // NameClient overrides:
@@ -32,15 +33,11 @@ class CORE_EXPORT V8VoidCallbackFunction final : public CallbackFunctionBase {
 
   // Performs "invoke".
   // https://heycam.github.io/webidl/#es-invoking-callback-functions
-  v8::Maybe<void> Invoke(ScriptWrappable* callback_this_value) WARN_UNUSED_RESULT;
+  v8::Maybe<void> Invoke(bindings::V8ValueOrScriptWrappableAdapter callback_this_value) WARN_UNUSED_RESULT;
 
   // Performs "invoke", and then reports an exception, if any, to the global
   // error handler such as DevTools' console.
-  void InvokeAndReportException(ScriptWrappable* callback_this_value);
-
- private:
-  explicit V8VoidCallbackFunction(v8::Local<v8::Function> callback_function)
-      : CallbackFunctionBase(callback_function) {}
+  void InvokeAndReportException(bindings::V8ValueOrScriptWrappableAdapter callback_this_value);
 };
 
 template <>
@@ -48,18 +45,17 @@ class V8PersistentCallbackFunction<V8VoidCallbackFunction> final : public V8Pers
   using V8CallbackFunction = V8VoidCallbackFunction;
 
  public:
+  explicit V8PersistentCallbackFunction(V8CallbackFunction* callback_function)
+      : V8PersistentCallbackFunctionBase(callback_function) {}
   ~V8PersistentCallbackFunction() override = default;
 
   // Returns a wrapper-tracing version of this callback function.
   V8CallbackFunction* ToNonV8Persistent() { return Proxy(); }
 
-  v8::Maybe<void> Invoke(ScriptWrappable* callback_this_value) WARN_UNUSED_RESULT;
-  CORE_EXPORT void InvokeAndReportException(ScriptWrappable* callback_this_value);
+  v8::Maybe<void> Invoke(bindings::V8ValueOrScriptWrappableAdapter callback_this_value) WARN_UNUSED_RESULT;
+  CORE_EXPORT void InvokeAndReportException(bindings::V8ValueOrScriptWrappableAdapter callback_this_value);
 
  private:
-  explicit V8PersistentCallbackFunction(V8CallbackFunction* callback_function)
-      : V8PersistentCallbackFunctionBase(callback_function) {}
-
   V8CallbackFunction* Proxy() {
     return As<V8CallbackFunction>();
   }
@@ -78,4 +74,4 @@ Persistent<V8VoidCallbackFunction> WrapPersistent(V8VoidCallbackFunction*) = del
 
 }  // namespace blink
 
-#endif  // V8VoidCallbackFunction_h
+#endif  // THIRD_PARTY_BLINK_RENDERER_BINDINGS_TESTS_RESULTS_CORE_V8_VOID_CALLBACK_FUNCTION_H_

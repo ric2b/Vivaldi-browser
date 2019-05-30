@@ -2,7 +2,9 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="pt-BR">
 <translation id="1055184225775184556">Des&amp;fazer adicionar</translation>
+<translation id="1158503667684816647">Não pedir confirmação novamente</translation>
 <translation id="1411638389238344450">Enviar link por &amp;email</translation>
+<translation id="1462666970065907900">Deseja realmente fechar esta janela?</translation>
 <translation id="1728549374069268714">Colar e &amp;ir</translation>
 <translation id="1756026472674246267">Abrir link em nova &amp;guia</translation>
 <translation id="1759842336958782510">Chrome</translation>
@@ -24,6 +26,7 @@
 <translation id="3914946330804881301">Importado do Opera</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4074744496918018786">Abrir imagem em janela &amp;privada</translation>
+<translation id="4420816922321010053">Deseja realmente fechar o Vivaldi?</translation>
 <translation id="4512900838580567989">Abrir link em segundo p&amp;lano</translation>
 <translation id="4515472507709384008">Opera versão 15+</translation>
 <translation id="4548358047305717967">Abrir imagem em segundo p&amp;lano</translation>
@@ -33,6 +36,7 @@
 <translation id="5092656712000637858">Criar pai&amp;nel web desta página</translation>
 <translation id="5238244642230426581">Marcadores Importados</translation>
 <translation id="5388358297987318779">&amp;Abrir imagem</translation>
+<translation id="5497042274492038489">Fechar Janela</translation>
 <translation id="5615637589913244581">Opera versão 15+ (Beta)</translation>
 <translation id="5648110075441906505">Abrir imagem em nova &amp;janela</translation>
 <translation id="588258955323874662">Tela c&amp;heia</translation>
@@ -46,6 +50,7 @@
 <translation id="6551219277044048123">Adicionar &amp;mecanismo de pesquisa...</translation>
 <translation id="6804831687363620480">Infelizmente, suas configurações do Opera 15+ não estão disponíveis enquanto ele estiver em execução. Para importá-las ao Vivaldi, salve seu trabalho e feche todas as janelas do Opera 15+. Então clique em Continuar.</translation>
 <translation id="7337881442233988129">Chromium</translation>
+<translation id="7865983598101744945">Fechar Vivaldi</translation>
 <translation id="8099620695029051217">&amp;Copiar endereço da página</translation>
 <translation id="8194797478851900357">Des&amp;fazer mover</translation>
 <translation id="8197810018650377191">Adicionar página aos &amp;marcadores</translation>

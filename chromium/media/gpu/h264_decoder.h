@@ -11,6 +11,7 @@
 #include <memory>
 #include <vector>
 
+#include "base/containers/span.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "media/base/limits.h"
@@ -43,11 +44,19 @@ class MEDIA_GPU_EXPORT H264Decoder : public AcceleratedVideoDecoder {
     // is called again, it will attempt to resume processing of the stream
     // by calling the same method again.
     enum class Status {
-      kOk,        // Operation completed successfully.
-      kFail,      // Operation failed.
-      kTryAgain,  // Operation failed because some external data is missing.
-                  // Retry the same operation later, once the data has been
-                  // provided.
+      // Operation completed successfully.
+      kOk,
+
+      // Operation failed.
+      kFail,
+
+      // Operation failed because some external data is missing. Retry the same
+      // operation later, once the data has been provided.
+      kTryAgain,
+
+      // Operation is not supported. Used by SetStream() to indicate that the
+      // Accelerator can not handle this operation.
+      kNotSupported,
     };
 
     H264Accelerator();
@@ -121,6 +130,18 @@ class MEDIA_GPU_EXPORT H264Decoder : public AcceleratedVideoDecoder {
     // any cached parameters/slices that have not been committed yet.
     virtual void Reset() = 0;
 
+    // Notifies the accelerator whenever there is a new stream to process.
+    // |stream| is the data in annex B format, which may include SPS and PPS
+    // NALUs when there is a configuration change. The first frame must contain
+    // the SPS and PPS NALUs. SPS and PPS NALUs may not be encrypted.
+    // |decrypt_config| is the config for decrypting the stream. The accelerator
+    // should use |decrypt_config| to keep track of the parts of |stream| that
+    // are encrypted. If kTryAgain is returned, the decoder will retry this call
+    // later. This method has a default implementation that returns
+    // kNotSupported.
+    virtual Status SetStream(base::span<const uint8_t> stream,
+                             const DecryptConfig* decrypt_config);
+
    private:
     DISALLOW_COPY_AND_ASSIGN(H264Accelerator);
   };
@@ -139,6 +160,7 @@ class MEDIA_GPU_EXPORT H264Decoder : public AcceleratedVideoDecoder {
   DecodeResult Decode() override WARN_UNUSED_RESULT;
   gfx::Size GetPicSize() const override;
   size_t GetRequiredNumOfPictures() const override;
+  size_t GetNumReferenceFrames() const override;
 
   // Return true if we need to start a new picture.
   static bool IsNewPrimaryCodedPicture(const H264Picture* curr_pic,
@@ -153,17 +175,6 @@ class MEDIA_GPU_EXPORT H264Decoder : public AcceleratedVideoDecoder {
                                              H264Picture* pic);
 
  private:
-  // We need to keep at most kDPBMaxSize pictures in DPB for
-  // reference/to display later and an additional one for the one currently
-  // being decoded. We also ask for some additional ones since VDA needs
-  // to accumulate a few ready-to-output pictures before it actually starts
-  // displaying and giving them back. +2 instead of +1 because of subjective
-  // smoothness improvement during testing.
-  enum {
-    kPicsInPipeline = limits::kMaxVideoFrames + 2,
-    kMaxNumReqPictures = H264DPB::kDPBMaxSize + kPicsInPipeline,
-  };
-
   // Internal state of the decoder.
   enum State {
     // After initialization, need an SPS.
@@ -281,8 +292,16 @@ class MEDIA_GPU_EXPORT H264Decoder : public AcceleratedVideoDecoder {
   // Parser in use.
   H264Parser parser_;
 
+  // Most recent call to SetStream().
+  const uint8_t* current_stream_ = nullptr;
+  size_t current_stream_size_ = 0;
+
   // Decrypting config for the most recent data passed to SetStream().
   std::unique_ptr<DecryptConfig> current_decrypt_config_;
+
+  // Keep track of when SetStream() is called so that
+  // H264Accelerator::SetStream() can be called.
+  bool current_stream_has_been_changed_ = false;
 
   // DPB in use.
   H264DPB dpb_;

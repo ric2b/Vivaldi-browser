@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/run_loop.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_callback.h"
@@ -21,10 +22,10 @@
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/frame_messages.h"
 #include "content/public/browser/javascript_dialog_manager.h"
+#include "content/public/browser/page_visibility_state.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_client.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
@@ -35,7 +36,7 @@
 #include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
 #include "content/test/content_browser_test_utils_internal.h"
-#include "content/test/did_commit_provisional_load_interceptor.h"
+#include "content/test/did_commit_navigation_interceptor.h"
 #include "content/test/frame_host_test_interface.mojom.h"
 #include "content/test/test_content_browser_client.h"
 #include "net/dns/mock_host_resolver.h"
@@ -43,8 +44,8 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "services/network/public/cpp/features.h"
+#include "services/service_manager/public/mojom/interface_provider.mojom-test-utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
-#include "third_party/blink/public/mojom/page/page_visibility_state.mojom.h"
 
 namespace content {
 
@@ -56,25 +57,24 @@ class PrerenderTestContentBrowserClient : public TestContentBrowserClient {
  public:
   PrerenderTestContentBrowserClient()
       : override_enabled_(false),
-        visibility_override_(blink::mojom::PageVisibilityState::kVisible) {}
+        visibility_override_(PageVisibilityState::kVisible) {}
   ~PrerenderTestContentBrowserClient() override {}
 
-  void EnableVisibilityOverride(
-      blink::mojom::PageVisibilityState visibility_override) {
+  void EnableVisibilityOverride(PageVisibilityState visibility_override) {
     override_enabled_ = true;
     visibility_override_ = visibility_override;
   }
 
   void OverridePageVisibilityState(
       RenderFrameHost* render_frame_host,
-      blink::mojom::PageVisibilityState* visibility_state) override {
+      PageVisibilityState* visibility_state) override {
     if (override_enabled_)
       *visibility_state = visibility_override_;
   }
 
  private:
   bool override_enabled_;
-  blink::mojom::PageVisibilityState visibility_override_;
+  PageVisibilityState visibility_override_;
 
   DISALLOW_COPY_AND_ASSIGN(PrerenderTestContentBrowserClient);
 };
@@ -164,11 +164,11 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
   WebContents* web_contents = shell()->web_contents();
 
   web_contents->WasShown();
-  EXPECT_EQ(blink::mojom::PageVisibilityState::kVisible,
+  EXPECT_EQ(PageVisibilityState::kVisible,
             web_contents->GetMainFrame()->GetVisibilityState());
 
   web_contents->WasHidden();
-  EXPECT_EQ(blink::mojom::PageVisibilityState::kHidden,
+  EXPECT_EQ(PageVisibilityState::kHidden,
             web_contents->GetMainFrame()->GetVisibilityState());
 }
 
@@ -182,12 +182,11 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
   ContentBrowserClient* old_client = SetBrowserClientForTesting(&new_client);
 
   web_contents->WasShown();
-  EXPECT_EQ(blink::mojom::PageVisibilityState::kVisible,
+  EXPECT_EQ(PageVisibilityState::kVisible,
             web_contents->GetMainFrame()->GetVisibilityState());
 
-  new_client.EnableVisibilityOverride(
-      blink::mojom::PageVisibilityState::kPrerender);
-  EXPECT_EQ(blink::mojom::PageVisibilityState::kPrerender,
+  new_client.EnableVisibilityOverride(PageVisibilityState::kPrerender);
+  EXPECT_EQ(PageVisibilityState::kPrerender,
             web_contents->GetMainFrame()->GetVisibilityState());
 
   SetBrowserClientForTesting(old_client);
@@ -202,20 +201,36 @@ class TestJavaScriptDialogManager : public JavaScriptDialogManager,
       : message_loop_runner_(new MessageLoopRunner), url_invalidate_count_(0) {}
   ~TestJavaScriptDialogManager() override {}
 
+  // This waits until either WCD::BeforeUnloadFired is called (the unload has
+  // been handled) or JSDM::RunJavaScriptDialog/RunBeforeUnloadDialog is called
+  // (a request to display a dialog has been received).
   void Wait() {
     message_loop_runner_->Run();
     message_loop_runner_ = new MessageLoopRunner;
   }
 
-  DialogClosedCallback& callback() { return callback_; }
+  // Runs the dialog callback.
+  void Run(bool success, const base::string16& user_input) {
+    std::move(callback_).Run(success, user_input);
+  }
 
   int num_beforeunload_dialogs_seen() { return num_beforeunload_dialogs_seen_; }
+  int num_beforeunload_fired_seen() { return num_beforeunload_fired_seen_; }
+  bool proceed() { return proceed_; }
 
   // WebContentsDelegate
 
   JavaScriptDialogManager* GetJavaScriptDialogManager(
       WebContents* source) override {
     return this;
+  }
+
+  void BeforeUnloadFired(WebContents* tab,
+                         bool proceed,
+                         bool* proceed_to_fire_unload) override {
+    ++num_beforeunload_fired_seen_;
+    proceed_ = proceed;
+    message_loop_runner_->Quit();
   }
 
   // JavaScriptDialogManager
@@ -226,7 +241,10 @@ class TestJavaScriptDialogManager : public JavaScriptDialogManager,
                            const base::string16& message_text,
                            const base::string16& default_prompt_text,
                            DialogClosedCallback callback,
-                           bool* did_suppress_message) override {}
+                           bool* did_suppress_message) override {
+    callback_ = std::move(callback);
+    message_loop_runner_->Quit();
+  }
 
   void RunBeforeUnloadDialog(WebContents* web_contents,
                              RenderFrameHost* render_frame_host,
@@ -267,6 +285,13 @@ class TestJavaScriptDialogManager : public JavaScriptDialogManager,
 
   // The total number of beforeunload dialogs seen by this dialog manager.
   int num_beforeunload_dialogs_seen_ = 0;
+
+  // The total number of BeforeUnloadFired events witnessed by the
+  // WebContentsDelegate.
+  int num_beforeunload_fired_seen_ = 0;
+
+  // The |proceed| value returned by the last unload event.
+  bool proceed_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(TestJavaScriptDialogManager);
 };
@@ -339,7 +364,7 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
   main_frame->GetProcess()->AddFilter(filter.get());
 
   // Answer the dialog.
-  std::move(dialog_manager.callback()).Run(true, base::string16());
+  dialog_manager.Run(true, base::string16());
 
   // There will be no beforeunload ACK, so if the beforeunload ACK timer isn't
   // functioning then the navigation will hang forever and this test will time
@@ -378,7 +403,7 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
   dialog_manager.Wait();
 
   // Answer the dialog.
-  std::move(dialog_manager.callback()).Run(true, base::string16());
+  dialog_manager.Run(true, base::string16());
   EXPECT_TRUE(WaitForLoadStop(wc));
 
   // The reload should have cleared the user gesture bit, so upon leaving again
@@ -409,7 +434,7 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
 
   // Cancel the dialog.
   dialog_manager.reset_url_invalidate_count();
-  std::move(dialog_manager.callback()).Run(false, base::string16());
+  dialog_manager.Run(false, base::string16());
   EXPECT_FALSE(wc->IsLoading());
 
   // Verify there are no pending history items after the dialog is cancelled.
@@ -447,13 +472,13 @@ class RenderFrameHostImplBeforeUnloadBrowserTest
   }
 
   void CloseDialogAndProceed() {
-    std::move(dialog_manager()->callback())
-        .Run(true /* navigation should proceed */, base::string16());
+    dialog_manager_->Run(true /* navigation should proceed */,
+                         base::string16());
   }
 
   void CloseDialogAndCancel() {
-    std::move(dialog_manager()->callback())
-        .Run(false /* navigation should proceed */, base::string16());
+    dialog_manager_->Run(false /* navigation should proceed */,
+                         base::string16());
   }
 
   // Installs a beforeunload handler in the given frame.
@@ -953,7 +978,7 @@ class ExecuteScriptBeforeRenderFrameDeletedHelper
 //
 // Note that if the second WebContents scheduled a call to window.close() to
 // close itself after it calls window.open(), the CreateNewWindow sync IPC could
-// be dispatched *before* ViewHostMsg_Close in the browser process, provided
+// be dispatched *before* WidgetHostMsg_Close in the browser process, provided
 // that the browser happened to be in IPC::SyncChannel::WaitForReply on the UI
 // thread (most likely after sending GpuCommandBufferMsg_* messages), in which
 // case incoming sync IPCs to this thread are dispatched, but the message loop
@@ -1330,10 +1355,10 @@ namespace {
 // DidCommitProvisionalLoad messages in a given |web_contents| instead of the
 // real one coming from the renderer process.
 class ScopedFakeInterfaceProviderRequestInjector
-    : public DidCommitProvisionalLoadInterceptor {
+    : public DidCommitNavigationInterceptor {
  public:
   explicit ScopedFakeInterfaceProviderRequestInjector(WebContents* web_contents)
-      : DidCommitProvisionalLoadInterceptor(web_contents) {}
+      : DidCommitNavigationInterceptor(web_contents) {}
   ~ScopedFakeInterfaceProviderRequestInjector() override = default;
 
   // Sets the fake InterfaceProvider |request| to inject into the next incoming
@@ -1351,14 +1376,19 @@ class ScopedFakeInterfaceProviderRequestInjector
   }
 
  protected:
-  bool WillDispatchDidCommitProvisionalLoad(
+  bool WillProcessDidCommitNavigation(
       RenderFrameHost* render_frame_host,
+      NavigationRequest* navigation_request,
       ::FrameHostMsg_DidCommitProvisionalLoad_Params* params,
-      service_manager::mojom::InterfaceProviderRequest*
-          interface_provider_request) override {
+      mojom::DidCommitProvisionalLoadInterfaceParamsPtr* interface_params)
+      override {
     url_of_last_commit_ = params->url;
-    original_request_of_last_commit_ = std::move(*interface_provider_request);
-    *interface_provider_request = std::move(next_fake_request_);
+    if (*interface_params) {
+      original_request_of_last_commit_ =
+          std::move((*interface_params)->interface_provider_request);
+      (*interface_params)->interface_provider_request =
+          std::move(next_fake_request_);
+    }
     return true;
   }
 
@@ -1874,6 +1904,77 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
+                       BeforeUnloadDialogSuppressedForDiscard) {
+  WebContentsImpl* wc = static_cast<WebContentsImpl*>(shell()->web_contents());
+  TestJavaScriptDialogManager dialog_manager;
+  wc->SetDelegate(&dialog_manager);
+
+  EXPECT_TRUE(NavigateToURL(
+      shell(), GetTestUrl("render_frame_host", "beforeunload.html")));
+  // Disable the hang monitor, otherwise there will be a race between the
+  // beforeunload dialog and the beforeunload hang timer.
+  wc->GetMainFrame()->DisableBeforeUnloadHangMonitorForTesting();
+
+  // Give the page a user gesture so javascript beforeunload works, and then
+  // dispatch a before unload with discard as a reason. This should return
+  // without any dialog being seen.
+  wc->GetMainFrame()->ExecuteJavaScriptWithUserGestureForTests(
+      base::string16());
+  wc->GetMainFrame()->DispatchBeforeUnload(
+      RenderFrameHostImpl::BeforeUnloadType::DISCARD, false);
+  dialog_manager.Wait();
+  EXPECT_EQ(0, dialog_manager.num_beforeunload_dialogs_seen());
+  EXPECT_EQ(1, dialog_manager.num_beforeunload_fired_seen());
+  EXPECT_FALSE(dialog_manager.proceed());
+
+  wc->SetDelegate(nullptr);
+  wc->SetJavaScriptDialogManagerForTesting(nullptr);
+}
+
+IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
+                       PendingDialogMakesDiscardUnloadReturnFalse) {
+  WebContentsImpl* wc = static_cast<WebContentsImpl*>(shell()->web_contents());
+  TestJavaScriptDialogManager dialog_manager;
+  wc->SetDelegate(&dialog_manager);
+
+  EXPECT_TRUE(NavigateToURL(
+      shell(), GetTestUrl("render_frame_host", "beforeunload.html")));
+  // Disable the hang monitor, otherwise there will be a race between the
+  // beforeunload dialog and the beforeunload hang timer.
+  wc->GetMainFrame()->DisableBeforeUnloadHangMonitorForTesting();
+
+  // Give the page a user gesture so javascript beforeunload works, and then
+  // dispatch a before unload with discard as a reason. This should return
+  // without any dialog being seen.
+  wc->GetMainFrame()->ExecuteJavaScriptWithUserGestureForTests(
+      base::string16());
+
+  // Launch an alert javascript dialog. This pending dialog should block a
+  // subsequent discarding before unload request.
+  wc->GetMainFrame()->ExecuteJavaScriptForTests(
+      base::ASCIIToUTF16("setTimeout(function(){alert('hello');}, 10);"));
+  dialog_manager.Wait();
+  EXPECT_EQ(0, dialog_manager.num_beforeunload_dialogs_seen());
+  EXPECT_EQ(0, dialog_manager.num_beforeunload_fired_seen());
+
+  // Dispatch a before unload request while the first is still blocked
+  // on the dialog, and expect it to return false immediately (synchronously).
+  wc->GetMainFrame()->DispatchBeforeUnload(
+      RenderFrameHostImpl::BeforeUnloadType::DISCARD, false);
+  dialog_manager.Wait();
+  EXPECT_EQ(0, dialog_manager.num_beforeunload_dialogs_seen());
+  EXPECT_EQ(1, dialog_manager.num_beforeunload_fired_seen());
+  EXPECT_FALSE(dialog_manager.proceed());
+
+  // Clear the existing javascript dialog so that the associated IPC message
+  // doesn't leak.
+  dialog_manager.Run(true, base::string16());
+
+  wc->SetDelegate(nullptr);
+  wc->SetJavaScriptDialogManagerForTesting(nullptr);
+}
+
+IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
                        NotifiesProcessHostOfAudibleAudio) {
   const auto RunPostedTasks = []() {
     base::RunLoop run_loop;
@@ -1914,6 +2015,267 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
   crash_observer.Wait();
   RunPostedTasks();
   EXPECT_EQ(0, process->get_media_stream_count_for_testing());
+}
+
+// Test that a frame is visible/hidden depending on its WebContents visibility
+// state.
+IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
+                       VisibilityScrolledOutOfView) {
+  WebContentsImpl* web_contents =
+      static_cast<WebContentsImpl*>(shell()->web_contents());
+
+  GURL main_frame(embedded_test_server()->GetURL("/iframe_out_of_view.html"));
+  GURL child_url(embedded_test_server()->GetURL("/hello.html"));
+
+  // This will set up the page frame tree as A(A1()).
+  ASSERT_TRUE(NavigateToURL(shell(), main_frame));
+  FrameTreeNode* root = web_contents->GetFrameTree()->root();
+  FrameTreeNode* nested_iframe_node = root->child_at(0);
+  NavigateFrameToURL(nested_iframe_node, child_url);
+
+  ASSERT_EQ(blink::mojom::FrameVisibility::kRenderedOutOfViewport,
+            nested_iframe_node->current_frame_host()->visibility());
+}
+
+// Test that a frame is visible/hidden depending on its WebContents visibility
+// state.
+IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest, VisibilityChildInView) {
+  WebContentsImpl* web_contents =
+      static_cast<WebContentsImpl*>(shell()->web_contents());
+
+  GURL main_frame(embedded_test_server()->GetURL("/iframe_clipped.html"));
+  GURL child_url(embedded_test_server()->GetURL("/hello.html"));
+
+  // This will set up the page frame tree as A(A1()).
+  ASSERT_TRUE(NavigateToURL(shell(), main_frame));
+  FrameTreeNode* root = web_contents->GetFrameTree()->root();
+  FrameTreeNode* nested_iframe_node = root->child_at(0);
+  NavigateFrameToURL(nested_iframe_node, child_url);
+
+  ASSERT_EQ(blink::mojom::FrameVisibility::kRenderedInViewport,
+            nested_iframe_node->current_frame_host()->visibility());
+}
+
+IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
+                       OriginOfFreshFrame_Subframe_NavCancelledByDocWrite) {
+  WebContents* web_contents = shell()->web_contents();
+  NavigationController& controller = web_contents->GetController();
+  GURL main_url(embedded_test_server()->GetURL("foo.com", "/title1.html"));
+  ASSERT_TRUE(NavigateToURL(shell(), main_url));
+  EXPECT_EQ(1, controller.GetEntryCount());
+  url::Origin main_origin = url::Origin::Create(main_url);
+
+  // document.open should cancel the cross-origin navigation to '/hung' and the
+  // subframe should remain on the parent/initiator origin.
+  const char kScriptTemplate[] = R"(
+      const frame = document.createElement('iframe');
+      frame.src = $1;
+      document.body.appendChild(frame);
+
+      const html = '<!DOCTYPE html><html><body>Hello world!</body></html>';
+      const doc = frame.contentDocument;
+      doc.open();
+      doc.write(html);
+      doc.close();
+
+      frame.contentWindow.origin;
+  )";
+  GURL cross_site_url(embedded_test_server()->GetURL("bar.com", "/hung"));
+  std::string script = JsReplace(kScriptTemplate, cross_site_url);
+  EXPECT_EQ(main_origin.Serialize(), EvalJs(web_contents, script));
+
+  // The subframe navigation should be cancelled and therefore shouldn't
+  // contribute an extra history entry.
+  EXPECT_EQ(1, controller.GetEntryCount());
+
+  // Browser-side origin should match the renderer-side origin.
+  // See also https://crbug.com/932067.
+  ASSERT_EQ(2u, web_contents->GetAllFrames().size());
+  RenderFrameHost* subframe = web_contents->GetAllFrames()[1];
+  EXPECT_EQ(main_origin, subframe->GetLastCommittedOrigin());
+}
+
+class RenderFrameHostCreatedObserver : public WebContentsObserver {
+ public:
+  explicit RenderFrameHostCreatedObserver(WebContents* web_contents)
+      : WebContentsObserver(web_contents) {}
+
+  RenderFrameHost* Wait() {
+    if (!new_frame_)
+      run_loop_.Run();
+
+    return new_frame_;
+  }
+
+ private:
+  void RenderFrameCreated(RenderFrameHost* render_frame_host) override {
+    new_frame_ = render_frame_host;
+    run_loop_.Quit();
+  }
+
+  base::RunLoop run_loop_;
+  RenderFrameHost* new_frame_ = nullptr;
+
+  DISALLOW_COPY_AND_ASSIGN(RenderFrameHostCreatedObserver);
+};
+
+IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
+                       OriginOfFreshFrame_SandboxedSubframe) {
+  WebContents* web_contents = shell()->web_contents();
+  NavigationController& controller = web_contents->GetController();
+  GURL main_url(embedded_test_server()->GetURL("foo.com", "/title1.html"));
+  ASSERT_TRUE(NavigateToURL(shell(), main_url));
+  EXPECT_EQ(1, controller.GetEntryCount());
+  url::Origin main_origin = url::Origin::Create(main_url);
+
+  // Navigate a sandboxed frame to a cross-origin '/hung'.
+  RenderFrameHostCreatedObserver subframe_observer(web_contents);
+  const char kScriptTemplate[] = R"(
+      const frame = document.createElement('iframe');
+      frame.sandbox = 'allow-scripts';
+      frame.src = $1;
+      document.body.appendChild(frame);
+  )";
+  GURL cross_site_url(embedded_test_server()->GetURL("bar.com", "/hung"));
+  std::string script = JsReplace(kScriptTemplate, cross_site_url);
+  EXPECT_TRUE(ExecJs(web_contents, script));
+
+  // Wait for a new subframe, but ignore the frame returned by
+  // |subframe_observer| (it might be the speculative one, not the current one).
+  subframe_observer.Wait();
+  ASSERT_EQ(2u, web_contents->GetAllFrames().size());
+  RenderFrameHost* subframe = web_contents->GetAllFrames()[1];
+
+  // The browser-side origin of the *sandboxed* subframe should be set to an
+  // *opaque* origin (with the parent's origin as the precursor origin).
+  EXPECT_TRUE(subframe->GetLastCommittedOrigin().opaque());
+  EXPECT_EQ(
+      main_origin.GetTupleOrPrecursorTupleIfOpaque(),
+      subframe->GetLastCommittedOrigin().GetTupleOrPrecursorTupleIfOpaque());
+
+  // Note that the test cannot check the renderer-side origin of the frame:
+  // - Scripts cannot be executed before the frame commits,
+  // - The parent cannot document.write into the *sandboxed* frame.
+}
+
+IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
+                       OriginOfFreshFrame_Subframe_AboutBlankAndThenDocWrite) {
+  WebContents* web_contents = shell()->web_contents();
+  NavigationController& controller = web_contents->GetController();
+  GURL main_url(embedded_test_server()->GetURL("foo.com", "/title1.html"));
+  ASSERT_TRUE(NavigateToURL(shell(), main_url));
+  EXPECT_EQ(1, controller.GetEntryCount());
+  url::Origin main_origin = url::Origin::Create(main_url);
+
+  // Create a new about:blank subframe and document.write into it.
+  TestNavigationObserver load_observer(web_contents);
+  RenderFrameHostCreatedObserver subframe_observer(web_contents);
+  const char kScript[] = R"(
+      const frame = document.createElement('iframe');
+      // Don't set |frame.src| - have the frame commit an initial about:blank.
+      document.body.appendChild(frame);
+
+      const html = '<!DOCTYPE html><html><body>Hello world!</body></html>';
+      const doc = frame.contentDocument;
+      doc.open();
+      doc.write(html);
+      doc.close();
+  )";
+  ExecuteScriptAsync(web_contents, kScript);
+
+  // Wait for the new subframe to be created - this will be still before the
+  // commit of about:blank.
+  RenderFrameHost* subframe = subframe_observer.Wait();
+  EXPECT_EQ(main_origin, subframe->GetLastCommittedOrigin());
+
+  // Wait for the about:blank navigation to finish.
+  load_observer.Wait();
+
+  // The subframe commit to about:blank should not contribute an extra history
+  // entry.
+  EXPECT_EQ(1, controller.GetEntryCount());
+
+  // Browser-side origin should match the renderer-side origin.
+  // See also https://crbug.com/932067.
+  ASSERT_EQ(2u, web_contents->GetAllFrames().size());
+  RenderFrameHost* subframe2 = web_contents->GetAllFrames()[1];
+  EXPECT_EQ(subframe, subframe2);  // No swaps are expected.
+  EXPECT_EQ(main_origin, subframe2->GetLastCommittedOrigin());
+  EXPECT_EQ(main_origin.Serialize(), EvalJs(subframe2, "window.origin"));
+}
+
+IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
+                       OriginOfFreshFrame_Popup_NavCancelledByDocWrite) {
+  WebContents* web_contents = shell()->web_contents();
+  GURL main_url(embedded_test_server()->GetURL("foo.com", "/title1.html"));
+  ASSERT_TRUE(NavigateToURL(shell(), main_url));
+  url::Origin main_origin = url::Origin::Create(main_url);
+
+  // document.open should cancel the cross-origin navigation to '/hung' and the
+  // popup should remain on the initiator origin.
+  WebContentsAddedObserver popup_observer;
+  const char kScriptTemplate[] = R"(
+      var popup = window.open($1, 'popup');
+
+      const html = '<!DOCTYPE html><html><body>Hello world!</body></html>';
+      const doc = popup.document;
+      doc.open();
+      doc.write(html);
+      doc.close();
+
+      popup.origin;
+  )";
+  GURL cross_site_url(embedded_test_server()->GetURL("bar.com", "/hung"));
+  std::string script = JsReplace(kScriptTemplate, cross_site_url);
+  EXPECT_EQ(main_origin.Serialize(), EvalJs(web_contents, script));
+
+  // Browser-side origin should match the renderer-side origin.
+  // See also https://crbug.com/932067.
+  WebContents* popup = popup_observer.GetWebContents();
+  EXPECT_EQ(main_origin, popup->GetMainFrame()->GetLastCommittedOrigin());
+
+  // The popup navigation should be cancelled and therefore shouldn't
+  // contribute an extra history entry.
+  EXPECT_EQ(0, popup->GetController().GetEntryCount());
+}
+
+IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
+                       OriginOfFreshFrame_Popup_AboutBlankAndThenDocWrite) {
+  WebContents* web_contents = shell()->web_contents();
+  GURL main_url(embedded_test_server()->GetURL("foo.com", "/title1.html"));
+  ASSERT_TRUE(NavigateToURL(shell(), main_url));
+  url::Origin main_origin = url::Origin::Create(main_url);
+
+  // Create a new about:blank popup and document.write into it.
+  WebContentsAddedObserver popup_observer;
+  TestNavigationObserver load_observer(web_contents);
+  const char kScript[] = R"(
+      // Empty |url| argument means that the popup will commit an initial
+      // about:blank.
+      var popup = window.open('', 'popup');
+
+      const html = '<!DOCTYPE html><html><body>Hello world!</body></html>';
+      const doc = popup.document;
+      doc.open();
+      doc.write(html);
+      doc.close();
+  )";
+  ExecuteScriptAsync(web_contents, kScript);
+
+  // Wait for the new popup to be created (this will be before the popup commits
+  // the initial about:blank page).
+  WebContents* popup = popup_observer.GetWebContents();
+  EXPECT_EQ(main_origin, popup->GetMainFrame()->GetLastCommittedOrigin());
+
+  // A round-trip to the renderer process is an indirect way to wait for
+  // DidCommitProvisionalLoad IPC for the initial about:blank page.
+  // WaitForLoadStop cannot be used, because this commit won't raise
+  // NOTIFICATION_LOAD_STOP.
+  EXPECT_EQ(123, EvalJs(popup, "123"));
+  EXPECT_EQ(main_origin, popup->GetMainFrame()->GetLastCommittedOrigin());
+
+  // The about:blank navigation shouldn't contribute an extra history entry.
+  EXPECT_EQ(0, popup->GetController().GetEntryCount());
 }
 
 }  // namespace content

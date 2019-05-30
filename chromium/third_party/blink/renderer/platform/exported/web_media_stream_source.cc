@@ -43,33 +43,6 @@
 
 namespace blink {
 
-namespace {
-
-class MediaStreamSourceExtraDataContainer
-    : public MediaStreamSource::ExtraData {
- public:
-  MediaStreamSourceExtraDataContainer(
-      std::unique_ptr<WebMediaStreamSource::ExtraData> extra_data)
-      : extra_data_(std::move(extra_data)) {}
-
-  WebMediaStreamSource::ExtraData* GetExtraData() { return extra_data_.get(); }
-
- private:
-  std::unique_ptr<WebMediaStreamSource::ExtraData> extra_data_;
-};
-
-}  // namespace
-
-WebMediaStreamSource WebMediaStreamSource::ExtraData::Owner() {
-  DCHECK(owner_);
-  return WebMediaStreamSource(owner_);
-}
-
-void WebMediaStreamSource::ExtraData::SetOwner(MediaStreamSource* owner) {
-  DCHECK(!owner_);
-  owner_ = owner;
-}
-
 WebMediaStreamSource::WebMediaStreamSource(
     MediaStreamSource* media_stream_source)
     : private_(media_stream_source) {}
@@ -90,13 +63,6 @@ void WebMediaStreamSource::Reset() {
 
 WebMediaStreamSource::operator MediaStreamSource*() const {
   return private_.Get();
-}
-
-void WebMediaStreamSource::Initialize(const WebString& id,
-                                      Type type,
-                                      const WebString& name) {
-  private_ = MediaStreamSource::Create(
-      id, static_cast<MediaStreamSource::StreamType>(type), name, false);
 }
 
 void WebMediaStreamSource::Initialize(const WebString& id,
@@ -147,23 +113,19 @@ WebMediaStreamSource::ReadyState WebMediaStreamSource::GetReadyState() const {
   return static_cast<ReadyState>(private_->GetReadyState());
 }
 
-WebMediaStreamSource::ExtraData* WebMediaStreamSource::GetExtraData() const {
+WebPlatformMediaStreamSource* WebMediaStreamSource::GetPlatformSource() const {
   DCHECK(!private_.IsNull());
-  MediaStreamSource::ExtraData* data = private_->GetExtraData();
-  if (!data)
-    return nullptr;
-  return static_cast<MediaStreamSourceExtraDataContainer*>(data)
-      ->GetExtraData();
+  return private_->GetPlatformSource();
 }
 
-void WebMediaStreamSource::SetExtraData(ExtraData* extra_data) {
+void WebMediaStreamSource::SetPlatformSource(
+    std::unique_ptr<WebPlatformMediaStreamSource> platform_source) {
   DCHECK(!private_.IsNull());
 
-  if (extra_data)
-    extra_data->SetOwner(private_.Get());
+  if (platform_source)
+    platform_source->SetOwner(private_.Get());
 
-  private_->SetExtraData(std::make_unique<MediaStreamSourceExtraDataContainer>(
-      base::WrapUnique(extra_data)));
+  private_->SetPlatformSource(std::move(platform_source));
 }
 
 void WebMediaStreamSource::SetAudioProcessingProperties(

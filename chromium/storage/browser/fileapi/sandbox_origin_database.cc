@@ -150,8 +150,7 @@ bool SandboxOriginDatabase::RepairDatabase(const std::string& db_path) {
   base::FilePath path_each;
   while (!(path_each = file_enum.Next()).empty())
     directories.insert(path_each.BaseName());
-  std::set<base::FilePath>::iterator db_dir_itr =
-      directories.find(base::FilePath(kOriginDatabaseName));
+  auto db_dir_itr = directories.find(base::FilePath(kOriginDatabaseName));
   // Make sure we have the database file in its directory and therefore we are
   // working on the correct path.
   DCHECK(db_dir_itr != directories.end());
@@ -165,7 +164,7 @@ bool SandboxOriginDatabase::RepairDatabase(const std::string& db_path) {
 
   // Delete any obsolete entries from the origins database.
   for (const OriginRecord& record : origins) {
-    std::set<base::FilePath>::iterator dir_itr = directories.find(record.path);
+    auto dir_itr = directories.find(record.path);
     if (dir_itr == directories.end()) {
       if (!RemovePathForOrigin(record.origin)) {
         DropDatabase();
@@ -310,6 +309,21 @@ bool SandboxOriginDatabase::ListAllOrigins(
 
 void SandboxOriginDatabase::DropDatabase() {
   db_.reset();
+}
+
+void SandboxOriginDatabase::RewriteDatabase() {
+  if (!Init(FAIL_IF_NONEXISTENT, FAIL_ON_CORRUPTION))
+    return;
+  base::FilePath db_path = GetDatabasePath();
+  std::string path = FilePathToString(db_path);
+  leveldb_env::Options options;
+  options.max_open_files = 0;  // Use minimum.
+  options.create_if_missing = true;
+  if (env_override_)
+    options.env = env_override_;
+  // There is a possibility that |db_| is null after this call. This case
+  // will be handled by the |!Init(...)| checks above each method.
+  leveldb_env::RewriteDB(options, path, &db_);
 }
 
 base::FilePath SandboxOriginDatabase::GetDatabasePath() const {

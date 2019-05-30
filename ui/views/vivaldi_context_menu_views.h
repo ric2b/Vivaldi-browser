@@ -17,8 +17,14 @@
 #include "content/public/common/context_menu_params.h"
 #include "ui/vivaldi_context_menu.h"
 
+class BookmarkMenuController;
+
 namespace aura {
 class Window;
+}
+
+namespace bookmarks {
+class BookmarkNode;
 }
 
 namespace content {

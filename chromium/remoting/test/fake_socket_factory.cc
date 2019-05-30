@@ -19,8 +19,8 @@
 #include "base/time/time.h"
 #include "net/base/io_buffer.h"
 #include "remoting/base/leaky_bucket.h"
-#include "third_party/webrtc/media/base/rtputils.h"
-#include "third_party/webrtc/rtc_base/asyncpacketsocket.h"
+#include "third_party/webrtc/media/base/rtp_utils.h"
+#include "third_party/webrtc/rtc_base/async_packet_socket.h"
 #include "third_party/webrtc/rtc_base/socket.h"
 
 namespace remoting {
@@ -96,8 +96,7 @@ void FakeUdpSocket::ReceivePacket(const rtc::SocketAddress& from,
                                   const rtc::SocketAddress& to,
                                   const scoped_refptr<net::IOBuffer>& data,
                                   int data_size) {
-  SignalReadPacket(
-      this, data->data(), data_size, from, rtc::CreatePacketTime(0));
+  SignalReadPacket(this, data->data(), data_size, from, rtc::TimeMicros());
 }
 
 rtc::SocketAddress FakeUdpSocket::GetLocalAddress() const {
@@ -118,7 +117,8 @@ int FakeUdpSocket::Send(const void* data, size_t data_size,
 int FakeUdpSocket::SendTo(const void* data, size_t data_size,
                           const rtc::SocketAddress& address,
                           const rtc::PacketOptions& options) {
-  scoped_refptr<net::IOBuffer> buffer = new net::IOBuffer(data_size);
+  scoped_refptr<net::IOBuffer> buffer =
+      base::MakeRefCounted<net::IOBuffer>(data_size);
   memcpy(buffer->data(), data, data_size);
   base::TimeTicks now = base::TimeTicks::Now();
   cricket::ApplyPacketOptions(reinterpret_cast<uint8_t*>(buffer->data()),
@@ -325,8 +325,8 @@ void FakePacketSocketFactory::ReceivePacket(
   pending_packets_.push_back(packet);
   task_runner_->PostDelayedTask(
       FROM_HERE,
-      base::Bind(&FakePacketSocketFactory::DoReceivePacket,
-                 weak_factory_.GetWeakPtr()),
+      base::BindOnce(&FakePacketSocketFactory::DoReceivePacket,
+                     weak_factory_.GetWeakPtr()),
       delay);
 }
 
@@ -335,7 +335,7 @@ void FakePacketSocketFactory::DoReceivePacket() {
 
   PendingPacket packet;
   if (pending_packets_.size() > 1 && RandDouble() < out_of_order_rate_) {
-    std::list<PendingPacket>::iterator it = pending_packets_.begin();
+    auto it = pending_packets_.begin();
     ++it;
     packet = *it;
     pending_packets_.erase(it);
@@ -344,7 +344,7 @@ void FakePacketSocketFactory::DoReceivePacket() {
     pending_packets_.pop_front();
   }
 
-  UdpSocketsMap::iterator iter = udp_sockets_.find(packet.to.port());
+  auto iter = udp_sockets_.find(packet.to.port());
   if (iter == udp_sockets_.end()) {
     // Invalid port number.
     return;

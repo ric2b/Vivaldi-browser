@@ -20,14 +20,12 @@ class FontFallbackList;
 class SimpleFontData;
 
 class FontFallbackIterator : public RefCounted<FontFallbackIterator> {
-  WTF_MAKE_NONCOPYABLE(FontFallbackIterator);
-
  public:
   static scoped_refptr<FontFallbackIterator> Create(const FontDescription&,
                                              scoped_refptr<FontFallbackList>,
                                              FontFallbackPriority);
 
-  bool HasNext() const { return fallback_stage_ != kOutOfLuck; };
+  bool HasNext() const { return fallback_stage_ != kOutOfLuck; }
   // Returns whether the next call to Next() needs a full hint list, or whether
   // a single character is sufficient. Intended to serve as an optimization in
   // HarfBuzzShaper to avoid spending too much time and resources collecting a
@@ -82,6 +80,8 @@ class FontFallbackIterator : public RefCounted<FontFallbackIterator> {
   HashSet<uint32_t> unique_font_data_for_range_sets_returned_;
   Vector<scoped_refptr<FontDataForRangeSet>> tracked_loading_range_sets_;
   FontFallbackPriority font_fallback_priority_;
+
+  DISALLOW_COPY_AND_ASSIGN(FontFallbackIterator);
 };
 
 }  // namespace blink

@@ -42,7 +42,7 @@ import org.chromium.chrome.test.util.ChromeRestriction;
 import org.chromium.chrome.test.util.browser.signin.SigninTestUtil;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.signin.ChromeSigninController;
-import org.chromium.content.browser.test.util.TestTouchUtils;
+import org.chromium.content_public.browser.test.util.TestTouchUtils;
 
 /**
  * Test suite for sign in tests.
@@ -215,7 +215,7 @@ public class SigninTest {
     @Before
     public void setUp() throws Exception {
         // Mock out the account manager on the device.
-        SigninTestUtil.setUpAuthForTest(InstrumentationRegistry.getInstrumentation());
+        SigninTestUtil.setUpAuthForTest();
 
         mActivityTestRule.startMainActivityOnBlankPage();
         mContext = InstrumentationRegistry.getTargetContext();
@@ -264,7 +264,7 @@ public class SigninTest {
             mSigninManager.removeSignInStateObserver(mTestSignInObserver);
 
             if (ChromeSigninController.get().isSignedIn()) {
-                mSigninManager.signOut(null, null);
+                mSigninManager.signOut(SignoutReason.SIGNOUT_TEST);
             }
 
             mBookmarks.destroy();
@@ -340,11 +340,7 @@ public class SigninTest {
         // Sync doesn't actually start up until we finish the sync setup. This usually happens
         // in the resume of the Main activity, but we forcefully do this here.
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
-        ThreadUtils.runOnUiThreadBlocking(() -> {
-            ProfileSyncService syncService = ProfileSyncService.get();
-            syncService.setFirstSetupComplete();
-            syncService.setSetupInProgress(false);
-        });
+        ThreadUtils.runOnUiThreadBlocking(() -> ProfileSyncService.get().setFirstSetupComplete());
         prefActivity.finish();
 
         // Verify that signin succeeded.

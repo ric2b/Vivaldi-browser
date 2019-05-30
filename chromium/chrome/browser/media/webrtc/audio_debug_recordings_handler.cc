@@ -15,6 +15,7 @@
 #include "base/time/time.h"
 #include "components/webrtc_logging/browser/text_log_list.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/service_manager_connection.h"
@@ -36,7 +37,7 @@ base::FilePath GetAudioDebugRecordingsPrefixPath(
     uint64_t audio_debug_recordings_id) {
   static const char kAudioDebugRecordingsFilePrefix[] = "AudioDebugRecordings.";
   return directory.AppendASCII(kAudioDebugRecordingsFilePrefix +
-                               base::Int64ToString(audio_debug_recordings_id));
+                               base::NumberToString(audio_debug_recordings_id));
 }
 
 base::FilePath GetLogDirectoryAndEnsureExists(
@@ -121,8 +122,8 @@ void AudioDebugRecordingsHandler::DoStartAudioDebugRecordings(
   }
 
   const bool is_manual_stop = false;
-  BrowserThread::PostDelayedTask(
-      BrowserThread::UI, FROM_HERE,
+  base::PostDelayedTaskWithTraits(
+      FROM_HERE, {BrowserThread::UI},
       base::BindOnce(&AudioDebugRecordingsHandler::DoStopAudioDebugRecordings,
                      this, host, is_manual_stop,
                      current_audio_debug_recordings_id_, callback,

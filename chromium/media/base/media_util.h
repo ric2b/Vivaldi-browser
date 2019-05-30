@@ -8,8 +8,10 @@
 #include <stdint.h>
 #include <vector>
 
+#include "base/macros.h"
 #include "media/base/encryption_scheme.h"
 #include "media/base/media_export.h"
+#include "media/base/media_log.h"
 
 namespace media {
 
@@ -21,6 +23,22 @@ MEDIA_EXPORT std::vector<uint8_t> EmptyExtraData();
 // indicate widely used settings.
 MEDIA_EXPORT EncryptionScheme Unencrypted();
 MEDIA_EXPORT EncryptionScheme AesCtrEncryptionScheme();
+
+// Helpers for PPAPI UMAs. There wasn't an obvious place to put them in
+// //content/renderer/pepper.
+MEDIA_EXPORT void ReportPepperVideoDecoderOutputPictureCountHW(int height);
+MEDIA_EXPORT void ReportPepperVideoDecoderOutputPictureCountSW(int height);
+
+class MEDIA_EXPORT NullMediaLog : public media::MediaLog {
+ public:
+  NullMediaLog() = default;
+  ~NullMediaLog() override = default;
+
+  void AddEventLocked(std::unique_ptr<media::MediaLogEvent> event) override {}
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(NullMediaLog);
+};
 
 }  // namespace media
 

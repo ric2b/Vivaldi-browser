@@ -68,7 +68,7 @@
 
 namespace blink {
 
-using namespace HTMLNames;
+using namespace html_names;
 
 static const unsigned kMaximumHTMLParserDOMTreeDepth = 512;
 
@@ -85,11 +85,11 @@ static inline void SetAttributes(Element* element,
 }
 
 static bool HasImpliedEndTag(const HTMLStackItem* item) {
-  return item->HasTagName(ddTag) || item->HasTagName(dtTag) ||
-         item->HasTagName(liTag) || item->HasTagName(optionTag) ||
-         item->HasTagName(optgroupTag) || item->HasTagName(pTag) ||
-         item->HasTagName(rbTag) || item->HasTagName(rpTag) ||
-         item->HasTagName(rtTag) || item->HasTagName(rtcTag);
+  return item->HasTagName(kDdTag) || item->HasTagName(kDtTag) ||
+         item->HasTagName(kLiTag) || item->HasTagName(kOptionTag) ||
+         item->HasTagName(kOptgroupTag) || item->HasTagName(kPTag) ||
+         item->HasTagName(kRbTag) || item->HasTagName(kRpTag) ||
+         item->HasTagName(kRtTag) || item->HasTagName(kRTCTag);
 }
 
 static bool ShouldUseLengthLimit(const ContainerNode& node) {
@@ -110,7 +110,7 @@ static inline void Insert(HTMLConstructionSiteTask& task) {
   if (auto* template_element = ToHTMLTemplateElementOrNull(*task.parent))
     task.parent = template_element->content();
 
-  // https://html.spec.whatwg.org/#insert-a-foreign-element
+  // https://html.spec.whatwg.org/C/#insert-a-foreign-element
   // 3.1, (3) Push (pop) an element queue
   CEReactionsScope reactions;
   if (task.next_child)
@@ -385,7 +385,7 @@ HTMLConstructionSite::~HTMLConstructionSite() {
   DCHECK(pending_text_.IsEmpty());
 }
 
-void HTMLConstructionSite::Trace(blink::Visitor* visitor) {
+void HTMLConstructionSite::Trace(Visitor* visitor) {
   visitor->Trace(document_);
   visitor->Trace(attachment_root_);
   visitor->Trace(head_);
@@ -413,9 +413,9 @@ void HTMLConstructionSite::InsertHTMLHtmlStartTagBeforeHTML(
     AtomicHTMLToken* token) {
   DCHECK(document_);
   HTMLHtmlElement* element;
-  if (const auto* is_attribute = token->GetAttributeItem(HTMLNames::isAttr)) {
+  if (const auto* is_attribute = token->GetAttributeItem(html_names::kIsAttr)) {
     element = ToHTMLHtmlElement(document_->CreateElement(
-        HTMLNames::htmlTag, GetCreateElementFlags(), is_attribute->Value()));
+        html_names::kHTMLTag, GetCreateElementFlags(), is_attribute->Value()));
   } else {
     element = HTMLHtmlElement::Create(*document_);
   }
@@ -737,9 +737,9 @@ void HTMLConstructionSite::InsertScriptElement(AtomicHTMLToken* token) {
                           kAllowScriptingContentAndDoNotMarkAlreadyStarted)
       .SetAlreadyStarted(is_parsing_fragment_ && flags.IsCreatedByParser());
   HTMLScriptElement* element = nullptr;
-  if (const auto* is_attribute = token->GetAttributeItem(HTMLNames::isAttr)) {
+  if (const auto* is_attribute = token->GetAttributeItem(html_names::kIsAttr)) {
     element = ToHTMLScriptElement(OwnerDocumentForCurrentNode().CreateElement(
-        HTMLNames::scriptTag, flags, is_attribute->Value()));
+        html_names::kScriptTag, flags, is_attribute->Value()));
   } else {
     element = HTMLScriptElement::Create(OwnerDocumentForCurrentNode(), flags);
   }
@@ -842,11 +842,15 @@ inline Document& HTMLConstructionSite::OwnerDocumentForCurrentNode() {
 }
 
 // "look up a custom element definition" for a token
-// https://html.spec.whatwg.org/#look-up-a-custom-element-definition
+// https://html.spec.whatwg.org/C/#look-up-a-custom-element-definition
 CustomElementDefinition* HTMLConstructionSite::LookUpCustomElementDefinition(
     Document& document,
-    AtomicHTMLToken* token,
+    const QualifiedName& tag_name,
     const AtomicString& is) {
+  // "1. If namespace is not the HTML namespace, return null."
+  if (tag_name.NamespaceURI() != html_names::xhtmlNamespaceURI)
+    return nullptr;
+
   // "2. If document does not have a browsing context, return null."
   LocalDOMWindow* window = document.ExecutingWindow();
   if (!window)
@@ -858,7 +862,7 @@ CustomElementDefinition* HTMLConstructionSite::LookUpCustomElementDefinition(
   if (!registry)
     return nullptr;
 
-  const AtomicString& local_name = token->GetName();
+  const AtomicString& local_name = tag_name.LocalName();
   const AtomicString& name = !is.IsNull() ? is : local_name;
   CustomElementDescriptor descriptor(name, local_name);
 
@@ -867,7 +871,7 @@ CustomElementDefinition* HTMLConstructionSite::LookUpCustomElementDefinition(
 }
 
 // "create an element for a token"
-// https://html.spec.whatwg.org/multipage/syntax.html#create-an-element-for-the-token
+// https://html.spec.whatwg.org/C/#create-an-element-for-the-token
 Element* HTMLConstructionSite::CreateElement(
     AtomicHTMLToken* token,
     const AtomicString& namespace_uri) {
@@ -877,10 +881,10 @@ Element* HTMLConstructionSite::CreateElement(
   // "2. Let local name be the tag name of the token."
   QualifiedName tag_name(g_null_atom, token->GetName(), namespace_uri);
   // "3. Let is be the value of the "is" attribute in the given token ..." etc.
-  const Attribute* is_attribute = token->GetAttributeItem(HTMLNames::isAttr);
+  const Attribute* is_attribute = token->GetAttributeItem(html_names::kIsAttr);
   const AtomicString& is = is_attribute ? is_attribute->Value() : g_null_atom;
   // "4. Let definition be the result of looking up a custom element ..." etc.
-  auto* definition = LookUpCustomElementDefinition(document, token, is);
+  auto* definition = LookUpCustomElementDefinition(document, tag_name, is);
   // "5. If definition is non-null and the parser was not originally created
   // for the HTML fragment parsing algorithm, then let will execute script
   // be true."
@@ -1054,15 +1058,15 @@ bool HTMLConstructionSite::InQuirksMode() {
 
 // Adjusts |task| to match the "adjusted insertion location" determined by the
 // foster parenting algorithm, laid out as the substeps of step 2 of
-// https://html.spec.whatwg.org/#appropriate-place-for-inserting-a-node
+// https://html.spec.whatwg.org/C/#appropriate-place-for-inserting-a-node
 void HTMLConstructionSite::FindFosterSite(HTMLConstructionSiteTask& task) {
   // 2.1
   HTMLElementStack::ElementRecord* last_template =
-      open_elements_.Topmost(templateTag.LocalName());
+      open_elements_.Topmost(kTemplateTag.LocalName());
 
   // 2.2
   HTMLElementStack::ElementRecord* last_table =
-      open_elements_.Topmost(tableTag.LocalName());
+      open_elements_.Topmost(kTableTag.LocalName());
 
   // 2.3
   if (last_template && (!last_table || last_template->IsAbove(last_table))) {
@@ -1102,7 +1106,7 @@ void HTMLConstructionSite::FosterParent(Node* node) {
   QueueTask(task);
 }
 
-void HTMLConstructionSite::PendingText::Trace(blink::Visitor* visitor) {
+void HTMLConstructionSite::PendingText::Trace(Visitor* visitor) {
   visitor->Trace(parent);
   visitor->Trace(next_child);
 }

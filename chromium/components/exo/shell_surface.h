@@ -139,8 +139,9 @@ class ShellSurface : public ShellSurfaceBase,
   bool OnPreWidgetCommit() override;
   void OnPostWidgetCommit() override;
 
-  // Asks the client to configure its surface.
-  void Configure();
+  // Asks the client to configure its surface. Optionally, the user can override
+  // the behaviour to check for window dragging by setting ends_drag to true.
+  void Configure(bool ends_drag = false);
 
   void AttemptToStartDrag(int component);
 
@@ -158,7 +159,7 @@ class ShellSurface : public ShellSurfaceBase,
   gfx::Vector2d pending_origin_offset_accumulator_;
   int resize_component_ = HTCAPTION;  // HT constant (see ui/base/hit_test.h)
   int pending_resize_component_ = HTCAPTION;
-
+  ui::WindowShowState initial_show_state_ = ui::SHOW_STATE_NORMAL;
   bool ignore_window_bounds_changes_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(ShellSurface);

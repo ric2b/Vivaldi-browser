@@ -21,10 +21,11 @@ import org.chromium.base.test.util.MetricsUtils.HistogramDelta;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeSwitches;
-import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
-import org.chromium.chrome.browser.tabmodel.TabModel.TabSelectionType;
+import org.chromium.chrome.browser.tabmodel.TabLaunchType;
+import org.chromium.chrome.browser.tabmodel.TabSelectionType;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.net.test.EmbeddedTestServer;
 
@@ -69,10 +70,10 @@ public class TabUmaTest {
         final Tab tab = ThreadUtils.runOnUiThreadBlocking(new Callable<Tab>() {
             @Override
             public Tab call() {
-                Tab bgTab = Tab.createTabForLazyLoad(false,
-                        mActivityTestRule.getActivity().getWindowAndroid(),
-                        TabLaunchType.FROM_LONGPRESS_BACKGROUND, Tab.INVALID_TAB_ID,
-                        new LoadUrlParams(mTestUrl));
+                Tab bgTab = TabBuilder.createForLazyLoad(new LoadUrlParams(mTestUrl))
+                                    .setWindow(mActivityTestRule.getActivity().getWindowAndroid())
+                                    .setLaunchType(TabLaunchType.FROM_LONGPRESS_BACKGROUND)
+                                    .build();
                 bgTab.initialize(null, null, new TabDelegateFactory(), true, false);
                 return bgTab;
             }
@@ -124,9 +125,10 @@ public class TabUmaTest {
         final Tab liveBgTab = ThreadUtils.runOnUiThreadBlocking(new Callable<Tab>() {
             @Override
             public Tab call() {
-                Tab bgTab = Tab.createLiveTab(Tab.INVALID_TAB_ID, false,
-                        mActivityTestRule.getActivity().getWindowAndroid(),
-                        TabLaunchType.FROM_LONGPRESS_BACKGROUND, Tab.INVALID_TAB_ID, true);
+                Tab bgTab = TabBuilder.createLiveTab(true)
+                                    .setWindow(mActivityTestRule.getActivity().getWindowAndroid())
+                                    .setLaunchType(TabLaunchType.FROM_LONGPRESS_BACKGROUND)
+                                    .build();
                 bgTab.initialize(null, null, new TabDelegateFactory(), true, false);
                 bgTab.loadUrl(new LoadUrlParams(mTestUrl));
                 bgTab.show(TabSelectionType.FROM_USER);
@@ -141,13 +143,14 @@ public class TabUmaTest {
         final Tab killedBgTab = ThreadUtils.runOnUiThreadBlocking(new Callable<Tab>() {
             @Override
             public Tab call() {
-                Tab bgTab = Tab.createLiveTab(Tab.INVALID_TAB_ID, false,
-                        mActivityTestRule.getActivity().getWindowAndroid(),
-                        TabLaunchType.FROM_LONGPRESS_BACKGROUND, Tab.INVALID_TAB_ID, true);
+                Tab bgTab = TabBuilder.createLiveTab(true)
+                                    .setWindow(mActivityTestRule.getActivity().getWindowAndroid())
+                                    .setLaunchType(TabLaunchType.FROM_LONGPRESS_BACKGROUND)
+                                    .build();
                 bgTab.initialize(null, null, new TabDelegateFactory(), true, false);
                 bgTab.loadUrl(new LoadUrlParams(mTestUrl));
                 // Simulate the renderer being killed by the OS.
-                bgTab.simulateRendererKilledForTesting(false);
+                ChromeTabUtils.simulateRendererKilledForTesting(bgTab, false);
                 bgTab.show(TabSelectionType.FROM_USER);
                 return bgTab;
             }
@@ -160,10 +163,10 @@ public class TabUmaTest {
         final Tab frozenBgTab = ThreadUtils.runOnUiThreadBlocking(new Callable<Tab>() {
             @Override
             public Tab call() {
-                Tab bgTab = Tab.createTabForLazyLoad(false,
-                        mActivityTestRule.getActivity().getWindowAndroid(),
-                        TabLaunchType.FROM_LONGPRESS_BACKGROUND, Tab.INVALID_TAB_ID,
-                        new LoadUrlParams(mTestUrl));
+                Tab bgTab = TabBuilder.createForLazyLoad(new LoadUrlParams(mTestUrl))
+                                    .setWindow(mActivityTestRule.getActivity().getWindowAndroid())
+                                    .setLaunchType(TabLaunchType.FROM_LONGPRESS_BACKGROUND)
+                                    .build();
                 bgTab.initialize(null, null, new TabDelegateFactory(), true, false);
                 bgTab.show(TabSelectionType.FROM_USER);
                 return bgTab;

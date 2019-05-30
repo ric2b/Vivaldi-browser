@@ -1,8 +1,28 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ar">
+<translation id="1156623771253174079">{SECONDS, plural, =1 {1 minute ago} أخرى {# minutes ago}}</translation>
 <translation id="1368832886055348810">من اليسار لليمين</translation>
+<translation id="1591184457164800433">{MINUTES, plural, =1 {1 minute and } أخرى {# minutes and }}</translation>
+<translation id="1752946267035950200">{MINUTES, plural, =1 {1 minute} أخرى {# minutes}}</translation>
+<translation id="1830179671306812954">{HOURS, plural, =1 {1 hour and } أخرى {# hours and }}</translation>
 <translation id="1859234291848436338">اتجاه الكتابة</translation>
+<translation id="3291688615589870984">{DAYS, plural, =1 {1 day} أخرى {# days}}</translation>
+<translation id="3600566671520689681">{DAYS, plural, =1 {1 day left} أخرى {# days left}}</translation>
+<translation id="3618849550573277856">ابحث عن “<ph name="LOOKUP_STRING" />”</translation>
+<translation id="4968171027979920686">{SECONDS, plural, =1 {1 second} أخرى {# seconds}}</translation>
+<translation id="5754277640426581776">{MINUTES, plural, =1 {1 min} أخرى {# mins}}</translation>
+<translation id="5768079895599174203">{DAYS, plural, =1 {1 day and } أخرى {# days and }}</translation>
+<translation id="5906667377645263094">{SECONDS, plural, =1 {1 second left} أخرى {# seconds left}}</translation>
+<translation id="5943826764092288734">{HOURS, plural, =1 {1 hour} أخرى {# hours}}</translation>
+<translation id="6404817160109697034">{SECONDS ، جمع ، = 1 {1 ثانية مضت} آخر {# ثانية مضت}}</translation>
+<translation id="6483402905448010557">{SECONDS, plural, =1 {1 second ago} أخرى {# seconds ago}}</translation>
+<translation id="6863590663815976734">{HOURS, plural, =1 {1 hour left} أخرى {# hours left}}</translation>
 <translation id="6974053822202609517">من اليمين لليسار</translation>
+<translation id="7238427729722629793">{MINUTES, plural, =1 {1 min left} أخرى {# mins left}}</translation>
+<translation id="7365057348334984696">{MINUTES, plural, =1 {1 min ago} أخرى {# mins ago}}</translation>
+<translation id="7410957453383678442">{MINUTES, plural, =1 {1 minute left} أخرى {# minutes left}}</translation>
+<translation id="8131263257437993507">{SECONDS, plural, =1 {1 sec left} أخرى {# secs left}}</translation>
 <translation id="8798099450830957504">الافتراضي</translation>
+<translation id="9044832324875206639">{SECONDS, plural, =1 {1 sec} أخرى {# secs}}</translation>
 </translationbundle>

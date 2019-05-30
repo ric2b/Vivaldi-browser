@@ -14,7 +14,9 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.task.PostTask;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.chrome.browser.ChromeActivity;
@@ -27,10 +29,10 @@ import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
 import org.chromium.chrome.browser.preferences.privacy.BrowsingDataBridge;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.content_public.browser.UiThreadTaskTraits;
 
 import java.util.HashSet;
 import java.util.Set;
-import java.util.concurrent.Callable;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -48,7 +50,8 @@ public class OriginVerifierTest {
             (byte) 0x10, (byte) 0x20, (byte) 0x30, (byte) 0x01, (byte) 0x02};
     private static final String STRING_ARRAY = "AA:BB:CC:10:20:30:01:02";
 
-    private static final String PACKAGE_NAME = "org.chromium.chrome";
+    private static final String PACKAGE_NAME =
+            ContextUtils.getApplicationContext().getPackageName();
     private static final String SHA_256_FINGERPRINT_PUBLIC =
             "32:A2:FC:74:D7:31:10:58:59:E5:A8:5D:F1:6D:95:F1:02:D8:5B"
             + ":22:09:9B:80:64:C5:D8:91:5C:61:DA:D1:E0";
@@ -87,10 +90,10 @@ public class OriginVerifierTest {
         mHttpsOrigin = new Origin("https://www.example.com");
         mHttpOrigin = new Origin("http://www.android.com");
 
-        mHandleAllUrlsVerifier = new OriginVerifier(new TestOriginVerificationListener(),
-                PACKAGE_NAME, CustomTabsService.RELATION_HANDLE_ALL_URLS);
-        mUseAsOriginVerifier = new OriginVerifier(new TestOriginVerificationListener(),
-                PACKAGE_NAME, CustomTabsService.RELATION_USE_AS_ORIGIN);
+        mHandleAllUrlsVerifier =
+                new OriginVerifier(PACKAGE_NAME, CustomTabsService.RELATION_HANDLE_ALL_URLS);
+        mUseAsOriginVerifier =
+                new OriginVerifier(PACKAGE_NAME, CustomTabsService.RELATION_USE_AS_ORIGIN);
         mVerificationResultSemaphore = new Semaphore(0);
     }
 
@@ -105,12 +108,16 @@ public class OriginVerifierTest {
     @Test
     @SmallTest
     public void testOnlyHttpsAllowed() throws InterruptedException {
-        ThreadUtils.postOnUiThread(()
-                -> mHandleAllUrlsVerifier.start(new Origin(Uri.parse("LOL"))));
+        Origin origin = new Origin(Uri.parse("LOL"));
+        PostTask.postTask(UiThreadTaskTraits.DEFAULT,
+                () -> mHandleAllUrlsVerifier.start(new TestOriginVerificationListener(), origin));
         Assert.assertTrue(
                 mVerificationResultSemaphore.tryAcquire(TIMEOUT_MS, TimeUnit.MILLISECONDS));
         Assert.assertFalse(mLastVerified);
-        ThreadUtils.postOnUiThread(() -> mHandleAllUrlsVerifier.start(mHttpOrigin));
+        PostTask.postTask(UiThreadTaskTraits.DEFAULT,
+                ()
+                        -> mHandleAllUrlsVerifier.start(
+                                new TestOriginVerificationListener(), mHttpOrigin));
         Assert.assertTrue(
                 mVerificationResultSemaphore.tryAcquire(TIMEOUT_MS, TimeUnit.MILLISECONDS));
         Assert.assertFalse(mLastVerified);
@@ -119,28 +126,23 @@ public class OriginVerifierTest {
     @Test
     @SmallTest
     public void testMultipleRelationships() throws Exception {
-        ThreadUtils.postOnUiThread(
+        PostTask.postTask(UiThreadTaskTraits.DEFAULT,
                 ()
-                        -> OriginVerifier.addVerifiedOriginForPackage(PACKAGE_NAME,
-                        mHttpsOrigin, CustomTabsService.RELATION_USE_AS_ORIGIN));
-        ThreadUtils.postOnUiThread(() -> mUseAsOriginVerifier.start(mHttpsOrigin));
+                        -> OriginVerifier.addVerificationOverride(PACKAGE_NAME, mHttpsOrigin,
+                                CustomTabsService.RELATION_USE_AS_ORIGIN));
+        PostTask.postTask(UiThreadTaskTraits.DEFAULT,
+                ()
+                        -> mUseAsOriginVerifier.start(
+                                new TestOriginVerificationListener(), mHttpsOrigin));
         Assert.assertTrue(
                 mVerificationResultSemaphore.tryAcquire(TIMEOUT_MS, TimeUnit.MILLISECONDS));
         Assert.assertTrue(mLastVerified);
-        Assert.assertTrue(ThreadUtils.runOnUiThreadBlocking(new Callable<Boolean>() {
-            @Override
-            public Boolean call() throws Exception {
-                return OriginVerifier.isValidOrigin(PACKAGE_NAME, mHttpsOrigin,
-                        CustomTabsService.RELATION_USE_AS_ORIGIN);
-            }
-        }));
-        Assert.assertFalse(ThreadUtils.runOnUiThreadBlocking(new Callable<Boolean>() {
-            @Override
-            public Boolean call() throws Exception {
-                return OriginVerifier.isValidOrigin(PACKAGE_NAME, mHttpsOrigin,
-                        CustomTabsService.RELATION_HANDLE_ALL_URLS);
-            }
-        }));
+        Assert.assertTrue(ThreadUtils.runOnUiThreadBlocking(
+                () -> OriginVerifier.wasPreviouslyVerified(PACKAGE_NAME, mHttpsOrigin,
+                        CustomTabsService.RELATION_USE_AS_ORIGIN)));
+        Assert.assertFalse(ThreadUtils.runOnUiThreadBlocking(
+                () -> OriginVerifier.wasPreviouslyVerified(PACKAGE_NAME, mHttpsOrigin,
+                        CustomTabsService.RELATION_HANDLE_ALL_URLS)));
         Assert.assertEquals(mLastPackageName, PACKAGE_NAME);
         Assert.assertEquals(mLastOrigin, mHttpsOrigin);
     }

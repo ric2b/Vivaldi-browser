@@ -22,6 +22,7 @@ from pylib.utils import dexdump
 from pylib.utils import instrumentation_tracing
 from pylib.utils import proguard
 from pylib.utils import shared_preference_utils
+from pylib.utils import test_filter
 
 
 with host_paths.SysPath(host_paths.BUILD_COMMON_PATH):
@@ -62,8 +63,6 @@ _TEST_LIST_JUNIT4_RUNNERS = [
 _SKIP_PARAMETERIZATION = 'SkipCommandLineParameterization'
 _COMMANDLINE_PARAMETERIZATION = 'CommandLineParameter'
 _NATIVE_CRASH_RE = re.compile('(process|native) crash', re.IGNORECASE)
-_CMDLINE_NAME_SEGMENT_RE = re.compile(
-    r' with(?:out)? \{[^\}]*\}')
 _PICKLE_FORMAT_VERSION = 12
 
 
@@ -181,7 +180,7 @@ def GenerateTestResults(
   return results
 
 
-def FilterTests(tests, test_filter=None, annotations=None,
+def FilterTests(tests, filter_str=None, annotations=None,
                 excluded_annotations=None):
   """Filter a list of tests
 
@@ -189,7 +188,7 @@ def FilterTests(tests, test_filter=None, annotations=None,
     tests: a list of tests. e.g. [
            {'annotations": {}, 'class': 'com.example.TestA', 'method':'test1'},
            {'annotations": {}, 'class': 'com.example.TestB', 'method':'test2'}]
-    test_filter: googletest-style filter string.
+    filter_str: googletest-style filter string.
     annotations: a dict of wanted annotations for test methods.
     exclude_annotations: a dict of annotations to exclude.
 
@@ -197,7 +196,7 @@ def FilterTests(tests, test_filter=None, annotations=None,
     A list of filtered tests
   """
   def gtest_filter(t):
-    if not test_filter:
+    if not filter_str:
       return True
     # Allow fully-qualified name as well as an omitted package.
     unqualified_class_test = {
@@ -216,7 +215,7 @@ def FilterTests(tests, test_filter=None, annotations=None,
           GetTestNameWithoutParameterPostfix(unqualified_class_test, sep='.')
       ]
 
-    pattern_groups = test_filter.split('-')
+    pattern_groups = filter_str.split('-')
     if len(pattern_groups) > 1:
       negative_filter = pattern_groups[1]
       if unittest_util.FilterTestNames(names, negative_filter):
@@ -385,9 +384,9 @@ class MissingJUnit4RunnerException(test_exception.TestException):
 class UnmatchedFilterException(test_exception.TestException):
   """Raised when a user specifies a filter that doesn't match any tests."""
 
-  def __init__(self, test_filter):
+  def __init__(self, filter_str):
     super(UnmatchedFilterException, self).__init__(
-        'Test filter "%s" matched no tests.' % test_filter)
+        'Test filter "%s" matched no tests.' % filter_str)
 
 
 def GetTestName(test, sep='#'):
@@ -402,7 +401,11 @@ def GetTestName(test, sep='#'):
   Returns:
     The test name as a string.
   """
-  return '%s%s%s' % (test['class'], sep, test['method'])
+  test_name = '%s%s%s' % (test['class'], sep, test['method'])
+  assert ' *-:' not in test_name, (
+      'The test name must not contain any of the characters in " *-:". See '
+      'https://crbug.com/912199')
+  return test_name
 
 
 def GetTestNameWithoutParameterPostfix(
@@ -441,7 +444,13 @@ def GetUniqueTestName(test, sep='#'):
   """
   display_name = GetTestName(test, sep=sep)
   if test.get('flags', [None])[0]:
-    display_name = '%s with %s' % (display_name, ' '.join(test['flags']))
+    sanitized_flags = [x.replace('-', '_') for x in test['flags']]
+    display_name = '%s_with_%s' % (display_name, '_'.join(sanitized_flags))
+
+  assert ' *-:' not in display_name, (
+      'The test name must not contain any of the characters in " *-:". See '
+      'https://crbug.com/912199')
+
   return display_name
 
 
@@ -476,6 +485,7 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     self._initializeTestFilterAttributes(args)
 
     self._flags = None
+    self._use_apk_under_test_flags_file = False
     self._initializeFlagAttributes(args)
 
     self._driver_apk = None
@@ -502,6 +512,9 @@ class InstrumentationTestInstance(test_instance.TestInstance):
 
     self._replace_system_package = None
     self._initializeReplaceSystemPackageAttributes(args)
+
+    self._use_webview_provider = None
+    self._initializeUseWebviewProviderAttributes(args)
 
     self._external_shard_index = args.test_launcher_shard_index
     self._total_external_shards = args.test_launcher_total_shards
@@ -622,9 +635,7 @@ class InstrumentationTestInstance(test_instance.TestInstance):
       logging.warning('No data dependencies will be pushed.')
 
   def _initializeTestFilterAttributes(self, args):
-    if args.test_filter:
-      self._test_filter = _CMDLINE_NAME_SEGMENT_RE.sub(
-          '', args.test_filter.replace('#', '.'))
+    self._test_filter = test_filter.InitializeFilterFromArgs(args)
 
     def annotation_element(a):
       a = a.split('=', 1)
@@ -652,6 +663,7 @@ class InstrumentationTestInstance(test_instance.TestInstance):
           if a not in requested_annotations)
 
   def _initializeFlagAttributes(self, args):
+    self._use_apk_under_test_flags_file = args.use_apk_under_test_flags_file
     self._flags = ['--enable-test-intents']
     if args.command_line_flags:
       self._flags.extend(args.command_line_flags)
@@ -701,6 +713,12 @@ class InstrumentationTestInstance(test_instance.TestInstance):
         or not args.replace_system_package):
       return
     self._replace_system_package = args.replace_system_package
+
+  def _initializeUseWebviewProviderAttributes(self, args):
+    if (not hasattr(args, 'use_webview_provider')
+        or not args.use_webview_provider):
+      return
+    self._use_webview_provider = args.use_webview_provider
 
   @property
   def additional_apks(self):
@@ -763,6 +781,10 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     return self._replace_system_package
 
   @property
+  def use_webview_provider(self):
+    return self._use_webview_provider
+
+  @property
   def screenshot_dir(self):
     return self._screenshot_dir
 
@@ -807,12 +829,23 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     return self._total_external_shards
 
   @property
+  def use_apk_under_test_flags_file(self):
+    return self._use_apk_under_test_flags_file
+
+  @property
   def wait_for_java_debugger(self):
     return self._wait_for_java_debugger
 
   #override
   def TestType(self):
     return 'instrumentation'
+
+  #override
+  def GetPreferredAbis(self):
+    ret = self._test_apk.GetAbis()
+    if not ret and self._apk_under_test:
+      ret = self._apk_under_test.GetAbis()
+    return ret
 
   #override
   def SetUp(self):

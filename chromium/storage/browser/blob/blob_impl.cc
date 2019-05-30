@@ -4,9 +4,12 @@
 
 #include "storage/browser/blob/blob_impl.h"
 
+#include <limits>
 #include <memory>
 #include <utility>
+#include <vector>
 
+#include "base/bind.h"
 #include "net/base/io_buffer.h"
 #include "net/disk_cache/disk_cache.h"
 #include "storage/browser/blob/blob_data_handle.h"
@@ -19,13 +22,8 @@ namespace {
 
 class ReaderDelegate : public MojoBlobReader::Delegate {
  public:
-  ReaderDelegate(mojo::ScopedDataPipeProducerHandle handle,
-                 blink::mojom::BlobReaderClientPtr client)
-      : handle_(std::move(handle)), client_(std::move(client)) {}
-
-  mojo::ScopedDataPipeProducerHandle PassDataPipe() override {
-    return std::move(handle_);
-  }
+  ReaderDelegate(blink::mojom::BlobReaderClientPtr client)
+      : client_(std::move(client)) {}
 
   MojoBlobReader::Delegate::RequestSideData DidCalculateSize(
       uint64_t total_size,
@@ -41,7 +39,6 @@ class ReaderDelegate : public MojoBlobReader::Delegate {
   }
 
  private:
-  mojo::ScopedDataPipeProducerHandle handle_;
   blink::mojom::BlobReaderClientPtr client_;
 
   DISALLOW_COPY_AND_ASSIGN(ReaderDelegate);
@@ -50,13 +47,8 @@ class ReaderDelegate : public MojoBlobReader::Delegate {
 class DataPipeGetterReaderDelegate : public MojoBlobReader::Delegate {
  public:
   DataPipeGetterReaderDelegate(
-      mojo::ScopedDataPipeProducerHandle handle,
       network::mojom::DataPipeGetter::ReadCallback callback)
-      : handle_(std::move(handle)), callback_(std::move(callback)) {}
-
-  mojo::ScopedDataPipeProducerHandle PassDataPipe() override {
-    return std::move(handle_);
-  }
+      : callback_(std::move(callback)) {}
 
   MojoBlobReader::Delegate::RequestSideData DidCalculateSize(
       uint64_t total_size,
@@ -80,7 +72,6 @@ class DataPipeGetterReaderDelegate : public MojoBlobReader::Delegate {
   }
 
  private:
-  mojo::ScopedDataPipeProducerHandle handle_;
   network::mojom::DataPipeGetter::ReadCallback callback_;
 
   DISALLOW_COPY_AND_ASSIGN(DataPipeGetterReaderDelegate);
@@ -108,15 +99,18 @@ void BlobImpl::ReadRange(uint64_t offset,
                          mojo::ScopedDataPipeProducerHandle handle,
                          blink::mojom::BlobReaderClientPtr client) {
   MojoBlobReader::Create(
-      handle_.get(), net::HttpByteRange::Bounded(offset, offset + length - 1),
-      std::make_unique<ReaderDelegate>(std::move(handle), std::move(client)));
+      handle_.get(),
+      (length == std::numeric_limits<uint64_t>::max())
+          ? net::HttpByteRange::RightUnbounded(offset)
+          : net::HttpByteRange::Bounded(offset, offset + length - 1),
+      std::make_unique<ReaderDelegate>(std::move(client)), std::move(handle));
 }
 
 void BlobImpl::ReadAll(mojo::ScopedDataPipeProducerHandle handle,
                        blink::mojom::BlobReaderClientPtr client) {
-  MojoBlobReader::Create(
-      handle_.get(), net::HttpByteRange(),
-      std::make_unique<ReaderDelegate>(std::move(handle), std::move(client)));
+  MojoBlobReader::Create(handle_.get(), net::HttpByteRange(),
+                         std::make_unique<ReaderDelegate>(std::move(client)),
+                         std::move(handle));
 }
 
 void BlobImpl::ReadSideData(ReadSideDataCallback callback) {
@@ -146,6 +140,10 @@ void BlobImpl::ReadSideData(ReadSideDataCallback callback) {
         }
         int32_t body_size =
             entry->GetDataSize(item->disk_cache_side_stream_index());
+        if (body_size == 0) {
+          std::move(callback).Run(std::vector<uint8_t>());
+          return;
+        }
         auto io_buffer = base::MakeRefCounted<net::IOBufferWithSize>(body_size);
 
         auto io_callback = base::AdaptCallbackForRepeating(base::BindOnce(
@@ -178,11 +176,12 @@ void BlobImpl::Clone(network::mojom::DataPipeGetterRequest request) {
   data_pipe_getter_bindings_.AddBinding(this, std::move(request));
 }
 
-void BlobImpl::Read(mojo::ScopedDataPipeProducerHandle pipe,
+void BlobImpl::Read(mojo::ScopedDataPipeProducerHandle handle,
                     ReadCallback callback) {
-  MojoBlobReader::Create(handle_.get(), net::HttpByteRange(),
-                         std::make_unique<DataPipeGetterReaderDelegate>(
-                             std::move(pipe), std::move(callback)));
+  MojoBlobReader::Create(
+      handle_.get(), net::HttpByteRange(),
+      std::make_unique<DataPipeGetterReaderDelegate>(std::move(callback)),
+      std::move(handle));
 }
 
 void BlobImpl::FlushForTesting() {

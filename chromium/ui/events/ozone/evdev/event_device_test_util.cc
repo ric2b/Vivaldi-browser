@@ -7,7 +7,7 @@
 #include <stdint.h>
 
 #include "base/format_macros.h"
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -81,18 +81,18 @@ bool ParseBitfield(const std::string& bitfield,
 
 // Captured from HJC Game ZD - V gamepad.
 const DeviceAbsoluteAxis kHJCGamepadAbsAxes[] = {
-    {ABS_X, {128, 0, 255, 15, 0}}, {ABS_Y, {128, 0, 255, 15, 0}},
-    {ABS_Z, {128, 0, 255, 15, 0}}, {ABS_RZ, {128, 0, 255, 15, 0}},
-    {ABS_HAT0X, {0, -1, 1, 0, 0}}, {ABS_HAT0Y, {0, 1, 1, 0, 0}}};
-
+    {ABS_X, {0, 0, 255, 0, 15, 0}},   {ABS_Y, {0, 0, 255, 0, 15, 0}},
+    {ABS_Z, {0, 0, 255, 0, 15, 0}},   {ABS_RZ, {0, 0, 255, 0, 15, 0}},
+    {ABS_HAT0X, {0, -1, 1, 0, 0, 0}}, {ABS_HAT0Y, {0, -1, 1, 0, 0, 0}},
+};
 const DeviceCapabilities kHJCGamepad = {
     /* path */
-    "/devices/pci0000:00/0000:00:14.0/usb1/1-2/1-2.2/1-2.2:1.0/"
-    "input/input38/event11",
+    "/sys/devices/pci0000:00/0000:00:14.0/usb1/1-1/1-1:1.0/"
+    "0003:11C5:5506.0005/input/input11/event8",
     /* name */ "HJC Game ZD - V",
-    /* phys */ "usb-0000:00:14.0-2.2/input0",
+    /* phys */ "usb-0000:00:14.0-1/input0",
     /* uniq */ "",
-    /* bustype */ "0011",
+    /* bustype */ "0003",
     /* vendor */ "11c5",
     /* product */ "5506",
     /* version */ "0111",
@@ -106,28 +106,27 @@ const DeviceCapabilities kHJCGamepad = {
     /* led */ "0",
     /* ff */ "0",
     kHJCGamepadAbsAxes,
-    arraysize(kHJCGamepadAbsAxes),
+    base::size(kHJCGamepadAbsAxes),
 };
 
 // Captured from Xbox 360 gamepad.
 const DeviceAbsoluteAxis kXboxGamepadAbsAxes[] = {
-    {ABS_X, {0, -32768, 32767, 16, 128}},
-    {ABS_Y, {0, -32768, 32767, 16, 128}},
-    {ABS_Z, {0, 0, 255, 0, 0}},
-    {ABS_RX, {0, -32768, 32767, 16, 128}},
-    {ABS_RY, {0, -32768, 32767, 16, 128}},
-    {ABS_RZ, {0, 0, 255, 0, 0}},
-    {ABS_HAT0X, {0, -1, 1, 0, 0}},
-    {ABS_HAT0Y, {0, -1, 1, 0, 0}}};
-
+    {ABS_X, {0, -32768, 32767, 16, 128, 0}},
+    {ABS_Y, {0, -32768, 32767, 16, 128, 0}},
+    {ABS_Z, {0, 0, 255, 0, 0, 0}},
+    {ABS_RX, {0, -32768, 32767, 16, 128, 0}},
+    {ABS_RY, {0, -32768, 32767, 16, 128, 0}},
+    {ABS_RZ, {0, 0, 255, 0, 0, 0}},
+    {ABS_HAT0X, {0, -1, 1, 0, 0, 0}},
+    {ABS_HAT0Y, {0, -1, 1, 0, 0, 0}},
+};
 const DeviceCapabilities kXboxGamepad = {
     /* path */
-    "/devices/pci0000:00/0000:00:14.0/usb1/1-2/1-2.2/1-2.2:1.0/"
-    "input/input38/event11",
+    "/sys/devices/pci0000:00/0000:00:14.0/usb1/1-1/1-1:1.0/input/input9/event8",
     /* name */ "Microsoft X-Box 360 pad",
-    /* phys */ "usb-0000:00:14.0-2.2/input0",
+    /* phys */ "usb-0000:00:14.0-1/input0",
     /* uniq */ "",
-    /* bustype */ "0011",
+    /* bustype */ "0003",
     /* vendor */ "045e",
     /* product */ "028e",
     /* version */ "0114",
@@ -139,24 +138,24 @@ const DeviceCapabilities kXboxGamepad = {
     /* msc */ "0",
     /* sw */ "0",
     /* led */ "0",
-    /* ff */ "0",
+    /* ff */ "107030000 0",
     kXboxGamepadAbsAxes,
-    arraysize(kXboxGamepadAbsAxes),
+    base::size(kXboxGamepadAbsAxes),
 };
 
 // Captured from iBuffalo gamepad.
 const DeviceAbsoluteAxis kiBuffaloGamepadAbsAxes[] = {
-    {ABS_X, {128, 0, 255, 0, 15}},
-    {ABS_Y, {128, 0, 255, 0, 15}}};
-
+    {ABS_X, {0, 0, 255, 0, 15, 0}},
+    {ABS_Y, {0, 0, 255, 0, 15, 0}},
+};
 const DeviceCapabilities kiBuffaloGamepad = {
     /* path */
-    "/devices/pci0000:00/0000:00:14.0/usb3/3-14/3-14:1.0/0003:0583:2060.0011/"
-    "input/input30/event14",
-    /* name */ "USB,2-axis 8-button gamepad",
-    /* phys */ "usb-0000:00:14.0-14/input0",
+    "/sys/devices/pci0000:00/0000:00:14.0/usb1/1-1/"
+    "1-1:1.0/0003:0583:2060.0004/input/input10/event8",
+    /* name */ "USB,2-axis 8-button gamepad  ",
+    /* phys */ "usb-0000:00:14.0-1/input0",
     /* uniq */ "",
-    /* bustype */ "0011",
+    /* bustype */ "0003",
     /* vendor */ "0583",
     /* product */ "2060",
     /* version */ "0110",
@@ -170,13 +169,13 @@ const DeviceCapabilities kiBuffaloGamepad = {
     /* led */ "0",
     /* ff */ "0",
     kiBuffaloGamepadAbsAxes,
-    arraysize(kiBuffaloGamepadAbsAxes),
+    base::size(kiBuffaloGamepadAbsAxes),
 };
 
 // Captured from Pixelbook.
 const DeviceAbsoluteAxis kEveTouchScreenAbsAxes[] = {
-    {ABS_X, {4624, 0, 10368, 0, 0, 40}},
-    {ABS_Y, {2177, 0, 6912, 0, 0, 40}},
+    {ABS_X, {0, 0, 10368, 0, 0, 40}},
+    {ABS_Y, {0, 0, 6912, 0, 0, 40}},
     {ABS_PRESSURE, {0, 0, 255, 0, 0, 0}},
     {ABS_MT_SLOT, {0, 0, 9, 0, 0, 0}},
     {ABS_MT_TOUCH_MAJOR, {0, 0, 255, 0, 0, 1}},
@@ -184,9 +183,10 @@ const DeviceAbsoluteAxis kEveTouchScreenAbsAxes[] = {
     {ABS_MT_ORIENTATION, {0, 0, 1, 0, 0, 0}},
     {ABS_MT_POSITION_X, {0, 0, 10368, 0, 0, 40}},
     {ABS_MT_POSITION_Y, {0, 0, 6912, 0, 0, 40}},
-    {ABS_MT_TOOL_TYPE, {0, 0, 2, 0, 0}},
-    {ABS_MT_PRESSURE, {0, 0, 255, 0, 0, 0}}};
-
+    {ABS_MT_TOOL_TYPE, {0, 0, 2, 0, 0, 0}},
+    {ABS_MT_TRACKING_ID, {0, 0, 65535, 0, 0, 0}},
+    {ABS_MT_PRESSURE, {0, 0, 255, 0, 0, 0}},
+};
 const DeviceCapabilities kEveTouchScreen = {
     /* path */
     "/sys/devices/pci0000:00/0000:00:15.0/i2c_designware.0/i2c-6/"
@@ -208,7 +208,7 @@ const DeviceCapabilities kEveTouchScreen = {
     /* led */ "0",
     /* ff */ "0",
     kEveTouchScreenAbsAxes,
-    arraysize(kEveTouchScreenAbsAxes),
+    base::size(kEveTouchScreenAbsAxes),
 };
 
 // Captured from Chromebook Pixel.
@@ -246,8 +246,9 @@ const DeviceAbsoluteAxis kLinkTouchscreenAbsAxes[] = {
     {ABS_MT_PRESSURE, {0, 0, 255, 0, 0, 0}},
 };
 const DeviceCapabilities kLinkTouchscreen = {
-    /* path */ "/sys/devices/pci0000:00/0000:00:02.0/i2c-2/2-004a/"
-               "input/input7/event7",
+    /* path */
+    "/sys/devices/pci0000:00/0000:00:02.0/i2c-2/2-004a/"
+    "input/input7/event7",
     /* name */ "Atmel maXTouch Touchscreen",
     /* phys */ "i2c-2-004a/input0",
     /* uniq */ "",
@@ -265,7 +266,7 @@ const DeviceCapabilities kLinkTouchscreen = {
     /* led */ "0",
     /* ff */ "0",
     kLinkTouchscreenAbsAxes,
-    arraysize(kLinkTouchscreenAbsAxes),
+    base::size(kLinkTouchscreenAbsAxes),
 };
 
 // Fake Atmel touchscreen based on real device from Chromebook Pixel,
@@ -304,7 +305,7 @@ const DeviceCapabilities kLinkWithToolTypeTouchscreen = {
     /* led */ "0",
     /* ff */ "0",
     kLinkWithToolTypeTouchscreenAbsAxes,
-    arraysize(kLinkWithToolTypeTouchscreenAbsAxes),
+    base::size(kLinkWithToolTypeTouchscreenAbsAxes),
 };
 
 // Captured from Chromebook Pixel.
@@ -321,8 +322,9 @@ const DeviceAbsoluteAxis kLinkTouchpadAbsAxes[] = {
     {ABS_MT_PRESSURE, {0, 0, 255, 0, 0, 0}},
 };
 const DeviceCapabilities kLinkTouchpad = {
-    /* path */ "/sys/devices/pci0000:00/0000:00:02.0/i2c-1/1-004b/"
-               "input/input8/event8",
+    /* path */
+    "/sys/devices/pci0000:00/0000:00:02.0/i2c-1/1-004b/"
+    "input/input8/event8",
     /* name */ "Atmel maXTouch Touchpad",
     /* phys */ "i2c-1-004b/input0",
     /* uniq */ "",
@@ -340,7 +342,7 @@ const DeviceCapabilities kLinkTouchpad = {
     /* led */ "0",
     /* ff */ "0",
     kLinkTouchpadAbsAxes,
-    arraysize(kLinkTouchpadAbsAxes),
+    base::size(kLinkTouchpadAbsAxes),
 };
 
 // Captured from generic HP KU-1156 USB keyboard.
@@ -371,8 +373,9 @@ const DeviceAbsoluteAxis kHpUsbKeyboard_ExtraAbsAxes[] = {
     {ABS_VOLUME, {0, 0, 767, 0, 0, 0}},
 };
 const DeviceCapabilities kHpUsbKeyboard_Extra = {
-    /* path */ "/sys/devices/pci0000:00/0000:00:1d.0/usb2/2-1/2-1.3/2-1.3:1.1/"
-               "input/input18/event16",
+    /* path */
+    "/sys/devices/pci0000:00/0000:00:1d.0/usb2/2-1/2-1.3/2-1.3:1.1/"
+    "input/input18/event16",
     /* name */ "Chicony HP Elite USB Keyboard",
     /* phys */ "usb-0000:00:1d.0-1.3/input1",
     /* uniq */ "",
@@ -382,8 +385,9 @@ const DeviceCapabilities kHpUsbKeyboard_Extra = {
     /* version */ "0110",
     /* prop */ "0",
     /* ev */ "1f",
-    /* key */ "3007f 0 0 483ffff17aff32d bf54444600000000 1 120f938b17c000 "
-              "677bfad941dfed 9ed68000004400 10000002",
+    /* key */
+    "3007f 0 0 483ffff17aff32d bf54444600000000 1 120f938b17c000 "
+    "677bfad941dfed 9ed68000004400 10000002",
     /* rel */ "40",
     /* abs */ "100000000",
     /* msc */ "10",
@@ -391,7 +395,7 @@ const DeviceCapabilities kHpUsbKeyboard_Extra = {
     /* led */ "0",
     /* ff */ "0",
     kHpUsbKeyboard_ExtraAbsAxes,
-    arraysize(kHpUsbKeyboard_ExtraAbsAxes),
+    base::size(kHpUsbKeyboard_ExtraAbsAxes),
 };
 
 // Captured from Dell MS111-L 3-Button Optical USB Mouse.
@@ -422,8 +426,9 @@ const DeviceAbsoluteAxis kMimoTouch2TouchscreenAbsAxes[] = {
     {ABS_Y, {0, 0, 2047, 0, 0, 0}},
 };
 const DeviceCapabilities kMimoTouch2Touchscreen = {
-    /* path */ "/sys/devices/pci0000:00/0000:00:1d.0/usb2/2-1/2-1.3/2-1.3.2/"
-               "2-1.3.2:1.0/input/input15/event14",
+    /* path */
+    "/sys/devices/pci0000:00/0000:00:1d.0/usb2/2-1/2-1.3/2-1.3.2/"
+    "2-1.3.2:1.0/input/input15/event14",
     /* name */ "eGalax Inc. USB TouchController",
     /* phys */ "usb-0000:00:1d.0-1.3.2/input0",
     /* uniq */ "",
@@ -441,7 +446,7 @@ const DeviceCapabilities kMimoTouch2Touchscreen = {
     /* led */ "0",
     /* ff */ "0",
     kMimoTouch2TouchscreenAbsAxes,
-    arraysize(kMimoTouch2TouchscreenAbsAxes),
+    base::size(kMimoTouch2TouchscreenAbsAxes),
 };
 
 // Captured from Wacom Intuos Pen and Touch Small Tablet.
@@ -452,8 +457,9 @@ const DeviceAbsoluteAxis kWacomIntuosPtS_PenAbsAxes[] = {
     {ABS_DISTANCE, {0, 0, 31, 0, 0, 0}},
 };
 const DeviceCapabilities kWacomIntuosPtS_Pen = {
-    /* path */ "/sys/devices/pci0000:00/0000:00:1d.0/usb2/2-1/2-1.2/2-1.2.3/"
-               "2-1.2.3:1.0/input/input9/event9",
+    /* path */
+    "/sys/devices/pci0000:00/0000:00:1d.0/usb2/2-1/2-1.2/2-1.2.3/"
+    "2-1.2.3:1.0/input/input9/event9",
     /* name */ "Wacom Intuos PT S Pen",
     /* phys */ "",
     /* uniq */ "",
@@ -471,7 +477,7 @@ const DeviceCapabilities kWacomIntuosPtS_Pen = {
     /* led */ "0",
     /* ff */ "0",
     kWacomIntuosPtS_PenAbsAxes,
-    arraysize(kWacomIntuosPtS_PenAbsAxes),
+    base::size(kWacomIntuosPtS_PenAbsAxes),
 };
 
 // Captured from Wacom Intuos Pen and Touch Small Tablet.
@@ -486,8 +492,9 @@ const DeviceAbsoluteAxis kWacomIntuosPtS_FingerAbsAxes[] = {
     {ABS_MT_TRACKING_ID, {0, 0, 65535, 0, 0, 0}},
 };
 const DeviceCapabilities kWacomIntuosPtS_Finger = {
-    /* path */ "/sys/devices/pci0000:00/0000:00:1d.0/usb2/2-1/2-1.2/2-1.2.3/"
-               "2-1.2.3:1.1/input/input10/event10",
+    /* path */
+    "/sys/devices/pci0000:00/0000:00:1d.0/usb2/2-1/2-1.2/2-1.2.3/"
+    "2-1.2.3:1.1/input/input10/event10",
     /* name */ "Wacom Intuos PT S Finger",
     /* phys */ "",
     /* uniq */ "",
@@ -505,7 +512,7 @@ const DeviceCapabilities kWacomIntuosPtS_Finger = {
     /* led */ "0",
     /* ff */ "0",
     kWacomIntuosPtS_FingerAbsAxes,
-    arraysize(kWacomIntuosPtS_FingerAbsAxes),
+    base::size(kWacomIntuosPtS_FingerAbsAxes),
 };
 
 // Captured from Logitech Wireless Touch Keyboard K400.
@@ -513,8 +520,9 @@ const DeviceAbsoluteAxis kLogitechTouchKeyboardK400AbsAxes[] = {
     {ABS_VOLUME, {0, 1, 652, 0, 0, 0}},
 };
 const DeviceCapabilities kLogitechTouchKeyboardK400 = {
-    /* path */ "/sys/devices/pci0000:00/0000:00:1d.0/usb2/2-1/2-1.2/2-1.2.3/"
-               "2-1.2.3:1.2/0003:046D:C52B.0006/input/input19/event17",
+    /* path */
+    "/sys/devices/pci0000:00/0000:00:1d.0/usb2/2-1/2-1.2/2-1.2.3/"
+    "2-1.2.3:1.2/0003:046D:C52B.0006/input/input19/event17",
     /* name */ "Logitech Unifying Device. Wireless PID:4024",
     /* phys */ "usb-0000:00:1d.0-1.2.3:1",
     /* uniq */ "",
@@ -524,9 +532,10 @@ const DeviceCapabilities kLogitechTouchKeyboardK400 = {
     /* version */ "0111",
     /* prop */ "0",
     /* ev */ "12001f",
-    /* key */ "3007f 0 0 483ffff17aff32d bf54444600000000 ffff0001 "
-              "130f938b17c007 ffff7bfad9415fff febeffdfffefffff "
-              "fffffffffffffffe",
+    /* key */
+    "3007f 0 0 483ffff17aff32d bf54444600000000 ffff0001 "
+    "130f938b17c007 ffff7bfad9415fff febeffdfffefffff "
+    "fffffffffffffffe",
     /* rel */ "1c3",
     /* abs */ "100000000",
     /* msc */ "10",
@@ -534,7 +543,7 @@ const DeviceCapabilities kLogitechTouchKeyboardK400 = {
     /* led */ "1f",
     /* ff */ "0",
     kLogitechTouchKeyboardK400AbsAxes,
-    arraysize(kLogitechTouchKeyboardK400AbsAxes),
+    base::size(kLogitechTouchKeyboardK400AbsAxes),
 };
 
 // Captured from Elo TouchSystems 2700 touchscreen.
@@ -544,10 +553,12 @@ const DeviceAbsoluteAxis kElo_TouchSystems_2700AbsAxes[] = {
     {ABS_MISC, {0, 0, 256, 0, 0, 0}},
 };
 const DeviceCapabilities kElo_TouchSystems_2700 = {
-    /* path */ "/sys/devices/pci0000:00/0000:00:1d.0/usb2/2-1/2-1.3/2-1.3:1.0/"
-               "input/input9/event9",
-    /* name */ "Elo TouchSystems, Inc. Elo TouchSystems 2700 IntelliTouch(r) "
-               "USB Touchmonitor Interface",
+    /* path */
+    "/sys/devices/pci0000:00/0000:00:1d.0/usb2/2-1/2-1.3/2-1.3:1.0/"
+    "input/input9/event9",
+    /* name */
+    "Elo TouchSystems, Inc. Elo TouchSystems 2700 IntelliTouch(r) "
+    "USB Touchmonitor Interface",
     /* phys */ "usb-0000:00:1d.0-1.3/input0",
     /* uniq */ "20A01347",
     /* bustype */ "0003",
@@ -564,7 +575,7 @@ const DeviceCapabilities kElo_TouchSystems_2700 = {
     /* led */ "0",
     /* ff */ "0",
     kElo_TouchSystems_2700AbsAxes,
-    arraysize(kElo_TouchSystems_2700AbsAxes),
+    base::size(kElo_TouchSystems_2700AbsAxes),
 };
 
 // Captured from Intel reference design: "Wilson Beach".
@@ -574,27 +585,28 @@ const DeviceAbsoluteAxis kWilsonBeachActiveStylusAbsAxes[] = {
     {ABS_PRESSURE, {0, 0, 1024, 0, 0, 0}},
 };
 const DeviceCapabilities kWilsonBeachActiveStylus = {
-  /* path */ "/sys/devices/pci0000:00/INT3433:00/i2c-1/"
+    /* path */
+    "/sys/devices/pci0000:00/INT3433:00/i2c-1/"
     "i2c-NTRG0001:00/0018:1B96:0D03.0004/input/"
     "input11/event10",
-  /* name */ "NTRG0001:00 1B96:0D03 Pen",
-  /* phys */ "",
-  /* uniq */ "",
-  /* bustype */ "0018",
-  /* vendor */ "1b96",
-  /* product */ "0d03",
-  /* version */ "0100",
-  /* prop */ "0",
-  /* ev */ "1b",
-  /* key */ "c03 1 0 0 0 0",
-  /* rel */ "0",
-  /* abs */ "1000003",
-  /* msc */ "10",
-  /* sw */ "0",
-  /* led */ "0",
-  /* ff */ "0",
-  kWilsonBeachActiveStylusAbsAxes,
-  arraysize(kWilsonBeachActiveStylusAbsAxes),
+    /* name */ "NTRG0001:00 1B96:0D03 Pen",
+    /* phys */ "",
+    /* uniq */ "",
+    /* bustype */ "0018",
+    /* vendor */ "1b96",
+    /* product */ "0d03",
+    /* version */ "0100",
+    /* prop */ "0",
+    /* ev */ "1b",
+    /* key */ "c03 1 0 0 0 0",
+    /* rel */ "0",
+    /* abs */ "1000003",
+    /* msc */ "10",
+    /* sw */ "0",
+    /* led */ "0",
+    /* ff */ "0",
+    kWilsonBeachActiveStylusAbsAxes,
+    base::size(kWilsonBeachActiveStylusAbsAxes),
 };
 
 // Captured from Eve Chromebook
@@ -624,22 +636,139 @@ const DeviceCapabilities kEveStylus = {
     /* led */ "0",
     /* ff */ "0",
     kEveStylusAbsAxes,
-    arraysize(kEveStylusAbsAxes),
+    base::size(kEveStylusAbsAxes),
 };
 
-ui::InputDeviceType InputDeviceTypeFromBusType(int bustype) {
-  switch (bustype) {
-    case BUS_I8042:
-    case BUS_I2C:
-      return ui::InputDeviceType::INPUT_DEVICE_INTERNAL;
-    case BUS_USB:
-    case 0x1D:  // Used in kLogitechTouchKeyboardK400 but not listed in input.h.
-      return ui::InputDeviceType::INPUT_DEVICE_EXTERNAL;
-    default:
-      NOTREACHED() << "Unexpected bus type";
-      return ui::InputDeviceType::INPUT_DEVICE_UNKNOWN;
-  }
-}
+const DeviceCapabilities kHammerKeyboard = {
+    /* path */
+    "/sys/devices/pci0000:00/0000:00:14.0/usb1/1-7/1-7:1.0/0003:18D1:5030.0002/"
+    "input/input10/event9",
+    /* name */ "Google Inc. Hammer",
+    /* phys */ "usb-0000:00:14.0-7/input0",
+    /* uniq */ "410020000d57345436313920",
+    /* bustype */ "0003",
+    /* vendor */ "18d1",
+    /* product */ "5030",
+    /* version */ "0100",
+    /* prop */ "0",
+    /* ev */ "100013",
+    /* key */
+    "88 0 0 0 0 0 1000000000007 ff000000000007ff febeffdfffefffff "
+    "fffffffffffffffe",
+    /* rel */ "0",
+    /* abs */ "0",
+    /* msc */ "10",
+    /* sw */ "0",
+    /* led */ "0",
+    /* ff */ "0",
+};
+
+const DeviceAbsoluteAxis kHammerTouchpadAbsAxes[] = {
+    {ABS_X, {0, 0, 2160, 0, 0, 21}},
+    {ABS_Y, {0, 0, 1080, 0, 0, 14}},
+    {ABS_PRESSURE, {0, 0, 255, 0, 0, 0}},
+    {ABS_MT_SLOT, {0, 0, 9, 0, 0, 0}},
+    {ABS_MT_TOUCH_MAJOR, {0, 0, 255, 0, 0, 3}},
+    {ABS_MT_TOUCH_MINOR, {0, 0, 255, 0, 0, 3}},
+    {ABS_MT_ORIENTATION, {0, 0, 1, 0, 0, 0}},
+    {ABS_MT_POSITION_X, {0, 0, 2160, 0, 0, 21}},
+    {ABS_MT_POSITION_Y, {0, 0, 1080, 0, 0, 14}},
+    {ABS_MT_TRACKING_ID, {0, 0, 65535, 0, 0, 0}},
+    {ABS_MT_PRESSURE, {0, 0, 255, 0, 0, 0}},
+};
+const DeviceCapabilities kHammerTouchpad = {
+    /* path */
+    "/sys/devices/pci0000:00/0000:00:14.0/usb1/1-7/1-7:1.2/0003:18D1:5030.0003/"
+    "input/input11/event10",
+    /* name */ "Google Inc. Hammer Touchpad",
+    /* phys */ "usb-0000:00:14.0-7/input2",
+    /* uniq */ "410020000d57345436313920",
+    /* bustype */ "0003",
+    /* vendor */ "18d1",
+    /* product */ "5030",
+    /* version */ "0100",
+    /* prop */ "5",
+    /* ev */ "1b",
+    /* key */ "e520 10000 0 0 0 0",
+    /* rel */ "0",
+    /* abs */ "673800001000003",
+    /* msc */ "20",
+    /* sw */ "0",
+    /* led */ "0",
+    /* ff */ "0",
+    kHammerTouchpadAbsAxes,
+    base::size(kHammerTouchpadAbsAxes),
+};
+
+// Captured from Logitech Tap touch controller
+const DeviceAbsoluteAxis kIlitekTP_Mouse_AbsAxes[] = {
+    {ABS_X, {0, 0, 16384, 0, 0, 76}},
+    {ABS_Y, {0, 0, 9600, 0, 0, 71}},
+};
+const DeviceCapabilities kIlitekTP_Mouse = {
+    /* path */
+    "/sys/devices/pci0000:00/0000:00:14.0/usb1/1-2/1-2.1/1-2.1.1/1-2.1.1.4/"
+    "1-2.1.1.4.2/1-2.1.1.4.2:1.1/0003:222A:0001.0015/input/input19/event9",
+    /* name */ "ILITEK ILITEK-TP",
+    /* phys */ "usb-0000:00:14.0-2.1.1.4.2/input1",
+    /* uniq */ "",
+    /* bustype */ "0003",
+    /* vendor */ "222a",
+    /* product */ "0001",
+    /* version */ "0110",
+    /* prop */ "0",
+    /* ev */ "1b",
+    /* key */ "1f0000 0 0 0 0",
+    /* rel */ "0",
+    /* abs */ "3",
+    /* msc */ "10",
+    /* sw */ "0",
+    /* led */ "0",
+    /* ff */ "0",
+    kIlitekTP_Mouse_AbsAxes,
+    base::size(kIlitekTP_Mouse_AbsAxes),
+};
+const DeviceAbsoluteAxis kIlitekTPAbsAxes[] = {
+    {ABS_X, {0, 0, 16384, 0, 0, 76}},
+    {ABS_Y, {0, 0, 9600, 0, 0, 71}},
+    {ABS_MT_SLOT, {0, 0, 9, 0, 0, 0}},
+    {ABS_MT_POSITION_X, {0, 0, 16384, 0, 0, 76}},
+    {ABS_MT_POSITION_Y, {0, 0, 9600, 0, 0, 71}},
+    {ABS_MT_TRACKING_ID, {0, 0, 65535, 0, 0, 0}},
+};
+const DeviceCapabilities kIlitekTP = {
+    /* path */
+    "/sys/devices/pci0000:00/0000:00:14.0/usb1/1-2/1-2.1/1-2.1.1/1-2.1.1.4/"
+    "1-2.1.1.4.2/1-2.1.1.4.2:1.0/0003:222A:0001.0014/input/input18/event8",
+    /* name */ "ILITEK ILITEK-TP",
+    /* phys */ "usb-0000:00:14.0-2.1.1.4.2/input0",
+    /* uniq */ "",
+    /* bustype */ "0003",
+    /* vendor */ "222a",
+    /* product */ "0001",
+    /* version */ "0110",
+    /* prop */ "2",
+    /* ev */ "1b",
+    /* key */ "400 0 0 0 0 0",
+    /* rel */ "0",
+    /* abs */ "260800000000003",
+    /* msc */ "20",
+    /* sw */ "0",
+    /* led */ "0",
+    /* ff */ "0",
+    kIlitekTPAbsAxes,
+    base::size(kIlitekTPAbsAxes),
+};
+
+// NB: Please use the capture_device_capabilities.py script to add more
+// test data here. This will help ensure the data matches what the kernel
+// reports for a real device and is entered correctly.
+//
+// For Chrome OS, you can run the script by installing a test image and running:
+//   DEVICE_IP=<your device IP>
+//   cd ui/events/ozone/evdev/
+//   scp capture_device_capabilities.py "root@${DEVICE_IP}:/tmp/"
+//   ssh "root@${DEVICE_IP}" /tmp/capture_device_capabilities.py
 
 bool CapabilitiesToDeviceInfo(const DeviceCapabilities& capabilities,
                               EventDeviceInfo* devinfo) {
@@ -695,17 +824,14 @@ bool CapabilitiesToDeviceInfo(const DeviceCapabilities& capabilities,
       devinfo->SetAbsMtSlots(code, zero_slots);
   }
 
-  int bustype = 0;
-  sscanf(capabilities.bustype, "%x", &bustype);
-  devinfo->SetDeviceType(InputDeviceTypeFromBusType(bustype));
+  input_id id = {};
+  sscanf(capabilities.vendor, "%" SCNx16, &id.vendor);
+  sscanf(capabilities.product, "%" SCNx16, &id.product);
+  sscanf(capabilities.bustype, "%" SCNx16, &id.bustype);
+  sscanf(capabilities.version, "%" SCNx16, &id.version);
+  devinfo->SetId(id);
+  devinfo->SetDeviceType(EventDeviceInfo::GetInputDeviceTypeFromId(id));
 
-  int vendor_id = 0;
-  int product_id = 0;
-
-  sscanf(capabilities.vendor, "%x", &vendor_id);
-  sscanf(capabilities.product, "%x", &product_id);
-  devinfo->SetId(static_cast<uint16_t>(vendor_id),
-                 static_cast<uint16_t>(product_id));
   return true;
 }
 

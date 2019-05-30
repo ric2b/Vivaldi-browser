@@ -250,7 +250,7 @@ void NavigationControllerAndroid::LoadUrl(
   if (j_referrer_url) {
     params.referrer = content::Referrer(
         GURL(ConvertJavaStringToUTF8(env, j_referrer_url)),
-        static_cast<blink::WebReferrerPolicy>(referrer_policy));
+        static_cast<network::mojom::ReferrerPolicy>(referrer_policy));
   }
 
   navigation_controller_->LoadURLWithParams(params);
@@ -298,16 +298,6 @@ void NavigationControllerAndroid::GetDirectedNavigationHistory(
         env, history, navigation_controller_->GetEntryAtIndex(i), i);
     num_added++;
   }
-}
-
-ScopedJavaLocalRef<jstring>
-NavigationControllerAndroid::GetOriginalUrlForVisibleNavigationEntry(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj) {
-  NavigationEntry* entry = navigation_controller_->GetVisibleEntry();
-  if (entry == NULL)
-    return ScopedJavaLocalRef<jstring>(env, NULL);
-  return ConvertUTF8ToJavaString(env, entry->GetOriginalRequestURL().spec());
 }
 
 void NavigationControllerAndroid::ClearSslPreferences(
@@ -389,42 +379,6 @@ jboolean NavigationControllerAndroid::RemoveEntryAtIndex(
   return navigation_controller_->RemoveEntryAtIndex(index);
 }
 
-jboolean NavigationControllerAndroid::CanCopyStateOver(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj) {
-  return navigation_controller_->GetEntryCount() == 0 &&
-      !navigation_controller_->GetPendingEntry();
-}
-
-jboolean NavigationControllerAndroid::CanPruneAllButLastCommitted(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj) {
-  return navigation_controller_->CanPruneAllButLastCommitted();
-}
-
-void NavigationControllerAndroid::CopyStateFrom(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj,
-    jlong source_navigation_controller_android,
-    jboolean needs_reload) {
-  navigation_controller_->CopyStateFrom(
-      *(reinterpret_cast<NavigationControllerAndroid*>(
-            source_navigation_controller_android)
-            ->navigation_controller_),
-      needs_reload);
-}
-
-void NavigationControllerAndroid::CopyStateFromAndPrune(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj,
-    jlong source_navigation_controller_android,
-    jboolean replace_entry) {
-  navigation_controller_->CopyStateFromAndPrune(
-      reinterpret_cast<NavigationControllerAndroid*>(
-          source_navigation_controller_android)->navigation_controller_,
-      replace_entry);
-}
-
 ScopedJavaLocalRef<jstring> NavigationControllerAndroid::GetEntryExtraData(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
@@ -451,6 +405,13 @@ void NavigationControllerAndroid::SetEntryExtraData(
   std::string key = base::android::ConvertJavaStringToUTF8(env, jkey);
   base::string16 value = base::android::ConvertJavaStringToUTF16(env, jvalue);
   navigation_controller_->GetEntryAtIndex(index)->SetExtraData(key, value);
+}
+
+jboolean NavigationControllerAndroid::IsEntryMarkedToBeSkipped(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj,
+    jint index) {
+  return navigation_controller_->IsEntryMarkedToBeSkipped(index);
 }
 
 }  // namespace content

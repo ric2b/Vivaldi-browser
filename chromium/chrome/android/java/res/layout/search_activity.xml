@@ -3,9 +3,9 @@
      Use of this source code is governed by a BSD-style license that can be
      found in the LICENSE file. -->
 
-<FrameLayout
+<android.support.design.widget.CoordinatorLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/control_container"
     android:layout_width="match_parent"
     android:layout_height="match_parent" >
@@ -14,6 +14,7 @@
             android:id="@+id/omnibox_results_container_stub"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            app:layout_anchor="@id/toolbar"
             android:background="@android:color/white"
             android:layout="@layout/omnibox_results_container" />
 
@@ -21,7 +22,9 @@
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="@dimen/toolbar_height_no_shadow"
-            android:background="@android:color/white"
+            android:background="@color/toolbar_background_primary"
+            android:paddingStart="@dimen/toolbar_edge_padding"
+            android:paddingEnd="@dimen/toolbar_edge_padding"
             android:clickable="true" >
 
         <org.chromium.chrome.browser.searchwidget.SearchActivityLocationBarLayout
@@ -31,8 +34,8 @@
                 android:layout_gravity="center_vertical"
                 android:layout_marginTop="@dimen/location_bar_vertical_margin"
                 android:layout_marginBottom="@dimen/location_bar_vertical_margin"
-                android:layout_marginStart="@dimen/modern_toolbar_background_focused_left_margin"
-                android:layout_marginEnd="@dimen/modern_toolbar_background_focused_left_margin" />
+                android:paddingStart="@dimen/location_bar_lateral_padding"
+                android:paddingEnd="@dimen/location_bar_lateral_padding" />
 
     </FrameLayout>
 
@@ -41,4 +44,4 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
 
-</FrameLayout>
+</android.support.design.widget.CoordinatorLayout>

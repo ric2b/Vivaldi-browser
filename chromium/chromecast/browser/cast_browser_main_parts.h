@@ -9,7 +9,6 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/metrics/field_trial.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
 #include "chromecast/chromecast_buildflags.h"
@@ -23,11 +22,6 @@
 
 class PrefService;
 
-namespace base {
-class SingleThreadTaskRunner;
-class Thread;
-}  // namespace base
-
 namespace extensions {
 class ExtensionsClient;
 class ExtensionsBrowserClient;
@@ -39,6 +33,7 @@ class NetLog;
 
 namespace chromecast {
 class CastMemoryPressureMonitor;
+class WaylandServerController;
 
 #if defined(USE_AURA)
 class CastWindowManagerAura;
@@ -49,12 +44,12 @@ class CastWindowManager;
 namespace media {
 class MediaCapsImpl;
 class MediaPipelineBackendManager;
-class MediaResourceTracker;
 class VideoPlaneController;
 }  // namespace media
 
 namespace shell {
 class CastBrowserProcess;
+class CastContentBrowserClient;
 class URLRequestContextFactory;
 
 class CastBrowserMainParts : public content::BrowserMainParts {
@@ -63,24 +58,22 @@ class CastBrowserMainParts : public content::BrowserMainParts {
   // link in an implementation as needed.
   static std::unique_ptr<CastBrowserMainParts> Create(
       const content::MainFunctionParams& parameters,
-      URLRequestContextFactory* url_request_context_factory);
+      URLRequestContextFactory* url_request_context_factory,
+      CastContentBrowserClient* cast_content_browser_client);
 
   // This class does not take ownership of |url_request_content_factory|.
   CastBrowserMainParts(const content::MainFunctionParams& parameters,
-                       URLRequestContextFactory* url_request_context_factory);
+                       URLRequestContextFactory* url_request_context_factory,
+                       CastContentBrowserClient* cast_content_browser_client);
   ~CastBrowserMainParts() override;
 
-  scoped_refptr<base::SingleThreadTaskRunner> GetMediaTaskRunner();
-
 #if BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
-  media::MediaResourceTracker* media_resource_tracker();
   media::MediaPipelineBackendManager* media_pipeline_backend_manager();
 #endif
   media::MediaCapsImpl* media_caps();
   content::BrowserContext* browser_context();
 
   // content::BrowserMainParts implementation:
-  bool ShouldContentCreateFeatureList() override;
   void PreMainMessageLoopStart() override;
   void PostMainMessageLoopStart() override;
   void ToolkitInitialized() override;
@@ -92,8 +85,9 @@ class CastBrowserMainParts : public content::BrowserMainParts {
 
  private:
   std::unique_ptr<CastBrowserProcess> cast_browser_process_;
-  base::FieldTrialList field_trial_list_;
   const content::MainFunctionParams parameters_;  // For running browser tests.
+  // Caches a pointer of the CastContentBrowserClient.
+  CastContentBrowserClient* const cast_content_browser_client_ = nullptr;
   URLRequestContextFactory* const url_request_context_factory_;
   std::unique_ptr<net::NetLog> net_log_;
   std::unique_ptr<media::VideoPlaneController> video_plane_controller_;
@@ -108,16 +102,11 @@ class CastBrowserMainParts : public content::BrowserMainParts {
 #if defined(OS_ANDROID)
   void StartPeriodicCrashReportUpload();
   void OnStartPeriodicCrashReportUpload();
+  scoped_refptr<base::SequencedTaskRunner> crash_reporter_runner_;
   std::unique_ptr<base::RepeatingTimer> crash_reporter_timer_;
 #endif
 
 #if BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
-  // CMA thread used by AudioManager, MojoRenderer, and MediaPipelineBackend.
-  std::unique_ptr<base::Thread> media_thread_;
-
-  // Tracks usage of media resource by e.g. CMA pipeline, CDM.
-  media::MediaResourceTracker* media_resource_tracker_;
-
   // Tracks all media pipeline backends.
   std::unique_ptr<media::MediaPipelineBackendManager>
       media_pipeline_backend_manager_;
@@ -131,6 +120,10 @@ class CastBrowserMainParts : public content::BrowserMainParts {
       extensions_browser_client_;
   std::unique_ptr<PrefService> local_state_;
   std::unique_ptr<PrefService> user_pref_service_;
+#endif
+
+#if BUILDFLAG(ENABLE_CAST_WAYLAND_SERVER)
+  std::unique_ptr<WaylandServerController> wayland_server_controller_;
 #endif
 
   DISALLOW_COPY_AND_ASSIGN(CastBrowserMainParts);

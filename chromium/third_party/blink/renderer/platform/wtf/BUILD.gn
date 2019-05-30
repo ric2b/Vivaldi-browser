@@ -16,20 +16,10 @@ visibility = [
 
 config("wtf_config") {
   if (is_win) {
-    defines = [
-      "__STD_C",
-      "_CRT_SECURE_NO_DEPRECATE",
-      "_SCL_SECURE_NO_DEPRECATE",
-    ]
-    include_dirs = [ "os-win32" ]
-
     cflags = [
       # Don't complain about calling specific versions of templatized
       # functions (e.g. in RefPtrHashMap.h).
       "/wd4344",
-
-      # dtoa, icu, etc. like doing assignment within conditional.
-      "/wd4706",
     ]
 
     if (is_component_build) {
@@ -44,8 +34,6 @@ config("wtf_config") {
 
 jumbo_component("wtf") {
   sources = [
-    "address_sanitizer.h",
-    "alignment.h",
     "allocator.cc",
     "allocator.h",
     "allocator/partition_allocator.cc",
@@ -56,10 +44,10 @@ jumbo_component("wtf") {
     "ascii_ctype.h",
     "assertions.cc",
     "assertions.h",
-    "atomics.h",
     "bit_vector.cc",
     "bit_vector.h",
     "bloom_filter.h",
+    "casting.h",
     "compiler.h",
     "conditional_destructor.h",
     "container_annotations.h",
@@ -111,11 +99,16 @@ jumbo_component("wtf") {
     "list_hash_set.h",
     "locker.h",
     "math_extras.h",
-    "noncopyable.h",
     "not_found.h",
+    "pod_arena.h",
+    "pod_free_list_arena.h",
+    "pod_interval.h",
+    "pod_interval_tree.h",
+    "pod_red_black_tree.h",
     "ref_counted.h",
     "ref_vector.h",
     "retain_ptr.h",
+    "sanitizers.h",
     "saturated_arithmetic.h",
     "saturated_arithmetic_arm.h",
     "scoped_logger.cc",
@@ -128,8 +121,6 @@ jumbo_component("wtf") {
     "std_lib_extras.h",
     "string_extras.h",
     "string_hasher.h",
-    "terminated_array.h",
-    "terminated_array_builder.h",
     "text/ascii_fast_path.h",
     "text/atomic_string.cc",
     "text/atomic_string.h",
@@ -145,6 +136,8 @@ jumbo_component("wtf") {
     "text/cstring.cc",
     "text/cstring.h",
     "text/integer_to_string_conversion.h",
+    "text/line_ending.cc",
+    "text/line_ending.h",
     "text/number_parsing_options.h",
     "text/parsing_utilities.h",
     "text/string_buffer.h",
@@ -160,7 +153,6 @@ jumbo_component("wtf") {
     "text/string_mac.mm",
     "text/string_operators.h",
     "text/string_statics.cc",
-    "text/string_statics.h",
     "text/string_statics.h",
     "text/string_to_number.cc",
     "text/string_to_number.h",
@@ -320,6 +312,13 @@ jumbo_source_set("wtf_unittests_sources") {
     "hash_set_test.cc",
     "list_hash_set_test.cc",
     "math_extras_test.cc",
+    "pod_arena_test.cc",
+    "pod_arena_test_helpers.h",
+    "pod_free_list_arena_test.cc",
+    "pod_interval_tree_test.cc",
+    "pod_red_black_tree_test.cc",
+    "pod_tree_test_helpers.cc",
+    "pod_tree_test_helpers.h",
     "saturated_arithmetic_test.cc",
     "scoped_logger_test.cc",
     "string_hasher_test.cc",
@@ -327,6 +326,7 @@ jumbo_source_set("wtf_unittests_sources") {
     "text/atomic_string_test.cc",
     "text/cstring_test.cc",
     "text/integer_to_string_conversion_test.cc",
+    "text/line_ending_test.cc",
     "text/string_buffer_test.cc",
     "text/string_builder_test.cc",
     "text/string_impl_test.cc",

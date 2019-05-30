@@ -10,11 +10,22 @@ from telemetry.util import screenshot
 from gpu_tests import exception_formatter
 from gpu_tests import gpu_test_expectations
 
+_START_BROWSER_RETRIES = 3
+
+# Please expand the following lists when we expand to new bot configs.
+_SUPPORTED_WIN_VERSIONS = ['win7', 'win10']
+_SUPPORTED_WIN_VERSIONS_WITH_DIRECT_COMPOSITION = ['win10']
+_SUPPORTED_WIN_GPU_VENDORS = [0x8086, 0x10de, 0x1002]
+_SUPPORTED_WIN_INTEL_GPUS = [0x5912]
+_SUPPORTED_WIN_INTEL_GPUS_WITH_YUY2_OVERLAYS = [0x5912]
+_SUPPORTED_WIN_INTEL_GPUS_WITH_NV12_OVERLAYS = [0x5912]
 
 class GpuIntegrationTest(
     serially_executed_browser_test_case.SeriallyExecutedBrowserTestCase):
 
   _cached_expectations = None
+  _also_run_disabled_tests = False
+  _disable_log_uploads = False
 
   # Several of the tests in this directory need to be able to relaunch
   # the browser on demand with a new set of command line arguments
@@ -38,6 +49,23 @@ class GpuIntegrationTest(
     cls._original_finder_options = cls._finder_options.Copy()
 
   @classmethod
+  def AddCommandlineArgs(cls, parser):
+    """Adds command line arguments understood by the test harness.
+
+    Subclasses overriding this method must invoke the superclass's
+    version!"""
+    parser.add_option(
+      '--also-run-disabled-tests',
+      dest='also_run_disabled_tests',
+      action='store_true', default=False,
+      help='Run disabled tests, ignoring Skip expectations')
+    parser.add_option(
+      '--disable-log-uploads',
+      dest='disable_log_uploads',
+      action='store_true', default=False,
+      help='Disables uploads of logs to cloud storage')
+
+  @classmethod
   def CustomizeBrowserArgs(cls, browser_args):
     """Customizes the browser's command line arguments.
 
@@ -48,19 +76,25 @@ class GpuIntegrationTest(
       browser_args = []
     cls._finder_options = cls._original_finder_options.Copy()
     browser_options = cls._finder_options.browser_options
+
+    # If requested, disable uploading of failure logs to cloud storage.
+    if cls._disable_log_uploads:
+      browser_options.logs_cloud_bucket = None
+
     # A non-sandboxed, 15-seconds-delayed gpu process is currently running in
     # the browser to collect gpu info. A command line switch is added here to
     # skip this gpu process for all gpu integration tests to prevent any
     # interference with the test results.
     browser_args.append(
       '--disable-gpu-process-for-dx12-vulkan-info-collection')
+
     # Append the new arguments.
     browser_options.AppendExtraBrowserArgs(browser_args)
     cls._last_launched_browser_args = set(browser_args)
     cls.SetBrowserOptions(cls._finder_options)
 
   @classmethod
-  def RestartBrowserIfNecessaryWithArgs(cls, browser_args):
+  def RestartBrowserIfNecessaryWithArgs(cls, browser_args, force_restart=False):
     if not browser_args:
       browser_args = []
     elif '--disable-gpu' in browser_args:
@@ -70,16 +104,22 @@ class GpuIntegrationTest(
       os_name = cls.browser.platform.GetOSName()
       if os_name == 'android' or os_name == 'chromeos':
         browser_args.remove('--disable-gpu')
-    if set(browser_args) != cls._last_launched_browser_args:
+    if force_restart or set(browser_args) != cls._last_launched_browser_args:
       logging.info('Restarting browser with arguments: ' + str(browser_args))
       cls.StopBrowser()
       cls.CustomizeBrowserArgs(browser_args)
       cls.StartBrowser()
 
+  @classmethod
+  def RestartBrowserWithArgs(cls, browser_args):
+    cls.RestartBrowserIfNecessaryWithArgs(browser_args, force_restart=True)
+
   # The following is the rest of the framework for the GPU integration tests.
 
   @classmethod
   def GenerateTestCases__RunGpuTest(cls, options):
+    cls._also_run_disabled_tests = options.also_run_disabled_tests
+    cls._disable_log_uploads = options.disable_log_uploads
     for test_name, url, args in cls.GenerateGpuTests(options):
       yield test_name, (url, test_name, args)
 
@@ -90,28 +130,31 @@ class GpuIntegrationTest(
     # to push the fetch of the first tab into the lower retry loop
     # without breaking Telemetry's unit tests, and that hook is used
     # to implement the gpu_integration_test_unittests.
-    for x in range(0, 3):
+    for x in range(1, _START_BROWSER_RETRIES+1):  # Index from 1 instead of 0.
       try:
         super(GpuIntegrationTest, cls).StartBrowser()
         cls.tab = cls.browser.tabs[0]
         return
       except Exception:
-        logging.warning('Browser start failed (attempt %d of 3)', (x + 1))
+        logging.exception('Browser start failed (attempt %d of %d). Backtrace:',
+                          x, _START_BROWSER_RETRIES)
         # If we are on the last try and there is an exception take a screenshot
         # to try and capture more about the browser failure and raise
-        if x == 2:
+        if x == _START_BROWSER_RETRIES:
           url = screenshot.TryCaptureScreenShotAndUploadToCloudStorage(
             cls.platform)
           if url is not None:
             logging.info("GpuIntegrationTest screenshot of browser failure " +
               "located at " + url)
           else:
-            logging.warning("GpuIntegrationTest unable to take screenshot")
-          raise
-        # Otherwise, stop the browser to make sure it's in an
+            logging.warning("GpuIntegrationTest unable to take screenshot.")
+        # Stop the browser to make sure it's in an
         # acceptable state to try restarting it.
         if cls.browser:
           cls.StopBrowser()
+    # Re-raise the last exception thrown. Only happens if all the retries
+    # fail.
+    raise
 
   @classmethod
   def _RestartBrowser(cls, reason):
@@ -125,9 +168,13 @@ class GpuIntegrationTest(
     expectation = expectations.GetExpectationForTest(
       self.browser, url, test_name)
     if expectation == 'skip':
-      # skipTest in Python's unittest harness raises an exception, so
-      # aborts the control flow here.
-      self.skipTest('SKIPPING TEST due to test expectations')
+      if self.__class__._also_run_disabled_tests:
+        # Ignore test expectations if the user has requested it.
+        expectation = 'pass'
+      else:
+        # skipTest in Python's unittest harness raises an exception, so
+        # aborts the control flow here.
+        self.skipTest('SKIPPING TEST due to test expectations')
     try:
       # TODO(nednguyen): For some reason the arguments are getting wrapped
       # in another tuple sometimes (like in the WebGL extension tests).
@@ -208,6 +255,50 @@ class GpuIntegrationTest(
     be resolved via UrlOfStaticFilePath.
     """
     raise NotImplementedError
+
+  def GetOverlayBotConfig(self):
+    """Returns expected bot config for DirectComposition and overlay support.
+
+    This is only meaningful on Windows platform.
+
+    The rules to determine bot config are:
+      1) Only win10 or newer supports DirectComposition
+      2) Only Intel supports hardware overlays with DirectComposition
+      3) Currently the Win/Intel GPU bot supports YUY2 and NV12 overlays
+    """
+    if self.browser is None:
+      raise Exception("Browser doesn't exist")
+    system_info = self.browser.GetSystemInfo()
+    if system_info is None:
+      raise Exception("Browser doesn't support GetSystemInfo")
+    gpu = system_info.gpu.devices[0]
+    if gpu is None:
+      raise Exception("System Info doesn't have a gpu")
+    gpu_vendor_id = gpu.vendor_id
+    gpu_device_id = gpu.device_id
+    os_version = self.browser.platform.GetOSVersionName()
+    if os_version is None:
+      raise Exception("browser.platform.GetOSVersionName() returns None")
+    os_version = os_version.lower()
+
+    config = {
+      'direct_composition': False,
+      'supports_overlays': False,
+      'overlay_cap_yuy2': 'NONE',
+      'overlay_cap_nv12': 'NONE',
+    }
+    assert os_version in _SUPPORTED_WIN_VERSIONS
+    assert gpu_vendor_id in _SUPPORTED_WIN_GPU_VENDORS
+    if os_version in _SUPPORTED_WIN_VERSIONS_WITH_DIRECT_COMPOSITION:
+      config['direct_composition'] = True
+      if gpu_vendor_id == 0x8086:
+        config['supports_overlays'] = True
+        assert gpu_device_id in _SUPPORTED_WIN_INTEL_GPUS
+        if gpu_device_id in _SUPPORTED_WIN_INTEL_GPUS_WITH_YUY2_OVERLAYS:
+          config['overlay_cap_yuy2'] = 'SCALING'
+        if gpu_device_id in _SUPPORTED_WIN_INTEL_GPUS_WITH_NV12_OVERLAYS:
+          config['overlay_cap_nv12'] = 'SCALING'
+    return config
 
   @classmethod
   def GetExpectations(cls):

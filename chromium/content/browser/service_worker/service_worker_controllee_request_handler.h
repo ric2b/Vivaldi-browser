@@ -19,10 +19,10 @@
 #include "content/browser/service_worker/service_worker_url_job_wrapper.h"
 #include "content/browser/service_worker/service_worker_url_request_job.h"
 #include "content/common/service_worker/service_worker_types.h"
-#include "content/public/common/request_context_type.h"
 #include "content/public/common/resource_type.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
 #include "services/network/public/mojom/request_context_frame_type.mojom.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom.h"
 #include "url/gurl.h"
 
 namespace net {
@@ -58,7 +58,7 @@ class CONTENT_EXPORT ServiceWorkerControlleeRequestHandler
       const std::string& integrity,
       bool keepalive,
       ResourceType resource_type,
-      RequestContextType request_context_type,
+      blink::mojom::RequestContextType request_context_type,
       network::mojom::RequestContextFrameType frame_type,
       scoped_refptr<network::ResourceRequestBody> body);
   ~ServiceWorkerControlleeRequestHandler() override;
@@ -97,7 +97,6 @@ class CONTENT_EXPORT ServiceWorkerControlleeRequestHandler
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerControlleeRequestHandlerTest,
                            ActivateWaitingVersion);
   class ScopedDisallowSetControllerRegistration;
-  class MainResourceRequestTracker;
 
   // For main resource case.
   void PrepareForMainResource(const GURL& url, const GURL& site_for_cookies);
@@ -136,15 +135,12 @@ class CONTENT_EXPORT ServiceWorkerControlleeRequestHandler
   bool RequestStillValid(
       ServiceWorkerMetrics::URLRequestJobResult* result) override;
   void MainResourceLoadFailed() override;
-  void ReportDestination(ServiceWorkerMetrics::MainResourceRequestDestination
-                             destination) override;
-  void WillDispatchFetchEventForMainResource() override;
 
   // Sets |job_| to nullptr, and clears all extra response info associated with
   // that job, except for timing information.
   void ClearJob();
 
-  bool JobWasCanceled() const;
+  bool IsJobAlive() const;
 
   // Schedules a service worker update to occur shortly after the page and its
   // initial subresources load, if this handler was for a navigation.
@@ -158,7 +154,7 @@ class CONTENT_EXPORT ServiceWorkerControlleeRequestHandler
   network::mojom::FetchRedirectMode redirect_mode_;
   std::string integrity_;
   const bool keepalive_;
-  RequestContextType request_context_type_;
+  blink::mojom::RequestContextType request_context_type_;
   network::mojom::RequestContextFrameType frame_type_;
   scoped_refptr<network::ResourceRequestBody> body_;
   ResourceContext* resource_context_;
@@ -169,8 +165,6 @@ class CONTENT_EXPORT ServiceWorkerControlleeRequestHandler
   // delivered from the network, bypassing the ServiceWorker. Cleared after the
   // next intercept opportunity, for main frame requests.
   bool use_network_;
-
-  std::unique_ptr<MainResourceRequestTracker> tracker_;
 
   base::WeakPtrFactory<ServiceWorkerControlleeRequestHandler> weak_factory_;
 

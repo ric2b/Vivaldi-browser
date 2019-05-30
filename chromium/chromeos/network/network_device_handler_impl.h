@@ -7,12 +7,13 @@
 
 #include <map>
 #include <string>
+#include <vector>
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/component_export.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "chromeos/chromeos_export.h"
 #include "chromeos/network/network_device_handler.h"
 #include "chromeos/network/network_handler.h"
 #include "chromeos/network/network_handler_callbacks.h"
@@ -22,7 +23,7 @@ namespace chromeos {
 
 class NetworkStateHandler;
 
-class CHROMEOS_EXPORT NetworkDeviceHandlerImpl
+class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkDeviceHandlerImpl
     : public NetworkDeviceHandler,
       public NetworkStateHandlerObserver {
  public:
@@ -103,8 +104,18 @@ class CHROMEOS_EXPORT NetworkDeviceHandlerImpl
       const base::Closure& callback,
       const network_handler::ErrorCallback& error_callback) override;
 
+  void AddWifiWakeOnPacketOfTypes(
+      const std::vector<std::string>& types,
+      const base::Closure& callback,
+      const network_handler::ErrorCallback& error_callback) override;
+
   void RemoveWifiWakeOnPacketConnection(
       const net::IPEndPoint& ip_endpoint,
+      const base::Closure& callback,
+      const network_handler::ErrorCallback& error_callback) override;
+
+  void RemoveWifiWakeOnPacketOfTypes(
+      const std::vector<std::string>& types,
       const base::Closure& callback,
       const network_handler::ErrorCallback& error_callback) override;
 

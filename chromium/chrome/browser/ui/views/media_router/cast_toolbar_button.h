@@ -70,6 +70,10 @@ class CastToolbarButton : public ToolbarButton,
  private:
   const gfx::VectorIcon& GetCurrentIcon() const;
 
+  MediaRouterActionController* GetActionController() const;
+
+  SkColor GetIconColor(const gfx::VectorIcon* icon_id) const;
+
   Browser* const browser_;
   Profile* const profile_;
 

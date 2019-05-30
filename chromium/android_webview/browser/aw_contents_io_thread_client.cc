@@ -14,9 +14,12 @@
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/android/jni_weak_ref.h"
+#include "base/bind.h"
 #include "base/containers/flat_set.h"
 #include "base/lazy_instance.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/synchronization/lock.h"
+#include "base/threading/scoped_blocking_call.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
@@ -28,6 +31,7 @@
 #include "jni/AwContentsIoThreadClient_jni.h"
 #include "net/base/data_url.h"
 #include "net/url_request/url_request.h"
+#include "services/network/public/cpp/resource_request.h"
 
 using base::android::AttachCurrentThread;
 using base::android::ConvertUTF8ToJavaString;
@@ -338,11 +342,47 @@ AwContentsIoThreadClient::CacheMode AwContentsIoThreadClient::GetCacheMode()
 }
 
 namespace {
+// Used to specify what kind of url was intercepted by the embedded
+// using shouldIntercepterRequest callback.
+// Note: these values are persisted in UMA logs, so they should never be
+// renumbered nor reused.
+enum class InterceptionType {
+  kNoIntercept,
+  kOther,
+  kHTTP,
+  kHTTPS,
+  kFILE,
+  kDATA,
+  // Magic constant used by the histogram macros.
+  kMaxValue = kDATA,
+};
+
+// Record UMA whether the request was intercepted and if so what kind of scheme.
+void RecordInterceptedType(bool response_is_null, const std::string& url) {
+  InterceptionType type = InterceptionType::kNoIntercept;
+  if (!response_is_null) {
+    GURL gurl(url);
+    if (gurl.SchemeIs(url::kHttpScheme)) {
+      type = InterceptionType::kHTTP;
+    } else if (gurl.SchemeIs(url::kHttpsScheme)) {
+      type = InterceptionType::kHTTPS;
+    } else if (gurl.SchemeIs(url::kFileScheme)) {
+      type = InterceptionType::kFILE;
+    } else if (gurl.SchemeIs(url::kDataScheme)) {
+      type = InterceptionType::kDATA;
+    } else {
+      type = InterceptionType::kOther;
+    }
+  }
+  UMA_HISTOGRAM_ENUMERATION(
+      "Android.WebView.ShouldInterceptRequest.InterceptionType", type);
+}
 
 std::unique_ptr<AwWebResourceResponse> RunShouldInterceptRequest(
-    const AwWebResourceRequest& request,
+    AwWebResourceRequest request,
     JavaObjectWeakGlobalRef ref) {
-  base::AssertBlockingAllowed();
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
 
   JNIEnv* env = AttachCurrentThread();
   base::android::ScopedJavaLocalRef<jobject> obj = ref.get(env);
@@ -360,6 +400,9 @@ std::unique_ptr<AwWebResourceResponse> RunShouldInterceptRequest(
           request.has_user_gesture, java_web_resource_request.jmethod,
           java_web_resource_request.jheader_names,
           java_web_resource_request.jheader_values);
+
+  RecordInterceptedType(ret.is_null(), request.url);
+
   return std::unique_ptr<AwWebResourceResponse>(
       ret.is_null() ? nullptr : new AwWebResourceResponse(ret));
 }
@@ -371,7 +414,7 @@ std::unique_ptr<AwWebResourceResponse> ReturnNull() {
 }  // namespace
 
 void AwContentsIoThreadClient::ShouldInterceptRequestAsync(
-    const net::URLRequest* request,
+    AwWebResourceRequest request,
     ShouldInterceptRequestResultCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   base::OnceCallback<std::unique_ptr<AwWebResourceResponse>()> get_response =
@@ -384,7 +427,7 @@ void AwContentsIoThreadClient::ShouldInterceptRequestAsync(
   }
   if (!bg_thread_client_object_.is_null()) {
     get_response = base::BindOnce(
-        &RunShouldInterceptRequest, AwWebResourceRequest(*request),
+        &RunShouldInterceptRequest, std::move(request),
         JavaObjectWeakGlobalRef(env, bg_thread_client_object_.obj()));
   }
   base::PostTaskAndReplyWithResult(sequenced_task_runner_.get(), FROM_HERE,

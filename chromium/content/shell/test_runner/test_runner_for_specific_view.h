@@ -13,6 +13,7 @@
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "content/shell/test_runner/test_runner_export.h"
 #include "v8/include/v8.h"
 
 class GURL;
@@ -24,6 +25,10 @@ class WebLocalFrame;
 class WebView;
 }
 
+namespace content {
+class RenderWidget;
+}  // namespace content
+
 namespace gin {
 class Arguments;
 }
@@ -31,17 +36,16 @@ class Arguments;
 namespace test_runner {
 
 class WebTestDelegate;
-class WebViewTestProxyBase;
+class WebViewTestProxy;
 
 // TestRunnerForSpecificView implements part of |testRunner| javascript bindings
 // that work with a view where the javascript call originated from.  Examples:
 // - testRunner.capturePixelsAsyncThen
 // - testRunner.setPageVisibility
 // Note that "global" bindings are handled by TestRunner class.
-class TestRunnerForSpecificView {
+class TEST_RUNNER_EXPORT TestRunnerForSpecificView {
  public:
-  explicit TestRunnerForSpecificView(
-      WebViewTestProxyBase* web_view_test_proxy_base);
+  explicit TestRunnerForSpecificView(WebViewTestProxy* web_view_test_proxy);
   ~TestRunnerForSpecificView();
 
   // Installs view-specific bindings (handled by |this|) and *also* global
@@ -72,12 +76,13 @@ class TestRunnerForSpecificView {
   base::OnceClosure CreateClosureThatPostsV8Callback(
       const v8::Local<v8::Function>& callback);
 
-  void LayoutAndPaintAsync();
-  void LayoutAndPaintAsyncThen(v8::Local<v8::Function> callback);
+  void UpdateAllLifecyclePhasesAndComposite();
+  void UpdateAllLifecyclePhasesAndCompositeThen(
+      v8::Local<v8::Function> callback);
 
-  // Similar to LayoutAndPaintAsyncThen(), but pass parameters of the captured
-  // snapshot (width, height, snapshot) to the callback. The snapshot is in
-  // uint8_t RGBA format.
+  // The callback will be called after the next full frame update and raster,
+  // with the captured snapshot as the parameters (width, height, snapshot).
+  // The snapshot is in uint8_t RGBA format.
   void CapturePixelsAsyncThen(v8::Local<v8::Function> callback);
   void CapturePixelsCallback(v8::UniquePersistent<v8::Function> callback,
                              const SkBitmap& snapshot);
@@ -103,7 +108,7 @@ class TestRunnerForSpecificView {
       v8::UniquePersistent<v8::Function> callback,
       const std::vector<std::string>& events);
 
-  // Change the bluetooth test data while running a layout test.
+  // Change the bluetooth test data while running a web test.
   void SetBluetoothFakeAdapter(const std::string& adapter_name,
                                v8::Local<v8::Function> callback);
 
@@ -127,7 +132,7 @@ class TestRunnerForSpecificView {
   // TODO(oshima): Remove this once all platforms migrated.
   void EnableUseZoomForDSF(v8::Local<v8::Function> callback);
 
-  // Change the device color profile while running a layout test.
+  // Change the device color profile while running a web test.
   void SetColorProfile(const std::string& name,
                        v8::Local<v8::Function> callback);
 
@@ -171,6 +176,8 @@ class TestRunnerForSpecificView {
   void AddWebPageOverlay();
   void RemoveWebPageOverlay();
 
+  void SetHighlightAds(bool);
+
   // Sets a flag causing the next call to WebGLRenderingContext::create to fail.
   void ForceNextWebGLContextCreationToFail();
 
@@ -196,31 +203,31 @@ class TestRunnerForSpecificView {
     PointerLockWillFailSync,
   } pointer_lock_planned_result_;
 
-  bool CallShouldCloseOnWebView();
   void SetDomainRelaxationForbiddenForURLScheme(bool forbidden,
                                                 const std::string& scheme);
   v8::Local<v8::Value> EvaluateScriptInIsolatedWorldAndReturnValue(
       int world_id,
       const std::string& script);
   void EvaluateScriptInIsolatedWorld(int world_id, const std::string& script);
-  void SetIsolatedWorldSecurityOrigin(int world_id,
-                                      v8::Local<v8::Value> origin);
-  void SetIsolatedWorldContentSecurityPolicy(int world_id,
-                                             const std::string& policy);
+  void SetIsolatedWorldInfo(int world_id,
+                            v8::Local<v8::Value> security_origin,
+                            v8::Local<v8::Value> content_security_policy);
   bool FindString(const std::string& search_text,
                   const std::vector<std::string>& options_array);
   std::string SelectionAsMarkup();
   void SetViewSourceForFrame(const std::string& name, bool enabled);
 
-  // Many parts of the layout test harness assume that the main frame is local.
+  // Many parts of the web test harness assume that the main frame is local.
   // Having all of them go through the helper below makes it easier to catch
   // scenarios that require breaking this assumption.
   blink::WebLocalFrame* GetLocalMainFrame();
 
-  // Helpers for accessing pointers exposed by |web_view_test_proxy_base_|.
+  // Helpers for accessing pointers exposed by |web_view_test_proxy_|.
+  content::RenderWidget* main_frame_render_widget();
   blink::WebView* web_view();
   WebTestDelegate* delegate();
-  WebViewTestProxyBase* web_view_test_proxy_base_;
+
+  WebViewTestProxy* web_view_test_proxy_;
 
   base::WeakPtrFactory<TestRunnerForSpecificView> weak_factory_;
 

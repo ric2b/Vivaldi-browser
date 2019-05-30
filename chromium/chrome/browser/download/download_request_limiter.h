@@ -232,9 +232,7 @@ class DownloadRequestLimiter
                        web_contents_getter,
                    const GURL& url,
                    const std::string& request_method,
-                   const Callback& callback,
-                   const content::DownloadInformation& info =
-                       content::DownloadInformation());
+                   const Callback& callback);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(DownloadTest, DownloadResourceThrottleCancels);

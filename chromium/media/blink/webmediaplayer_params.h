@@ -22,6 +22,7 @@
 #include "media/blink/media_blink_export.h"
 #include "media/filters/context_3d.h"
 #include "media/mojo/interfaces/media_metrics_provider.mojom.h"
+#include "third_party/blink/public/platform/web_media_player.h"
 #include "third_party/blink/public/platform/web_video_frame_submitter.h"
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
@@ -70,18 +71,6 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerParams {
   // not the WebMediaPlayer!
   typedef base::Callback<int64_t(int64_t)> AdjustAllocatedMemoryCB;
 
-  // Describes when we use SurfaceLayer for video instead of VideoLayer.
-  enum class SurfaceLayerMode {
-    // Always use VideoLayer
-    kNever,
-
-    // Use SurfaceLayer only when we switch to Picture-in-Picture.
-    kOnDemand,
-
-    // Always use SurfaceLayer for video.
-    kAlways,
-  };
-
   // |defer_load_cb|, |audio_renderer_sink|, |compositor_task_runner|, and
   // |context_3d_cb| may be null.
   WebMediaPlayerParams(
@@ -100,14 +89,15 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerParams {
       blink::WebContentDecryptionModule* initial_cdm,
       RequestRoutingTokenCallback request_routing_token_cb,
       base::WeakPtr<MediaObserver> media_observer,
-      base::TimeDelta max_keyframe_distance_to_disable_background_video,
-      base::TimeDelta max_keyframe_distance_to_disable_background_video_mse,
       bool enable_instant_source_buffer_gc,
       bool embedded_media_experience_enabled,
       mojom::MediaMetricsProviderPtr metrics_provider,
       CreateSurfaceLayerBridgeCB bridge_callback,
       scoped_refptr<viz::ContextProvider> context_provider,
-      SurfaceLayerMode use_surface_layer_for_video);
+      blink::WebMediaPlayer::SurfaceLayerMode use_surface_layer_for_video,
+      bool is_background_suspend_enabled,
+      bool is_background_video_play_enabled,
+      bool is_background_video_track_optimization_supported);
 
   ~WebMediaPlayerParams();
 
@@ -159,15 +149,6 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerParams {
     return media_observer_;
   }
 
-  base::TimeDelta max_keyframe_distance_to_disable_background_video() const {
-    return max_keyframe_distance_to_disable_background_video_;
-  }
-
-  base::TimeDelta max_keyframe_distance_to_disable_background_video_mse()
-      const {
-    return max_keyframe_distance_to_disable_background_video_mse_;
-  }
-
   bool enable_instant_source_buffer_gc() const {
     return enable_instant_source_buffer_gc_;
   }
@@ -188,8 +169,20 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerParams {
     return context_provider_;
   }
 
-  SurfaceLayerMode use_surface_layer_for_video() const {
+  blink::WebMediaPlayer::SurfaceLayerMode use_surface_layer_for_video() const {
     return use_surface_layer_for_video_;
+  }
+
+  bool IsBackgroundSuspendEnabled() const {
+    return is_background_suspend_enabled_;
+  }
+
+  bool IsBackgroundVideoPlaybackEnabled() const {
+    return is_background_video_playback_enabled_;
+  }
+
+  bool IsBackgroundVideoTrackOptimizationSupported() const {
+    return is_background_video_track_optimization_supported_;
   }
 
  private:
@@ -209,14 +202,20 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerParams {
   blink::WebContentDecryptionModule* initial_cdm_;
   RequestRoutingTokenCallback request_routing_token_cb_;
   base::WeakPtr<MediaObserver> media_observer_;
-  base::TimeDelta max_keyframe_distance_to_disable_background_video_;
-  base::TimeDelta max_keyframe_distance_to_disable_background_video_mse_;
   bool enable_instant_source_buffer_gc_;
   const bool embedded_media_experience_enabled_;
   mojom::MediaMetricsProviderPtr metrics_provider_;
   CreateSurfaceLayerBridgeCB create_bridge_callback_;
   scoped_refptr<viz::ContextProvider> context_provider_;
-  SurfaceLayerMode use_surface_layer_for_video_;
+  blink::WebMediaPlayer::SurfaceLayerMode use_surface_layer_for_video_;
+
+  // Whether the renderer should automatically suspend media playback in
+  // background tabs.
+  bool is_background_suspend_enabled_ = false;
+  // Whether the renderer is allowed to play video in background tabs.
+  bool is_background_video_playback_enabled_ = true;
+  // Whether background video optimization is supported on current platform.
+  bool is_background_video_track_optimization_supported_ = true;
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(WebMediaPlayerParams);
 };

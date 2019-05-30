@@ -6,9 +6,11 @@
 
 #include <string>
 
+#include "ash/public/cpp/app_list/internal_app_id_constants.h"
 #include "ash/public/cpp/app_types.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/window_properties.h"
+#include "ash/shell.h"
 #include "base/bind.h"
 #include "chrome/browser/chromeos/arc/arc_optin_uma.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
@@ -18,20 +20,29 @@
 #include "chrome/browser/ui/ash/launcher/arc_app_window.h"
 #include "chrome/browser/ui/ash/launcher/arc_app_window_launcher_item_controller.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
-#include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
+#include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_util.h"
+#include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_client.h"
 #include "components/account_id/account_id.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_util.h"
-#include "components/exo/shell_surface.h"
+#include "components/exo/shell_surface_util.h"
 #include "components/user_manager/user_manager.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
 #include "ui/base/base_window.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/views/widget/widget.h"
 
 namespace {
 
 constexpr size_t kMaxIconPngSize = 64 * 1024;  // 64 kb
+
+// Map any ARC Camera app to internal Camera app.
+ash::ShelfID MaybeMapShelfId(const arc::ArcAppShelfId& arc_app_shelf_id) {
+  if (IsCameraApp(arc_app_shelf_id.app_id()))
+    return ash::ShelfID(app_list::kInternalAppIdCamera);
+  return ash::ShelfID(arc_app_shelf_id.ToString());
+}
 
 }  // namespace
 
@@ -163,7 +174,7 @@ void ArcAppWindowLauncherController::OnWindowVisibilityChanged(
   // Attach window to multi-user manager now to let it manage visibility state
   // of the ARC window correctly.
   if (GetWindowTaskId(window) > 0) {
-    MultiUserWindowManager::GetInstance()->SetWindowOwner(
+    MultiUserWindowManagerClient::GetInstance()->SetWindowOwner(
         window,
         user_manager::UserManager::Get()->GetPrimaryUser()->GetAccountId());
   }
@@ -440,8 +451,10 @@ void ArcAppWindowLauncherController::OnWindowActivated(
 }
 
 void ArcAppWindowLauncherController::StartObserving(Profile* profile) {
-  if (aura::Env::HasInstance())
-    aura::Env::GetInstance()->AddObserver(this);
+  // TODO(mash): Find another way to observe for ARC++ window creation.
+  // https://crbug.com/887156
+  if (!features::IsMultiProcessMash())
+    ash::Shell::Get()->aura_env()->AddObserver(this);
   ArcAppListPrefs* prefs = ArcAppListPrefs::Get(profile);
   DCHECK(prefs);
   prefs->AddObserver(this);
@@ -452,8 +465,8 @@ void ArcAppWindowLauncherController::StopObserving(Profile* profile) {
     window->RemoveObserver(this);
   ArcAppListPrefs* prefs = ArcAppListPrefs::Get(profile);
   prefs->RemoveObserver(this);
-  if (aura::Env::HasInstance())
-    aura::Env::GetInstance()->RemoveObserver(this);
+  if (!features::IsMultiProcessMash())
+    ash::Shell::Get()->aura_env()->RemoveObserver(this);
 }
 
 ArcAppWindowLauncherItemController*
@@ -463,16 +476,16 @@ ArcAppWindowLauncherController::AttachControllerToTask(
   const arc::ArcAppShelfId& app_shelf_id = app_window_info.app_shelf_id();
   const auto it = app_shelf_group_to_controller_map_.find(app_shelf_id);
   if (it != app_shelf_group_to_controller_map_.end()) {
-    DCHECK_EQ(it->second->app_id(), app_shelf_id.ToString());
+    DCHECK(IsCameraApp(app_shelf_id.ToString()) ||
+           it->second->app_id() == app_shelf_id.ToString());
     it->second->AddTaskId(task_id);
     return it->second;
   }
 
+  const ash::ShelfID shelf_id = MaybeMapShelfId(app_shelf_id);
   std::unique_ptr<ArcAppWindowLauncherItemController> controller =
-      std::make_unique<ArcAppWindowLauncherItemController>(
-          app_shelf_id.ToString());
+      std::make_unique<ArcAppWindowLauncherItemController>(shelf_id);
   ArcAppWindowLauncherItemController* item_controller = controller.get();
-  const ash::ShelfID shelf_id(app_shelf_id.ToString());
   if (!owner()->GetItem(shelf_id)) {
     owner()->CreateAppLauncherItem(std::move(controller), ash::STATUS_RUNNING);
   } else {
@@ -529,7 +542,7 @@ void ArcAppWindowLauncherController::UnregisterApp(
 
 // static
 int ArcAppWindowLauncherController::GetWindowTaskId(aura::Window* window) {
-  const std::string* arc_app_id = exo::ShellSurface::GetApplicationId(window);
+  const std::string* arc_app_id = exo::GetShellApplicationId(window);
   if (!arc_app_id)
     return -1;
 

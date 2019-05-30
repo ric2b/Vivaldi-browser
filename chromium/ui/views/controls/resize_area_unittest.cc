@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/window.h"
 #include "ui/events/test/event_generator.h"
@@ -13,6 +14,7 @@
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
+#include "ui/views/widget/widget_utils.h"
 
 namespace {
 // Constants used by the ResizeAreaTest.SuccessfulGestureDrag test to simulate
@@ -130,8 +132,8 @@ void ResizeAreaTest::SetUp() {
   widget_->SetContentsView(resize_area_);
   widget_->Show();
 
-  event_generator_.reset(
-      new ui::test::EventGenerator(widget_->GetNativeWindow()));
+  event_generator_ =
+      std::make_unique<ui::test::EventGenerator>(GetRootWindow(widget_));
 }
 
 void ResizeAreaTest::TearDown() {

@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_UI_PAGE_INFO_PAGE_INFO_H_
 #define CHROME_BROWSER_UI_PAGE_INFO_PAGE_INFO_H_
 
+#include <vector>
+
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
@@ -128,8 +130,8 @@ class PageInfo : public TabSpecificContentSettings::SiteDataObserver,
   struct ChooserUIInfo {
     ContentSettingsType content_settings_type;
     ChooserContextBase* (*get_context)(Profile*);
-    int label_string_id;
-    int secondary_label_string_id;
+    int description_string_id;
+    int allowed_by_policy_description_string_id;
     int delete_tooltip_string_id;
     const char* ui_name_key;
   };
@@ -202,6 +204,10 @@ class PageInfo : public TabSpecificContentSettings::SiteDataObserver,
   // Sets (presents) the information about the site's identity and connection
   // in the |ui_|.
   void PresentSiteIdentity();
+
+  // Presents feature related info in the |ui_|; like, if VR content is being
+  // presented in a headset.
+  void PresentPageFeatureInfo();
 
   // Helper function to get the site identification status and details by
   // malicious content status.

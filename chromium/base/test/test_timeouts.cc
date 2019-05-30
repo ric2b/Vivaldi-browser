@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "base/clang_coverage_buildflags.h"
 #include "base/command_line.h"
 #include "base/debug/debugger.h"
 #include "base/logging.h"
@@ -38,13 +39,26 @@ void InitializeTimeout(const char* switch_name, int min_value, int* value) {
   // down significantly.
   // For MSan the slowdown depends heavily on the value of msan_track_origins
   // build flag. The multiplier below corresponds to msan_track_origins = 1.
+#if defined(OS_CHROMEOS)
+  // A handful of tests on ChromeOS run *very* close to the 6x limit used
+  // else where, so it's bumped to 7x.
+  constexpr int kTimeoutMultiplier = 7;
+#else
   constexpr int kTimeoutMultiplier = 6;
+#endif
 #elif defined(ADDRESS_SANITIZER) && defined(OS_WIN)
   // ASan/Win has not been optimized yet, give it a higher
   // timeout multiplier. See http://crbug.com/412471
   constexpr int kTimeoutMultiplier = 3;
+#elif defined(ADDRESS_SANITIZER) && defined(OS_CHROMEOS)
+  // A number of tests on ChromeOS run very close to the 2x limit, so ChromeOS
+  // gets 3x.
+  constexpr int kTimeoutMultiplier = 3;
 #elif defined(ADDRESS_SANITIZER) || defined(THREAD_SANITIZER)
   constexpr int kTimeoutMultiplier = 2;
+#elif BUILDFLAG(CLANG_COVERAGE)
+  // On coverage build, tests run 3x slower.
+  constexpr int kTimeoutMultiplier = 3;
 #else
   constexpr int kTimeoutMultiplier = 1;
 #endif

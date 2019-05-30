@@ -10,7 +10,7 @@
 
 namespace password_manager {
 
-class PasswordFormManager;
+class PasswordFormManagerInterface;
 
 // This interface is used to filter credentials during saving, retrieval from
 // PasswordStore, etc.
@@ -18,11 +18,6 @@ class CredentialsFilter {
  public:
   CredentialsFilter() {}
   virtual ~CredentialsFilter() {}
-
-  // Removes from |results| all forms which should be ignored for any password
-  // manager-related purposes, and returns the rest.
-  virtual std::vector<std::unique_ptr<autofill::PasswordForm>> FilterResults(
-      std::vector<std::unique_ptr<autofill::PasswordForm>> results) const = 0;
 
   // Should |form| be offered to be saved?
   virtual bool ShouldSave(const autofill::PasswordForm& form) const = 0;
@@ -40,9 +35,11 @@ class CredentialsFilter {
   // Call this if the form associated with |form_manager| was filled, and the
   // subsequent sign-in looked like a success.
   virtual void ReportFormLoginSuccess(
-      const PasswordFormManager& form_manager) const {}
+      const PasswordFormManagerInterface& form_manager) const {}
 
-  // If |username| matches Chrome sync account email.
+  // If |username| matches Chrome sync account email. For incognito profile,
+  // it matches |username| against the sync account email used in its original
+  // profile.
   virtual bool IsSyncAccountEmail(const std::string& username) const = 0;
 
  private:

@@ -5,11 +5,14 @@
 #ifndef ASH_WM_SPLITVIEW_SPLIT_VIEW_UTILS_H_
 #define ASH_WM_SPLITVIEW_SPLIT_VIEW_UTILS_H_
 
+#include "ash/ash_export.h"
+#include "ash/display/screen_orientation_controller.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/transform.h"
 
-namespace gfx {
-class Rect;
-}  // namespace gfx
+namespace aura {
+class Window;
+}  // namespace aura
 
 namespace ui {
 class Layer;
@@ -24,24 +27,22 @@ enum SplitviewAnimationType {
   // to drag a selector item.
   SPLITVIEW_ANIMATION_HIGHLIGHT_FADE_IN,
   SPLITVIEW_ANIMATION_HIGHLIGHT_FADE_OUT,
-  // Used to fade in and out the other highlight. There are normally two
-  // highlights, one on each side. When entering a state with a preview
-  // highlight, one highlight is the preview highlight, and the other highlight
-  // is the other highlight.
-  SPLITVIEW_ANIMATION_OTHER_HIGHLIGHT_FADE_IN,
+  // Used to fade out the other highlight. There are normally two highlights,
+  // one on each side. When entering a state with a preview highlight, one
+  // highlight is the preview highlight, and the other highlight is the other
+  // highlight.
   SPLITVIEW_ANIMATION_OTHER_HIGHLIGHT_FADE_OUT,
-  // Used to fade in and out the preview area highlight which indicate the
-  // bounds of
-  // the window that is about to get snapped.
+  // Used to fade in and out the preview area highlight which indicates the
+  // bounds of the window that is about to get snapped.
   SPLITVIEW_ANIMATION_PREVIEW_AREA_FADE_IN,
   SPLITVIEW_ANIMATION_PREVIEW_AREA_FADE_OUT,
-  // Used to fade in and out the label on the selector item which warns users
-  // the item cannot be snapped. The label appears on the selector item after
+  // Used to fade in and out the label on the overview item which warns users
+  // the item cannot be snapped. The label appears on the overview item after
   // another window has been snapped.
-  SPLITVIEW_ANIMATION_SELECTOR_ITEM_FADE_IN,
-  SPLITVIEW_ANIMATION_SELECTOR_ITEM_FADE_OUT,
+  SPLITVIEW_ANIMATION_OVERVIEW_ITEM_FADE_IN,
+  SPLITVIEW_ANIMATION_OVERVIEW_ITEM_FADE_OUT,
   // Used to fade in and out the labels which appear on either side of overview
-  // mode when a selector item is selected. They indicate where to drag the
+  // mode when a overview item is selected. They indicate where to drag the
   // selector item if it is snappable, or if an item cannot be snapped.
   SPLITVIEW_ANIMATION_TEXT_FADE_IN,
   SPLITVIEW_ANIMATION_TEXT_FADE_OUT,
@@ -58,8 +59,9 @@ enum SplitviewAnimationType {
   // Used to slide in the text labels.
   SPLITVIEW_ANIMATION_TEXT_SLIDE_IN,
   SPLITVIEW_ANIMATION_TEXT_SLIDE_OUT,
-  // Used to apply window transform on the selector item after it gets snapped.
-  SPLITVIEW_ANIMATION_RESTORE_OVERVIEW_WINDOW,
+  // Used to apply window transform on the selector item after it gets snapped
+  // or on the dragged window after the drag ends.
+  SPLITVIEW_ANIMATION_SET_WINDOW_TRANSFORM,
 };
 
 // Animates |layer|'s opacity based on |type|.
@@ -70,8 +72,13 @@ void DoSplitviewTransformAnimation(ui::Layer* layer,
                                    SplitviewAnimationType type,
                                    const gfx::Transform& target_transform);
 
-// Transposes the given |rect|.
-void TransposeRect(gfx::Rect* rect);
+// Returns true if split view mode is supported. Currently the split view
+// mode is only supported in tablet mode.
+ASH_EXPORT bool ShouldAllowSplitView();
+
+// Returns true if |window| can be activated and snapped in split screen in
+// tablet mode.
+ASH_EXPORT bool CanSnapInSplitview(aura::Window* window);
 
 }  // namespace ash
 

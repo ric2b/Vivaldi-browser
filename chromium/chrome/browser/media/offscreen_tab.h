@@ -79,6 +79,10 @@ class OffscreenTab : protected content::WebContentsDelegate,
   void Close();
 
  private:
+#if defined(USE_AURA)
+  class WindowAdoptionAgent;
+#endif  // defined(USE_AURA)
+
   // content::WebContentsDelegate overrides to provide the desired behaviors.
   void CloseContents(content::WebContents* source) final;
   bool ShouldSuppressDialogs(content::WebContents* source) final;
@@ -87,7 +91,8 @@ class OffscreenTab : protected content::WebContentsDelegate,
   void CanDownload(const GURL& url,
                    const std::string& request_method,
                    const base::RepeatingCallback<void(bool)>& callback) final;
-  bool HandleContextMenu(const content::ContextMenuParams& params) final;
+  bool HandleContextMenu(content::RenderFrameHost* render_frame_host,
+                         const content::ContextMenuParams& params) final;
   content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
       content::WebContents* source,
       const content::NativeWebKeyboardEvent& event) final;
@@ -125,7 +130,7 @@ class OffscreenTab : protected content::WebContentsDelegate,
       content::MediaResponseCallback callback) final;
   bool CheckMediaAccessPermission(content::RenderFrameHost* render_frame_host,
                                   const GURL& security_origin,
-                                  content::MediaStreamType type) final;
+                                  blink::MediaStreamType type) final;
 
   // content::WebContentsObserver overrides
   void DidShowFullscreenWidget() final;
@@ -177,6 +182,10 @@ class OffscreenTab : protected content::WebContentsDelegate,
 
   // Object consulted to determine which offscreen tab navigations are allowed.
   std::unique_ptr<media_router::NavigationPolicy> navigation_policy_;
+
+#if defined(USE_AURA)
+  std::unique_ptr<WindowAdoptionAgent> window_agent_;
+#endif  // defined(USE_AURA)
 
   DISALLOW_COPY_AND_ASSIGN(OffscreenTab);
 };

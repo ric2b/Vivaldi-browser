@@ -26,6 +26,9 @@ import java.util.regex.Pattern;
  * Utilities for working with URIs (and URLs). These methods may be used in security-sensitive
  * contexts (after all, origins are the security boundary on the web), and so the correctness bar
  * must be high.
+ *
+ * Use ShadowUrlUtilities to mock out native-dependent methods in tests.
+ * TODO(pshmakov): we probably should just make those methods non-static.
  */
 public class UrlUtilities {
     private static final String TAG = "UrlUtilities";
@@ -344,6 +347,20 @@ public class UrlUtilities {
                 + ((parsed.getPort() != -1) ? (":" + parsed.getPort()) : "");
     }
 
+    /**
+     * @param url An HTTP or HTTPS URL.
+     * @return The URL without the scheme.
+     */
+    public static String stripScheme(String url) {
+        String noScheme = url.trim();
+        if (noScheme.startsWith(UrlConstants.HTTPS_URL_PREFIX)) {
+            noScheme = noScheme.substring(8);
+        } else if (noScheme.startsWith(UrlConstants.HTTP_URL_PREFIX)) {
+            noScheme = noScheme.substring(7);
+        }
+        return noScheme;
+    }
+
     private static native boolean nativeIsDownloadable(String url);
     private static native boolean nativeIsValidForIntentFallbackNavigation(String url);
     private static native boolean nativeIsAcceptedScheme(String url);
@@ -351,6 +368,7 @@ public class UrlUtilities {
             boolean includePrivateRegistries);
     private static native String nativeGetDomainAndRegistry(String url,
             boolean includePrivateRegistries);
+    public static native boolean nativeIsGoogleDomainUrl(String url, boolean allowNonStandardPort);
     public static native boolean nativeIsGoogleSearchUrl(String url);
     public static native boolean nativeIsGoogleHomePageUrl(String url);
     private static native boolean nativeIsUrlWithinScope(String url, String scopeUrl);

@@ -41,7 +41,9 @@ class FeedbackPrivateAPI : public BrowserContextKeyedAPI {
                               const std::string& category_tag,
                               const std::string& extra_diagnostics,
                               const GURL& page_url,
-                              api::feedback_private::FeedbackFlow flow);
+                              api::feedback_private::FeedbackFlow flow,
+                              bool from_assistant = false,
+                              bool include_bluetooth_logs = false);
 
   // BrowserContextKeyedAPI implementation.
   static BrowserContextKeyedAPIFactory<FeedbackPrivateAPI>*
@@ -89,7 +91,7 @@ class FeedbackPrivateGetStringsFunction : public UIThreadExtensionFunction {
 class FeedbackPrivateGetUserEmailFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("feedbackPrivate.getUserEmail",
-                             FEEDBACKPRIVATE_GETUSEREMAIL);
+                             FEEDBACKPRIVATE_GETUSEREMAIL)
 
  protected:
   ~FeedbackPrivateGetUserEmailFunction() override {}
@@ -100,7 +102,7 @@ class FeedbackPrivateGetSystemInformationFunction
     : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("feedbackPrivate.getSystemInformation",
-                             FEEDBACKPRIVATE_GETSYSTEMINFORMATION);
+                             FEEDBACKPRIVATE_GETSYSTEMINFORMATION)
 
  protected:
   ~FeedbackPrivateGetSystemInformationFunction() override {}
@@ -115,7 +117,7 @@ class FeedbackPrivateGetSystemInformationFunction
 class FeedbackPrivateReadLogSourceFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("feedbackPrivate.readLogSource",
-                             FEEDBACKPRIVATE_READLOGSOURCE);
+                             FEEDBACKPRIVATE_READLOGSOURCE)
 
  protected:
   ~FeedbackPrivateReadLogSourceFunction() override {}
@@ -131,7 +133,7 @@ class FeedbackPrivateReadLogSourceFunction : public UIThreadExtensionFunction {
 class FeedbackPrivateSendFeedbackFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("feedbackPrivate.sendFeedback",
-                             FEEDBACKPRIVATE_SENDFEEDBACK);
+                             FEEDBACKPRIVATE_SENDFEEDBACK)
 
  protected:
   ~FeedbackPrivateSendFeedbackFunction() override {}
@@ -150,7 +152,7 @@ class FeedbackPrivateLogSrtPromptResultFunction
     : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("feedbackPrivate.logSrtPromptResult",
-                             FEEDBACKPRIVATE_LOGSRTPROMPTRESULT);
+                             FEEDBACKPRIVATE_LOGSRTPROMPTRESULT)
 
  protected:
   ~FeedbackPrivateLogSrtPromptResultFunction() override {}

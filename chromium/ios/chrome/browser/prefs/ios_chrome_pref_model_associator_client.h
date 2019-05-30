@@ -8,12 +8,8 @@
 #include <string>
 
 #include "base/macros.h"
+#include "base/no_destructor.h"
 #include "components/sync_preferences/pref_model_associator_client.h"
-
-namespace base {
-template <typename T>
-struct DefaultSingletonTraits;
-}
 
 class IOSChromePrefModelAssociatorClient
     : public sync_preferences::PrefModelAssociatorClient {
@@ -22,8 +18,7 @@ class IOSChromePrefModelAssociatorClient
   static IOSChromePrefModelAssociatorClient* GetInstance();
 
  private:
-  friend struct base::DefaultSingletonTraits<
-      IOSChromePrefModelAssociatorClient>;
+  friend class base::NoDestructor<IOSChromePrefModelAssociatorClient>;
 
   IOSChromePrefModelAssociatorClient();
   ~IOSChromePrefModelAssociatorClient() override;
@@ -32,6 +27,10 @@ class IOSChromePrefModelAssociatorClient
   bool IsMergeableListPreference(const std::string& pref_name) const override;
   bool IsMergeableDictionaryPreference(
       const std::string& pref_name) const override;
+  std::unique_ptr<base::Value> MaybeMergePreferenceValues(
+      const std::string& pref_name,
+      const base::Value& local_value,
+      const base::Value& server_value) const override;
 
   DISALLOW_COPY_AND_ASSIGN(IOSChromePrefModelAssociatorClient);
 };

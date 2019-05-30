@@ -6,7 +6,6 @@
 
 #include <gtk/gtk.h>
 
-#include "chrome/browser/ui/libgtkui/chrome_gtk_menu_subclasses.h"
 #include "chrome/browser/ui/libgtkui/gtk_util.h"
 #include "chrome/browser/ui/libgtkui/skia_utils_gtk.h"
 #include "ui/gfx/color_palette.h"
@@ -25,17 +24,6 @@ enum BackgroundRenderMode {
   BG_RENDER_NONE,
   BG_RENDER_RECURSIVE,
 };
-
-std::string GetGtkSettingsStringProperty(GtkSettings* settings,
-                                         const gchar* prop_name) {
-  GValue layout = G_VALUE_INIT;
-  g_value_init(&layout, G_TYPE_STRING);
-  g_object_get_property(G_OBJECT(settings), prop_name, &layout);
-  DCHECK(G_VALUE_HOLDS_STRING(&layout));
-  std::string prop_value(g_value_get_string(&layout));
-  g_value_unset(&layout);
-  return prop_value;
-}
 
 ScopedStyleContext GetTooltipContext() {
   return AppendCssNodeToStyleContext(
@@ -82,9 +70,6 @@ void PaintWidget(cc::PaintCanvas* canvas,
 }
 
 SkColor SkColorFromColorId(ui::NativeTheme::ColorId color_id) {
-  const SkColor kPositiveTextColor = SkColorSetRGB(0x0b, 0x80, 0x43);
-  const SkColor kNegativeTextColor = SkColorSetRGB(0xc5, 0x39, 0x29);
-
   switch (color_id) {
     // Windows
     case ui::NativeTheme::kColorId_WindowBackground:
@@ -135,7 +120,15 @@ SkColor SkColorFromColorId(ui::NativeTheme::ColorId color_id) {
       return GetFgColor("GtkMenu#menu GtkMenuItem#menuitem.separator");
     case ui::NativeTheme::kColorId_TouchableMenuItemLabelColor:
     case ui::NativeTheme::kColorId_ActionableSubmenuVerticalSeparatorColor:
-      return kInvalidColorIdColor;
+      return gfx::kPlaceholderColor;
+    // Fallback to the same colors as Aura.
+    case ui::NativeTheme::kColorId_HighlightedMenuItemBackgroundColor:
+    case ui::NativeTheme::kColorId_HighlightedMenuItemForegroundColor:
+    case ui::NativeTheme::kColorId_FocusedHighlightedMenuItemBackgroundColor:
+    case ui::NativeTheme::kColorId_MenuItemAlertBackgroundColorMax:
+    case ui::NativeTheme::kColorId_MenuItemAlertBackgroundColorMin:
+      return ui::NativeTheme::GetInstanceForNativeUi()->GetSystemColor(
+          color_id);
 
     // Label
     case ui::NativeTheme::kColorId_LabelEnabledColor:
@@ -194,27 +187,9 @@ SkColor SkColorFromColorId(ui::NativeTheme::ColorId color_id) {
     case ui::NativeTheme::kColorId_ButtonPressedShade:
       return SK_ColorTRANSPARENT;
 
-    // BlueButton
-    case ui::NativeTheme::kColorId_BlueButtonEnabledColor:
-      return GetFgColor(
-          "GtkButton#button.text-button.default.suggested-action GtkLabel");
-    case ui::NativeTheme::kColorId_BlueButtonDisabledColor:
-      return GetFgColor(
-          "GtkButton#button.text-button.default.suggested-action:disabled "
-          "GtkLabel");
-    case ui::NativeTheme::kColorId_BlueButtonHoverColor:
-      return GetFgColor(
-          "GtkButton#button.text-button.default.suggested-action:hover "
-          "GtkLabel");
-    case ui::NativeTheme::kColorId_BlueButtonPressedColor:
-      return GetFgColor(
-          "GtkButton#button.text-button.default.suggested-action:hover:active "
-          "GtkLabel");
-    case ui::NativeTheme::kColorId_BlueButtonShadowColor:
-      return SK_ColorTRANSPARENT;
-
     // ProminentButton
     case ui::NativeTheme::kColorId_ProminentButtonColor:
+    case ui::NativeTheme::kColorId_ProminentButtonFocusedColor:
       return GetBgColor(
           "GtkTreeView#treeview.view "
           "GtkTreeView#treeview.view.cell:selected:focus");
@@ -222,6 +197,10 @@ SkColor SkColorFromColorId(ui::NativeTheme::ColorId color_id) {
       return GetFgColor(
           "GtkTreeView#treeview.view "
           "GtkTreeView#treeview.view.cell:selected:focus GtkLabel");
+    case ui::NativeTheme::kColorId_ProminentButtonDisabledColor:
+      return GetBgColor("GtkButton#button.text-button:disabled");
+    case ui::NativeTheme::kColorId_ButtonBorderColor:
+      return GetBorderColor("GtkButton#button.text-button");
 
     // TabbedPane
     case ui::NativeTheme::kColorId_TabTitleColorActive:
@@ -309,69 +288,16 @@ SkColor SkColorFromColorId(ui::NativeTheme::ColorId color_id) {
               ui::NativeTheme::kColorId_TextfieldDefaultBackground),
           SkColorFromColorId(
               ui::NativeTheme::kColorId_TextfieldSelectionBackgroundFocused),
-          0x80);
-    case ui::NativeTheme::kColorId_ResultsTableSelectedBackground:
-      return SkColorFromColorId(
-          ui::NativeTheme::kColorId_TextfieldSelectionBackgroundFocused);
+          0.5f);
     case ui::NativeTheme::kColorId_ResultsTableNormalText:
-    case ui::NativeTheme::kColorId_ResultsTableHoveredText:
       return SkColorFromColorId(
           ui::NativeTheme::kColorId_TextfieldDefaultColor);
-    case ui::NativeTheme::kColorId_ResultsTableSelectedText:
-      return SkColorFromColorId(
-          ui::NativeTheme::kColorId_TextfieldSelectionColor);
-    case ui::NativeTheme::kColorId_ResultsTableNormalDimmedText:
-    case ui::NativeTheme::kColorId_ResultsTableHoveredDimmedText:
+    case ui::NativeTheme::kColorId_ResultsTableDimmedText:
       return color_utils::AlphaBlend(
           SkColorFromColorId(ui::NativeTheme::kColorId_TextfieldDefaultColor),
           SkColorFromColorId(
               ui::NativeTheme::kColorId_TextfieldDefaultBackground),
-          0x80);
-    case ui::NativeTheme::kColorId_ResultsTableSelectedDimmedText:
-      return color_utils::AlphaBlend(
-          SkColorFromColorId(ui::NativeTheme::kColorId_TextfieldSelectionColor),
-          SkColorFromColorId(
-              ui::NativeTheme::kColorId_TextfieldDefaultBackground),
-          0x80);
-    case ui::NativeTheme::kColorId_ResultsTableNormalUrl:
-    case ui::NativeTheme::kColorId_ResultsTableHoveredUrl:
-      return NormalURLColor(
-          SkColorFromColorId(ui::NativeTheme::kColorId_TextfieldDefaultColor));
-    case ui::NativeTheme::kColorId_ResultsTableSelectedUrl:
-      return SelectedURLColor(
-          SkColorFromColorId(ui::NativeTheme::kColorId_TextfieldSelectionColor),
-          SkColorFromColorId(
-              ui::NativeTheme::kColorId_TextfieldSelectionBackgroundFocused));
-    case ui::NativeTheme::kColorId_ResultsTablePositiveText:
-      return color_utils::GetReadableColor(
-          kPositiveTextColor,
-          SkColorFromColorId(
-              ui::NativeTheme::kColorId_TextfieldDefaultBackground));
-    case ui::NativeTheme::kColorId_ResultsTablePositiveHoveredText:
-      return color_utils::GetReadableColor(
-          kPositiveTextColor,
-          SkColorFromColorId(
-              ui::NativeTheme::kColorId_TextfieldDefaultBackground));
-    case ui::NativeTheme::kColorId_ResultsTablePositiveSelectedText:
-      return color_utils::GetReadableColor(
-          kPositiveTextColor,
-          SkColorFromColorId(
-              ui::NativeTheme::kColorId_TextfieldSelectionBackgroundFocused));
-    case ui::NativeTheme::kColorId_ResultsTableNegativeText:
-      return color_utils::GetReadableColor(
-          kNegativeTextColor,
-          SkColorFromColorId(
-              ui::NativeTheme::kColorId_TextfieldDefaultBackground));
-    case ui::NativeTheme::kColorId_ResultsTableNegativeHoveredText:
-      return color_utils::GetReadableColor(
-          kNegativeTextColor,
-          SkColorFromColorId(
-              ui::NativeTheme::kColorId_TextfieldDefaultBackground));
-    case ui::NativeTheme::kColorId_ResultsTableNegativeSelectedText:
-      return color_utils::GetReadableColor(
-          kNegativeTextColor,
-          SkColorFromColorId(
-              ui::NativeTheme::kColorId_TextfieldSelectionBackgroundFocused));
+          0.5f);
 
     // Throbber
     // TODO(thomasanderson): Render GtkSpinner directly.
@@ -396,19 +322,24 @@ SkColor SkColorFromColorId(ui::NativeTheme::ColorId color_id) {
       return fallback_theme->GetSystemColor(color_id);
     }
 
+    case ui::NativeTheme::kColorId_DefaultIconColor:
+      if (GtkVersionCheck(3, 20))
+        return GetFgColor("GtkMenu#menu GtkMenuItem#menuitem #radio");
+      return GetFgColor("GtkMenu#menu GtkMenuItem#menuitem.radio");
+
     case ui::NativeTheme::kColorId_NumColors:
       NOTREACHED();
       break;
   }
-  return kInvalidColorIdColor;
+  return gfx::kPlaceholderColor;
 }
 
 }  // namespace
 
 // static
 NativeThemeGtk* NativeThemeGtk::instance() {
-  CR_DEFINE_STATIC_LOCAL(NativeThemeGtk, s_native_theme, ());
-  return &s_native_theme;
+  static base::NoDestructor<NativeThemeGtk> s_native_theme;
+  return s_native_theme.get();
 }
 
 NativeThemeGtk::NativeThemeGtk() {

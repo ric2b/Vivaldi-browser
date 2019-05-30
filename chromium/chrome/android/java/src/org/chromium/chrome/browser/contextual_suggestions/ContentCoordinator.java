@@ -5,7 +5,7 @@
 package org.chromium.chrome.browser.contextual_suggestions;
 
 import android.content.Context;
-import android.support.v4.view.ViewCompat;
+import android.content.res.Resources;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.RecyclerView.OnScrollListener;
 import android.view.LayoutInflater;
@@ -13,11 +13,12 @@ import android.view.View;
 import android.view.ViewGroup;
 
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ntp.ContextMenuManager;
+import org.chromium.chrome.browser.native_page.ContextMenuManager;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.suggestions.SuggestionsRecyclerView;
 import org.chromium.chrome.browser.suggestions.SuggestionsUiDelegate;
 import org.chromium.chrome.browser.widget.displaystyle.UiConfig;
+import org.chromium.chrome.browser.widget.displaystyle.ViewResizer;
 import org.chromium.ui.base.WindowAndroid;
 
 /**
@@ -25,12 +26,15 @@ import org.chromium.ui.base.WindowAndroid;
  * {@link ContextualSuggestionsCoordinator} and lifecycle of sub-component objects.
  */
 class ContentCoordinator {
+    private static final String CONTEXT_MENU_USER_ACTION_PREFIX = "ContextualSuggestions";
     private final SuggestionsRecyclerView mRecyclerView;
 
     private ContextualSuggestionsModel mModel;
     private WindowAndroid mWindowAndroid;
     private ContextMenuManager mContextMenuManager;
     private ContextualSuggestionsAdapter mAdapter;
+    private UiConfig mUiConfig;
+    private ViewResizer mRecyclerViewResizer;
 
     /**
      * Construct a new {@link ContentCoordinator}.
@@ -40,6 +44,7 @@ class ContentCoordinator {
     ContentCoordinator(Context context, ViewGroup parentView) {
         mRecyclerView = (SuggestionsRecyclerView) LayoutInflater.from(context).inflate(
                 R.layout.contextual_suggestions_layout, parentView, false);
+        mUiConfig = new UiConfig(mRecyclerView);
     }
 
     /** @return The content {@link View}. */
@@ -70,13 +75,23 @@ class ContentCoordinator {
         mWindowAndroid = windowAndroid;
 
         mContextMenuManager = new ContextMenuManager(uiDelegate.getNavigationDelegate(),
-                mRecyclerView::setTouchEnabled, closeContextMenuCallback, true);
+                mRecyclerView::setTouchEnabled, closeContextMenuCallback,
+                CONTEXT_MENU_USER_ACTION_PREFIX);
         mWindowAndroid.addContextMenuCloseListener(mContextMenuManager);
 
         ClusterList clusterList = mModel.getClusterList();
         mAdapter = new ContextualSuggestionsAdapter(
-                profile, new UiConfig(mRecyclerView), uiDelegate, mContextMenuManager, clusterList);
+                profile, mUiConfig, uiDelegate, mContextMenuManager, clusterList);
         mRecyclerView.setAdapter(mAdapter);
+        mRecyclerView.init(mUiConfig, mContextMenuManager);
+
+        Resources resources = context.getResources();
+        int defaultMargin =
+                resources.getDimensionPixelSize(R.dimen.content_suggestions_card_modern_margin);
+        int wideMargin = resources.getDimensionPixelSize(R.dimen.ntp_wide_card_lateral_margins);
+
+        mRecyclerViewResizer =
+                ViewResizer.createAndAttach(mRecyclerView, mUiConfig, defaultMargin, wideMargin);
 
         // TODO(twellington): Should this be a proper model property, set by the mediator and bound
         // to the RecyclerView?
@@ -86,13 +101,6 @@ class ContentCoordinator {
                 mModel.setToolbarShadowVisibility(mRecyclerView.canScrollVertically(-1));
             }
         });
-
-        if (mModel.isSlimPeekEnabled()) {
-            ViewCompat.setPaddingRelative(mRecyclerView, ViewCompat.getPaddingStart(mRecyclerView),
-                    context.getResources().getDimensionPixelSize(
-                            R.dimen.bottom_control_container_slim_expanded_height),
-                    ViewCompat.getPaddingEnd(mRecyclerView), mRecyclerView.getPaddingBottom());
-        }
     }
 
     /** Destroy the content component. */
@@ -104,6 +112,11 @@ class ContentCoordinator {
         }
         if (mWindowAndroid != null) {
             mWindowAndroid.removeContextMenuCloseListener(mContextMenuManager);
+        }
+
+        if (mRecyclerViewResizer != null) {
+            mRecyclerViewResizer.detach();
+            mRecyclerViewResizer = null;
         }
     }
 }

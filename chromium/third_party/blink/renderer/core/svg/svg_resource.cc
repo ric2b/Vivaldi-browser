@@ -126,7 +126,7 @@ void ExternalSVGResource::Load(const Document& document) {
   if (resource_document_)
     return;
   ResourceLoaderOptions options;
-  options.initiator_info.name = FetchInitiatorTypeNames::css;
+  options.initiator_info.name = fetch_initiator_type_names::kCSS;
   FetchParameters params(ResourceRequest(url_), options);
   params.MutableResourceRequest().SetFetchRequestMode(
       network::mojom::FetchRequestMode::kSameOrigin);
@@ -155,8 +155,8 @@ Element* ExternalSVGResource::ResolveTarget() {
   Document* external_document = resource_document_->GetDocument();
   if (!external_document)
     return nullptr;
-  AtomicString decoded_fragment(
-      DecodeURLEscapeSequences(url_.FragmentIdentifier()));
+  AtomicString decoded_fragment(DecodeURLEscapeSequences(
+      url_.FragmentIdentifier(), DecodeURLMode::kUTF8OrIsomorphic));
   return external_document->getElementById(decoded_fragment);
 }
 

@@ -5,8 +5,8 @@
 #include "third_party/blink/renderer/core/frame/intervention.h"
 
 #include "services/service_manager/public/cpp/connector.h"
+#include "third_party/blink/public/mojom/reporting/reporting.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/public/platform/reporting.mojom-blink.h"
 #include "third_party/blink/renderer/core/frame/frame_console.h"
 #include "third_party/blink/renderer/core/frame/intervention_report_body.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
@@ -27,16 +27,16 @@ void Intervention::GenerateReport(const LocalFrame* frame,
   // Send the message to the console.
   Document* document = frame->GetDocument();
   document->AddConsoleMessage(ConsoleMessage::Create(
-      kInterventionMessageSource, kErrorMessageLevel, message));
+      kInterventionMessageSource, mojom::ConsoleMessageLevel::kError, message));
 
   if (!frame->Client())
     return;
 
   // Construct the intervention report.
-  InterventionReportBody* body =
-      new InterventionReportBody(id, message, SourceLocation::Capture());
-  Report* report =
-      new Report("intervention", document->Url().GetString(), body);
+  InterventionReportBody* body = MakeGarbageCollected<InterventionReportBody>(
+      id, message, SourceLocation::Capture());
+  Report* report = MakeGarbageCollected<Report>(
+      "intervention", document->Url().GetString(), body);
 
   // Send the intervention report to any ReportingObservers.
   ReportingContext::From(document)->QueueReport(report);

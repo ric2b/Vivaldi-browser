@@ -10,12 +10,21 @@
 #include <string>
 #include <tuple>
 
+#include "base/json/string_escape.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "tools/gn/functions.h"
 #include "tools/gn/operators.h"
 #include "tools/gn/scope.h"
 #include "tools/gn/string_utils.h"
+
+// Dictionary keys used for JSON-formatted tree dump.
+const char kJsonNodeChild[] = "child";
+const char kJsonNodeType[] = "type";
+const char kJsonNodeValue[] = "value";
+const char kJsonBeforeComment[] = "before_comment";
+const char kJsonSuffixComment[] = "suffix_comment";
+const char kJsonAfterComment[] = "after_comment";
 
 namespace {
 
@@ -51,10 +60,6 @@ std::tuple<base::StringPiece, base::StringPiece> SplitAtFirst(
                          index_of_first != base::StringPiece::npos
                              ? str.substr(index_of_first + 1)
                              : base::StringPiece());
-}
-
-std::string IndentFor(int value) {
-  return std::string(value, ' ');
 }
 
 bool IsSortRangeSeparator(const ParseNode* node, const ParseNode* prev) {
@@ -133,15 +138,42 @@ Comments* ParseNode::comments_mutable() {
   return comments_.get();
 }
 
-void ParseNode::PrintComments(std::ostream& out, int indent) const {
+base::Value ParseNode::CreateJSONNode(const char* type) const {
+  base::Value dict(base::Value::Type::DICTIONARY);
+  dict.SetKey(kJsonNodeType, base::Value(type));
+  AddCommentsJSONNodes(&dict);
+  return dict;
+}
+
+base::Value ParseNode::CreateJSONNode(const char* type,
+    const base::StringPiece& value) const {
+  base::Value dict(base::Value::Type::DICTIONARY);
+  dict.SetKey(kJsonNodeType, base::Value(type));
+  dict.SetKey(kJsonNodeValue, base::Value(value));
+  AddCommentsJSONNodes(&dict);
+  return dict;
+}
+
+void ParseNode::AddCommentsJSONNodes(base::Value* out_value) const {
   if (comments_) {
-    std::string ind = IndentFor(indent + 1);
-    for (const auto& token : comments_->before())
-      out << ind << "+BEFORE_COMMENT(\"" << token.value() << "\")\n";
-    for (const auto& token : comments_->suffix())
-      out << ind << "+SUFFIX_COMMENT(\"" << token.value() << "\")\n";
-    for (const auto& token : comments_->after())
-      out << ind << "+AFTER_COMMENT(\"" << token.value() << "\")\n";
+    if (comments_->before().size()) {
+      base::Value comment_values(base::Value::Type::LIST);
+      for (const auto& token : comments_->before())
+        comment_values.GetList().push_back(base::Value(token.value()));
+      out_value->SetKey(kJsonBeforeComment, std::move(comment_values));
+    }
+    if (comments_->suffix().size()) {
+      base::Value comment_values(base::Value::Type::LIST);
+      for (const auto& token : comments_->suffix())
+        comment_values.GetList().push_back(base::Value(token.value()));
+      out_value->SetKey(kJsonSuffixComment, std::move(comment_values));
+    }
+    if (comments_->after().size()) {
+      base::Value comment_values(base::Value::Type::LIST);
+      for (const auto& token : comments_->after())
+        comment_values.GetList().push_back(base::Value(token.value()));
+      out_value->SetKey(kJsonAfterComment, std::move(comment_values));
+    }
   }
 }
 
@@ -178,14 +210,15 @@ Err AccessorNode::MakeErrorDescribing(const std::string& msg,
   return Err(GetRange(), msg, help);
 }
 
-void AccessorNode::Print(std::ostream& out, int indent) const {
-  out << IndentFor(indent) << "ACCESSOR\n";
-  PrintComments(out, indent);
-  out << IndentFor(indent + 1) << base_.value() << "\n";
+base::Value AccessorNode::GetJSONNode() const {
+  base::Value dict(CreateJSONNode("ACCESSOR", base_.value()));
+  base::Value child(base::Value::Type::LIST);
   if (index_)
-    index_->Print(out, indent + 1);
+    child.GetList().push_back(index_->GetJSONNode());
   else if (member_)
-    member_->Print(out, indent + 1);
+    child.GetList().push_back(member_->GetJSONNode());
+  dict.SetKey(kJsonNodeChild, std::move(child));
+  return dict;
 }
 
 Value AccessorNode::ExecuteArrayAccess(Scope* scope, Err* err) const {
@@ -269,12 +302,18 @@ bool AccessorNode::ComputeAndValidateListIndex(Scope* scope,
                "You gave me " + base::Int64ToString(index_int) + ".");
     return false;
   }
+  if (max_len == 0) {
+    *err = Err(index_->GetRange(), "Array subscript out of range.",
+               "You gave me " + base::Int64ToString(index_int) + " but the " +
+               "array has no elements.");
+    return false;
+  }
   size_t index_sizet = static_cast<size_t>(index_int);
   if (index_sizet >= max_len) {
     *err = Err(index_->GetRange(), "Array subscript out of range.",
                "You gave me " + base::Int64ToString(index_int) +
                    " but I was expecting something from 0 to " +
-                   base::NumberToString(max_len) + ", inclusive.");
+                   base::NumberToString(max_len - 1) + ", inclusive.");
     return false;
   }
 
@@ -305,11 +344,13 @@ Err BinaryOpNode::MakeErrorDescribing(const std::string& msg,
   return Err(op_, msg, help);
 }
 
-void BinaryOpNode::Print(std::ostream& out, int indent) const {
-  out << IndentFor(indent) << "BINARY(" << op_.value() << ")\n";
-  PrintComments(out, indent);
-  left_->Print(out, indent + 1);
-  right_->Print(out, indent + 1);
+base::Value BinaryOpNode::GetJSONNode() const {
+  base::Value dict(CreateJSONNode("BINARY", op_.value()));
+  base::Value child(base::Value::Type::LIST);
+  child.GetList().push_back(left_->GetJSONNode());
+  child.GetList().push_back(right_->GetJSONNode());
+  dict.SetKey(kJsonNodeChild, std::move(child));
+  return dict;
 }
 
 // BlockNode ------------------------------------------------------------------
@@ -382,13 +423,16 @@ Err BlockNode::MakeErrorDescribing(const std::string& msg,
   return Err(GetRange(), msg, help);
 }
 
-void BlockNode::Print(std::ostream& out, int indent) const {
-  out << IndentFor(indent) << "BLOCK\n";
-  PrintComments(out, indent);
+base::Value BlockNode::GetJSONNode() const {
+  base::Value dict(CreateJSONNode("BLOCK"));
+  base::Value statements(base::Value::Type::LIST);
   for (const auto& statement : statements_)
-    statement->Print(out, indent + 1);
+    statements.GetList().push_back(statement->GetJSONNode());
   if (end_ && end_->comments())
-    end_->Print(out, indent + 1);
+    statements.GetList().push_back(end_->GetJSONNode());
+
+  dict.SetKey("child", std::move(statements));
+  return dict;
 }
 
 // ConditionNode --------------------------------------------------------------
@@ -435,13 +479,16 @@ Err ConditionNode::MakeErrorDescribing(const std::string& msg,
   return Err(if_token_, msg, help);
 }
 
-void ConditionNode::Print(std::ostream& out, int indent) const {
-  out << IndentFor(indent) << "CONDITION\n";
-  PrintComments(out, indent);
-  condition_->Print(out, indent + 1);
-  if_true_->Print(out, indent + 1);
-  if (if_false_)
-    if_false_->Print(out, indent + 1);
+base::Value ConditionNode::GetJSONNode() const {
+  base::Value dict = CreateJSONNode("CONDITION");
+  base::Value child(base::Value::Type::LIST);
+  child.GetList().push_back(condition_->GetJSONNode());
+  child.GetList().push_back(if_true_->GetJSONNode());
+  if (if_false_) {
+    child.GetList().push_back(if_false_->GetJSONNode());
+  }
+  dict.SetKey(kJsonNodeChild, std::move(child));
+  return std::move(dict);
 }
 
 // FunctionCallNode -----------------------------------------------------------
@@ -471,12 +518,30 @@ Err FunctionCallNode::MakeErrorDescribing(const std::string& msg,
   return Err(function_, msg, help);
 }
 
-void FunctionCallNode::Print(std::ostream& out, int indent) const {
-  out << IndentFor(indent) << "FUNCTION(" << function_.value() << ")\n";
-  PrintComments(out, indent);
-  args_->Print(out, indent + 1);
-  if (block_)
-    block_->Print(out, indent + 1);
+base::Value FunctionCallNode::GetJSONNode() const {
+  base::Value dict = CreateJSONNode("FUNCTION", function_.value());
+  base::Value child(base::Value::Type::LIST);
+  child.GetList().push_back(args_->GetJSONNode());
+  if (block_) {
+    child.GetList().push_back(block_->GetJSONNode());
+  }
+  dict.SetKey(kJsonNodeChild, std::move(child));
+  return dict;
+}
+
+void FunctionCallNode::SetNewLocation(int line_number) {
+  Location func_old_loc = function_.location();
+  Location func_new_loc =
+      Location(func_old_loc.file(), line_number, func_old_loc.column_number(),
+               func_old_loc.byte());
+  function_.set_location(func_new_loc);
+
+  Location args_old_loc = args_->Begin().location();
+  Location args_new_loc =
+      Location(args_old_loc.file(), line_number, args_old_loc.column_number(),
+               args_old_loc.byte());
+  const_cast<Token&>(args_->Begin()).set_location(args_new_loc);
+  const_cast<Token&>(args_->End()->value()).set_location(args_new_loc);
 }
 
 // IdentifierNode --------------------------------------------------------------
@@ -518,9 +583,8 @@ Err IdentifierNode::MakeErrorDescribing(const std::string& msg,
   return Err(value_, msg, help);
 }
 
-void IdentifierNode::Print(std::ostream& out, int indent) const {
-  out << IndentFor(indent) << "IDENTIFIER(" << value_.value() << ")\n";
-  PrintComments(out, indent);
+base::Value IdentifierNode::GetJSONNode() const {
+  return CreateJSONNode("IDENTIFIER", value_.value());
 }
 
 void IdentifierNode::SetNewLocation(int line_number) {
@@ -568,14 +632,17 @@ Err ListNode::MakeErrorDescribing(const std::string& msg,
   return Err(begin_token_, msg, help);
 }
 
-void ListNode::Print(std::ostream& out, int indent) const {
-  out << IndentFor(indent) << "LIST" << (prefer_multiline_ ? " multiline" : "")
-      << "\n";
-  PrintComments(out, indent);
-  for (const auto& cur : contents_)
-    cur->Print(out, indent + 1);
-  if (end_ && end_->comments())
-    end_->Print(out, indent + 1);
+base::Value ListNode::GetJSONNode() const {
+  base::Value dict(CreateJSONNode("LIST"));
+  base::Value child(base::Value::Type::LIST);
+  for (const auto& cur : contents_) {
+    child.GetList().push_back(cur->GetJSONNode());
+  }
+  if (end_ && end_->comments()) {
+    child.GetList().push_back(end_->GetJSONNode());
+  }
+  dict.SetKey(kJsonNodeChild, std::move(child));
+  return dict;
 }
 
 template <typename Comparator>
@@ -773,9 +840,8 @@ Err LiteralNode::MakeErrorDescribing(const std::string& msg,
   return Err(value_, msg, help);
 }
 
-void LiteralNode::Print(std::ostream& out, int indent) const {
-  out << IndentFor(indent) << "LITERAL(" << value_.value() << ")\n";
-  PrintComments(out, indent);
+base::Value LiteralNode::GetJSONNode() const {
+  return CreateJSONNode("LITERAL", value_.value());
 }
 
 void LiteralNode::SetNewLocation(int line_number) {
@@ -810,10 +876,12 @@ Err UnaryOpNode::MakeErrorDescribing(const std::string& msg,
   return Err(op_, msg, help);
 }
 
-void UnaryOpNode::Print(std::ostream& out, int indent) const {
-  out << IndentFor(indent) << "UNARY(" << op_.value() << ")\n";
-  PrintComments(out, indent);
-  operand_->Print(out, indent + 1);
+base::Value UnaryOpNode::GetJSONNode() const {
+  base::Value dict = CreateJSONNode("UNARY", op_.value());
+  base::Value child(base::Value::Type::LIST);
+  child.GetList().push_back(operand_->GetJSONNode());
+  dict.SetKey(kJsonNodeChild, std::move(child));
+  return dict;
 }
 
 // BlockCommentNode ------------------------------------------------------------
@@ -839,9 +907,10 @@ Err BlockCommentNode::MakeErrorDescribing(const std::string& msg,
   return Err(comment_, msg, help);
 }
 
-void BlockCommentNode::Print(std::ostream& out, int indent) const {
-  out << IndentFor(indent) << "BLOCK_COMMENT(" << comment_.value() << ")\n";
-  PrintComments(out, indent);
+base::Value BlockCommentNode::GetJSONNode() const {
+  std::string escaped;
+  base::EscapeJSONString(comment_.value().as_string(), false, &escaped);
+  return CreateJSONNode("BLOCK_COMMENT", escaped);
 }
 
 // EndNode ---------------------------------------------------------------------
@@ -867,7 +936,6 @@ Err EndNode::MakeErrorDescribing(const std::string& msg,
   return Err(value_, msg, help);
 }
 
-void EndNode::Print(std::ostream& out, int indent) const {
-  out << IndentFor(indent) << "END(" << value_.value() << ")\n";
-  PrintComments(out, indent);
+base::Value EndNode::GetJSONNode() const {
+  return CreateJSONNode("END", value_.value());
 }

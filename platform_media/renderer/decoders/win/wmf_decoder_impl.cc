@@ -240,7 +240,8 @@ bool WMFDecoderImpl<DemuxerStream::VIDEO>::IsValidConfig(
     return false;
   }
 
-  return config.codec() == VideoCodec::kCodecH264 && config.profile() >= VideoCodecProfile::H264PROFILE_MIN &&
+  return config.codec() == VideoCodec::kCodecH264 &&
+         config.profile() >= VideoCodecProfile::H264PROFILE_MIN &&
          config.profile() <= VideoCodecProfile::H264PROFILE_MAX;
 }
 
@@ -529,8 +530,8 @@ bool WMFDecoderImpl<StreamType>::SetOutputMediaType() {
                  << " Error while getting stream info.";
     return false;
   }
+  output_sample_.Reset();
 
-  output_sample_ = nullptr;
   const bool decoder_creates_samples =
       (output_stream_info.dwFlags & (MFT_OUTPUT_STREAM_PROVIDES_SAMPLES |
                                      MFT_OUTPUT_STREAM_CAN_PROVIDE_SAMPLES)) !=
@@ -683,8 +684,8 @@ HRESULT WMFDecoderImpl<StreamType>::ProcessOutput() {
 
   // Make the whole buffer available for use by |decoder_| again after it was
   // filled with data by the previous call to ProcessOutput().
-  IMFMediaBuffer* buffer = nullptr;
-  HRESULT hr = output_sample_->ConvertToContiguousBuffer(&buffer);
+  Microsoft::WRL::ComPtr<IMFMediaBuffer> buffer;
+  HRESULT hr = output_sample_->ConvertToContiguousBuffer(buffer.GetAddressOf());
   if (FAILED(hr)) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << " Error while converting buffer.";
@@ -808,8 +809,8 @@ WMFDecoderImpl<StreamType>::PrepareInputSample(
     return Microsoft::WRL::ComPtr<IMFSample>();
   }
 
-  IMFMediaBuffer* buffer = nullptr;
-  HRESULT hr = sample->GetBufferByIndex(0, &buffer);
+  Microsoft::WRL::ComPtr<IMFMediaBuffer> buffer;
+  HRESULT hr = sample->GetBufferByIndex(0, buffer.GetAddressOf());
   if (FAILED(hr)) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << " Error while getting buffer.";

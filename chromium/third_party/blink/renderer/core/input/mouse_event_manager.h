@@ -43,24 +43,26 @@ class CORE_EXPORT MouseEventManager final
   virtual ~MouseEventManager();
   void Trace(blink::Visitor*) override;
 
-  enum FakeMouseMoveReason { kDuringScroll, kPerFrame };
+  enum class UpdateHoverReason { kScrollOffsetChanged, kLayoutOrStyleChanged };
 
   WebInputEventResult DispatchMouseEvent(EventTarget*,
                                          const AtomicString&,
                                          const WebMouseEvent&,
                                          const String& canvas_region_id,
+                                         const FloatPoint* last_position,
                                          EventTarget* related_target,
                                          bool check_for_listener = false);
 
   WebInputEventResult SetMousePositionAndDispatchMouseEvent(
-      Node* target_node,
+      Element* target_element,
       const String& canvas_region_id,
       const AtomicString& event_type,
       const WebMouseEvent&);
 
   WebInputEventResult DispatchMouseClickIfNeeded(
-      const MouseEventWithHitTestResults&,
-      Element& mouse_release_target);
+      Element* mouse_release_target,
+      const WebMouseEvent& mouse_event,
+      const String& canvas_region_id);
 
   WebInputEventResult DispatchDragSrcEvent(const AtomicString& event_type,
                                            const WebMouseEvent&);
@@ -78,9 +80,9 @@ class CORE_EXPORT MouseEventManager final
                           const String& canvas_region_id,
                           const WebMouseEvent&);
 
-  void SetNodeUnderMouse(Node*,
-                         const String& canvas_region_id,
-                         const WebMouseEvent&);
+  void SetElementUnderMouse(Element*,
+                            const String& canvas_region_id,
+                            const WebMouseEvent&);
 
   WebInputEventResult HandleMouseFocus(
       const HitTestResult&,
@@ -89,8 +91,9 @@ class CORE_EXPORT MouseEventManager final
   void FakeMouseMoveEventTimerFired(TimerBase*);
 
   void CancelFakeMouseMoveEvent();
-  void DispatchFakeMouseMoveEventSoon(MouseEventManager::FakeMouseMoveReason);
-  void DispatchFakeMouseMoveEventSoonInQuad(const FloatQuad&);
+  void MayUpdateHoverWhenContentUnderMouseChanged(
+      MouseEventManager::UpdateHoverReason);
+  void MayUpdateHoverAfterScroll(const FloatQuad&);
 
   void SetLastKnownMousePosition(const WebMouseEvent&);
   void SetLastMousePositionAsUnknown();
@@ -127,7 +130,7 @@ class CORE_EXPORT MouseEventManager final
 
   // TODO: These functions ideally should be private but the code needs more
   // refactoring to be able to remove the dependency from EventHandler.
-  Node* GetNodeUnderMouse();
+  Element* GetElementUnderMouse();
   bool IsMousePositionUnknown();
   // TODO(aelias): Make LastKnownMousePosition return FloatPoint.
   IntPoint LastKnownMousePosition();
@@ -152,6 +155,8 @@ class CORE_EXPORT MouseEventManager final
   bool MouseDownMayStartDrag();
 
   bool FakeMouseMovePending() const;
+
+  void RecomputeMouseHoverState();
 
  private:
   class MouseEventBoundaryEventDispatcher : public BoundaryEventDispatcher {
@@ -198,7 +203,7 @@ class CORE_EXPORT MouseEventManager final
   void ClearDragDataTransfer();
   DataTransfer* CreateDraggingDataTransfer() const;
 
-  void ResetDragState();
+  void ResetDragSource();
 
   // Implementations of |SynchronousMutationObserver|
   void NodeChildrenWillBeRemoved(ContainerNode&) final;
@@ -213,7 +218,7 @@ class CORE_EXPORT MouseEventManager final
   // The effective position of the mouse pointer.
   // See
   // https://w3c.github.io/pointerevents/#dfn-tracking-the-effective-position-of-the-legacy-mouse-pointer.
-  Member<Node> node_under_mouse_;
+  Member<Element> element_under_mouse_;
 
   // The last mouse movement position this frame has seen in viewport
   // coordinates.

@@ -64,7 +64,6 @@
           },
           "calendarId": {
             "type": "string",
-            "optional": true,
             "description": "The calendar id of the event."
           },
           "alarmId": {
@@ -131,6 +130,21 @@
             "$ref": "RecurrencePattern",
             "optional": true,
             "description": "How this event reoccurs."
+          },
+          "etag": {
+            "description": "The CalDAV etag id of the event.",
+            "type": "string",
+            "optional": true
+          },
+          "href": {
+            "description": "The CalDAV href id of the event.",
+            "type": "string",
+            "optional": true
+          },
+          "uid": {
+            "description": "The event uid.",
+            "type": "string",
+            "optional": true
           }
         }
       },
@@ -195,8 +209,22 @@
           },
           "calendarId": {
             "type": "string",
-            "optional": true,
             "description": "The calendar id of the event."
+          },
+          "etag": {
+            "type": "string",
+            "optional": true,
+            "description": "The CalDAV etag id of the event."
+          },
+          "href": {
+            "type": "string",
+            "optional": true,
+            "description": "The CalDAV href id of the event."
+          },
+          "uid": {
+            "type": "string",
+            "optional": true,
+            "description": "The event uid."
           }
         }
       },
@@ -207,13 +235,11 @@
         "properties": {
           "created_count": {
             "description": "Number of events created",
-            "type": "integer",
-            "optional": true
+            "type": "integer"
           },
           "failed_count": {
             "description": "Number of failed event creation attempts",
-            "type": "integer",
-            "optional": true
+            "type": "integer"
           }
         }
       },
@@ -247,6 +273,21 @@
             "type": "string",
             "optional": true,
             "description": "The color of the calendar."
+          },
+          "hidden": {
+            "type": "boolean",
+            "optional": true,
+            "description": "If this calendar should be visible."
+          },
+          "active": {
+            "type": "boolean",
+            "optional": true,
+            "description": "If this CalDAV calendar should be polled."
+          },
+          "username": {
+            "type": "string",
+            "optional": true,
+            "description": "The CalDav authentication username."
           }
         }
       },
@@ -289,6 +330,26 @@
             "type": "boolean",
             "optional": true,
             "description": "States if the calendar is hidden in the UI"
+          },
+          "active": {
+            "type": "boolean",
+            "optional": true,
+            "description": "States if a CalDAV calendar should be polled"
+          },
+          "iconindex": {
+            "type": "integer",
+            "optional": true,
+            "description": "Icon index of the calendar."
+          },
+          "ctag": {
+            "type": "string",
+            "optional": true,
+            "description": "The ctag field of the CalDAV calendar."
+          },
+          "username": {
+            "type": "string",
+            "optional": true,
+            "description": "The CalDav authentication username."
           }
         }
       }
@@ -458,10 +519,25 @@
                 "type": "string",
                 "optional": true
               },
+              "etag": {
+                "description": "The CalDAV.etag of the event",
+                "type": "string",
+                "optional": true
+              },
+              "href": {
+                "description": "The href id of the event",
+                "type": "string",
+                "optional": true
+              },
               "recurrence": {
                 "$ref": "RecurrencePattern",
                 "optional": true,
                 "description": "How this event reoccurs."
+              },
+              "uid": {
+                "description": "The event uid",
+                "type": "string",
+                "optional": true
               }
             }
           }
@@ -574,6 +650,26 @@
                 "type": "boolean",
                 "optional": true,
                 "description": "States if the calendar is hidden in the UI"
+              },
+              "active": {
+                "type": "boolean",
+                "optional": true,
+                "description": "States if a CalDAV calendar should be polled"
+              },
+              "iconindex": {
+                "description": "The iconindex of the calendar",
+                "type": "number",
+                "optional": true
+              },
+              "ctag": {
+                "description": "The ctag of the CalDAV calendar",
+                "type": "string",
+                "optional": true
+              },
+              "username": {
+                "description": "The CalDav authentication username.",
+                "type": "string",
+                "optional": true
               }
             }
           }

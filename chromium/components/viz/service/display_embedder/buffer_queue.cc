@@ -34,8 +34,8 @@ BufferQueue::BufferQueue(gpu::gles2::GLES2Interface* gl,
       format_(format),
       gpu_memory_buffer_manager_(gpu_memory_buffer_manager),
       surface_handle_(surface_handle) {
-  DCHECK(gpu::IsImageFormatCompatibleWithGpuMemoryBufferFormat(internal_format,
-                                                               format_));
+  DCHECK_EQ(internal_format,
+            gpu::InternalFormatForGpuMemoryBufferFormat(format_));
 }
 
 BufferQueue::~BufferQueue() {
@@ -75,6 +75,7 @@ void BufferQueue::CopyBufferDamage(int texture,
 
   GLuint dst_framebuffer = 0;
   gl_->GenFramebuffers(1, &dst_framebuffer);
+  DCHECK(dst_framebuffer);
   gl_->BindFramebuffer(GL_FRAMEBUFFER, dst_framebuffer);
   gl_->BindTexture(texture_target_, texture);
   gl_->FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
@@ -86,8 +87,7 @@ void BufferQueue::CopyBufferDamage(int texture,
   }
   gl_->BindTexture(texture_target_, 0);
   gl_->Flush();
-  if (dst_framebuffer != 0)
-    gl_->DeleteFramebuffers(1, &dst_framebuffer);
+  gl_->DeleteFramebuffers(1, &dst_framebuffer);
 }
 
 void BufferQueue::UpdateBufferDamage(const gfx::Rect& damage) {
@@ -101,38 +101,45 @@ void BufferQueue::UpdateBufferDamage(const gfx::Rect& damage) {
   }
 }
 
+void BufferQueue::CopyDamageForCurrentSurface(const gfx::Rect& damage) {
+  if (!current_surface_)
+    return;
+
+  if (damage != gfx::Rect(size_)) {
+    // Copy damage from the most recently swapped buffer. In the event that
+    // the buffer was destroyed and failed to recreate, pick from the most
+    // recently available buffer.
+    uint32_t texture_id = 0;
+    for (auto& surface : base::Reversed(in_flight_surfaces_)) {
+      if (surface) {
+        texture_id = surface->texture;
+        break;
+      }
+    }
+    if (!texture_id && displayed_surface_)
+      texture_id = displayed_surface_->texture;
+
+    if (texture_id) {
+      CopyBufferDamage(current_surface_->texture, texture_id, damage,
+                       current_surface_->damage);
+      gl_->BindFramebuffer(GL_FRAMEBUFFER, fbo_);
+    }
+  }
+  current_surface_->damage = gfx::Rect();
+}
+
 void BufferQueue::SwapBuffers(const gfx::Rect& damage) {
   if (damage.IsEmpty()) {
     in_flight_surfaces_.push_back(std::move(current_surface_));
     return;
   }
 
-  if (current_surface_) {
-    if (damage != gfx::Rect(size_)) {
-      // Copy damage from the most recently swapped buffer. In the event that
-      // the buffer was destroyed and failed to recreate, pick from the most
-      // recently available buffer.
-      uint32_t texture_id = 0;
-      for (auto& surface : base::Reversed(in_flight_surfaces_)) {
-        if (surface) {
-          texture_id = surface->texture;
-          break;
-        }
-      }
-      if (!texture_id && displayed_surface_)
-        texture_id = displayed_surface_->texture;
-
-      if (texture_id) {
-        CopyBufferDamage(current_surface_->texture, texture_id, damage,
-                         current_surface_->damage);
-      }
-    }
-    current_surface_->damage = gfx::Rect();
-  }
+  DCHECK(!current_surface_ || current_surface_->damage.IsEmpty());
   UpdateBufferDamage(damage);
   in_flight_surfaces_.push_back(std::move(current_surface_));
   // Some things reset the framebuffer (CopyBufferDamage, some GLRenderer
   // paths), so ensure we restore it here.
+  // TODO(khushalsagar): Not needed anymore. Remove this.
   gl_->BindFramebuffer(GL_FRAMEBUFFER, fbo_);
 }
 
@@ -299,6 +306,11 @@ std::unique_ptr<BufferQueue::AllocatedSurface> BufferQueue::GetNextSurface() {
   allocated_count_++;
   gl_->BindTexture(texture_target_, texture);
   gl_->BindTexImage2DCHROMIUM(texture_target_, id);
+
+  // The texture must be bound to the image before setting the color space.
+  gl_->SetColorSpaceMetadataCHROMIUM(
+      texture, reinterpret_cast<GLColorSpace>(&color_space_));
+
   return std::make_unique<AllocatedSurface>(this, std::move(buffer), texture,
                                             id, stencil, gfx::Rect(size_));
 }

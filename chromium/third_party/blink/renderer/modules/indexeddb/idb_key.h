@@ -32,10 +32,10 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/scoped_refptr.h"
-#include "third_party/blink/public/platform/modules/indexeddb/web_idb_key.h"
-#include "third_party/blink/public/platform/web_vector.h"
+#include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom-shared.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/shared_buffer.h"
+#include "third_party/blink/renderer/platform/wtf/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
@@ -50,6 +50,8 @@ namespace blink {
 // primary keys and index keys. For this reason, keys are represented using a
 // dedicated data type that fully exposes its contents to the backing store.
 class MODULES_EXPORT IDBKey {
+  USING_FAST_MALLOC(IDBKey);
+
  public:
   typedef Vector<std::unique_ptr<IDBKey>> KeyArray;
 
@@ -57,8 +59,12 @@ class MODULES_EXPORT IDBKey {
     return base::WrapUnique(new IDBKey());
   }
 
+  static std::unique_ptr<IDBKey> CreateNull() {
+    return base::WrapUnique(new IDBKey(mojom::IDBKeyType::Null));
+  }
+
   static std::unique_ptr<IDBKey> CreateNumber(double number) {
-    return base::WrapUnique(new IDBKey(kNumberType, number));
+    return base::WrapUnique(new IDBKey(mojom::IDBKeyType::Number, number));
   }
 
   static std::unique_ptr<IDBKey> CreateBinary(
@@ -71,59 +77,53 @@ class MODULES_EXPORT IDBKey {
   }
 
   static std::unique_ptr<IDBKey> CreateDate(double date) {
-    return base::WrapUnique(new IDBKey(kDateType, date));
+    return base::WrapUnique(new IDBKey(mojom::IDBKeyType::Date, date));
   }
 
   static std::unique_ptr<IDBKey> CreateArray(KeyArray array) {
     return base::WrapUnique(new IDBKey(std::move(array)));
   }
 
+  static std::unique_ptr<IDBKey> Clone(const std::unique_ptr<IDBKey>& rkey_in) {
+    return IDBKey::Clone(rkey_in.get());
+  }
+
+  static std::unique_ptr<IDBKey> Clone(const IDBKey* rkey);
+
   ~IDBKey();
 
-  // In order of the least to the highest precedent in terms of sort order.
-  // These values are written to logs. New enum values can be added, but
-  // existing enums must never be renumbered or deleted and reused.
-  enum Type {
-    kInvalidType = 0,
-    kArrayType = 1,
-    kBinaryType = 2,
-    kStringType = 3,
-    kDateType = 4,
-    kNumberType = 5,
-    kTypeEnumMax,
-  };
-
-  Type GetType() const { return type_; }
+  mojom::IDBKeyType GetType() const { return type_; }
   bool IsValid() const;
 
   const KeyArray& Array() const {
-    DCHECK_EQ(type_, kArrayType);
+    DCHECK_EQ(type_, mojom::IDBKeyType::Array);
     return array_;
   }
 
   scoped_refptr<SharedBuffer> Binary() const {
-    DCHECK_EQ(type_, kBinaryType);
+    DCHECK_EQ(type_, mojom::IDBKeyType::Binary);
     return binary_;
   }
 
   const String& GetString() const {
-    DCHECK_EQ(type_, kStringType);
+    DCHECK_EQ(type_, mojom::IDBKeyType::String);
     return string_;
   }
 
   double Date() const {
-    DCHECK_EQ(type_, kDateType);
+    DCHECK_EQ(type_, mojom::IDBKeyType::Date);
     return number_;
   }
 
   double Number() const {
-    DCHECK_EQ(type_, kNumberType);
+    DCHECK_EQ(type_, mojom::IDBKeyType::Number);
     return number_;
   }
 
   int Compare(const IDBKey* other) const;
   bool IsLessThan(const IDBKey* other) const;
   bool IsEqual(const IDBKey* other) const;
+  size_t SizeEstimate() const { return size_estimate_; }
 
   // Returns a new key array with invalid keys and duplicates removed.
   //
@@ -134,27 +134,32 @@ class MODULES_EXPORT IDBKey {
   // The return value will be pasesd to the backing store, which requires
   // Web types. Returning the correct types directly avoids copying later on
   // (wasted CPU cycles and code size).
-  static WebVector<WebIDBKey> ToMultiEntryArray(
+  static Vector<std::unique_ptr<IDBKey>> ToMultiEntryArray(
       std::unique_ptr<IDBKey> array_key);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(IDBKey);
 
-  IDBKey() : type_(kInvalidType) {}
-  IDBKey(Type type, double number) : type_(type), number_(number) {}
-  explicit IDBKey(const class String& value)
-      : type_(kStringType), string_(value) {}
-  explicit IDBKey(scoped_refptr<SharedBuffer> value)
-      : type_(kBinaryType), binary_(std::move(value)) {}
-  explicit IDBKey(KeyArray key_array)
-      : type_(kArrayType), array_(std::move(key_array)) {}
+  IDBKey();
+  IDBKey(mojom::IDBKeyType type);
+  IDBKey(mojom::IDBKeyType type, double number);
+  explicit IDBKey(const String& value);
+  explicit IDBKey(scoped_refptr<SharedBuffer> value);
+  explicit IDBKey(KeyArray key_array);
 
-  Type type_;
+  mojom::IDBKeyType type_;
   KeyArray array_;
   scoped_refptr<SharedBuffer> binary_;
-  const class String string_;
+  const String string_;
   const double number_ = 0;
+
+  // Initialized in IDBKey constructors based on key type and value size (see
+  // idb_key.cc).  Returned via SizeEstimate() and used in IndexedDB code to
+  // verify that a given key is small enough to pass over IPC.
+  size_t size_estimate_;
 };
+
+using IDBIndexKeys = std::pair<int64_t, Vector<std::unique_ptr<IDBKey>>>;
 
 }  // namespace blink
 

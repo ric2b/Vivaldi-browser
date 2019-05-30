@@ -6,12 +6,14 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/memory/shared_memory_mapping.h"
 #include "cc/paint/skia_paint_canvas.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "components/viz/service/frame_sinks/video_capture/frame_sink_video_capturer_impl.h"
 #include "content/browser/compositor/surface_utils.h"
 #include "media/base/limits.h"
+#include "media/capture/mojom/video_capture_types.mojom.h"
 #include "media/renderers/paint_canvas_video_renderer.h"
 
 namespace content {
@@ -57,7 +59,7 @@ SkBitmap DevToolsVideoConsumer::GetSkBitmapFromFrame(
   skbitmap.allocN32Pixels(frame->visible_rect().width(),
                           frame->visible_rect().height());
   cc::SkiaPaintCanvas canvas(skbitmap);
-  renderer.Copy(frame, &canvas, media::Context3D());
+  renderer.Copy(frame, &canvas, media::Context3D(), nullptr);
   return skbitmap;
 }
 
@@ -132,7 +134,6 @@ bool DevToolsVideoConsumer::IsValidMinAndMaxFrameSize(
 void DevToolsVideoConsumer::OnFrameCaptured(
     base::ReadOnlySharedMemoryRegion data,
     ::media::mojom::VideoFrameInfoPtr info,
-    const gfx::Rect& update_rect,
     const gfx::Rect& content_rect,
     viz::mojom::FrameSinkVideoConsumerFrameCallbacksPtr callbacks) {
   if (!data.IsValid())
@@ -171,6 +172,8 @@ void DevToolsVideoConsumer::OnFrameCaptured(
          viz::mojom::FrameSinkVideoConsumerFrameCallbacksPtr callbacks) {},
       std::move(mapping), std::move(callbacks)));
   frame->metadata()->MergeInternalValuesFrom(info->metadata);
+  if (info->color_space.has_value())
+    frame->set_color_space(info->color_space.value());
 
   callback_.Run(std::move(frame));
 }

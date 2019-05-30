@@ -32,20 +32,12 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/single_thread_task_runner.h"
 #include "third_party/blink/renderer/core/html/parser/nesting_level_incrementer.h"
-#include "third_party/blink/renderer/platform/web_task_runner.h"
+#include "third_party/blink/renderer/platform/scheduler/public/post_cancellable_task.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
 
 namespace blink {
 
 class HTMLDocumentParser;
-
-class PumpSession : public NestingLevelIncrementer {
-  STACK_ALLOCATED();
-
- public:
-  PumpSession(unsigned& nesting_level);
-  ~PumpSession();
-};
 
 class SpeculationsPumpSession : public NestingLevelIncrementer {
   STACK_ALLOCATED();
@@ -69,8 +61,12 @@ class HTMLParserScheduler final
   static HTMLParserScheduler* Create(
       HTMLDocumentParser* parser,
       scoped_refptr<base::SingleThreadTaskRunner> loading_task_runner) {
-    return new HTMLParserScheduler(parser, std::move(loading_task_runner));
+    return MakeGarbageCollected<HTMLParserScheduler>(
+        parser, std::move(loading_task_runner));
   }
+
+  HTMLParserScheduler(HTMLDocumentParser*,
+                      scoped_refptr<base::SingleThreadTaskRunner>);
   ~HTMLParserScheduler();
 
   bool IsScheduledForUnpause() const;
@@ -91,12 +87,9 @@ class HTMLParserScheduler final
 
   void Detach();  // Clear active tasks if any.
 
-  void Trace(blink::Visitor*);
+  void Trace(Visitor*);
 
  private:
-  HTMLParserScheduler(HTMLDocumentParser*,
-                      scoped_refptr<base::SingleThreadTaskRunner>);
-
   bool ShouldYield(const SpeculationsPumpSession&, bool starting_script) const;
   void ContinueParsing();
 
@@ -105,7 +98,6 @@ class HTMLParserScheduler final
 
   TaskHandle cancellable_continue_parse_task_handle_;
   bool is_paused_with_active_timer_;
-  const double parser_time_limit_;
 
   DISALLOW_COPY_AND_ASSIGN(HTMLParserScheduler);
 };

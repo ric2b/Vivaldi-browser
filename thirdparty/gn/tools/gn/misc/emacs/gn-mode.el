@@ -63,7 +63,7 @@ variable name or the '{{' and '}}' which surround it."
 (defvar gn-font-lock-target-declaration-keywords
   '("action" "action_foreach" "bundle_data" "copy" "create_bundle" "executable"
     "group" "loadable_module" "shared_library" "source_set" "static_library"
-    "target"))
+    "generated_file" "target"))
 
 ;; pool() is handled specially since it's also a variable name
 (defvar gn-font-lock-buildfile-fun-keywords
@@ -92,7 +92,8 @@ variable name or the '{{' and '}}' which surround it."
     "output_prefix_override" "outputs" "pool" "precompiled_header"
     "precompiled_header_type" "precompiled_source" "product_type" "public"
     "public_configs" "public_deps" "response_file_contents" "script" "sources"
-    "testonly" "visibility" "write_runtime_deps" "bundle_contents_dir"))
+    "testonly" "visibility" "write_runtime_deps" "bundle_contents_dir"
+    "contents" "output_conversion" "rebase" "data_keys" "walk_keys"))
 
 (defconst gn-font-lock-keywords
   `((,(regexp-opt gn-font-lock-reserved-keywords 'words) .

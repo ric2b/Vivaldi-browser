@@ -42,9 +42,11 @@ class ContextLostExpectations(GpuTestExpectations):
     self.Skip('ContextLost_WebGLContextLostFromSelectElement',
               ['lion', 'debug'], bug=498149)
 
-    # Flaking on Mac.
-    self.Flaky('GpuCrash_GPUProcessCrashesExactlyOncePerVisitToAboutGpuCrash',
-              ['mac'], bug=878258)
+    # Too difficult to make this test work on Mac and Android for now.
+    # Disabling GLES3 support at the GL bindings level doesn't work
+    # there yet.
+    self.Skip('ContextLost_WebGL2Blocked', ['mac'], bug=923134)
+    self.Skip('ContextLost_WebGL2Blocked', ['android'], bug=923134)
 
     # 'Browser must support tab control' raised on Android
     self.Skip('GpuCrash_GPUProcessCrashesExactlyOncePerVisitToAboutGpuCrash',
@@ -54,10 +56,17 @@ class ContextLostExpectations(GpuTestExpectations):
     self.Skip('ContextLost_WebGLContextLostInHiddenTab',
               ['android'], bug=609629)
 
+    # Flaking on Nexus 5X
+    self.Flaky('ContextLost_WebGLUnblockedAfterUserInitiatedReload',
+              ['android', ('qualcomm', 'Adreno (TM) 418')], bug=879423)
+    self.Fail('ContextLost_WorkerRAFAfterGPUCrash',
+              ['android'], bug=880078)
+    self.Fail('ContextLost_WorkerRAFAfterGPUCrash_OOPD',
+              ['android'], bug=880078)
+
     # Nexus 6
     # The Nexus 6 times out on these tests while waiting for the JS to complete
     self.Fail('ContextLost_WebGLContextLostFromLoseContextExtension',
               ['android', ('qualcomm', 'Adreno (TM) 420')], bug=611906)
     self.Fail('ContextLost_WebGLContextLostFromQuantity',
               ['android', ('qualcomm', 'Adreno (TM) 420')], bug=611906)
-

@@ -14,7 +14,7 @@
 #include "base/logging.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
-#include "chromeos/chromeos_switches.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/cryptohome/async_method_caller.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/cryptohome/cryptohome_util.h"
@@ -24,9 +24,9 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/login/auth/auth_status_consumer.h"
 #include "chromeos/login/auth/key.h"
+#include "chromeos/login/auth/login_event_recorder.h"
 #include "chromeos/login/auth/user_context.h"
-#include "chromeos/login/login_state.h"
-#include "chromeos/login_event_recorder.h"
+#include "chromeos/login/login_state/login_state.h"
 #include "components/account_id/account_id.h"
 #include "components/device_event_log/device_event_log.h"
 #include "components/user_manager/known_user.h"
@@ -74,6 +74,67 @@ enum CryptohomeMigrationToGaiaId {
 void UMACryptohomeMigrationToGaiaId(const CryptohomeMigrationToGaiaId status) {
   UMA_HISTOGRAM_ENUMERATION(kCryptohomeMigrationToGaiaId, status,
                             CryptohomeMigrationToGaiaId::ENTRIES_COUNT);
+}
+
+// Returns a human-readable string describing |state|.
+const char* AuthStateToString(CryptohomeAuthenticator::AuthState state) {
+  switch (state) {
+    case CryptohomeAuthenticator::CONTINUE:
+      return "CONTINUE";
+    case CryptohomeAuthenticator::NO_MOUNT:
+      return "NO_MOUNT";
+    case CryptohomeAuthenticator::FAILED_MOUNT:
+      return "FAILED_MOUNT";
+    case CryptohomeAuthenticator::FAILED_REMOVE:
+      return "FAILED_REMOVE";
+    case CryptohomeAuthenticator::FAILED_TMPFS:
+      return "FAILED_TMPFS";
+    case CryptohomeAuthenticator::FAILED_TPM:
+      return "FAILED_TPM";
+    case CryptohomeAuthenticator::CREATE_NEW:
+      return "CREATE_NEW";
+    case CryptohomeAuthenticator::RECOVER_MOUNT:
+      return "RECOVER_MONUT";
+    case CryptohomeAuthenticator::POSSIBLE_PW_CHANGE:
+      return "POSSIBLE_PW_CHANGE";
+    case CryptohomeAuthenticator::NEED_NEW_PW:
+      return "NEED_NEW_PW";
+    case CryptohomeAuthenticator::NEED_OLD_PW:
+      return "NEED_OLD_PW";
+    case CryptohomeAuthenticator::HAVE_NEW_PW:
+      return "HAVE_NEW_PW";
+    case CryptohomeAuthenticator::OFFLINE_LOGIN:
+      return "OFFLINE_LOGIN";
+    case CryptohomeAuthenticator::ONLINE_LOGIN:
+      return "ONLINE_LOGIN";
+    case CryptohomeAuthenticator::UNLOCK:
+      return "UNLOCK";
+    case CryptohomeAuthenticator::ONLINE_FAILED:
+      return "ONLINE_FAILED";
+    case CryptohomeAuthenticator::GUEST_LOGIN:
+      return "GUEST_LOGIN";
+    case CryptohomeAuthenticator::PUBLIC_ACCOUNT_LOGIN:
+      return "PUBLIC_ACCOUNT_LOGIN";
+    case CryptohomeAuthenticator::SUPERVISED_USER_LOGIN:
+      return "SUPERVISED_USER_LOGIN";
+    case CryptohomeAuthenticator::LOGIN_FAILED:
+      return "LOGIN_FAILED";
+    case CryptohomeAuthenticator::OWNER_REQUIRED:
+      return "OWNER_REQUIRED";
+    case CryptohomeAuthenticator::FAILED_USERNAME_HASH:
+      return "FAILED_USERNAME_HASH";
+    case CryptohomeAuthenticator::KIOSK_ACCOUNT_LOGIN:
+      return "KIOSK_ACCOUNT_LOGIN";
+    case CryptohomeAuthenticator::REMOVED_DATA_AFTER_FAILURE:
+      return "REMOVED_DATA_AFTER_FAILURE";
+    case CryptohomeAuthenticator::FAILED_OLD_ENCRYPTION:
+      return "FAILED_OLD_ENCRYPTION";
+    case CryptohomeAuthenticator::FAILED_PREVIOUS_MIGRATION_INCOMPLETE:
+      return "FAILED_PREVIOUS_MIGRATION_INCOMPLETE";
+    case CryptohomeAuthenticator::OFFLINE_NO_MOUNT:
+      return "OFFLINE_NO_MOUNT";
+  }
+  return "UNKNOWN";
 }
 
 // Hashes |key| with |system_salt| if it its type is KEY_TYPE_PASSWORD_PLAIN.
@@ -540,7 +601,7 @@ CryptohomeAuthenticator::CryptohomeAuthenticator(
       owner_is_verified_(false),
       user_can_login_(false),
       remove_user_data_on_failure_(false),
-      delayed_login_failure_(NULL) {}
+      delayed_login_failure_(AuthFailure::NONE) {}
 
 void CryptohomeAuthenticator::AuthenticateToLogin(
     content::BrowserContext* context,
@@ -731,13 +792,21 @@ void CryptohomeAuthenticator::OnOldEncryptionDetected(
   }
 }
 
+// Callback invoked when UnmountEx returns.
+void CryptohomeAuthenticator::OnUnmountEx(
+    base::Optional<cryptohome::BaseReply> reply) {
+  if (BaseReplyToMountError(reply) != cryptohome::MOUNT_ERROR_NONE)
+    LOGIN_LOG(ERROR) << "Couldn't unmount user's homedir";
+  OnAuthFailure(AuthFailure(AuthFailure::OWNER_REQUIRED));
+}
+
 void CryptohomeAuthenticator::OnAuthFailure(const AuthFailure& error) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   // OnAuthFailure will be called again with the same |error|
   // after the cryptohome has been removed.
   if (remove_user_data_on_failure_) {
-    delayed_login_failure_ = &error;
+    delayed_login_failure_ = error;
     RemoveEncryptedData();
     return;
   }
@@ -796,19 +865,12 @@ void CryptohomeAuthenticator::OnOwnershipChecked(bool is_owner) {
   Resolve();
 }
 
-void CryptohomeAuthenticator::OnUnmount(base::Optional<bool> success) {
-  if (!success.has_value() || !success.value()) {
-    // Maybe we should reboot immediately here?
-    LOGIN_LOG(ERROR) << "Couldn't unmount users home!";
-  }
-  OnAuthFailure(AuthFailure(AuthFailure::OWNER_REQUIRED));
-}
-
 void CryptohomeAuthenticator::Resolve() {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
   bool create_if_nonexistent = false;
   CryptohomeAuthenticator::AuthState state = ResolveState();
-  VLOG(1) << "Resolved state to: " << state;
+  VLOG(1) << "Resolved state to " << state << " (" << AuthStateToString(state)
+          << ")";
   switch (state) {
     case CONTINUE:
     case POSSIBLE_PW_CHANGE:
@@ -861,7 +923,7 @@ void CryptohomeAuthenticator::Resolve() {
       remove_user_data_on_failure_ = false;
       task_runner_->PostTask(
           FROM_HERE, base::BindOnce(&CryptohomeAuthenticator::OnAuthFailure,
-                                    this, *delayed_login_failure_));
+                                    this, delayed_login_failure_));
       break;
     case CREATE_NEW:
       create_if_nonexistent = true;
@@ -922,8 +984,9 @@ void CryptohomeAuthenticator::Resolve() {
       break;
     case OWNER_REQUIRED: {
       current_state_->ResetCryptohomeStatus();
-      DBusThreadManager::Get()->GetCryptohomeClient()->Unmount(
-          base::BindOnce(&CryptohomeAuthenticator::OnUnmount, this));
+      DBusThreadManager::Get()->GetCryptohomeClient()->UnmountEx(
+          cryptohome::UnmountRequest(),
+          base::BindOnce(&CryptohomeAuthenticator::OnUnmountEx, this));
       break;
     }
     case FAILED_OLD_ENCRYPTION:

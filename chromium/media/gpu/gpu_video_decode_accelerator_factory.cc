@@ -31,7 +31,7 @@
 #if defined(OS_ANDROID)
 #include "media/gpu/android/android_video_decode_accelerator.h"
 #include "media/gpu/android/android_video_surface_chooser_impl.h"
-#include "media/gpu/android/avda_codec_allocator.h"
+#include "media/gpu/android/codec_allocator.h"
 #include "media/gpu/android/device_info.h"
 #endif
 #if BUILDFLAG(USE_VAAPI)
@@ -46,8 +46,10 @@ namespace {
 gpu::VideoDecodeAcceleratorCapabilities GetDecoderCapabilitiesInternal(
     const gpu::GpuPreferences& gpu_preferences,
     const gpu::GpuDriverBugWorkarounds& workarounds) {
+#if !defined(OS_MACOSX)
   if (gpu_preferences.disable_accelerated_video_decode)
     return gpu::VideoDecodeAcceleratorCapabilities();
+#endif
 
   // Query VDAs for their capabilities and construct a set of supported
   // profiles for current platform. This must be done in the same order as in
@@ -98,7 +100,8 @@ GpuVideoDecodeAcceleratorFactory::Create(
     const BindGLImageCallback& bind_image_cb) {
   return base::WrapUnique(new GpuVideoDecodeAcceleratorFactory(
       get_gl_context_cb, make_context_current_cb, bind_image_cb,
-      GetContextGroupCallback(), AndroidOverlayMojoFactoryCB()));
+      GetContextGroupCallback(), AndroidOverlayMojoFactoryCB(),
+      CreateAbstractTextureCallback()));
 }
 
 // static
@@ -108,10 +111,11 @@ GpuVideoDecodeAcceleratorFactory::CreateWithGLES2Decoder(
     const MakeGLContextCurrentCallback& make_context_current_cb,
     const BindGLImageCallback& bind_image_cb,
     const GetContextGroupCallback& get_context_group_cb,
-    const AndroidOverlayMojoFactoryCB& overlay_factory_cb) {
+    const AndroidOverlayMojoFactoryCB& overlay_factory_cb,
+    const CreateAbstractTextureCallback& create_abstract_texture_cb) {
   return base::WrapUnique(new GpuVideoDecodeAcceleratorFactory(
       get_gl_context_cb, make_context_current_cb, bind_image_cb,
-      get_context_group_cb, overlay_factory_cb));
+      get_context_group_cb, overlay_factory_cb, create_abstract_texture_cb));
 }
 
 // static
@@ -145,8 +149,10 @@ GpuVideoDecodeAcceleratorFactory::CreateVDA(
     MediaLog* media_log) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
+#if !defined(OS_MACOSX)
   if (gpu_preferences.disable_accelerated_video_decode)
     return nullptr;
+#endif
 
   // Array of Create..VDA() function pointers, potentially usable on current
   // platform. This list is ordered by priority, from most to least preferred,
@@ -253,7 +259,8 @@ GpuVideoDecodeAcceleratorFactory::CreateVTVDA(
     const gpu::GpuPreferences& gpu_preferences,
     MediaLog* media_log) const {
   std::unique_ptr<VideoDecodeAccelerator> decoder;
-  decoder.reset(new VTVideoDecodeAccelerator(bind_image_cb_, media_log));
+  decoder.reset(new VTVideoDecodeAccelerator(bind_image_cb_, media_log,
+                             gpu_preferences.disable_accelerated_video_decode));
   return decoder;
 }
 #endif
@@ -266,11 +273,11 @@ GpuVideoDecodeAcceleratorFactory::CreateAndroidVDA(
     MediaLog* media_log) const {
   std::unique_ptr<VideoDecodeAccelerator> decoder;
   decoder.reset(new AndroidVideoDecodeAccelerator(
-      AVDACodecAllocator::GetInstance(base::ThreadTaskRunnerHandle::Get()),
+      CodecAllocator::GetInstance(base::ThreadTaskRunnerHandle::Get()),
       std::make_unique<AndroidVideoSurfaceChooserImpl>(
           DeviceInfo::GetInstance()->IsSetOutputSurfaceSupported()),
       make_context_current_cb_, get_context_group_cb_, overlay_factory_cb_,
-      DeviceInfo::GetInstance()));
+      create_abstract_texture_cb_, DeviceInfo::GetInstance()));
   return decoder;
 }
 #endif
@@ -280,12 +287,14 @@ GpuVideoDecodeAcceleratorFactory::GpuVideoDecodeAcceleratorFactory(
     const MakeGLContextCurrentCallback& make_context_current_cb,
     const BindGLImageCallback& bind_image_cb,
     const GetContextGroupCallback& get_context_group_cb,
-    const AndroidOverlayMojoFactoryCB& overlay_factory_cb)
+    const AndroidOverlayMojoFactoryCB& overlay_factory_cb,
+    const CreateAbstractTextureCallback& create_abstract_texture_cb)
     : get_gl_context_cb_(get_gl_context_cb),
       make_context_current_cb_(make_context_current_cb),
       bind_image_cb_(bind_image_cb),
       get_context_group_cb_(get_context_group_cb),
-      overlay_factory_cb_(overlay_factory_cb) {}
+      overlay_factory_cb_(overlay_factory_cb),
+      create_abstract_texture_cb_(create_abstract_texture_cb) {}
 
 GpuVideoDecodeAcceleratorFactory::~GpuVideoDecodeAcceleratorFactory() = default;
 

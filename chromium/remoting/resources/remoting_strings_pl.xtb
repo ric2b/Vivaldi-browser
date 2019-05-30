@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="pl">
 <translation id="1002108253973310084">Wykryto niezgodną wersję protokołu. Upewnij się, że na obu komputerach masz zainstalowaną najnowszą wersję oprogramowania, i spróbuj ponownie.</translation>
+<translation id="1008557486741366299">Nie teraz</translation>
 <translation id="1050693411695664090">Słaba</translation>
 <translation id="1152528166145813711">Wybierz…</translation>
 <translation id="1199593201721843963">Wyłącz połączenia zdalne</translation>
@@ -23,6 +24,7 @@ Informacje na temat prywatności znajdziesz w Polityce prywatności Google (http
 <translation id="1520828917794284345">Dopasuj pulpit</translation>
 <translation id="154040539590487450">Nie udało się uruchomić usługi dostępu zdalnego.</translation>
 <translation id="1546934824884762070">Wystąpił nieoczekiwany błąd. Zgłoś ten problem programistom.</translation>
+<translation id="1624185583382384493">Pulpit zdalny Chrome jest teraz dostępny w internecie. Wypróbuj naszą <ph name="LINK_BEGIN" />aplikację internetową<ph name="LINK_END" />. Jest bezpłatna, szybka i oferuje jeszcze więcej funkcji, w tym poprawioną obsługę wielu monitorów.</translation>
 <translation id="1643640058022401035">Jeśli opuścisz tę stronę, sesja Chromoting zostanie zakończona.</translation>
 <translation id="1654128982815600832">Włączam połączenia zdalne z tym komputerem…</translation>
 <translation id="170207782578677537">Nie udało się zarejestrować tego komputera.</translation>
@@ -62,6 +64,7 @@ Informacje na temat prywatności znajdziesz w Polityce prywatności Google (http
 <translation id="2314101195544969792">Sesja aplikacji <ph name="APPLICATION_NAME" /> jest od jakiegoś czasu nieaktywna i zostanie wkrótce zakończona.</translation>
 <translation id="2317666076142640974">Zobacz, jak wygląda nowa <ph name="LINK_BEGIN" />aplikacja internetowa Pulpit zdalny Chrome<ph name="LINK_END" /> i podziel się z nami opinią.</translation>
 <translation id="2320166752086256636">Ukryj klawiaturę</translation>
+<translation id="2332192922827071008">Otwórz Ustawienia</translation>
 <translation id="2353140552984634198">Możesz bezpiecznie korzystać z tego komputera przez Chromoting.</translation>
 <translation id="2359808026110333948">Dalej</translation>
 <translation id="2366718077645204424">Nie można połączyć się z hostem. Problem prawdopodobnie wynika z konfiguracji Twojej sieci.</translation>
@@ -82,6 +85,7 @@ Informacje na temat prywatności znajdziesz w Polityce prywatności Google (http
 <translation id="2841013758207633010">Godzina</translation>
 <translation id="2851754573186462851">Chromium App Streaming</translation>
 <translation id="2888969873284818612">Wystąpił błąd sieci. Uruchomimy ponownie aplikację, gdy urządzenie znów będzie online.</translation>
+<translation id="2891243864890517178">Mac (OS X Yosemite 10.10 lub nowszy)</translation>
 <translation id="289405675947420287">Uzyskaj bezpieczny dostęp do swojego komputera z urządzenia z iOS. To rozwiązanie proste, szybkie i bezpłatne.
 
 • Na komputerze, do którego chcesz uzyskać zdalny dostęp, pobierz aplikację Pulpit zdalny Chrome ze sklepu Chrome Web Store.
@@ -102,7 +106,6 @@ Informacje na temat prywatności znajdziesz w Polityce prywatności Google (http
 <translation id="3171922709365450819">To urządzenie nie jest obsługiwane przez tego klienta, ponieważ wymaga uwierzytelniania innej firmy.</translation>
 <translation id="3194245623920924351">Pulpit zdalny Chrome</translation>
 <translation id="3197730452537982411">Pulpit zdalny</translation>
-<translation id="3212472844831225214">• Dodano obsługę Androida 9.0 Pie.</translation>
 <translation id="324272851072175193">Prześlij te instrukcje e-mailem</translation>
 <translation id="3258789396564295715">Możesz bezpiecznie korzystać z tego komputera przez Pulpit zdalny Chrome.</translation>
 <translation id="3286521253923406898">Kontroler hosta funkcji Chromoting</translation>
@@ -136,6 +139,7 @@ Informacje na temat prywatności znajdziesz w Polityce prywatności Google (http
 <translation id="3989511127559254552">Aby przejść dalej, musisz najpierw przyznać rozszerzone uprawnienia dostępu do swojego komputera. Trzeba to zrobić tylko raz.</translation>
 <translation id="4006787130661126000">Jeśli chcesz korzystać z tego komputera przez Pulpit zdalny Chrome, musisz włączyć połączenia zdalne.</translation>
 <translation id="405887016757208221">Komputerowi zdalnemu nie udało się zainicjować sesji. Jeśli problem nie zniknie, spróbuj ponownie skonfigurować hosta.</translation>
+<translation id="4060747889721220580">Pobieranie pliku</translation>
 <translation id="4068946408131579958">Wszystkie połączenia</translation>
 <translation id="409800995205263688">UWAGA: ustawienia zasad zezwalają wyłącznie na połączenia między komputerami w Twojej sieci.</translation>
 <translation id="4126409073460786861">Po zakończeniu konfiguracji odśwież tę stronę. Gdy to zrobisz, dostęp do komputera będzie można uzyskiwać, wybierając urządzenie i wpisując kod PIN.</translation>
@@ -189,6 +193,9 @@ PC</translation>
 <translation id="4973800994433240357">Pobierając instalatora hosta funkcji Chromoting, akceptujesz <ph name="LINK_BEGIN" />Warunki korzystania z usług<ph name="LINK_END" /> Google.</translation>
 <translation id="4974476491460646149">Połączenie z hostem <ph name="HOSTNAME" /> zostało zakończone</translation>
 <translation id="4985296110227979402">Najpierw musisz skonfigurować funkcję dostępu zdalnego na komputerze.</translation>
+<translation id="5059773780693835145">Aby móc sterować tym komputerem zdalnie za pomocą <ph name="PRODUCT_NAME" />, musisz wykonać jeszcze jedną czynność konfiguracyjną.
+
+Aby włączyć tę funkcję, kliknij „<ph name="BUTTON_NAME" />” w celu wyświetlenia panelu ustawień Bezpieczeństwo i prywatność, a następnie zaznacz „<ph name="SERVICE_SCRIPT_NAME" />”.</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" /> (offline)</translation>
 <translation id="5070121137485264635">Host zdalny wymaga uwierzytelnienia w witrynie innej firmy. Aby kontynuować, musisz udzielić Pulpitowi zdalnemu Chrome dodatkowych uprawnień dostępu do tego adresu:</translation>
 <translation id="507204348399810022">Na pewno chcesz wyłączyć połączenia zdalne z: <ph name="HOSTNAME" />?</translation>
@@ -237,6 +244,7 @@ PC</translation>
 <translation id="6198252989419008588">Zmień kod PIN</translation>
 <translation id="6204583485351780592"><ph name="HOSTNAME" /> (nieaktualne)</translation>
 <translation id="6221358653751391898">Nie jesteś zalogowany do Chrome. Zaloguj się i spróbuj ponownie.</translation>
+<translation id="6227369581881558336">Pulpit zdalny Chrome jest teraz dostępny w internecie i oferuje nowe funkcje, w tym możliwość transferu plików. Wypróbuj naszą <ph name="LINK_BEGIN" />aplikację internetową<ph name="LINK_END" />.</translation>
 <translation id="6284412385303060032">Host uruchomiony na ekranie logowania konsoli został zamknięty, by umożliwić włączenie trybu kurtyny, przełączając się na hosta uruchomionego w sesji danego użytkownika.</translation>
 <translation id="629730747756840877">Konto</translation>
 <translation id="6304318647555713317">Klient</translation>
@@ -250,7 +258,6 @@ PC</translation>
 <translation id="6542902059648396432">Zgłoś problem…</translation>
 <translation id="6550675742724504774">Opcje</translation>
 <translation id="6570205395680337606">Zresetuj aplikację. Niezapisane dane zostaną utracone.</translation>
-<translation id="6572345186230665992">Mac (OS X Mavericks 10.9 lub nowszy)</translation>
 <translation id="6583902294974160967">Pomoc</translation>
 <translation id="6612717000975622067">Wyślij Ctrl-Alt-Del</translation>
 <translation id="6654753848497929428">Udostępnij</translation>
@@ -285,7 +292,6 @@ PC</translation>
 <translation id="7434397035092923453">Odmowa dostępu dla klienta: <ph name="CLIENT_USERNAME" />.</translation>
 <translation id="7444276978508498879">Podłączył się klient: <ph name="CLIENT_USERNAME" />.</translation>
 <translation id="7526139040829362392">Zmień konto</translation>
-<translation id="7589941250119944644">Pulpit zdalny Chrome jest teraz dostępny w internecie. Wypróbuj naszą <ph name="LINK_BEGIN" />aplikację internetową<ph name="LINK_END" /> – jest szybka, bezpłatna i oferuje wszystkie funkcje znane z poprzedniej wersji Pulpitu.</translation>
 <translation id="7606912958770842224">Włącz połączenia zdalne</translation>
 <translation id="7628469622942688817">Zapamiętaj mój kod PIN na tym urządzeniu.</translation>
 <translation id="7649070708921625228">Pomoc</translation>
@@ -314,6 +320,7 @@ PC</translation>
 <translation id="809687642899217504">Moje komputery</translation>
 <translation id="811307782653349804">Dostęp do własnego komputera z dowolnego miejsca.</translation>
 <translation id="8116630183974937060">Wystąpił błąd sieci. Sprawdź, czy urządzenie jest online, i spróbuj jeszcze raz.</translation>
+<translation id="8123581458650016326">Zezwól użytkownikom zdalnym na sterowanie tym komputerem</translation>
 <translation id="8178433417677596899">Dzielenie się ekranem z innym użytkownikiem – doskonałe do zdalnej pomocy technicznej.</translation>
 <translation id="8187079423890319756">Copyright 2013 Autorzy Chromium. Wszelkie prawa zastrzeżone.</translation>
 <translation id="8196755618196986400">Aby umożliwić nam skontaktowanie się z Tobą w sprawie dodatkowych informacji, Twój adres e-mail zostanie dołączony do każdego zgłoszenia, które prześlesz.</translation>
@@ -331,6 +338,8 @@ PC</translation>
 <translation id="8525306231823319788">Pełny ekran</translation>
 <translation id="8548209692293300397">Poprzednio logowałeś się jako <ph name="USER_NAME" /> (<ph name="USER_EMAIL" />). Aby uzyskać dostęp do swoich komputerów na tym koncie, <ph name="LINK_BEGIN" />zaloguj się na to konto w Google Chrome<ph name="LINK_END" /> i ponownie zainstaluj Pulpit zdalny Chrome.</translation>
 <translation id="8642984861538780905">Średnia</translation>
+<translation id="8705151241155781642">• Dodano obsługę Androida 9.0 Pie.
+• Umożliwiono zmianę rozdzielczości pulpitu zdalnego, by dopasować ją do ekranu urządzenia z Androidem.</translation>
 <translation id="8712909229180978490">Nie widzę moich plików zapisanych na Dysku Google, gdy jestem online.</translation>
 <translation id="8743328882720071828">Czy chcesz zezwolić użytkownikowi <ph name="CLIENT_USERNAME" /> na przeglądanie zawartości Twojego komputera i sterowanie nim?</translation>
 <translation id="8747048596626351634">Sesja została zerwana lub nie udało się jej rozpocząć. Jeśli sesja ~/.chrome-remote-desktop-session istnieje na komputerze zdalnym, upewnij się, że spowodowała ona uruchomienie długotrwałego procesu na pierwszym planie, takiego jak środowisko pulpitu lub menedżer okien.</translation>

@@ -12,6 +12,8 @@
 
 namespace vivaldi {
 
+WEB_CONTENTS_USER_DATA_KEY_IMPL(VivaldiFrameObserver)
+
 VivaldiFrameObserver::VivaldiFrameObserver(content::WebContents* web_contents)
     : content::WebContentsObserver(web_contents) {
   host_zoom_map_ = content::HostZoomMap::GetForWebContents(web_contents);
@@ -62,7 +64,7 @@ void VivaldiFrameObserver::RenderFrameHostChanged(
 
   Profile* profile_ =
       Profile::FromBrowserContext(web_contents()->GetBrowserContext());
-  content::RendererPreferences* prefs =
+  blink::mojom::RendererPreferences* prefs =
       web_contents()->GetMutableRendererPrefs();
   renderer_preferences_util::UpdateFromSystemSettings(prefs, profile_);
   web_contents()->GetRenderViewHost()->SyncRendererPrefs();

@@ -5,6 +5,8 @@
 #ifndef GPU_IPC_GPU_IN_PROCESS_THREAD_SERVICE_H_
 #define GPU_IPC_GPU_IN_PROCESS_THREAD_SERVICE_H_
 
+#include <memory>
+
 #include "base/compiler_specific.h"
 #include "base/single_thread_task_runner.h"
 #include "gpu/command_buffer/service/mailbox_manager.h"
@@ -14,8 +16,11 @@
 #include "ui/gl/gl_share_group.h"
 
 namespace gpu {
-
 class Scheduler;
+
+namespace gles2 {
+class ProgramCache;
+}  // namespace gles2
 
 // Default Service class when no service is specified. GpuInProcessThreadService
 // is used by Mus and unit tests.
@@ -30,11 +35,13 @@ class GL_IN_PROCESS_CONTEXT_EXPORT GpuInProcessThreadService
       scoped_refptr<gl::GLShareGroup> share_group,
       gl::GLSurfaceFormat share_group_surface_format,
       const GpuFeatureInfo& gpu_feature_info,
-      const GpuPreferences& gpu_preferences);
+      const GpuPreferences& gpu_preferences,
+      SharedImageManager* shared_image_manager,
+      gles2::ProgramCache* program_cache);
 
   // CommandBufferTaskExecutor implementation.
-  bool ForceVirtualizedGLContexts() override;
-  bool BlockThreadOnWaitSyncToken() override;
+  bool ForceVirtualizedGLContexts() const override;
+  bool ShouldCreateMemoryTracker() const override;
   std::unique_ptr<CommandBufferTaskExecutor::Sequence> CreateSequence()
       override;
   void ScheduleOutOfOrderTask(base::OnceClosure task) override;

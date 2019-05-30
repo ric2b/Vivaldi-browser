@@ -20,7 +20,6 @@ class ShapeResultBloberizer;
 class TextRun;
 
 class PLATFORM_EXPORT ShapeResultBuffer {
-  WTF_MAKE_NONCOPYABLE(ShapeResultBuffer);
   STACK_ALLOCATED();
 
  public:
@@ -72,16 +71,15 @@ class PLATFORM_EXPORT ShapeResultBuffer {
       unsigned to);
 
   static void AddRunInfoAdvances(const ShapeResult::RunInfo& run_info,
-                                 float offset,
+                                 double offset,
                                  Vector<double>& advances);
-  static void AddRunInfoRanges(const ShapeResult::RunInfo&,
-                               float offset,
-                               Vector<CharacterRange>&);
 
   // Empirically, cases where we get more than 50 ShapeResults are extremely
   // rare.
   Vector<scoped_refptr<const ShapeResult>, 64> results_;
   bool has_vertical_offsets_;
+
+  DISALLOW_COPY_AND_ASSIGN(ShapeResultBuffer);
 };
 
 }  // namespace blink

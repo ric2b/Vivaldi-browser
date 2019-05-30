@@ -9,6 +9,7 @@
 #include "base/lazy_instance.h"
 #include "components/pdf/renderer/pdf_accessibility_tree.h"
 #include "content/public/common/referrer.h"
+#include "content/public/common/referrer_type_converters.h"
 #include "content/public/renderer/pepper_plugin_instance.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
@@ -110,6 +111,8 @@ int32_t PepperPDFHost::OnResourceMessageReceived(
         OnHostMsgSetAccessibilityPageInfo)
     PPAPI_DISPATCH_HOST_RESOURCE_CALL(PpapiHostMsg_PDF_SelectionChanged,
                                       OnHostMsgSelectionChanged)
+    PPAPI_DISPATCH_HOST_RESOURCE_CALL(PpapiHostMsg_PDF_SetPluginCanSave,
+                                      OnHostMsgSetPluginCanSave)
   PPAPI_END_MESSAGE_MAP()
   return PP_ERROR_FAILED;
 }
@@ -218,14 +221,14 @@ int32_t PepperPDFHost::OnHostMsgSaveAs(
   GURL url = instance->GetPluginURL();
   content::Referrer referrer;
   referrer.url = url;
-  referrer.policy = blink::kWebReferrerPolicyDefault;
+  referrer.policy = network::mojom::ReferrerPolicy::kDefault;
   referrer = content::Referrer::SanitizeForRequest(url, referrer);
 
   mojom::PdfService* service = GetRemotePdfService();
   if (!service)
     return PP_ERROR_FAILED;
 
-  service->SaveUrlAs(url, referrer);
+  service->SaveUrlAs(url, blink::mojom::Referrer::From(referrer));
   return PP_OK;
 }
 
@@ -296,6 +299,17 @@ int32_t PepperPDFHost::OnHostMsgSelectionChanged(
 
   service->SelectionChanged(gfx::PointF(left.x, left.y), left_height,
                             gfx::PointF(right.x, right.y), right_height);
+  return PP_OK;
+}
+
+int32_t PepperPDFHost::OnHostMsgSetPluginCanSave(
+    ppapi::host::HostMessageContext* context,
+    bool can_save) {
+  mojom::PdfService* service = GetRemotePdfService();
+  if (!service)
+    return PP_ERROR_FAILED;
+
+  service->SetPluginCanSave(can_save);
   return PP_OK;
 }
 

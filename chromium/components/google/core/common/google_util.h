@@ -86,9 +86,8 @@ bool IsGoogleHostname(base::StringPiece host,
 // port for its scheme (80 for HTTP, 443 for HTTPS).
 //
 // Note that this only checks for google.<TLD> domains, but not other Google
-// properties. There is code in variations_http_header_provider.cc that checks
-// for additional Google properties, which can be moved here if more callers
-// are interested in this in the future.
+// properties. If you want to check domains including other Google properties,
+// you can use IsGoogleAssociatedDomainUrl() below.
 bool IsGoogleDomainUrl(const GURL& url,
                        SubdomainPermission subdomain_permission,
                        PortPermission port_permission);
@@ -106,6 +105,9 @@ bool IsYoutubeDomainUrl(const GURL& url,
                         SubdomainPermission subdomain_permission,
                         PortPermission port_permission);
 
+// True if |url| is hosted by Google.
+bool IsGoogleAssociatedDomainUrl(const GURL& url);
+
 // Returns the list of all Google's registerable domains, i.e. domains named
 // google.<eTLD> owned by Google.
 // TODO(msramek): This is currently only used to ensure the deletion of Google
@@ -114,18 +116,11 @@ bool IsYoutubeDomainUrl(const GURL& url,
 // unregistering themselves.
 const std::vector<std::string>& GetGoogleRegistrableDomains();
 
-// True if |host| is "[www.]<domain_in_lower_case>.<TLD>" with a valid TLD. If
-// |subdomain_permission| is ALLOW_SUBDOMAIN, we check against host
-// "*.<domain_in_lower_case>.<TLD>" instead.
-bool IsValidHostName(base::StringPiece host,
-                     base::StringPiece domain_in_lower_case,
-                     google_util::SubdomainPermission subdomain_permission,
-                     base::StringPiece* tld = nullptr);
-
-// True if |url| is a valid URL with HTTP or HTTPS scheme. If |port_permission|
-// is DISALLOW_NON_STANDARD_PORTS, this also requires |url| to use the standard
-// port for its scheme (80 for HTTP, 443 for HTTPS).
-bool IsValidURL(const GURL& url, google_util::PortPermission port_permission);
+// When called, this will ignore the PortPermission passed in the above methods
+// and ignore the port numbers. This makes it easier to run tests for features
+// that use these methods (directly or indirectly) with the EmbeddedTestServer,
+// which is more representative of production.
+void IgnorePortNumbersForGoogleURLChecksForTesting();
 
 }  // namespace google_util
 

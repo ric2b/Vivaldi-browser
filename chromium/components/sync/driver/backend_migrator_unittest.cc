@@ -6,9 +6,9 @@
 
 #include <memory>
 
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/test/mock_callback.h"
+#include "base/test/scoped_task_environment.h"
 #include "components/sync/base/model_type_test_util.h"
 #include "components/sync/driver/data_type_manager_mock.h"
 #include "components/sync/protocol/sync.pb.h"
@@ -87,7 +87,7 @@ class SyncBackendMigratorTest : public testing::Test {
   BackendMigrator* migrator() { return migrator_.get(); }
 
  private:
-  base::MessageLoop message_loop_;
+  base::test::ScopedTaskEnvironment task_environment_;
   ModelTypeSet preferred_types_;
   NiceMock<DataTypeManagerMock> manager_;
   NiceMock<base::MockCallback<base::RepeatingClosure>> reconfigure_callback_;
@@ -287,4 +287,4 @@ TEST_F(SyncBackendMigratorTest, ConfigureFailure) {
   EXPECT_EQ(BackendMigrator::IDLE, migrator()->state());
 }
 
-};  // namespace syncer
+}  // namespace syncer

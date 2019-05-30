@@ -82,8 +82,6 @@ class LoginDisplayHostMojo : public LoginDisplayHostCommon,
   void OnStartAppLaunch() override;
   void OnStartArcKiosk() override;
   void OnBrowserCreated() override;
-  void StartVoiceInteractionOobe() override;
-  bool IsVoiceInteractionOobe() override;
   void ShowGaiaDialog(
       bool can_close,
       const base::Optional<AccountId>& prefilled_account) override;
@@ -98,17 +96,23 @@ class LoginDisplayHostMojo : public LoginDisplayHostCommon,
   void UpdateAddUserButtonStatus() override;
 
   // LoginScreenClient::Delegate:
-  void HandleAuthenticateUser(const AccountId& account_id,
-                              const std::string& password,
-                              bool authenticated_by_pin,
-                              AuthenticateUserCallback callback) override;
-  void HandleAttemptUnlock(const AccountId& account_id) override;
+  void HandleAuthenticateUserWithPasswordOrPin(
+      const AccountId& account_id,
+      const std::string& password,
+      bool authenticated_by_pin,
+      AuthenticateUserWithPasswordOrPinCallback callback) override;
+  void HandleAuthenticateUserWithExternalBinary(
+      const AccountId& account_id,
+      AuthenticateUserWithExternalBinaryCallback callback) override;
+  void HandleEnrollUserWithExternalBinary(
+      EnrollUserWithExternalBinaryCallback callback) override;
+  void HandleAuthenticateUserWithEasyUnlock(
+      const AccountId& account_id) override;
   void HandleHardlockPod(const AccountId& account_id) override;
-  void HandleRecordClickOnLockIcon(const AccountId& account_id) override;
   void HandleOnFocusPod(const AccountId& account_id) override;
   void HandleOnNoPodFocused() override;
   bool HandleFocusLockScreenApps(bool reverse) override;
-  void HandleLoginAsGuest() override;
+  void HandleFocusOobeDialog() override;
   void HandleLaunchPublicSession(const AccountId& account_id,
                                  const std::string& locale,
                                  const std::string& input_method) override;
@@ -122,13 +126,14 @@ class LoginDisplayHostMojo : public LoginDisplayHostCommon,
 
   // State associated with a pending authentication attempt.
   struct AuthState {
-    AuthState(AccountId account_id, AuthenticateUserCallback callback);
+    AuthState(AccountId account_id,
+              AuthenticateUserWithPasswordOrPinCallback callback);
     ~AuthState();
 
     // Account that is being authenticated.
     AccountId account_id;
     // Callback that should be executed the authentication result is available.
-    AuthenticateUserCallback callback;
+    AuthenticateUserWithPasswordOrPinCallback callback;
   };
   std::unique_ptr<AuthState> pending_auth_state_;
 
@@ -161,6 +166,10 @@ class LoginDisplayHostMojo : public LoginDisplayHostCommon,
   // user cancels the Powerwash dialog in the login screen. Set to true on the
   // first OnStartSigninScreen and remains true afterward.
   bool signin_screen_started_ = false;
+
+  // Set if the signin screen initialization was delayed to show a OOBE dialog,
+  // for example to run reset or enable debugging wizard.
+  bool start_delayed_for_oobe_dialog_ = false;
 
   base::WeakPtrFactory<LoginDisplayHostMojo> weak_factory_;
 

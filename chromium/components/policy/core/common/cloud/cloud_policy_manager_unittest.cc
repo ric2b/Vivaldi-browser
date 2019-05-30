@@ -20,6 +20,7 @@
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
 #include "components/policy/core/common/policy_types.h"
 #include "components/policy/core/common/schema_registry.h"
+#include "services/network/test/test_network_connection_tracker.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -79,7 +80,8 @@ ConfigurationPolicyProvider* TestHarness::CreateProvider(
   // Create and initialize the store.
   store_.NotifyStoreLoaded();
   ConfigurationPolicyProvider* provider = new CloudPolicyManager(
-      dm_protocol::kChromeUserPolicyType, std::string(), &store_, task_runner);
+      dm_protocol::kChromeUserPolicyType, std::string(), &store_, task_runner,
+      network::TestNetworkConnectionTracker::CreateGetter());
   Mock::VerifyAndClearExpectations(&store_);
   return provider;
 }
@@ -133,21 +135,22 @@ PolicyProviderTestHarness* TestHarness::CreateRecommended() {
 }
 
 // Instantiate abstract test case for basic policy reading tests.
-INSTANTIATE_TEST_CASE_P(
-    UserCloudPolicyManagerProviderTest,
-    ConfigurationPolicyProviderTest,
-    testing::Values(TestHarness::CreateMandatory,
-                    TestHarness::CreateRecommended));
+INSTANTIATE_TEST_SUITE_P(UserCloudPolicyManagerProviderTest,
+                         ConfigurationPolicyProviderTest,
+                         testing::Values(TestHarness::CreateMandatory,
+                                         TestHarness::CreateRecommended));
 
 class TestCloudPolicyManager : public CloudPolicyManager {
  public:
   TestCloudPolicyManager(
       CloudPolicyStore* store,
       const scoped_refptr<base::SequencedTaskRunner>& task_runner)
-      : CloudPolicyManager(dm_protocol::kChromeUserPolicyType,
-                           std::string(),
-                           store,
-                           task_runner) {}
+      : CloudPolicyManager(
+            dm_protocol::kChromeUserPolicyType,
+            std::string(),
+            store,
+            task_runner,
+            network::TestNetworkConnectionTracker::CreateGetter()) {}
   ~TestCloudPolicyManager() override {}
 
   // Publish the protected members for testing.

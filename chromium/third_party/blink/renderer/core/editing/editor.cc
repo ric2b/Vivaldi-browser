@@ -33,8 +33,8 @@
 #include "third_party/blink/renderer/core/clipboard/data_transfer_access_policy.h"
 #include "third_party/blink/renderer/core/clipboard/system_clipboard.h"
 #include "third_party/blink/renderer/core/css/css_computed_style_declaration.h"
+#include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/css/css_property_value_set.h"
-#include "third_party/blink/renderer/core/css_property_names.h"
 #include "third_party/blink/renderer/core/dom/document_fragment.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
 #include "third_party/blink/renderer/core/dom/events/scoped_event_queue.h"
@@ -54,9 +54,9 @@
 #include "third_party/blink/renderer/core/editing/editing_tri_state.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/editing/ephemeral_range.h"
+#include "third_party/blink/renderer/core/editing/finder/find_buffer.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
 #include "third_party/blink/renderer/core/editing/ime/input_method_controller.h"
-#include "third_party/blink/renderer/core/editing/iterators/search_buffer.h"
 #include "third_party/blink/renderer/core/editing/kill_ring.h"
 #include "third_party/blink/renderer/core/editing/markers/document_marker.h"
 #include "third_party/blink/renderer/core/editing/markers/document_marker_controller.h"
@@ -67,7 +67,6 @@
 #include "third_party/blink/renderer/core/editing/visible_position.h"
 #include "third_party/blink/renderer/core/editing/visible_units.h"
 #include "third_party/blink/renderer/core/editing/writing_direction.h"
-#include "third_party/blink/renderer/core/event_names.h"
 #include "third_party/blink/renderer/core/events/keyboard_event.h"
 #include "third_party/blink/renderer/core/events/text_event.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
@@ -87,20 +86,20 @@
 #include "third_party/blink/renderer/core/page/drag_data.h"
 #include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/page.h"
+#include "third_party/blink/renderer/core/scroll/scroll_alignment.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
-#include "third_party/blink/renderer/platform/scroll/scroll_alignment.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/wtf/text/character_names.h"
 
 namespace blink {
 
-using namespace HTMLNames;
+using namespace html_names;
 
 namespace {
 
 bool IsInPasswordFieldWithUnrevealedPassword(const Position& position) {
   if (auto* input = ToHTMLInputElementOrNull(EnclosingTextControl(position))) {
-    return (input->type() == InputTypeNames::password) &&
+    return (input->type() == input_type_names::kPassword) &&
            !input->ShouldRevealPassword();
   }
   return false;
@@ -448,7 +447,7 @@ void Editor::ApplyParagraphStyleToSelection(CSSPropertyValueSet* style,
 }
 
 Editor* Editor::Create(LocalFrame& frame) {
-  return new Editor(frame);
+  return MakeGarbageCollected<Editor>(frame);
 }
 
 Editor::Editor(LocalFrame& frame)
@@ -505,9 +504,9 @@ bool Editor::InsertTextWithoutSendingTextEvent(
   if (LocalFrame* edited_frame = selection.Start().GetDocument()->GetFrame()) {
     if (Page* page = edited_frame->GetPage()) {
       LocalFrame* focused_or_main_frame =
-          ToLocalFrame(page->GetFocusController().FocusedOrMainFrame());
+          To<LocalFrame>(page->GetFocusController().FocusedOrMainFrame());
       focused_or_main_frame->Selection().RevealSelection(
-          ScrollAlignment::kAlignCenterIfNeeded);
+          ScrollAlignment::kAlignToEdgeIfNeeded);
     }
   }
 
@@ -520,13 +519,10 @@ bool Editor::InsertLineBreak() {
 
   VisiblePosition caret =
       GetFrameSelection().ComputeVisibleSelectionInDOMTree().VisibleStart();
-  bool align_to_edge = IsEndOfEditableOrNonEditableContent(caret);
   DCHECK(GetFrame().GetDocument());
   if (!TypingCommand::InsertLineBreak(*GetFrame().GetDocument()))
     return false;
-  RevealSelectionAfterEditingOperation(
-      align_to_edge ? ScrollAlignment::kAlignToEdgeIfNeeded
-                    : ScrollAlignment::kAlignCenterIfNeeded);
+  RevealSelectionAfterEditingOperation(ScrollAlignment::kAlignToEdgeIfNeeded);
 
   return true;
 }
@@ -540,14 +536,11 @@ bool Editor::InsertParagraphSeparator() {
 
   VisiblePosition caret =
       GetFrameSelection().ComputeVisibleSelectionInDOMTree().VisibleStart();
-  bool align_to_edge = IsEndOfEditableOrNonEditableContent(caret);
   DCHECK(GetFrame().GetDocument());
   EditingState editing_state;
   if (!TypingCommand::InsertParagraphSeparator(*GetFrame().GetDocument()))
     return false;
-  RevealSelectionAfterEditingOperation(
-      align_to_edge ? ScrollAlignment::kAlignToEdgeIfNeeded
-                    : ScrollAlignment::kAlignCenterIfNeeded);
+  RevealSelectionAfterEditingOperation(ScrollAlignment::kAlignToEdgeIfNeeded);
 
   return true;
 }
@@ -594,7 +587,7 @@ void Editor::CountEvent(ExecutionContext* execution_context,
   if (!execution_context)
     return;
 
-  if (event.type() == EventTypeNames::textInput) {
+  if (event.type() == event_type_names::kTextInput) {
     CountEditingEvent(execution_context, event,
                       WebFeature::kTextInputEventOnInput,
                       WebFeature::kTextInputEventOnTextArea,
@@ -603,7 +596,7 @@ void Editor::CountEvent(ExecutionContext* execution_context,
     return;
   }
 
-  if (event.type() == EventTypeNames::webkitBeforeTextInserted) {
+  if (event.type() == event_type_names::kWebkitBeforeTextInserted) {
     CountEditingEvent(execution_context, event,
                       WebFeature::kWebkitBeforeTextInsertedOnInput,
                       WebFeature::kWebkitBeforeTextInsertedOnTextArea,
@@ -612,7 +605,7 @@ void Editor::CountEvent(ExecutionContext* execution_context,
     return;
   }
 
-  if (event.type() == EventTypeNames::webkitEditableContentChanged) {
+  if (event.type() == event_type_names::kWebkitEditableContentChanged) {
     CountEditingEvent(
         execution_context, event,
         WebFeature::kWebkitEditableContentChangedOnInput,
@@ -649,7 +642,7 @@ void Editor::SetBaseWritingDirection(WritingDirection direction) {
     if (direction == WritingDirection::kNatural)
       return;
     focused_element->setAttribute(
-        dirAttr, direction == WritingDirection::kLeftToRight ? "ltr" : "rtl");
+        kDirAttr, direction == WritingDirection::kLeftToRight ? "ltr" : "rtl");
     focused_element->DispatchInputEvent();
     return;
   }
@@ -747,15 +740,15 @@ void Editor::ComputeAndSetTypingStyle(CSSPropertyValueSet* style,
 bool Editor::FindString(LocalFrame& frame,
                         const String& target,
                         FindOptions options) {
-  VisibleSelection selection =
-      frame.Selection().ComputeVisibleSelectionInDOMTreeDeprecated();
+  VisibleSelectionInFlatTree selection =
+      frame.Selection().ComputeVisibleSelectionInFlatTree();
 
   // TODO(yosin) We should make |findRangeOfString()| to return
   // |EphemeralRange| rather than|Range| object.
-  Range* const result_range =
-      FindRangeOfString(*frame.GetDocument(), target,
-                        EphemeralRange(selection.Start(), selection.End()),
-                        static_cast<FindOptions>(options | kFindAPICall));
+  Range* const result_range = FindRangeOfString(
+      *frame.GetDocument(), target,
+      EphemeralRangeInFlatTree(selection.Start(), selection.End()),
+      static_cast<FindOptions>(options | kFindAPICall));
 
   if (!result_range)
     return false;
@@ -771,18 +764,17 @@ bool Editor::FindString(LocalFrame& frame,
 // TODO(yosin) We should return |EphemeralRange| rather than |Range|. We use
 // |Range| object for checking whether start and end position crossing shadow
 // boundaries, however we can do it without |Range| object.
-template <typename Strategy>
 static Range* FindStringBetweenPositions(
     const String& target,
-    const EphemeralRangeTemplate<Strategy>& reference_range,
+    const EphemeralRangeInFlatTree& reference_range,
     FindOptions options) {
-  EphemeralRangeTemplate<Strategy> search_range(reference_range);
+  EphemeralRangeInFlatTree search_range(reference_range);
 
   bool forward = !(options & kBackwards);
 
   while (true) {
-    EphemeralRangeTemplate<Strategy> result_range =
-        FindPlainText(search_range, target, options);
+    EphemeralRangeInFlatTree result_range =
+        FindBuffer::FindMatchInRange(search_range, target, options);
     if (result_range.IsCollapsed())
       return nullptr;
 
@@ -798,12 +790,12 @@ static Range* FindStringBetweenPositions(
     // next occurrence.
     // TODO(yosin) Handle this case.
     if (forward) {
-      search_range = EphemeralRangeTemplate<Strategy>(
+      search_range = EphemeralRangeInFlatTree(
           NextPositionOf(result_range.StartPosition(),
                          PositionMoveType::kGraphemeCluster),
           search_range.EndPosition());
     } else {
-      search_range = EphemeralRangeTemplate<Strategy>(
+      search_range = EphemeralRangeInFlatTree(
           search_range.StartPosition(),
           PreviousPositionOf(result_range.EndPosition(),
                              PositionMoveType::kGraphemeCluster));
@@ -814,11 +806,10 @@ static Range* FindStringBetweenPositions(
   return nullptr;
 }
 
-template <typename Strategy>
-static Range* FindRangeOfStringAlgorithm(
+Range* Editor::FindRangeOfString(
     Document& document,
     const String& target,
-    const EphemeralRangeTemplate<Strategy>& reference_range,
+    const EphemeralRangeInFlatTree& reference_range,
     FindOptions options) {
   if (target.IsEmpty())
     return nullptr;
@@ -826,26 +817,27 @@ static Range* FindRangeOfStringAlgorithm(
   // Start from an edge of the reference range. Which edge is used depends on
   // whether we're searching forward or backward, and whether startInSelection
   // is set.
-  EphemeralRangeTemplate<Strategy> document_range =
-      EphemeralRangeTemplate<Strategy>::RangeOfContents(document);
-  EphemeralRangeTemplate<Strategy> search_range(document_range);
+  EphemeralRangeInFlatTree document_range =
+      EphemeralRangeInFlatTree::RangeOfContents(document);
+  EphemeralRangeInFlatTree search_range(document_range);
 
   bool forward = !(options & kBackwards);
   bool start_in_reference_range = false;
   if (reference_range.IsNotNull()) {
     start_in_reference_range = options & kStartInSelection;
-    if (forward && start_in_reference_range)
-      search_range = EphemeralRangeTemplate<Strategy>(
-          reference_range.StartPosition(), document_range.EndPosition());
-    else if (forward)
-      search_range = EphemeralRangeTemplate<Strategy>(
-          reference_range.EndPosition(), document_range.EndPosition());
-    else if (start_in_reference_range)
-      search_range = EphemeralRangeTemplate<Strategy>(
-          document_range.StartPosition(), reference_range.EndPosition());
-    else
-      search_range = EphemeralRangeTemplate<Strategy>(
-          document_range.StartPosition(), reference_range.StartPosition());
+    if (forward && start_in_reference_range) {
+      search_range = EphemeralRangeInFlatTree(reference_range.StartPosition(),
+                                              document_range.EndPosition());
+    } else if (forward) {
+      search_range = EphemeralRangeInFlatTree(reference_range.EndPosition(),
+                                              document_range.EndPosition());
+    } else if (start_in_reference_range) {
+      search_range = EphemeralRangeInFlatTree(document_range.StartPosition(),
+                                              reference_range.EndPosition());
+    } else {
+      search_range = EphemeralRangeInFlatTree(document_range.StartPosition(),
+                                              reference_range.StartPosition());
+    }
   }
 
   Range* result_range =
@@ -856,16 +848,16 @@ static Range* FindRangeOfStringAlgorithm(
   // to remove collapsed whitespace. Compare ranges instead of selection
   // objects to ignore the way that the current selection was made.
   if (result_range && start_in_reference_range &&
-      NormalizeRange(EphemeralRangeTemplate<Strategy>(result_range)) ==
+      NormalizeRange(EphemeralRangeInFlatTree(result_range)) ==
           reference_range) {
     if (forward)
-      search_range = EphemeralRangeTemplate<Strategy>(
-          FromPositionInDOMTree<Strategy>(result_range->EndPosition()),
+      search_range = EphemeralRangeInFlatTree(
+          ToPositionInFlatTree(result_range->EndPosition()),
           search_range.EndPosition());
     else
-      search_range = EphemeralRangeTemplate<Strategy>(
+      search_range = EphemeralRangeInFlatTree(
           search_range.StartPosition(),
-          FromPositionInDOMTree<Strategy>(result_range->StartPosition()));
+          ToPositionInFlatTree(result_range->StartPosition()));
     result_range = FindStringBetweenPositions(target, search_range, options);
   }
 
@@ -873,22 +865,6 @@ static Range* FindRangeOfStringAlgorithm(
     return FindStringBetweenPositions(target, document_range, options);
 
   return result_range;
-}
-
-Range* Editor::FindRangeOfString(Document& document,
-                                 const String& target,
-                                 const EphemeralRange& reference,
-                                 FindOptions options) {
-  return FindRangeOfStringAlgorithm<EditingStrategy>(document, target,
-                                                     reference, options);
-}
-
-Range* Editor::FindRangeOfString(Document& document,
-                                 const String& target,
-                                 const EphemeralRangeInFlatTree& reference,
-                                 FindOptions options) {
-  return FindRangeOfStringAlgorithm<EditingInFlatTreeStrategy>(
-      document, target, reference, options);
 }
 
 void Editor::SetMarkedTextMatchesAreHighlighted(bool flag) {
@@ -933,7 +909,7 @@ void Editor::ReplaceSelection(const String& text) {
                            InputEvent::InputType::kInsertReplacementText);
 }
 
-void Editor::Trace(blink::Visitor* visitor) {
+void Editor::Trace(Visitor* visitor) {
   visitor->Trace(frame_);
   visitor->Trace(last_edit_command_);
   visitor->Trace(undo_stack_);

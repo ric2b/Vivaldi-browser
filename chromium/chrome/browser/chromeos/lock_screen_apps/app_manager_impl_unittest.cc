@@ -9,6 +9,8 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/json/json_file_value_serializer.h"
@@ -461,12 +463,12 @@ class LockScreenAppManagerImplTest
 
 }  // namespace
 
-INSTANTIATE_TEST_CASE_P(Unpacked,
-                        LockScreenAppManagerImplTest,
-                        ::testing::Values(TestAppLocation::kUnpacked));
-INSTANTIATE_TEST_CASE_P(Internal,
-                        LockScreenAppManagerImplTest,
-                        ::testing::Values(TestAppLocation::kInternal));
+INSTANTIATE_TEST_SUITE_P(Unpacked,
+                         LockScreenAppManagerImplTest,
+                         ::testing::Values(TestAppLocation::kUnpacked));
+INSTANTIATE_TEST_SUITE_P(Internal,
+                         LockScreenAppManagerImplTest,
+                         ::testing::Values(TestAppLocation::kInternal));
 
 TEST_P(LockScreenAppManagerImplTest, StartAddsAppToTarget) {
   scoped_refptr<const extensions::Extension> note_taking_app =

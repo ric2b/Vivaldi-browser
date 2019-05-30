@@ -21,11 +21,6 @@
 
 #include "third_party/blink/renderer/core/layout/layout_theme.h"
 
-#include <string>
-
-#include "base/feature_list.h"
-#include "base/metrics/field_trial_params.h"
-#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/web/blink.h"
@@ -53,15 +48,15 @@
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/paint/fallback_theme.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
+#include "third_party/blink/renderer/core/style/computed_style_initial_values.h"
 #include "third_party/blink/renderer/platform/file_metadata.h"
 #include "third_party/blink/renderer/platform/fonts/font_selector.h"
 #include "third_party/blink/renderer/platform/fonts/string_truncator.h"
-#include "third_party/blink/renderer/platform/graphics/color.h"
 #include "third_party/blink/renderer/platform/graphics/touch_action.h"
-#include "third_party/blink/renderer/platform/layout_test_support.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/text/platform_locale.h"
 #include "third_party/blink/renderer/platform/theme.h"
+#include "third_party/blink/renderer/platform/web_test_support.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 #include "ui/native_theme/native_theme.h"
 
@@ -69,43 +64,11 @@
 
 namespace blink {
 
-namespace {
-
-void GetAutofillPreviewColorsFromFieldTrial(std::string* color,
-                                            std::string* background_color) {
-  constexpr char kAutofillDefaultBackgroundColor[] = "#FAFFBD";
-  constexpr char kAutofillDefaultColor[] = "#000000";
-
-  if (base::FeatureList::IsEnabled(features::kAutofillPreviewStyleExperiment)) {
-    std::string bg_color_param = base::GetFieldTrialParamValueByFeature(
-        features::kAutofillPreviewStyleExperiment,
-        features::kAutofillPreviewStyleExperimentBgColorParameterName);
-    std::string color_param = base::GetFieldTrialParamValueByFeature(
-        features::kAutofillPreviewStyleExperiment,
-        features::kAutofillPreviewStyleExperimentColorParameterName);
-    if (Color().SetFromString(bg_color_param.c_str()) &&
-        Color().SetFromString(color_param.c_str())) {
-      *background_color = bg_color_param;
-      *color = color_param;
-      return;
-    }
-  }
-
-  // Fallback to the default colors if the experiment is not enabled or if a
-  // color param is invalid.
-  *background_color = std::string(kAutofillDefaultBackgroundColor);
-  *color = std::string(kAutofillDefaultColor);
-}
-
-}  // namespace
-
 // Wrapper function defined in WebKit.h
 void SetMockThemeEnabledForTest(bool value) {
-  LayoutTestSupport::SetMockThemeEnabledForTest(value);
+  WebTestSupport::SetMockThemeEnabledForTest(value);
   LayoutTheme::GetTheme().DidChangeThemeEngine();
 }
-
-using namespace HTMLNames;
 
 LayoutTheme& LayoutTheme::GetTheme() {
   if (RuntimeEnabledFeatures::MobileLayoutThemeEnabled()) {
@@ -300,16 +263,7 @@ void LayoutTheme::AdjustStyle(ComputedStyle& style, Element* e) {
 }
 
 String LayoutTheme::ExtraDefaultStyleSheet() {
-  std::string color, background_color;
-  GetAutofillPreviewColorsFromFieldTrial(&color, &background_color);
-  constexpr char const format[] =
-      "input:-webkit-autofill, textarea:-webkit-autofill, "
-      "select:-webkit-autofill {"
-      "  background-color: %s !important;"
-      "  background-image:none !important;"
-      "  color: %s !important;"
-      "}";
-  return String::Format(format, background_color.c_str(), color.c_str());
+  return g_empty_string;
 }
 
 String LayoutTheme::ExtraQuirksStyleSheet() {
@@ -637,7 +591,7 @@ TimeDelta LayoutTheme::AnimationDurationForProgressBar() const {
 
 bool LayoutTheme::ShouldHaveSpinButton(HTMLInputElement* input_element) const {
   return input_element->IsSteppable() &&
-         input_element->type() != InputTypeNames::range;
+         input_element->type() != input_type_names::kRange;
 }
 
 void LayoutTheme::AdjustMenuListButtonStyle(ComputedStyle&, Element*) const {}
@@ -675,10 +629,10 @@ void LayoutTheme::SetCaretBlinkInterval(TimeDelta interval) {
 }
 
 TimeDelta LayoutTheme::CaretBlinkInterval() const {
-  // Disable the blinking caret in layout test mode, as it introduces
+  // Disable the blinking caret in web test mode, as it introduces
   // a race condition for the pixel tests. http://b/1198440
-  return LayoutTestSupport::IsRunningLayoutTest() ? TimeDelta()
-                                                  : caret_blink_interval_;
+  return WebTestSupport::IsRunningWebTest() ? TimeDelta()
+                                            : caret_blink_interval_;
 }
 
 static FontDescription& GetCachedFontDescription(CSSValueID system_font_id) {
@@ -832,6 +786,22 @@ void LayoutTheme::SetCustomFocusRingColor(const Color& c) {
   has_custom_focus_ring_color_ = true;
 }
 
+bool LayoutTheme::IsFocusRingOutset() const {
+  return is_focus_ring_outset_;
+}
+
+void LayoutTheme::SetIsFocusRingOutset(bool is_outset) {
+  is_focus_ring_outset_ = is_outset;
+}
+
+float LayoutTheme::MinimumStrokeWidthForFocusRing() const {
+  return minimum_width_for_focus_ring_;
+}
+
+void LayoutTheme::SetMinimumStrokeWidthForFocusRing(float stroke_width) {
+  minimum_width_for_focus_ring_ = stroke_width;
+}
+
 Color LayoutTheme::FocusRingColor() const {
   return has_custom_focus_ring_color_ ? custom_focus_ring_color_
                                       : GetTheme().PlatformFocusRingColor();
@@ -867,9 +837,10 @@ bool LayoutTheme::ShouldOpenPickerWithF4Key() const {
 
 bool LayoutTheme::SupportsCalendarPicker(const AtomicString& type) const {
   DCHECK(RuntimeEnabledFeatures::InputMultipleFieldsUIEnabled());
-  return type == InputTypeNames::date || type == InputTypeNames::datetime ||
-         type == InputTypeNames::datetime_local ||
-         type == InputTypeNames::month || type == InputTypeNames::week;
+  return type == input_type_names::kDate ||
+         type == input_type_names::kDatetime ||
+         type == input_type_names::kDatetimeLocal ||
+         type == input_type_names::kMonth || type == input_type_names::kWeek;
 }
 
 bool LayoutTheme::ShouldUseFallbackTheme(const ComputedStyle&) const {
@@ -891,9 +862,9 @@ void LayoutTheme::AdjustStyleUsingFallbackTheme(ComputedStyle& style) {
 // static
 void LayoutTheme::SetSizeIfAuto(ComputedStyle& style, const IntSize& size) {
   if (style.Width().IsIntrinsicOrAuto())
-    style.SetWidth(Length(size.Width(), kFixed));
+    style.SetWidth(Length::Fixed(size.Width()));
   if (style.Height().IsIntrinsicOrAuto())
-    style.SetHeight(Length(size.Height(), kFixed));
+    style.SetHeight(Length::Fixed(size.Height()));
 }
 
 // static
@@ -918,8 +889,8 @@ void LayoutTheme::SetMinimumSize(ComputedStyle& style,
 // static
 void LayoutTheme::SetMinimumSizeIfAuto(ComputedStyle& style,
                                        const IntSize& size) {
-  LengthSize length_size(Length(size.Width(), kFixed),
-                         Length(size.Height(), kFixed));
+  LengthSize length_size(Length::Fixed(size.Width()),
+                         Length::Fixed(size.Height()));
   SetMinimumSize(style, &length_size);
 }
 
@@ -969,6 +940,12 @@ void LayoutTheme::AdjustRadioStyleUsingFallbackTheme(
   // box and turns off the Windows XP theme)
   // for now, we will not honor it.
   style.ResetBorder();
+}
+
+Color LayoutTheme::RootElementColor(ColorScheme color_scheme) const {
+  if (color_scheme == ColorScheme::kDark)
+    return Color::kWhite;
+  return ComputedStyleInitialValues::InitialColor();
 }
 
 }  // namespace blink

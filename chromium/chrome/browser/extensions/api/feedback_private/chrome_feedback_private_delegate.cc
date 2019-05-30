@@ -7,19 +7,20 @@
 #include <memory>
 #include <string>
 
+#include "base/bind.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/feedback/feedback_uploader_chrome.h"
 #include "chrome/browser/feedback/feedback_uploader_factory_chrome.h"
 #include "chrome/browser/feedback/system_logs/chrome_system_logs_fetcher.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/simple_message_box.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/feedback/system_logs/system_logs_fetcher.h"
-#include "components/signin/core/browser/signin_manager.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/browser_context.h"
+#include "services/identity/public/cpp/identity_manager.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
 
@@ -33,6 +34,23 @@
 #endif  // defined(OS_CHROMEOS)
 
 namespace extensions {
+
+namespace {
+
+int GetSysInfoCheckboxStringId(content::BrowserContext* browser_context) {
+#if defined(OS_CHROMEOS)
+  if (arc::IsArcPlayStoreEnabledForProfile(
+          Profile::FromBrowserContext(browser_context))) {
+    return IDS_FEEDBACK_INCLUDE_SYSTEM_INFORMATION_AND_METRICS_CHKBOX_ARC;
+  } else {
+    return IDS_FEEDBACK_INCLUDE_SYSTEM_INFORMATION_AND_METRICS_CHKBOX;
+  }
+#else
+  return IDS_FEEDBACK_INCLUDE_SYSTEM_INFORMATION_CHKBOX;
+#endif
+}
+
+}  // namespace
 
 ChromeFeedbackPrivateDelegate::ChromeFeedbackPrivateDelegate() = default;
 ChromeFeedbackPrivateDelegate::~ChromeFeedbackPrivateDelegate() = default;
@@ -55,18 +73,9 @@ ChromeFeedbackPrivateDelegate::GetStrings(
   SET_STRING("screenshot", IDS_FEEDBACK_SCREENSHOT_LABEL);
   SET_STRING("user-email", IDS_FEEDBACK_USER_EMAIL_LABEL);
   SET_STRING("anonymous-user", IDS_FEEDBACK_ANONYMOUS_EMAIL_OPTION);
-#if defined(OS_CHROMEOS)
-  if (arc::IsArcPlayStoreEnabledForProfile(
-          Profile::FromBrowserContext(browser_context))) {
-    SET_STRING("sys-info",
-               IDS_FEEDBACK_INCLUDE_SYSTEM_INFORMATION_AND_METRICS_CHKBOX_ARC);
-  } else {
-    SET_STRING("sys-info",
-               IDS_FEEDBACK_INCLUDE_SYSTEM_INFORMATION_AND_METRICS_CHKBOX);
-  }
-#else
-  SET_STRING("sys-info", IDS_FEEDBACK_INCLUDE_SYSTEM_INFORMATION_CHKBOX);
-#endif
+  SET_STRING("sys-info", GetSysInfoCheckboxStringId(browser_context));
+  SET_STRING("assistant-info",
+             IDS_FEEDBACK_INCLUDE_ASSISTANT_INFORMATION_CHKBOX);
   SET_STRING("attach-file-label", IDS_FEEDBACK_ATTACH_FILE_LABEL);
   SET_STRING("attach-file-note", IDS_FEEDBACK_ATTACH_FILE_NOTE);
   SET_STRING("attach-file-to-big", IDS_FEEDBACK_ATTACH_FILE_TO_BIG);
@@ -79,6 +88,8 @@ ChromeFeedbackPrivateDelegate::GetStrings(
              IDS_FEEDBACK_INCLUDE_PERFORMANCE_TRACE_CHECKBOX);
   SET_STRING("bluetooth-logs-info", IDS_FEEDBACK_BLUETOOTH_LOGS_CHECKBOX);
   SET_STRING("bluetooth-logs-message", IDS_FEEDBACK_BLUETOOTH_LOGS_MESSAGE);
+  SET_STRING("assistant-logs-message", IDS_FEEDBACK_ASSISTANT_LOGS_MESSAGE);
+
   // Add the localized strings needed for the "system information" page.
   SET_STRING("sysinfoPageTitle", IDS_FEEDBACK_SYSINFO_PAGE_TITLE);
   SET_STRING("sysinfoPageDescription", IDS_ABOUT_SYS_DESC);
@@ -172,10 +183,12 @@ void ChromeFeedbackPrivateDelegate::FetchAndMergeIwlwifiDumpLogsIfPresent(
     system_logs::SysLogsFetcherCallback callback) const {
   if (!original_sys_logs ||
       !system_logs::ContainsIwlwifiLogs(original_sys_logs.get())) {
+    VLOG(1) << "WiFi dump logs are not present.";
     std::move(callback).Run(std::move(original_sys_logs));
     return;
   }
 
+  VLOG(1) << "Fetching WiFi dump logs.";
   system_logs::SystemLogsFetcher* fetcher =
       new system_logs::SystemLogsFetcher(true /* scrub_data */);
   fetcher->AddSource(std::make_unique<system_logs::IwlwifiDumpLogSource>());
@@ -187,10 +200,10 @@ void ChromeFeedbackPrivateDelegate::FetchAndMergeIwlwifiDumpLogsIfPresent(
 
 std::string ChromeFeedbackPrivateDelegate::GetSignedInUserEmail(
     content::BrowserContext* context) const {
-  SigninManagerBase* signin_manager =
-      SigninManagerFactory::GetForProfile(Profile::FromBrowserContext(context));
-  return signin_manager ? signin_manager->GetAuthenticatedAccountInfo().email
-                        : std::string();
+  auto* identity_manager = IdentityManagerFactory::GetForProfile(
+      Profile::FromBrowserContext(context));
+  return identity_manager ? identity_manager->GetPrimaryAccountInfo().email
+                          : std::string();
 }
 
 void ChromeFeedbackPrivateDelegate::NotifyFeedbackDelayed() const {

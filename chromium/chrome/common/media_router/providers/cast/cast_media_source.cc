@@ -36,7 +36,9 @@ constexpr char kLegacyLaunchTimeoutKey[] = "__castLaunchTimeout__";
 std::string DecodeURLComponent(const std::string& encoded) {
   url::RawCanonOutputT<base::char16> unescaped;
   std::string output;
-  url::DecodeURLEscapeSequences(encoded.data(), encoded.size(), &unescaped);
+  url::DecodeURLEscapeSequences(encoded.data(), encoded.size(),
+                                url::DecodeURLMode::kUTF8OrIsomorphic,
+                                &unescaped);
   if (base::UTF16ToUTF8(unescaped.data(), unescaped.length(), &output))
     return output;
 
@@ -218,7 +220,7 @@ CastAppInfo::~CastAppInfo() = default;
 CastAppInfo::CastAppInfo(const CastAppInfo& other) = default;
 
 // static
-std::unique_ptr<CastMediaSource> CastMediaSource::From(
+std::unique_ptr<CastMediaSource> CastMediaSource::FromMediaSourceId(
     const MediaSource::Id& source_id) {
   MediaSource source(source_id);
   if (IsTabMirroringMediaSource(source))
@@ -242,6 +244,12 @@ std::unique_ptr<CastMediaSource> CastMediaSource::From(
   }
 
   return nullptr;
+}
+
+// static
+std::unique_ptr<CastMediaSource> CastMediaSource::FromAppId(
+    const std::string& app_id) {
+  return FromMediaSourceId(kCastPresentationUrlScheme + (":" + app_id));
 }
 
 CastMediaSource::CastMediaSource(const MediaSource::Id& source_id,

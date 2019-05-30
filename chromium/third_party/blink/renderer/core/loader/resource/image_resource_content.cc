@@ -40,15 +40,16 @@ class NullImageResourceInfo final
 
  private:
   const KURL& Url() const override { return url_; }
+  TimeTicks LoadResponseEnd() const override { return TimeTicks(); }
   bool IsSchedulingReload() const override { return false; }
   const ResourceResponse& GetResponse() const override { return response_; }
   bool ShouldShowPlaceholder() const override { return false; }
+  bool ShouldShowLazyImagePlaceholder() const override { return false; }
   bool IsCacheValidator() const override { return false; }
   bool SchedulingReloadOrShouldReloadBrokenPlaceholder() const override {
     return false;
   }
   bool IsAccessAllowed(
-      const SecurityOrigin*,
       DoesCurrentFrameHaveSingleSecurityOrigin) const override {
     return true;
   }
@@ -76,7 +77,7 @@ int64_t EstimateOriginalImageSizeForPlaceholder(
   if (response.HttpHeaderField("chrome-proxy-content-transform") ==
       "empty-image") {
     const String& str = response.HttpHeaderField("chrome-proxy");
-    size_t index = str.Find("ofcl=");
+    wtf_size_t index = str.Find("ofcl=");
     if (index != kNotFound) {
       bool ok = false;
       int bytes = str.Substring(index + (sizeof("ofcl=") - 1)).ToInt(&ok);
@@ -103,15 +104,16 @@ ImageResourceContent::ImageResourceContent(scoped_refptr<blink::Image> image)
       device_pixel_ratio_header_value_(1.0),
       has_device_pixel_ratio_header_value_(false),
       image_(std::move(image)) {
-  DEFINE_STATIC_LOCAL(NullImageResourceInfo, null_info,
-                      (new NullImageResourceInfo()));
-  info_ = &null_info;
+  DEFINE_STATIC_LOCAL(Persistent<NullImageResourceInfo>, null_info,
+                      (MakeGarbageCollected<NullImageResourceInfo>()));
+  info_ = null_info;
 }
 
 ImageResourceContent* ImageResourceContent::CreateLoaded(
     scoped_refptr<blink::Image> image) {
   DCHECK(image);
-  ImageResourceContent* content = new ImageResourceContent(std::move(image));
+  ImageResourceContent* content =
+      MakeGarbageCollected<ImageResourceContent>(std::move(image));
   content->content_status_ = ResourceStatus::kCached;
   return content;
 }
@@ -254,8 +256,7 @@ IntSize ImageResourceContent::IntrinsicSize(
 
 void ImageResourceContent::NotifyObservers(
     NotifyFinishOption notifying_finish_option,
-    CanDeferInvalidation defer,
-    const IntRect* change_rect) {
+    CanDeferInvalidation defer) {
   {
     Vector<ImageResourceObserver*> finished_observers_as_vector;
     {
@@ -266,7 +267,7 @@ void ImageResourceContent::NotifyObservers(
 
     for (auto* observer : finished_observers_as_vector) {
       if (finished_observers_.Contains(observer))
-        observer->ImageChanged(this, defer, change_rect);
+        observer->ImageChanged(this, defer);
     }
   }
   {
@@ -279,7 +280,7 @@ void ImageResourceContent::NotifyObservers(
 
     for (auto* observer : observers_as_vector) {
       if (observers_.Contains(observer)) {
-        observer->ImageChanged(this, defer, change_rect);
+        observer->ImageChanged(this, defer);
         if (notifying_finish_option == kShouldNotifyFinish &&
             observers_.Contains(observer) &&
             !info_->SchedulingReloadOrShouldReloadBrokenPlaceholder()) {
@@ -292,10 +293,14 @@ void ImageResourceContent::NotifyObservers(
 }
 
 scoped_refptr<Image> ImageResourceContent::CreateImage(bool is_multipart) {
+  String content_dpr_value =
+      info_->GetResponse().HttpHeaderField(http_names::kContentDPR);
+  wtf_size_t comma = content_dpr_value.ReverseFind(',');
+  if (comma != kNotFound && comma < content_dpr_value.length() - 1) {
+    content_dpr_value = content_dpr_value.Substring(comma + 1);
+  }
   device_pixel_ratio_header_value_ =
-      info_->GetResponse()
-          .HttpHeaderField(HTTPNames::Content_DPR)
-          .ToFloat(&has_device_pixel_ratio_header_value_);
+      content_dpr_value.ToFloat(&has_device_pixel_ratio_header_value_);
   if (!has_device_pixel_ratio_header_value_ ||
       device_pixel_ratio_header_value_ <= 0.0) {
     device_pixel_ratio_header_value_ = 1.0;
@@ -431,13 +436,19 @@ ImageResourceContent::UpdateImageResult ImageResourceContent::UpdateImage(
       if (size_available_ == Image::kSizeUnavailable && !all_data_received)
         return UpdateImageResult::kNoDecodeError;
 
-      if (info_->ShouldShowPlaceholder() && all_data_received) {
+      if ((info_->ShouldShowPlaceholder() ||
+           info_->ShouldShowLazyImagePlaceholder()) &&
+          all_data_received) {
         if (image_ && !image_->IsNull()) {
           IntSize dimensions = image_->Size();
           ClearImage();
-          image_ = PlaceholderImage::Create(
-              this, dimensions,
-              EstimateOriginalImageSizeForPlaceholder(info_->GetResponse()));
+          if (info_->ShouldShowLazyImagePlaceholder()) {
+            image_ = PlaceholderImage::CreateForLazyImages(this, dimensions);
+          } else {
+            image_ = PlaceholderImage::Create(
+                this, dimensions,
+                EstimateOriginalImageSizeForPlaceholder(info_->GetResponse()));
+          }
         }
       }
 
@@ -491,17 +502,23 @@ bool ImageResourceContent::IsAcceptableContentType() {
 }
 
 // Return true if the image content is well-compressed (and not full of
-// extraneous metadata). This is currently defined as no using more than 10 bits
-// per pixel of image data.
+// extraneous metadata). This is currently defined as no using more than 0.5
+// byte per pixel of image data with approximate header size(1KB) removed.
 // TODO(crbug.com/838263): Support site-defined bit-per-pixel ratio through
 // feature policy declarations.
 bool ImageResourceContent::IsAcceptableCompressionRatio() {
   uint64_t pixels = IntrinsicSize(kDoNotRespectImageOrientation).Area();
   if (!pixels)
     return true;
-  long long resource_length = GetResponse().DecodedBodyLength();
+  DCHECK(image_);
+  double resource_length =
+      static_cast<double>(GetResponse().ExpectedContentLength());
+  if (resource_length <= 0 && GetImage() && GetImage()->Data()) {
+    // WPT and LayoutTests server returns -1 or 0 for the content length.
+    resource_length = static_cast<double>(GetImage()->Data()->size());
+  }
   // Allow no more than 10 bits per compressed pixel
-  return (double)resource_length / pixels <= 1.25;
+  return (resource_length - 1024) / pixels <= 0.5;
 }
 
 void ImageResourceContent::DecodedSizeChangedTo(const blink::Image* image,
@@ -531,12 +548,6 @@ bool ImageResourceContent::ShouldPauseAnimation(const blink::Image* image) {
   return true;
 }
 
-void ImageResourceContent::AnimationAdvanced(const blink::Image* image) {
-  if (!image || image != image_)
-    return;
-  NotifyObservers(kDoNotNotifyFinish, CanDeferInvalidation::kYes);
-}
-
 void ImageResourceContent::UpdateImageAnimationPolicy() {
   if (!image_)
     return;
@@ -558,19 +569,17 @@ void ImageResourceContent::UpdateImageAnimationPolicy() {
   image_->SetAnimationPolicy(new_policy);
 }
 
-void ImageResourceContent::ChangedInRect(const blink::Image* image,
-                                         const IntRect& rect) {
+void ImageResourceContent::Changed(const blink::Image* image) {
   if (!image || image != image_)
     return;
-  NotifyObservers(kDoNotNotifyFinish, CanDeferInvalidation::kYes, &rect);
+  NotifyObservers(kDoNotNotifyFinish, CanDeferInvalidation::kYes);
 }
 
-bool ImageResourceContent::IsAccessAllowed(
-    const SecurityOrigin* security_origin) {
+bool ImageResourceContent::IsAccessAllowed() {
   return info_->IsAccessAllowed(
-      security_origin, GetImage()->CurrentFrameHasSingleSecurityOrigin()
-                           ? ImageResourceInfo::kHasSingleSecurityOrigin
-                           : ImageResourceInfo::kHasMultipleSecurityOrigin);
+      GetImage()->CurrentFrameHasSingleSecurityOrigin()
+          ? ImageResourceInfo::kHasSingleSecurityOrigin
+          : ImageResourceInfo::kHasMultipleSecurityOrigin);
 }
 
 void ImageResourceContent::EmulateLoadStartedForInspector(
@@ -605,6 +614,10 @@ ResourceStatus ImageResourceContent::GetContentStatus() const {
 // redirecting to ImageResource.
 const KURL& ImageResourceContent::Url() const {
   return info_->Url();
+}
+
+TimeTicks ImageResourceContent::LoadResponseEnd() const {
+  return info_->LoadResponseEnd();
 }
 
 bool ImageResourceContent::HasCacheControlNoStoreHeader() const {

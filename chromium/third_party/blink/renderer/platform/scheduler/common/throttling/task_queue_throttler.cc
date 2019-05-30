@@ -6,6 +6,7 @@
 
 #include <cstdint>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/optional.h"
@@ -101,8 +102,6 @@ TaskQueueThrottler::~TaskQueueThrottler() {
 }
 
 void TaskQueueThrottler::IncreaseThrottleRefCount(TaskQueue* task_queue) {
-  DCHECK_NE(task_queue, control_task_runner_.get());
-
   std::pair<TaskQueueMap::iterator, bool> insert_result =
       queue_details_.insert(std::make_pair(task_queue, Metadata()));
   insert_result.first->second.throttling_ref_count++;
@@ -446,7 +445,7 @@ void TaskQueueThrottler::AsValueInto(base::trace_event::TracedValue* state,
   for (const auto& map_entry : queue_details_) {
     state->BeginDictionaryWithCopiedName(PointerToString(map_entry.first));
     state->SetInteger("throttling_ref_count",
-                      map_entry.second.throttling_ref_count);
+                      static_cast<int>(map_entry.second.throttling_ref_count));
     state->EndDictionary();
   }
   state->EndDictionary();

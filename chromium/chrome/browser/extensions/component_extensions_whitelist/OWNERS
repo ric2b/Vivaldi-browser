@@ -1,8 +1,12 @@
-# Adding new component extensions requires approval from
-# chrome-eng-review@google.com. See comment in whitelist.h
+# Adding new component extensions requires approval from the Extensions Tech
+# Lead. See comment in whitelist.h
 set noparent
 
-file://ENG_REVIEW_OWNERS
+# For Component Extensions
+rdevlin.cronin@chromium.org
+
+# For Component Apps
+benwells@chromium.org
 
 # TEAM: extensions-dev@chromium.org
 # COMPONENT: Platform>Extensions

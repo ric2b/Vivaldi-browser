@@ -6,7 +6,7 @@
 
 #include <stddef.h>
 
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -448,13 +448,13 @@ TEST(BreakIteratorTest, BreakCharacter) {
   };
   std::vector<string16> characters;
   string16 text;
-  for (size_t i = 0; i < arraysize(kCharacters); ++i) {
-    characters.push_back(WideToUTF16(kCharacters[i]));
+  for (auto*& i : kCharacters) {
+    characters.push_back(WideToUTF16(i));
     text.append(characters.back());
   }
   BreakIterator iter(text, BreakIterator::BREAK_CHARACTER);
   ASSERT_TRUE(iter.Init());
-  for (size_t i = 0; i < arraysize(kCharacters); ++i) {
+  for (size_t i = 0; i < base::size(kCharacters); ++i) {
     EXPECT_TRUE(iter.Advance());
     EXPECT_EQ(characters[i], iter.GetString());
   }

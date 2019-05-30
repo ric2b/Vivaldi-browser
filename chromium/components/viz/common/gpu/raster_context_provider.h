@@ -26,6 +26,7 @@ class Lock;
 namespace gpu {
 class ContextSupport;
 struct GpuFeatureInfo;
+class SharedImageInterface;
 
 namespace gles2 {
 class GLES2Interface;
@@ -54,7 +55,6 @@ class VIZ_COMMON_EXPORT RasterContextProvider {
     RasterContextProvider* const context_provider_;
     base::AutoLock context_lock_;
     std::unique_ptr<ContextCacheController::ScopedBusy> busy_;
-    const char* url_;
   };
 
   // RefCounted interface.
@@ -98,6 +98,8 @@ class VIZ_COMMON_EXPORT RasterContextProvider {
   // must have been successfully bound to a thread before calling this.  Returns
   // nullptr if a GrContext fails to initialize on this context.
   virtual class GrContext* GrContext() = 0;
+
+  virtual gpu::SharedImageInterface* SharedImageInterface() = 0;
 
   // Returns the capabilities of the currently bound 3d context.  The context
   // provider must have been successfully bound to a thread before calling this.

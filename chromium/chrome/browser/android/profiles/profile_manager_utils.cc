@@ -5,8 +5,8 @@
 #include <vector>
 
 #include "base/android/jni_android.h"
+#include "base/bind.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/net/predictor.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "components/prefs/pref_service.h"
@@ -31,7 +31,6 @@ void CommitPendingWritesForProfile(Profile* profile) {
   // These calls are asynchronous. They may not finish (and may not even
   // start!) before the Android OS kills our process. But we can't wait for them
   // to finish because blocking the UI thread is illegal.
-  profile->GetNetworkPredictor()->SaveStateForNextStartup();
   profile->GetPrefs()->CommitPendingWrite();
   content::BrowserContext::GetDefaultStoragePartition(profile)
       ->GetCookieManagerForBrowserProcess()
@@ -54,8 +53,7 @@ void RemoveSessionCookiesForProfile(Profile* profile) {
 }  // namespace
 
 static void JNI_ProfileManagerUtils_FlushPersistentDataForAllProfiles(
-    JNIEnv* env,
-    const JavaParamRef<jclass>& obj) {
+    JNIEnv* env) {
   std::vector<Profile*> loaded_profiles =
       g_browser_process->profile_manager()->GetLoadedProfiles();
   std::for_each(loaded_profiles.begin(), loaded_profiles.end(),
@@ -66,8 +64,7 @@ static void JNI_ProfileManagerUtils_FlushPersistentDataForAllProfiles(
 }
 
 static void JNI_ProfileManagerUtils_RemoveSessionCookiesForAllProfiles(
-    JNIEnv* env,
-    const JavaParamRef<jclass>& obj) {
+    JNIEnv* env) {
   std::vector<Profile*> loaded_profiles =
       g_browser_process->profile_manager()->GetLoadedProfiles();
   std::for_each(loaded_profiles.begin(), loaded_profiles.end(),

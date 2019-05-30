@@ -25,9 +25,13 @@ SERVICE_MANAGER_SANDBOX_EXPORT extern const char kNetworkSandbox[];
 SERVICE_MANAGER_SANDBOX_EXPORT extern const char kPpapiSandbox[];
 SERVICE_MANAGER_SANDBOX_EXPORT extern const char kUtilitySandbox[];
 SERVICE_MANAGER_SANDBOX_EXPORT extern const char kCdmSandbox[];
+SERVICE_MANAGER_SANDBOX_EXPORT extern const char kXrCompositingSandbox[];
 SERVICE_MANAGER_SANDBOX_EXPORT extern const char kPdfCompositorSandbox[];
 SERVICE_MANAGER_SANDBOX_EXPORT extern const char kProfilingSandbox[];
 SERVICE_MANAGER_SANDBOX_EXPORT extern const char kAudioSandbox[];
+#if defined(OS_CHROMEOS)
+SERVICE_MANAGER_SANDBOX_EXPORT extern const char kImeSandbox[];
+#endif  // OS_CHROMEOS
 
 // Flags owned by the service manager sandbox.
 SERVICE_MANAGER_SANDBOX_EXPORT extern const char kAllowNoSandboxJob[];
@@ -50,6 +54,7 @@ SERVICE_MANAGER_SANDBOX_EXPORT extern const char kDisableGpuLpac[];
 SERVICE_MANAGER_SANDBOX_EXPORT extern const char kEnableGpuAppContainer[];
 SERVICE_MANAGER_SANDBOX_EXPORT extern const char
     kNoSandboxAndElevatedPrivileges[];
+SERVICE_MANAGER_SANDBOX_EXPORT extern const char kAddXrAppContainerCaps[];
 #endif
 #if defined(OS_MACOSX)
 SERVICE_MANAGER_SANDBOX_EXPORT extern const char kEnableSandboxLogging[];
@@ -57,6 +62,7 @@ SERVICE_MANAGER_SANDBOX_EXPORT extern const char kEnableSandboxLogging[];
 
 // Flags spied upon from other layers.
 SERVICE_MANAGER_SANDBOX_EXPORT extern const char kGpuProcess[];
+SERVICE_MANAGER_SANDBOX_EXPORT extern const char kNaClLoaderProcess[];
 SERVICE_MANAGER_SANDBOX_EXPORT extern const char kPpapiBrokerProcess[];
 SERVICE_MANAGER_SANDBOX_EXPORT extern const char kPpapiPluginProcess[];
 SERVICE_MANAGER_SANDBOX_EXPORT extern const char kRendererProcess[];

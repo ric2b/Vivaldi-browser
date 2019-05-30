@@ -14,6 +14,7 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "content/browser/android/text_suggestion_host_android.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
@@ -30,7 +31,7 @@
 
 using base::android::AttachCurrentThread;
 using base::android::ConvertJavaStringToUTF16;
-using base::android::ConvertUTF8ToJavaString;
+using base::android::ConvertUTF16ToJavaString;
 using base::android::JavaParamRef;
 using base::android::ScopedJavaLocalRef;
 
@@ -74,7 +75,6 @@ jlong JNI_ImeAdapterImpl_Init(JNIEnv* env,
 // Callback from Java to convert BackgroundColorSpan data to a
 // ui::ImeTextSpan instance, and append it to |ime_text_spans_ptr|.
 void JNI_ImeAdapterImpl_AppendBackgroundColorSpan(JNIEnv*,
-                                                  const JavaParamRef<jclass>&,
                                                   jlong ime_text_spans_ptr,
                                                   jint start,
                                                   jint end,
@@ -95,11 +95,11 @@ void JNI_ImeAdapterImpl_AppendBackgroundColorSpan(JNIEnv*,
 // ui::ImeTextSpan instance, and append it to |ime_text_spans_ptr|.
 void JNI_ImeAdapterImpl_AppendSuggestionSpan(
     JNIEnv* env,
-    const JavaParamRef<jclass>&,
     jlong ime_text_spans_ptr,
     jint start,
     jint end,
     jboolean is_misspelling,
+    jboolean remove_on_finish_composing,
     jint underline_color,
     jint suggestion_highlight_color,
     const JavaParamRef<jobjectArray>& suggestions) {
@@ -118,6 +118,7 @@ void JNI_ImeAdapterImpl_AppendSuggestionSpan(
       type, static_cast<unsigned>(start), static_cast<unsigned>(end),
       ui::ImeTextSpan::Thickness::kThick, SK_ColorTRANSPARENT,
       static_cast<unsigned>(suggestion_highlight_color), suggestions_vec);
+  ime_text_span.remove_on_finish_composing = remove_on_finish_composing;
   ime_text_span.underline_color = static_cast<unsigned>(underline_color);
   ime_text_spans->push_back(ime_text_span);
 }
@@ -125,7 +126,6 @@ void JNI_ImeAdapterImpl_AppendSuggestionSpan(
 // Callback from Java to convert UnderlineSpan data to a
 // ui::ImeTextSpan instance, and append it to |ime_text_spans_ptr|.
 void JNI_ImeAdapterImpl_AppendUnderlineSpan(JNIEnv*,
-                                            const JavaParamRef<jclass>&,
                                             jlong ime_text_spans_ptr,
                                             jint start,
                                             jint end) {
@@ -144,13 +144,17 @@ ImeAdapterAndroid::ImeAdapterAndroid(JNIEnv* env,
                                      WebContents* web_contents)
     : RenderWidgetHostConnector(web_contents), rwhva_(nullptr) {
   java_ime_adapter_ = JavaObjectWeakGlobalRef(env, obj);
+
+  // Set up mojo client for TextSuggestionHost in advance. Java side is
+  // initialized lazily right before showing the menu first time.
+  TextSuggestionHostAndroid::Create(env, web_contents);
 }
 
 ImeAdapterAndroid::~ImeAdapterAndroid() {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ime_adapter_.get(env);
   if (!obj.is_null())
-    Java_ImeAdapterImpl_destroy(env, obj);
+    Java_ImeAdapterImpl_onNativeDestroyed(env, obj);
 }
 
 void ImeAdapterAndroid::UpdateRenderProcessConnection(
@@ -177,7 +181,7 @@ void ImeAdapterAndroid::UpdateState(const TextInputState& state) {
     return;
 
   ScopedJavaLocalRef<jstring> jstring_text =
-      ConvertUTF8ToJavaString(env, state.value);
+      ConvertUTF16ToJavaString(env, state.value);
   Java_ImeAdapterImpl_updateState(
       env, obj, static_cast<int>(state.type), state.flags, state.mode,
       state.show_ime_if_needed, jstring_text, state.selection_start,

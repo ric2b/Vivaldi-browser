@@ -25,7 +25,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/loader/resource/image_resource_content.h"
 #include "third_party/blink/renderer/core/style/style_fetched_image.h"
-#include "third_party/blink/renderer/platform/cross_origin_attribute_value.h"
+#include "third_party/blink/renderer/platform/loader/fetch/cross_origin_attribute_value.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_initiator_type_names.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_parameters.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
@@ -64,7 +64,7 @@ StyleImage* CSSImageValue::CacheImage(
         referrer_.referrer_policy, resource_request.Url(), referrer_.referrer));
     ResourceLoaderOptions options;
     options.initiator_info.name = initiator_name_.IsEmpty()
-                                      ? FetchInitiatorTypeNames::css
+                                      ? fetch_initiator_type_names::kCSS
                                       : initiator_name_;
     FetchParameters params(resource_request, options);
 
@@ -78,11 +78,16 @@ StyleImage* CSSImageValue::CacheImage(
         document.GetFrame()->IsClientLoFiAllowed(params.GetResourceRequest())) {
       params.SetClientLoFiPlaceholder();
     }
-    cached_image_ = StyleFetchedImage::Create(
-        document, params,
-        image_request_optimization == FetchParameters::kDeferImageLoad);
-  }
+    bool is_lazily_loaded =
+        image_request_optimization == FetchParameters::kDeferImageLoad &&
+        // Only http/https images are eligible to be lazily loaded.
+        params.Url().ProtocolIsInHTTPFamily();
+    if (is_lazily_loaded)
+      params.SetLazyImageDeferred();
 
+    cached_image_ =
+        StyleFetchedImage::Create(document, params, is_lazily_loaded);
+  }
   return cached_image_.Get();
 }
 
@@ -97,7 +102,7 @@ void CSSImageValue::RestoreCachedResourceIfNeeded(
 
   resource->EmulateLoadStartedForInspector(
       document.Fetcher(), KURL(absolute_url_),
-      initiator_name_.IsEmpty() ? FetchInitiatorTypeNames::css
+      initiator_name_.IsEmpty() ? fetch_initiator_type_names::kCSS
                                 : initiator_name_);
 }
 

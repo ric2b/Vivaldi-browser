@@ -105,6 +105,8 @@ class PLATFORM_EXPORT HeapCompact final {
   void StartThreadCompaction();
   void FinishThreadCompaction();
 
+  void CancelCompaction();
+
   // Perform any relocation post-processing after having completed compacting
   // the given arena. The number of pages that were freed together with the
   // total size (in bytes) of freed heap storage, are passed in as arguments.
@@ -135,6 +137,10 @@ class PLATFORM_EXPORT HeapCompact final {
         return true;
     }
     return false;
+  }
+
+  size_t last_fixup_count_for_testing() {
+    return last_fixup_count_for_testing_;
   }
 
  private:
@@ -179,6 +185,8 @@ class PLATFORM_EXPORT HeapCompact final {
   // marking phases. The mapping between the slots and the backing stores are
   // created at the atomic pause phase.
   HashSet<MovableReference*> traced_slots_;
+
+  size_t last_fixup_count_for_testing_;
 
   static bool force_compaction_gc_;
 };

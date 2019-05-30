@@ -23,7 +23,7 @@ PageAnimator::PageAnimator(Page& page)
       updating_layout_and_style_for_painting_(false) {}
 
 PageAnimator* PageAnimator::Create(Page& page) {
-  return new PageAnimator(page);
+  return MakeGarbageCollected<PageAnimator>(page);
 }
 
 void PageAnimator::Trace(blink::Visitor* visitor) {
@@ -38,8 +38,8 @@ void PageAnimator::ServiceScriptedAnimations(
   HeapVector<Member<Document>, 32> documents;
   for (Frame* frame = page_->MainFrame(); frame;
        frame = frame->Tree().TraverseNext()) {
-    if (frame->IsLocalFrame())
-      documents.push_back(ToLocalFrame(frame)->GetDocument());
+    if (auto* local_frame = DynamicTo<LocalFrame>(frame))
+      documents.push_back(local_frame->GetDocument());
   }
 
   for (auto& document : documents) {
@@ -103,11 +103,13 @@ void PageAnimator::ScheduleVisualUpdate(LocalFrame* frame) {
   page_->GetChromeClient().ScheduleAnimation(frame->View());
 }
 
-void PageAnimator::UpdateAllLifecyclePhases(LocalFrame& root_frame) {
+void PageAnimator::UpdateAllLifecyclePhases(
+    LocalFrame& root_frame,
+    DocumentLifecycle::LifecycleUpdateReason reason) {
   LocalFrameView* view = root_frame.View();
   base::AutoReset<bool> servicing(&updating_layout_and_style_for_painting_,
                                   true);
-  view->UpdateAllLifecyclePhases();
+  view->UpdateAllLifecyclePhases(reason);
 }
 
 void PageAnimator::UpdateAllLifecyclePhasesExceptPaint(LocalFrame& root_frame) {

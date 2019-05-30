@@ -33,8 +33,9 @@ FileGrid.prototype = {
   set dataModel(model) {
     // The setter for dataModel is overridden to remove/add the 'splice'
     // listener for the current data model.
-    if (this.dataModel)
+    if (this.dataModel) {
       this.dataModel.removeEventListener('splice', this.onSplice_.bind(this));
+    }
     this.dataModelDescriptor_.set.call(this, model);
     if (this.dataModel) {
       this.dataModel.addEventListener('splice', this.onSplice_.bind(this));
@@ -47,13 +48,12 @@ FileGrid.prototype = {
  * Decorates an HTML element to be a FileGrid.
  * @param {!Element} element The grid to decorate.
  * @param {!MetadataModel} metadataModel File system metadata.
- * @param {VolumeManagerWrapper} volumeManager Volume manager instance.
+ * @param {!VolumeManager} volumeManager Volume manager instance.
  * @param {!importer.HistoryLoader} historyLoader
  */
-FileGrid.decorate = function(
-    element, metadataModel, volumeManager, historyLoader) {
+FileGrid.decorate = (element, metadataModel, volumeManager, historyLoader) => {
   cr.ui.Grid.decorate(element);
-  var self = /** @type {!FileGrid} */ (element);
+  const self = /** @type {!FileGrid} */ (element);
   self.__proto__ = FileGrid.prototype;
   self.metadataModel_ = metadataModel;
   self.volumeManager_ = volumeManager;
@@ -84,7 +84,7 @@ FileGrid.decorate = function(
   self.onThumbnailLoadedBound_ = self.onThumbnailLoaded_.bind(self);
 
   self.itemConstructor = function(entry) {
-    var item = self.ownerDocument.createElement('li');
+    let item = self.ownerDocument.createElement('li');
     item.__proto__ = FileGrid.Item.prototype;
     item = /** @type {!FileGrid.Item} */ (item);
     self.decorateThumbnail_(item, entry);
@@ -94,7 +94,7 @@ FileGrid.decorate = function(
   self.relayoutRateLimiter_ =
       new AsyncUtil.RateLimiter(self.relayoutImmediately_.bind(self));
 
-  var style = window.getComputedStyle(self);
+  const style = window.getComputedStyle(self);
   /**
    * @private {number}
    * @const
@@ -142,11 +142,11 @@ FileGrid.prototype.setListThumbnailLoader = function(listThumbnailLoader) {
  *     occurred.
  */
 FileGrid.prototype.getThumbnail = function(index) {
-  var listItem = this.getListItemByIndex(index);
+  const listItem = this.getListItemByIndex(index);
   if (!listItem) {
     return null;
   }
-  var container = listItem.querySelector('.img-container');
+  const container = listItem.querySelector('.img-container');
   if (!container) {
     return null;
   }
@@ -159,12 +159,12 @@ FileGrid.prototype.getThumbnail = function(index) {
  * @private
  */
 FileGrid.prototype.onThumbnailLoaded_ = function(event) {
-  var listItem = this.getListItemByIndex(event.index);
-  var entry = listItem && this.dataModel.item(listItem.listIndex);
+  const listItem = this.getListItemByIndex(event.index);
+  const entry = listItem && this.dataModel.item(listItem.listIndex);
   if (entry) {
-    var box = listItem.querySelector('.img-container');
+    const box = listItem.querySelector('.img-container');
     if (box) {
-      var mimeType = this.metadataModel_.getCache(
+      const mimeType = this.metadataModel_.getCache(
           [entry], ['contentMimeType'])[0].contentMimeType;
       if (!event.dataUrl) {
         FileGrid.clearThumbnailImage_(
@@ -192,19 +192,19 @@ FileGrid.prototype.onThumbnailLoaded_ = function(event) {
 FileGrid.prototype.mergeItems = function(beginIndex, endIndex) {
   cr.ui.List.prototype.mergeItems.call(this, beginIndex, endIndex);
 
-  var afterFiller = this.afterFiller_;
-  var columns = this.columns;
+  const afterFiller = this.afterFiller_;
+  const columns = this.columns;
 
-  for (var item = this.beforeFiller_.nextSibling; item != afterFiller;) {
-    var next = item.nextSibling;
+  for (let item = this.beforeFiller_.nextSibling; item != afterFiller;) {
+    const next = item.nextSibling;
     if (isSpacer(item)) {
       // Spacer found on a place it mustn't be.
       this.removeChild(item);
       item = next;
       continue;
     }
-    var index = item.listIndex;
-    var nextIndex = index + 1;
+    const index = item.listIndex;
+    const nextIndex = index + 1;
 
     // Invisible pinned item could be outside of the
     // [beginIndex, endIndex). Ignore it.
@@ -212,21 +212,22 @@ FileGrid.prototype.mergeItems = function(beginIndex, endIndex) {
         (nextIndex < this.dataModel.getFolderCount()
             ? nextIndex % columns == 0
             : (nextIndex - this.dataModel.getFolderCount()) % columns == 0)) {
-      var isFolderSpacer = nextIndex === this.dataModel.getFolderCount();
+      const isFolderSpacer = nextIndex === this.dataModel.getFolderCount();
       if (isSpacer(next)) {
         // Leave the spacer on its place.
         next.classList.toggle('folder-spacer', isFolderSpacer);
         item = next.nextSibling;
       } else {
         // Insert spacer.
-        var spacer = this.ownerDocument.createElement('div');
+        const spacer = this.ownerDocument.createElement('div');
         spacer.className = 'spacer';
         spacer.classList.toggle('folder-spacer', isFolderSpacer);
         this.insertBefore(spacer, next);
         item = next;
       }
-    } else
+    } else {
       item = next;
+    }
   }
 
   function isSpacer(child) {
@@ -237,31 +238,35 @@ FileGrid.prototype.mergeItems = function(beginIndex, endIndex) {
   // Make sure that grid item's selected attribute is updated just after the
   // mergeItems operation is done. This prevents shadow of selected grid items
   // from being animated unintentionally by redraw.
-  for (var i = beginIndex; i < endIndex; i++) {
-    var item = this.getListItemByIndex(i);
-    if (!item)
+  for (let i = beginIndex; i < endIndex; i++) {
+    const item = this.getListItemByIndex(i);
+    if (!item) {
       continue;
-    var isSelected = this.selectionModel.getIndexSelected(i);
-    if (item.selected != isSelected)
+    }
+    const isSelected = this.selectionModel.getIndexSelected(i);
+    if (item.selected != isSelected) {
       item.selected = isSelected;
+    }
   }
 
   // Keep these values to set range when a new list thumbnail loader is set.
   this.beginIndex_ = beginIndex;
   this.endIndex_ = endIndex;
-  if (this.listThumbnailLoader_ !== null)
+  if (this.listThumbnailLoader_ !== null) {
     this.listThumbnailLoader_.setHighPriorityRange(beginIndex, endIndex);
+  }
 };
 
 /**
  * @override
  */
 FileGrid.prototype.getItemTop = function(index) {
-  if (index < this.dataModel.getFolderCount())
+  if (index < this.dataModel.getFolderCount()) {
     return Math.floor(index / this.columns) * this.getFolderItemHeight_();
+  }
 
-  var folderRows = this.getFolderRowCount();
-  var indexInFiles = index - this.dataModel.getFolderCount();
+  const folderRows = this.getFolderRowCount();
+  const indexInFiles = index - this.dataModel.getFolderCount();
   return folderRows * this.getFolderItemHeight_() +
       (folderRows > 0 ? this.getSeparatorHeight_() : 0) +
       Math.floor(indexInFiles / this.columns) * this.getFileItemHeight_();
@@ -271,11 +276,12 @@ FileGrid.prototype.getItemTop = function(index) {
  * @override
  */
 FileGrid.prototype.getItemRow = function(index) {
-  if (index < this.dataModel.getFolderCount())
+  if (index < this.dataModel.getFolderCount()) {
     return Math.floor(index / this.columns);
+  }
 
-  var folderRows = this.getFolderRowCount();
-  var indexInFiles = index - this.dataModel.getFolderCount();
+  const folderRows = this.getFolderRowCount();
+  const indexInFiles = index - this.dataModel.getFolderCount();
   return folderRows + Math.floor(indexInFiles / this.columns);
 };
 
@@ -284,10 +290,11 @@ FileGrid.prototype.getItemRow = function(index) {
  * @param {number} index The item index.
  */
 FileGrid.prototype.getItemColumn = function(index) {
-  if (index < this.dataModel.getFolderCount())
+  if (index < this.dataModel.getFolderCount()) {
     return index % this.columns;
+  }
 
-  var indexInFiles = index - this.dataModel.getFolderCount();
+  const indexInFiles = index - this.dataModel.getFolderCount();
   return indexInFiles % this.columns;
 };
 
@@ -298,15 +305,17 @@ FileGrid.prototype.getItemColumn = function(index) {
  * @param {number} column The column index.
  */
 FileGrid.prototype.getItemIndex = function(row, column) {
-  if (row < 0 || column < 0 || column >= this.columns)
+  if (row < 0 || column < 0 || column >= this.columns) {
     return -1;
-  var folderCount = this.dataModel.getFolderCount();
-  var folderRows = this.getFolderRowCount();
+  }
+  const folderCount = this.dataModel.getFolderCount();
+  const folderRows = this.getFolderRowCount();
+  let index;
   if (row < folderRows) {
-    var index = row * this.columns + column;
+    index = row * this.columns + column;
     return index < folderCount ? index : -1;
   }
-  var index = folderCount + (row - folderRows) * this.columns + column;
+  index = folderCount + (row - folderRows) * this.columns + column;
   return index < this.dataModel.length ? index : -1;
 };
 
@@ -314,9 +323,10 @@ FileGrid.prototype.getItemIndex = function(row, column) {
  * @override
  */
 FileGrid.prototype.getFirstItemInRow = function(row) {
-  var folderRows = this.getFolderRowCount();
-  if (row < folderRows)
+  const folderRows = this.getFolderRowCount();
+  if (row < folderRows) {
     return row * this.columns;
+  }
 
   return this.dataModel.getFolderCount() + (row - folderRows) * this.columns;
 };
@@ -325,42 +335,45 @@ FileGrid.prototype.getFirstItemInRow = function(row) {
  * @override
  */
 FileGrid.prototype.scrollIndexIntoView = function(index) {
-  var dataModel = this.dataModel;
-  if (!dataModel || index < 0 || index >= dataModel.length)
+  const dataModel = this.dataModel;
+  if (!dataModel || index < 0 || index >= dataModel.length) {
     return;
+  }
 
-  var itemHeight = index < this.dataModel.getFolderCount() ?
+  const itemHeight = index < this.dataModel.getFolderCount() ?
       this.getFolderItemHeight_() : this.getFileItemHeight_();
-  var scrollTop = this.scrollTop;
-  var top = this.getItemTop(index);
-  var clientHeight = this.clientHeight;
+  const scrollTop = this.scrollTop;
+  const top = this.getItemTop(index);
+  const clientHeight = this.clientHeight;
 
-  var computedStyle = window.getComputedStyle(this);
-  var paddingY = parseInt(computedStyle.paddingTop, 10) +
+  const computedStyle = window.getComputedStyle(this);
+  const paddingY = parseInt(computedStyle.paddingTop, 10) +
                  parseInt(computedStyle.paddingBottom, 10);
-  var availableHeight = clientHeight - paddingY;
+  const availableHeight = clientHeight - paddingY;
 
-  var self = this;
+  const self = this;
   // Function to adjust the tops of viewport and row.
-  var scrollToAdjustTop = function() {
+  const scrollToAdjustTop = () => {
       self.scrollTop = top;
   };
   // Function to adjust the bottoms of viewport and row.
-  var scrollToAdjustBottom = function() {
+  const scrollToAdjustBottom = () => {
       self.scrollTop = top + itemHeight - availableHeight;
   };
 
   // Check if the entire of given indexed row can be shown in the viewport.
   if (itemHeight <= availableHeight) {
-    if (top < scrollTop)
+    if (top < scrollTop) {
       scrollToAdjustTop();
-    else if (scrollTop + availableHeight < top + itemHeight)
+    } else if (scrollTop + availableHeight < top + itemHeight) {
       scrollToAdjustBottom();
+    }
   } else {
-    if (scrollTop < top)
+    if (scrollTop < top) {
       scrollToAdjustTop();
-    else if (top + itemHeight < scrollTop + availableHeight)
+    } else if (top + itemHeight < scrollTop + availableHeight) {
       scrollToAdjustBottom();
+    }
   }
 };
 
@@ -368,12 +381,12 @@ FileGrid.prototype.scrollIndexIntoView = function(index) {
  * @override
  */
 FileGrid.prototype.getItemsInViewPort = function(scrollTop, clientHeight) {
-  var beginRow = this.getRowForListOffset_(scrollTop);
-  var endRow = this.getRowForListOffset_(scrollTop + clientHeight - 1) + 1;
-  var beginIndex = this.getFirstItemInRow(beginRow);
-  var endIndex = Math.min(this.getFirstItemInRow(endRow),
+  const beginRow = this.getRowForListOffset_(scrollTop);
+  const endRow = this.getRowForListOffset_(scrollTop + clientHeight - 1) + 1;
+  const beginIndex = this.getFirstItemInRow(beginRow);
+  const endIndex = Math.min(this.getFirstItemInRow(endRow),
                           this.dataModel.length);
-  var result = {
+  const result = {
     first: beginIndex,
     length: endIndex - beginIndex,
     last: endIndex - 1
@@ -385,17 +398,18 @@ FileGrid.prototype.getItemsInViewPort = function(scrollTop, clientHeight) {
  * @override
  */
 FileGrid.prototype.getAfterFillerHeight = function(lastIndex) {
-  var folderRows = this.getFolderRowCount();
-  var fileRows = this.getFileRowCount();
-  var row = this.getItemRow(lastIndex - 1);
+  const folderRows = this.getFolderRowCount();
+  const fileRows = this.getFileRowCount();
+  const row = this.getItemRow(lastIndex - 1);
   if (row < folderRows) {
-    var fillerHeight = (folderRows - 1 - row) * this.getFolderItemHeight_() +
+    let fillerHeight = (folderRows - 1 - row) * this.getFolderItemHeight_() +
                        fileRows * this.getFileItemHeight_();
-    if (fileRows > 0)
+    if (fileRows > 0) {
       fillerHeight += this.getSeparatorHeight_();
+    }
     return fillerHeight;
   }
-  var rowInFiles = row - folderRows;
+  const rowInFiles = row - folderRows;
   return (fileRows - 1 - rowInFiles) * this.getFileItemHeight_();
 };
 
@@ -419,7 +433,7 @@ FileGrid.prototype.getFileRowCount = function() {
  * Returns the height of folder items in grid view.
  * @return {number} The height of folder items.
  */
-FileGrid.prototype.getFolderItemHeight_ = function() {
+FileGrid.prototype.getFolderItemHeight_ = () => {
   return 44;  // TODO(fukino): Read from DOM and cache it.
 };
 
@@ -427,7 +441,7 @@ FileGrid.prototype.getFolderItemHeight_ = function() {
  * Returns the height of file items in grid view.
  * @return {number} The height of file items.
  */
-FileGrid.prototype.getFileItemHeight_ = function() {
+FileGrid.prototype.getFileItemHeight_ = () => {
   return 184;  // TODO(fukino): Read from DOM and cache it.
 };
 
@@ -435,7 +449,7 @@ FileGrid.prototype.getFileItemHeight_ = function() {
  * Returns the width of grid items.
  * @return {number}
  */
-FileGrid.prototype.getItemWidth_ = function() {
+FileGrid.prototype.getItemWidth_ = () => {
   return 184;  // TODO(fukino): Read from DOM and cache it.
 };
 
@@ -443,7 +457,7 @@ FileGrid.prototype.getItemWidth_ = function() {
  * Returns the margin top of grid items.
  * @return {number};
  */
-FileGrid.prototype.getItemMarginTop_ = function() {
+FileGrid.prototype.getItemMarginTop_ = () => {
   return 4;  // TODO(fukino): Read from DOM and cache it.
 };
 
@@ -451,7 +465,7 @@ FileGrid.prototype.getItemMarginTop_ = function() {
  * Returns the margin left of grid items.
  * @return {number}
  */
-FileGrid.prototype.getItemMarginLeft_ = function() {
+FileGrid.prototype.getItemMarginLeft_ = () => {
   return 4;  // TODO(fukino): Read from DOM and cache it.
 };
 
@@ -459,7 +473,7 @@ FileGrid.prototype.getItemMarginLeft_ = function() {
  * Returns the height of the separator which separates folders and files.
  * @return {number} The height of the separator.
  */
-FileGrid.prototype.getSeparatorHeight_ = function() {
+FileGrid.prototype.getSeparatorHeight_ = () => {
   return 5;  // TODO(fukino): Read from DOM and cache it.
 };
 
@@ -470,14 +484,16 @@ FileGrid.prototype.getSeparatorHeight_ = function() {
  * @private
  */
 FileGrid.prototype.getRowForListOffset_ = function(offset) {
-  var innerOffset = Math.max(0, offset - this.paddingTop_);
-  var folderRows = this.getFolderRowCount();
-  if (innerOffset < folderRows * this.getFolderItemHeight_())
+  const innerOffset = Math.max(0, offset - this.paddingTop_);
+  const folderRows = this.getFolderRowCount();
+  if (innerOffset < folderRows * this.getFolderItemHeight_()) {
     return Math.floor(innerOffset / this.getFolderItemHeight_());
+  }
 
-  var offsetInFiles = innerOffset - folderRows * this.getFolderItemHeight_();
-  if (folderRows > 0)
+  let offsetInFiles = innerOffset - folderRows * this.getFolderItemHeight_();
+  if (folderRows > 0) {
     offsetInFiles = Math.max(0, offsetInFiles - this.getSeparatorHeight_());
+  }
   return folderRows + Math.floor(offsetInFiles / this.getFileItemHeight_());
 };
 
@@ -494,15 +510,16 @@ FileGrid.prototype.createSelectionController = function(sm) {
  * @param {Array<Entry>} entries Entries whose metadata changed.
  */
 FileGrid.prototype.updateListItemsMetadata = function(type, entries) {
-  var urls = util.entriesToURLs(entries);
-  var boxes = /** @type {!NodeList<!HTMLElement>} */(
+  const urls = util.entriesToURLs(entries);
+  const boxes = /** @type {!NodeList<!HTMLElement>} */(
       this.querySelectorAll('.img-container'));
-  for (var i = 0; i < boxes.length; i++) {
-    var box = boxes[i];
-    var listItem = this.getListItemAncestor(box);
-    var entry = listItem && this.dataModel.item(listItem.listIndex);
-    if (!entry || urls.indexOf(entry.toURL()) === -1)
+  for (let i = 0; i < boxes.length; i++) {
+    const box = boxes[i];
+    const listItem = this.getListItemAncestor(box);
+    const entry = listItem && this.dataModel.item(listItem.listIndex);
+    if (!entry || urls.indexOf(entry.toURL()) === -1) {
       continue;
+    }
 
     this.decorateThumbnailBox_(assert(listItem), entry);
     this.updateSharedStatus_(assert(listItem), entry);
@@ -536,50 +553,54 @@ FileGrid.prototype.relayoutImmediately_ = function() {
  */
 FileGrid.prototype.decorateThumbnail_ = function(li, entry) {
   li.className = 'thumbnail-item';
-  if (entry)
+  if (entry) {
     filelist.decorateListItem(li, entry, this.metadataModel_);
+  }
 
-  var frame = li.ownerDocument.createElement('div');
+  const frame = li.ownerDocument.createElement('div');
   frame.className = 'thumbnail-frame';
   li.appendChild(frame);
 
-  var box = li.ownerDocument.createElement('div');
+  const box = li.ownerDocument.createElement('div');
   box.className = 'img-container';
   frame.appendChild(box);
-  if (entry)
+  if (entry) {
     this.decorateThumbnailBox_(assertInstanceof(li, HTMLLIElement), entry);
+  }
 
-  var shield = li.ownerDocument.createElement('div');
+  const shield = li.ownerDocument.createElement('div');
   shield.className = 'shield';
   frame.appendChild(shield);
 
-  var isDirectory = entry && entry.isDirectory;
+  const isDirectory = entry && entry.isDirectory;
   if (!isDirectory) {
-    var activeCheckmark = li.ownerDocument.createElement('div');
+    const activeCheckmark = li.ownerDocument.createElement('div');
     activeCheckmark.className = 'checkmark active';
     frame.appendChild(activeCheckmark);
-    var inactiveCheckmark = li.ownerDocument.createElement('div');
+    const inactiveCheckmark = li.ownerDocument.createElement('div');
     inactiveCheckmark.className = 'checkmark inactive';
     frame.appendChild(inactiveCheckmark);
   }
 
-  var badge = li.ownerDocument.createElement('div');
+  const badge = li.ownerDocument.createElement('div');
   badge.className = 'badge';
   frame.appendChild(badge);
 
-  var bottom = li.ownerDocument.createElement('div');
+  const bottom = li.ownerDocument.createElement('div');
   bottom.className = 'thumbnail-bottom';
-  var mimeType = this.metadataModel_.getCache(
+  const mimeType = this.metadataModel_.getCache(
       [entry], ['contentMimeType'])[0].contentMimeType;
-  var detailIcon = filelist.renderFileTypeIcon(
-      li.ownerDocument, entry, mimeType);
+  const locationInfo = this.volumeManager_.getLocationInfo(entry);
+  const detailIcon = filelist.renderFileTypeIcon(
+      li.ownerDocument, entry, locationInfo, mimeType);
   if (isDirectory) {
-    var checkmark = li.ownerDocument.createElement('div');
+    const checkmark = li.ownerDocument.createElement('div');
     checkmark.className = 'detail-checkmark';
     detailIcon.appendChild(checkmark);
   }
   bottom.appendChild(detailIcon);
-  bottom.appendChild(filelist.renderFileNameLabel(li.ownerDocument, entry));
+  bottom.appendChild(
+      filelist.renderFileNameLabel(li.ownerDocument, entry, locationInfo));
   frame.appendChild(bottom);
 
   this.updateSharedStatus_(li, entry);
@@ -593,7 +614,7 @@ FileGrid.prototype.decorateThumbnail_ = function(li, entry) {
  * @private
  */
 FileGrid.prototype.decorateThumbnailBox_ = function(li, entry) {
-  var box = assertInstanceof(li.querySelector('.img-container'),
+  const box = assertInstanceof(li.querySelector('.img-container'),
                              HTMLDivElement);
   if (this.importStatusVisible_ &&
       importer.isEligibleType(entry)) {
@@ -611,10 +632,10 @@ FileGrid.prototype.decorateThumbnailBox_ = function(li, entry) {
 
   // Set thumbnail if it's already in cache, and the thumbnail data is not
   // empty.
-  var thumbnailData = this.listThumbnailLoader_ ?
+  const thumbnailData = this.listThumbnailLoader_ ?
       this.listThumbnailLoader_.getThumbnailFromCache(entry) : null;
   if (thumbnailData && thumbnailData.dataUrl) {
-    var mimeType = this.metadataModel_.getCache(
+    const mimeType = this.metadataModel_.getCache(
         [entry], ['contentMimeType'])[0].contentMimeType;
     FileGrid.setThumbnailImage_(
         box,
@@ -629,7 +650,7 @@ FileGrid.prototype.decorateThumbnailBox_ = function(li, entry) {
     FileGrid.setGenericThumbnail_(box, entry);
     li.classList.toggle('thumbnail-loaded', false);
   }
-  var mimeType = this.metadataModel_.getCache(
+  const mimeType = this.metadataModel_.getCache(
       [entry], ['contentMimeType'])[0].contentMimeType;
   li.classList.toggle('can-hide-filename',
                       FileType.isImage(entry, mimeType) ||
@@ -643,16 +664,19 @@ FileGrid.prototype.decorateThumbnailBox_ = function(li, entry) {
  * @private
  */
 FileGrid.prototype.updateSharedStatus_ = function(li, entry) {
-  if (!entry.isDirectory)
+  if (!entry.isDirectory) {
     return;
+  }
 
-  var shared = !!this.metadataModel_.getCache([entry], ['shared'])[0].shared;
-  var box = li.querySelector('.img-container');
-  if (box)
+  const shared = !!this.metadataModel_.getCache([entry], ['shared'])[0].shared;
+  const box = li.querySelector('.img-container');
+  if (box) {
     box.classList.toggle('shared', shared);
-  var icon = li.querySelector('.detail-icon');
-  if (icon)
+  }
+  const icon = li.querySelector('.detail-icon');
+  if (icon) {
     icon.classList.toggle('shared', shared);
+  }
 };
 
 /**
@@ -669,6 +693,14 @@ FileGrid.prototype.setImportStatusVisible = function(visible) {
  * @private
  */
 FileGrid.prototype.onSplice_ = function() {
+  // When adjusting search parameters, |dataModel| is transiently empty.
+  // Updating whether image-dominant is active at these times can cause spurious
+  // changes. Avoid this problem by not updating whether image-dominant is
+  // active when |dataModel| is empty.
+  if (this.dataModel.getFileCount() == 0 &&
+      this.dataModel.getFolderCount() == 0) {
+    return;
+  }
   this.classList.toggle('image-dominant', this.dataModel.isImageDominant());
 };
 
@@ -684,33 +716,35 @@ FileGrid.prototype.onSplice_ = function() {
  * @param {string=} opt_mimeType Optional mime type for the image.
  * @private
  */
-FileGrid.setThumbnailImage_ = function(
-    box, entry, dataUrl, width, height, shouldAnimate, opt_mimeType) {
-  var oldThumbnails = box.querySelectorAll('.thumbnail');
+FileGrid.setThumbnailImage_ = (box, entry, dataUrl, width, height, shouldAnimate, opt_mimeType) => {
+  const oldThumbnails = box.querySelectorAll('.thumbnail');
 
-  var thumbnail = box.ownerDocument.createElement('div');
+  const thumbnail = box.ownerDocument.createElement('div');
   thumbnail.classList.add('thumbnail');
 
   // If the image is JPEG or the thumbnail is larger than the grid size, resize
   // it to cover the thumbnail box.
-  var type = FileType.getType(entry, opt_mimeType);
+  const type = FileType.getType(entry, opt_mimeType);
   if ((type.type === 'image' && type.subtype === 'JPEG') ||
-      width > FileGrid.GridSize || height > FileGrid.GridSize)
+      width > FileGrid.GridSize || height > FileGrid.GridSize) {
     thumbnail.style.backgroundSize = 'cover';
+  }
 
   thumbnail.style.backgroundImage = 'url(' + dataUrl + ')';
-  thumbnail.addEventListener('animationend', function() {
+  thumbnail.addEventListener('animationend', () => {
     // Remove animation css once animation is completed in order not to animate
     // again when an item is attached to the dom again.
     thumbnail.classList.remove('animate');
 
-    for (var i = 0; i < oldThumbnails.length; i++) {
-      if (box.contains(oldThumbnails[i]))
+    for (let i = 0; i < oldThumbnails.length; i++) {
+      if (box.contains(oldThumbnails[i])) {
         box.removeChild(oldThumbnails[i]);
+      }
     }
   });
-  if (shouldAnimate)
+  if (shouldAnimate) {
     thumbnail.classList.add('animate');
+  }
   box.appendChild(thumbnail);
 };
 
@@ -719,9 +753,9 @@ FileGrid.setThumbnailImage_ = function(
  * @param {!HTMLDivElement} box A div element to hold thumbnails.
  * @private
  */
-FileGrid.clearThumbnailImage_ = function(box) {
-  var oldThumbnails = box.querySelectorAll('.thumbnail');
-  for (var i = 0; i < oldThumbnails.length; i++) {
+FileGrid.clearThumbnailImage_ = box => {
+  const oldThumbnails = box.querySelectorAll('.thumbnail');
+  for (let i = 0; i < oldThumbnails.length; i++) {
     box.removeChild(oldThumbnails[i]);
   }
   return;
@@ -733,11 +767,11 @@ FileGrid.clearThumbnailImage_ = function(box) {
  * @param {!Entry} entry An entry of the thumbnail.
  * @private
  */
-FileGrid.setGenericThumbnail_ = function(box, entry) {
+FileGrid.setGenericThumbnail_ = (box, entry) => {
   if (entry.isDirectory) {
     box.setAttribute('generic-thumbnail', 'folder');
   } else {
-    var mediaType = FileType.getMediaType(entry);
+    const mediaType = FileType.getMediaType(entry);
     box.setAttribute('generic-thumbnail', mediaType);
   }
 };
@@ -751,10 +785,10 @@ FileGrid.setGenericThumbnail_ = function(box, entry) {
  *
  * @private
  */
-FileGrid.applyHistoryBadges_ = function(entry, box, history) {
+FileGrid.applyHistoryBadges_ = (entry, box, history) => {
   history.wasImported(entry, importer.Destination.GOOGLE_DRIVE)
       .then(
-          function(imported) {
+          imported => {
             if (imported) {
               // TODO(smckay): update badges when history changes
               // "box" is currently the sibling of the elemement
@@ -765,7 +799,7 @@ FileGrid.applyHistoryBadges_ = function(entry, box, history) {
             } else {
               history.wasCopied(entry, importer.Destination.GOOGLE_DRIVE)
                   .then(
-                      function(copied) {
+                      copied => {
                         if (copied) {
                           // TODO(smckay): update badges when history changes
                           // "box" is currently the sibling of the elemement
@@ -811,7 +845,7 @@ FileGrid.Item.prototype.decorate = function() {
   // Override the default role 'listitem' to 'option' to match the parent's
   // role (listbox).
   this.setAttribute('role', 'option');
-  var nameId = this.id + '-entry-name';
+  const nameId = this.id + '-entry-name';
   this.querySelector('.entry-name').setAttribute('id', nameId);
   this.querySelector('.img-container').setAttribute('aria-labelledby', nameId);
   this.setAttribute('aria-labelledby', nameId);
@@ -825,7 +859,7 @@ FileGrid.Item.prototype.decorate = function() {
  *                   it is in the background.
  */
 FileGrid.prototype.hasDragHitElement = function(event) {
-  var pos = DragSelector.getScrolledPosition(this, event);
+  const pos = DragSelector.getScrolledPosition(this, event);
   return this.getHitElements(pos.x, pos.y).length !== 0;
 };
 
@@ -852,18 +886,19 @@ FileGrid.prototype.shouldStartDragSelection = function(event) {
  * @private
  */
 FileGrid.prototype.getHitRowIndex_ = function(y, reverse) {
-  var folderRows = this.getFolderRowCount();
-  var folderHeight = this.getFolderItemHeight_();
-  var fileHeight = this.getFileItemHeight_();
+  const folderRows = this.getFolderRowCount();
+  const folderHeight = this.getFolderItemHeight_();
+  const fileHeight = this.getFileItemHeight_();
 
   if (y < folderHeight * folderRows) {
-    var shift = reverse ? -this.getItemMarginTop_() : 0;
+    const shift = reverse ? -this.getItemMarginTop_() : 0;
     return Math.floor((y + shift) / folderHeight);
   }
-  var yInFiles = y - folderHeight * folderRows;
-  if (folderRows > 0)
+  let yInFiles = y - folderHeight * folderRows;
+  if (folderRows > 0) {
     yInFiles = Math.max(0, yInFiles - this.getSeparatorHeight_());
-  var shift = reverse ? -this.getItemMarginTop_() : 0;
+  }
+  const shift = reverse ? -this.getItemMarginTop_() : 0;
   return folderRows + Math.floor((yInFiles + shift) / fileHeight);
 };
 
@@ -880,8 +915,8 @@ FileGrid.prototype.getHitRowIndex_ = function(y, reverse) {
  * @private
  */
 FileGrid.prototype.getHitColumnIndex_ = function(x, reverse) {
-  var itemWidth = this.getItemWidth_();
-  var shift = reverse ? -this.getItemMarginLeft_() : 0;
+  const itemWidth = this.getItemWidth_();
+  const shift = reverse ? -this.getItemMarginLeft_() : 0;
   return Math.floor((x + shift) / itemWidth);
 };
 
@@ -898,23 +933,24 @@ FileGrid.prototype.getHitColumnIndex_ = function(x, reverse) {
  * @return {Array<number>} Index list of hit elements.
  */
 FileGrid.prototype.getHitElements = function(x, y, opt_width, opt_height) {
-  var currentSelection = [];
-  var startXWithPadding = isRTL() ? this.clientWidth - (x + opt_width) : x;
-  var startX = Math.max(0, startXWithPadding - this.paddingStart_);
-  var endX = startX + (opt_width ? opt_width - 1 : 0);
-  var top = Math.max(0, y - this.paddingTop_);
-  var bottom = top + (opt_height ? opt_height - 1 : 0);
+  const currentSelection = [];
+  const startXWithPadding = isRTL() ? this.clientWidth - (x + opt_width) : x;
+  const startX = Math.max(0, startXWithPadding - this.paddingStart_);
+  const endX = startX + (opt_width ? opt_width - 1 : 0);
+  const top = Math.max(0, y - this.paddingTop_);
+  const bottom = top + (opt_height ? opt_height - 1 : 0);
 
-  var firstRow = this.getHitRowIndex_(top, false);
-  var lastRow = this.getHitRowIndex_(bottom, true);
-  var firstColumn = this.getHitColumnIndex_(startX, false);
-  var lastColumn = this.getHitColumnIndex_(endX, true);
+  const firstRow = this.getHitRowIndex_(top, false);
+  const lastRow = this.getHitRowIndex_(bottom, true);
+  const firstColumn = this.getHitColumnIndex_(startX, false);
+  const lastColumn = this.getHitColumnIndex_(endX, true);
 
-  for (var row = firstRow; row <= lastRow; row++) {
-    for (var col = firstColumn; col <= lastColumn; col++) {
-      var index = this.getItemIndex(row, col);
-      if (0 <= index && index < this.dataModel.length)
+  for (let row = firstRow; row <= lastRow; row++) {
+    for (let col = firstColumn; col <= lastColumn; col++) {
+      const index = this.getItemIndex(row, col);
+      if (0 <= index && index < this.dataModel.length) {
         currentSelection.push(index);
+      }
     }
   }
   return currentSelection;
@@ -931,15 +967,6 @@ FileGrid.prototype.getHitElements = function(x, y, opt_width, opt_height) {
  */
 function FileGridSelectionController(selectionModel, grid) {
   cr.ui.GridSelectionController.call(this, selectionModel, grid);
-
-  /**
-   * Whether to allow touch-specific interaction.
-   * @private {boolean}
-   */
-  this.enableTouchMode_ = false;
-  util.isTouchModeEnabled().then(function(enabled) {
-    this.enableTouchMode_ = enabled;
-  }.bind(this));
 
   /**
    * @type {!FileTapHandler}
@@ -959,11 +986,10 @@ FileGridSelectionController.prototype.handlePointerDownUp = function(e, index) {
 
 /** @override */
 FileGridSelectionController.prototype.handleTouchEvents = function(e, index) {
-  if (!this.enableTouchMode_)
-    return;
   if (this.tapHandler_.handleTouchEvents(
-          e, index, filelist.handleTap.bind(this)))
+          e, index, filelist.handleTap.bind(this))) {
     filelist.focusParentList(e);
+  }
 };
 
 /** @override */
@@ -973,15 +999,17 @@ FileGridSelectionController.prototype.handleKeyDown = function(e) {
 
 /** @override */
 FileGridSelectionController.prototype.getIndexBelow = function(index) {
-  if (this.isAccessibilityEnabled())
+  if (this.isAccessibilityEnabled()) {
     return this.getIndexAfter(index);
-  if (index === this.getLastIndex())
+  }
+  if (index === this.getLastIndex()) {
     return -1;
+  }
 
-  var grid = /** @type {!FileGrid} */ (this.grid_);
-  var row = grid.getItemRow(index);
-  var col = grid.getItemColumn(index);
-  var nextIndex = grid.getItemIndex(row + 1, col);
+  const grid = /** @type {!FileGrid} */ (this.grid_);
+  const row = grid.getItemRow(index);
+  const col = grid.getItemColumn(index);
+  const nextIndex = grid.getItemIndex(row + 1, col);
   if (nextIndex === -1) {
     return row + 1 < grid.getFolderRowCount() ?
         grid.dataModel.getFolderCount() - 1 :
@@ -992,17 +1020,20 @@ FileGridSelectionController.prototype.getIndexBelow = function(index) {
 
 /** @override */
 FileGridSelectionController.prototype.getIndexAbove = function(index) {
-  if (this.isAccessibilityEnabled())
+  if (this.isAccessibilityEnabled()) {
     return this.getIndexBefore(index);
-  if (index == 0)
+  }
+  if (index == 0) {
     return -1;
+  }
 
-  var grid = /** @type {!FileGrid} */ (this.grid_);
-  var row = grid.getItemRow(index);
-  if (row - 1 < 0)
+  const grid = /** @type {!FileGrid} */ (this.grid_);
+  const row = grid.getItemRow(index);
+  if (row - 1 < 0) {
     return 0;
-  var col = grid.getItemColumn(index);
-  var nextIndex = grid.getItemIndex(row - 1, col);
+  }
+  const col = grid.getItemColumn(index);
+  const nextIndex = grid.getItemIndex(row - 1, col);
   if (nextIndex === -1) {
     return row - 1 < grid.getFolderRowCount() ?
         grid.dataModel.getFolderCount() - 1 :

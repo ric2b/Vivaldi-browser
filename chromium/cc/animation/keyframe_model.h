@@ -8,8 +8,10 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/optional.h"
 #include "base/time/time.h"
 #include "cc/animation/animation_export.h"
+#include "cc/trees/element_id.h"
 
 namespace cc {
 
@@ -54,6 +56,8 @@ class CC_ANIMATION_EXPORT KeyframeModel {
 
   enum class FillMode { NONE, FORWARDS, BACKWARDS, BOTH, AUTO };
 
+  enum class Phase { BEFORE, ACTIVE, AFTER };
+
   static std::unique_ptr<KeyframeModel> Create(
       std::unique_ptr<AnimationCurve> curve,
       int keyframe_model_id,
@@ -68,6 +72,9 @@ class CC_ANIMATION_EXPORT KeyframeModel {
   int id() const { return id_; }
   int group() const { return group_; }
   int target_property_id() const { return target_property_id_; }
+
+  ElementId element_id() const { return element_id_; }
+  void set_element_id(ElementId element_id) { element_id_ = element_id; }
 
   RunState run_state() const { return run_state_; }
   void SetRunState(RunState run_state, base::TimeTicks monotonic_time);
@@ -165,6 +172,9 @@ class CC_ANIMATION_EXPORT KeyframeModel {
   }
   bool affects_pending_elements() const { return affects_pending_elements_; }
 
+  KeyframeModel::Phase CalculatePhaseForTesting(
+      base::TimeDelta local_time) const;
+
  private:
   KeyframeModel(std::unique_ptr<AnimationCurve> curve,
                 int keyframe_model_id,
@@ -198,8 +208,9 @@ class CC_ANIMATION_EXPORT KeyframeModel {
   base::TimeDelta ConvertMonotonicTimeToLocalTime(
       base::TimeTicks monotonic_time) const;
 
-  base::TimeDelta TrimLocalTimeToCurrentIteration(
-      base::TimeDelta local_time) const;
+  KeyframeModel::Phase CalculatePhase(base::TimeDelta local_time) const;
+  base::Optional<base::TimeDelta> CalculateActiveTime(
+      base::TimeTicks monotonic_time) const;
 
   std::unique_ptr<AnimationCurve> curve_;
 
@@ -211,6 +222,10 @@ class CC_ANIMATION_EXPORT KeyframeModel {
   // time and no other KeyframeModels may animate any of the group's target
   // properties until all KeyframeModels in the group have finished animating.
   int group_;
+
+  // If specified, overrides the ElementId to apply this KeyframeModel's effect
+  // value on.
+  ElementId element_id_;
 
   int target_property_id_;
   RunState run_state_;

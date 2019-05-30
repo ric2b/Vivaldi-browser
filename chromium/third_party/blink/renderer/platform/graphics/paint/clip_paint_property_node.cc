@@ -10,23 +10,24 @@
 namespace blink {
 
 const ClipPaintPropertyNode& ClipPaintPropertyNode::Root() {
-  DEFINE_STATIC_REF(
-      ClipPaintPropertyNode, root,
-      base::AdoptRef(new ClipPaintPropertyNode(
-          nullptr, State{&TransformPaintPropertyNode::Root(),
-                         FloatRoundedRect(LayoutRect::InfiniteIntRect())})));
+  DEFINE_STATIC_REF(ClipPaintPropertyNode, root,
+                    base::AdoptRef(new ClipPaintPropertyNode(
+                        nullptr,
+                        State{&TransformPaintPropertyNode::Root(),
+                              FloatRoundedRect(LayoutRect::InfiniteIntRect())},
+                        true /* is_parent_alias */)));
   return *root;
 }
 
 bool ClipPaintPropertyNode::Changed(
     const PropertyTreeState& relative_to_state,
     const TransformPaintPropertyNode* transform_not_to_check) const {
-  for (const auto* node = this; node && node != relative_to_state.Clip();
+  for (const auto* node = this; node && node != &relative_to_state.Clip();
        node = node->Parent()) {
     if (node->NodeChanged())
       return true;
-    if (node->LocalTransformSpace() != transform_not_to_check &&
-        node->LocalTransformSpace()->Changed(*relative_to_state.Transform()))
+    if (&node->LocalTransformSpace() != transform_not_to_check &&
+        node->LocalTransformSpace().Changed(relative_to_state.Transform()))
       return true;
   }
 
@@ -59,8 +60,8 @@ std::unique_ptr<JSONObject> ClipPaintPropertyNode::ToJSON() const {
 
 size_t ClipPaintPropertyNode::CacheMemoryUsageInBytes() const {
   size_t total_bytes = sizeof(*this);
-  if (geometry_mapper_clip_cache_)
-    total_bytes += sizeof(*geometry_mapper_clip_cache_);
+  if (clip_cache_)
+    total_bytes += sizeof(*clip_cache_);
   if (Parent())
     total_bytes += Parent()->CacheMemoryUsageInBytes();
   return total_bytes;

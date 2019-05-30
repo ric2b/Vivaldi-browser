@@ -32,10 +32,14 @@ namespace blink {
 struct AttributeTriggers;
 class Color;
 class DocumentFragment;
+class ElementInternals;
 class ExceptionState;
 class FormAssociated;
 class HTMLFormElement;
 class KeyboardEvent;
+class LabelsNodeList;
+class StringOrTrustedScript;
+class StringTreatNullAsEmptyStringOrTrustedScript;
 
 enum TranslateAttributeMode {
   kTranslateAttributeYes,
@@ -57,6 +61,12 @@ class CORE_EXPORT HTMLElement : public Element {
   int tabIndex() const override;
 
   void setInnerText(const String&, ExceptionState&);
+  virtual void setInnerText(const StringOrTrustedScript&, ExceptionState&);
+  virtual void setInnerText(const StringTreatNullAsEmptyStringOrTrustedScript&,
+                            ExceptionState&);
+  String innerText();
+  void innerText(StringOrTrustedScript& result);
+  void innerText(StringTreatNullAsEmptyStringOrTrustedScript& result);
   void setOuterText(const String&, ExceptionState&);
 
   virtual bool HasCustomFocusLogic() const;
@@ -99,7 +109,11 @@ class CORE_EXPORT HTMLElement : public Element {
   virtual bool IsHTMLUnknownElement() const { return false; }
   virtual bool IsPluginElement() const { return false; }
 
-  virtual bool IsLabelable() const { return false; }
+  // https://html.spec.whatwg.org/C/#category-label
+  virtual bool IsLabelable() const;
+  // |labels| IDL attribute implementation for IsLabelable()==true elements.
+  LabelsNodeList* labels();
+
   // http://www.whatwg.org/specs/web-apps/current-work/multipage/elements.html#interactive-content
   virtual bool IsInteractiveContent() const;
   void DefaultEventHandler(Event&) override;
@@ -107,8 +121,14 @@ class CORE_EXPORT HTMLElement : public Element {
   static const AtomicString& EventNameForAttributeName(
       const QualifiedName& attr_name);
 
+  bool SupportsFocus() const override;
+  bool IsDisabledFormControl() const override;
+  bool MatchesEnabledPseudoClass() const override;
   bool MatchesReadOnlyPseudoClass() const override;
   bool MatchesReadWritePseudoClass() const override;
+  bool MatchesValidityPseudoClasses() const override;
+  bool willValidate() const override;
+  bool IsValidElement() override;
 
   static const AtomicString& EventParameterName();
 
@@ -121,7 +141,9 @@ class CORE_EXPORT HTMLElement : public Element {
 
   Element* unclosedOffsetParent();
 
-  virtual FormAssociated* ToFormAssociatedOrNull() { return nullptr; };
+  ElementInternals* attachInternals(ExceptionState& exception_state);
+  virtual FormAssociated* ToFormAssociatedOrNull() { return nullptr; }
+  bool IsFormAssociatedCustomElement() const;
 
  protected:
   HTMLElement(const QualifiedName& tag_name, Document&, ConstructionType);
@@ -155,6 +177,9 @@ class CORE_EXPORT HTMLElement : public Element {
   void CalculateAndAdjustDirectionality();
 
   InsertionNotificationRequest InsertedInto(ContainerNode&) override;
+  void RemovedFrom(ContainerNode& insertion_point) override;
+  void DidMoveToNewDocument(Document& old_document) override;
+  void FinishParsingChildren() override;
 
  private:
   String DebugNodeName() const final;
@@ -184,6 +209,7 @@ class CORE_EXPORT HTMLElement : public Element {
       const QualifiedName& attr_name);
 
   void OnDirAttrChanged(const AttributeModificationParams&);
+  void OnFormAttrChanged(const AttributeModificationParams&);
   void OnInertAttrChanged(const AttributeModificationParams&);
   void OnLangAttrChanged(const AttributeModificationParams&);
   void OnNonceAttrChanged(const AttributeModificationParams&);

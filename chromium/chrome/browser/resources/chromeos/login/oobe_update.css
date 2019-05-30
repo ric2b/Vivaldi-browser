@@ -8,6 +8,10 @@
   line-height: 18px;
 }
 
+oobe-dialog {
+  outline: unset;
+}
+
 .update-subtitle {
   color: #333;
 }
@@ -24,13 +28,7 @@
 }
 
 .update-illustration {
+  height: 264px;
   padding-bottom: 82px;
-}
-
-paper-progress {
-  --paper-progress-active-color: var(--google-blue-500);
-  --paper-progress-secondary-color: var(--google-blue-100);
-  bottom: 0;
-  height: 3px;
-  width: 100%;
+  width: 264px;
 }

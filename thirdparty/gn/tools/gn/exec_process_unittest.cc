@@ -67,7 +67,6 @@ TEST(ExecProcessTest, TestExitCode) {
 // byte buffer and, if stdout is non-blocking, python will throw an IOError when
 // a write exceeds the buffer size.
 TEST(ExecProcessTest, TestLargeOutput) {
-  base::ScopedTempDir temp_dir;
   std::string std_out, std_err;
   int exit_code;
 
@@ -78,7 +77,6 @@ TEST(ExecProcessTest, TestLargeOutput) {
 }
 
 TEST(ExecProcessTest, TestStdoutAndStderrOutput) {
-  base::ScopedTempDir temp_dir;
   std::string std_out, std_err;
   int exit_code;
 

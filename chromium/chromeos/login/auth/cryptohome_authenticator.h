@@ -9,12 +9,12 @@
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/component_export.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/optional.h"
 #include "base/synchronization/lock.h"
 #include "base/task_runner.h"
-#include "chromeos/chromeos_export.h"
 #include "chromeos/login/auth/auth_attempt_state.h"
 #include "chromeos/login/auth/auth_attempt_state_resolver.h"
 #include "chromeos/login/auth/authenticator.h"
@@ -25,6 +25,10 @@ class AuthFailure;
 
 namespace content {
 class BrowserContext;
+}
+
+namespace cryptohome {
+class BaseReply;
 }
 
 namespace chromeos {
@@ -56,7 +60,7 @@ class AuthStatusConsumer;
 //     Old password failure: NEED_OLD_PW
 //     Old password ok: RECOVER_MOUNT > CONTINUE > ONLINE_LOGIN
 //
-class CHROMEOS_EXPORT CryptohomeAuthenticator
+class COMPONENT_EXPORT(CHROMEOS_LOGIN_AUTH) CryptohomeAuthenticator
     : public Authenticator,
       public AuthAttemptStateResolver {
  public:
@@ -157,6 +161,9 @@ class CHROMEOS_EXPORT CryptohomeAuthenticator
   void OnAuthFailure(const AuthFailure& error) override;
   void RecoverEncryptedData(const std::string& old_password) override;
   void ResyncEncryptedData() override;
+
+  // Called after UnmountEx finishes.
+  void OnUnmountEx(base::Optional<cryptohome::BaseReply> reply);
 
   // AuthAttemptStateResolver overrides.
   // Attempts to make a decision and call back |consumer_| based on
@@ -274,7 +281,7 @@ class CHROMEOS_EXPORT CryptohomeAuthenticator
 
   // When |remove_user_data_on_failure_| is set, we delay calling
   // consumer_->OnAuthFailure() until we removed the user cryptohome.
-  const AuthFailure* delayed_login_failure_;
+  AuthFailure delayed_login_failure_;
 
   DISALLOW_COPY_AND_ASSIGN(CryptohomeAuthenticator);
 };

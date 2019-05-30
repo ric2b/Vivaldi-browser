@@ -133,7 +133,8 @@ class ModemMessagingProxy {
   DISALLOW_COPY_AND_ASSIGN(ModemMessagingProxy);
 };
 
-class CHROMEOS_EXPORT ModemMessagingClientImpl : public ModemMessagingClient {
+class COMPONENT_EXPORT(CHROMEOS_DBUS) ModemMessagingClientImpl
+    : public ModemMessagingClient {
  public:
   ModemMessagingClientImpl() : bus_(NULL) {}
 
@@ -162,7 +163,7 @@ class CHROMEOS_EXPORT ModemMessagingClientImpl : public ModemMessagingClient {
   }
 
  protected:
-  void Init(dbus::Bus* bus) override { bus_ = bus; };
+  void Init(dbus::Bus* bus) override { bus_ = bus; }
 
  private:
   using ProxyMap = std::map<std::pair<std::string, std::string>,

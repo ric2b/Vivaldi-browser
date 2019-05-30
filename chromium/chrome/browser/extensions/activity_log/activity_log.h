@@ -23,7 +23,7 @@
 #include "content/public/browser/notification_registrar.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/extension_registry_observer.h"
-#include "extensions/browser/script_execution_observer.h"
+#include "extensions/browser/script_executor.h"
 #include "extensions/common/dom_action_types.h"
 
 class Profile;
@@ -47,7 +47,6 @@ class ExtensionSystem;
 // each profile.
 //
 class ActivityLog : public BrowserContextKeyedAPI,
-                    public ScriptExecutionObserver,
                     public ExtensionRegistryObserver,
                     public content::NotificationObserver {
  public:
@@ -63,6 +62,14 @@ class ActivityLog : public BrowserContextKeyedAPI,
   // ActivityLog is a KeyedService, so don't instantiate it with
   // the constructor; use GetInstance instead.
   static ActivityLog* GetInstance(content::BrowserContext* context);
+
+  // Invoked when a ContentScript is executed.
+  void OnScriptsExecuted(content::WebContents* web_contents,
+                         const ExecutingScriptsMap& extension_ids,
+                         const GURL& on_url);
+
+  // Observe tabs.executeScript on the given |executor|.
+  void ObserveScripts(ScriptExecutor* executor);
 
   // Add/remove observer: the activityLogPrivate API only listens when the
   // ActivityLog extension is registered for an event.
@@ -109,6 +116,10 @@ class ActivityLog : public BrowserContextKeyedAPI,
   // action_ids array.
   void RemoveActions(const std::vector<int64_t>& action_ids);
 
+  // Remove all actions from the activity log database with the specified
+  // extension_id.
+  void RemoveExtensionData(const std::string& extension_id);
+
   // Clean up URLs from the activity log database.
   // If restrict_urls is empty then all URLs in the activity log database are
   // removed, otherwise only those in restrict_urls are removed.
@@ -125,6 +136,10 @@ class ActivityLog : public BrowserContextKeyedAPI,
   // active.
   void SetWatchdogAppActiveForTesting(bool active);
 
+  bool has_listeners() const { return has_listeners_; }
+
+  void SetHasListeners(bool has_listeners);
+
  private:
   friend class ActivityLogTest;
   friend class BrowserContextKeyedAPIFactory<ActivityLog>;
@@ -134,6 +149,8 @@ class ActivityLog : public BrowserContextKeyedAPI,
 
   // Specifies if the Watchdog app is active (installed & enabled).
   // If so, we need to log to the database and stream to the API.
+  // TODO(kelvinjiang): eliminate this check if possible to simplify logic and
+  // for the deprecation of the Chrome Apps & Extensions Developer Tool.
   bool IsWatchdogAppActive();
 
   // Specifies if we need to record actions to the db. If so, we need to log to
@@ -144,12 +161,6 @@ class ActivityLog : public BrowserContextKeyedAPI,
   // Updates cached_consumer_count_ to be active_consumers_ and stores the value
   // in prefs.
   void UpdateCachedConsumerCount();
-
-  // ScriptExecutionObserver implementation.
-  // Fires when a ContentScript is executed.
-  void OnScriptsExecuted(const content::WebContents* web_contents,
-                         const ExecutingScriptsMap& extension_ids,
-                         const GURL& on_url) override;
 
   // At the moment, ActivityLog will use only one policy for summarization.
   // These methods are used to choose and set the most appropriate policy.
@@ -209,6 +220,8 @@ class ActivityLog : public BrowserContextKeyedAPI,
       extension_registry_observer_;
 
   // The number of active consumers of the activity log.
+  // TODO(kelvinjiang): eliminate this flag if possible and use has_listeners_
+  // instead to simplify logic.
   int active_consumers_;
 
   // The cached number of consumers of the activity log. Maintained by the
@@ -216,6 +229,10 @@ class ActivityLog : public BrowserContextKeyedAPI,
   // the result so that we can record extension actions that happen before
   // all extensions have finished loading.
   int cached_consumer_count_;
+
+  // Whether there are listeners on the browser side for the onExtensionActivity
+  // event.
+  bool has_listeners_;
 
   // True if the activity log is currently active, meaning that the user has
   // either added the commandline switch or has loaded a compatible extension.

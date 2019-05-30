@@ -11,6 +11,7 @@
 
 #define TELEMETRY 1
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/environment.h"
 #include "base/path_service.h"
@@ -243,7 +244,7 @@ NACL_BROWSER_TEST_F(NaClBrowserTest, MAYBE_SysconfNprocessorsOnln, {
     RunNaClIntegrationTest(path);
 })
 
-IN_PROC_BROWSER_TEST_F(NaClBrowserTestStatic, CrossOriginCORS) {
+IN_PROC_BROWSER_TEST_F(NaClBrowserTestStatic, CrossOriginCors) {
   RunLoadTest(FILE_PATH_LITERAL("cross_origin/cors.html"));
 }
 
@@ -255,7 +256,7 @@ IN_PROC_BROWSER_TEST_F(NaClBrowserTestStatic, SameOriginCookie) {
   RunLoadTest(FILE_PATH_LITERAL("cross_origin/same_origin_cookie.html"));
 }
 
-IN_PROC_BROWSER_TEST_F(NaClBrowserTestStatic, CORSNoCookie) {
+IN_PROC_BROWSER_TEST_F(NaClBrowserTestStatic, CorsNoCookie) {
   RunLoadTest(FILE_PATH_LITERAL("cross_origin/cors_no_cookie.html"));
 }
 
@@ -302,7 +303,7 @@ class NaClBrowserTestPnaclDebug : public NaClBrowserTestPnacl {
     base::PathService::Get(chrome::DIR_TEST_DATA, &script);
     script = script.AppendASCII("nacl/debug_stub_browser_tests.py");
     cmd.AppendArgPath(script);
-    cmd.AppendArg(base::IntToString(debug_stub_port));
+    cmd.AppendArg(base::NumberToString(debug_stub_port));
     cmd.AppendArg("continue");
     LOG(INFO) << cmd.GetCommandLineString();
     *test_process = base::LaunchProcess(cmd, base::LaunchOptions());

@@ -24,6 +24,7 @@ extern const char kChromeUIChromeURLsURL[];
 extern const char kChromeUICreditsURL[];
 extern const char kChromeUIFlagsURL[];
 extern const char kChromeUIHistoryURL[];
+extern const char kChromeUIInspectURL[];
 extern const char kChromeUINewTabURL[];
 extern const char kChromeUINTPTilesInternalsURL[];
 extern const char kChromeUIOfflineURL[];
@@ -44,6 +45,7 @@ extern const char kChromeUIFlagsHost[];
 extern const char kChromeUIGCMInternalsHost[];
 extern const char kChromeUIHistogramHost[];
 extern const char kChromeUIHistoryHost[];
+extern const char kChromeUIInspectHost[];
 extern const char kChromeUINetExportHost[];
 extern const char kChromeUINewTabHost[];
 extern const char kChromeUINTPTilesInternalsHost[];
@@ -56,8 +58,9 @@ extern const char kChromeUISignInInternalsHost[];
 extern const char kChromeUISuggestionsHost[];
 extern const char kChromeUISyncInternalsHost[];
 extern const char kChromeUITermsHost[];
-extern const char kChromeUIVersionHost[];
 extern const char kChromeUIURLKeyedMetricsHost[];
+extern const char kChromeUIUserActionsHost[];
+extern const char kChromeUIVersionHost[];
 
 // Gets the hosts/domains that are shown in chrome://chrome-urls.
 extern const char* const kChromeHostURLs[];
@@ -106,5 +109,8 @@ extern const char kGoogleMyAccountURL[];
 // URL used in referrer to signal that the navigation originates from Reading
 // List page and thus should not be considered for Most Visited.
 extern const char kReadingListReferrerURL[];
+
+// URL used internally by ios/web when loading the NTP.
+extern const char kChromeUIAboutNewTabURL[];
 
 #endif  // IOS_CHROME_BROWSER_CHROME_URL_CONSTANTS_H_

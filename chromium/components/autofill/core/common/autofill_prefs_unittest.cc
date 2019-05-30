@@ -6,6 +6,8 @@
 
 #include <memory>
 
+#include "base/json/json_reader.h"
+#include "base/json/json_writer.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/pref_service_factory.h"
@@ -71,6 +73,130 @@ TEST_F(AutofillPrefsTest, MigrateDeprecatedAutofillPrefs) {
   MigrateDeprecatedAutofillPrefs(pref_service());
   EXPECT_FALSE(pref_service()->GetBoolean(kAutofillProfileEnabled));
   EXPECT_FALSE(pref_service()->GetBoolean(kAutofillCreditCardEnabled));
+}
+
+// Tests that setting and getting the AutofillSyncTransportOptIn works as
+// expected.
+TEST_F(AutofillPrefsTest, WalletSyncTransportPref_GetAndSet) {
+  const std::string account1 = "account1";
+  const std::string account2 = "account2";
+
+  // There should be no opt-in recorded at first.
+  ASSERT_FALSE(IsUserOptedInWalletSyncTransport(pref_service(), account1));
+  ASSERT_FALSE(IsUserOptedInWalletSyncTransport(pref_service(), account2));
+  // There should be no entry for the accounts in the dictionary.
+  EXPECT_TRUE(pref_service()
+                  ->GetDictionary(prefs::kAutofillSyncTransportOptIn)
+                  ->DictEmpty());
+
+  // Set the opt-in for the first account.
+  SetUserOptedInWalletSyncTransport(pref_service(), account1, true);
+  EXPECT_TRUE(IsUserOptedInWalletSyncTransport(pref_service(), account1));
+  EXPECT_FALSE(IsUserOptedInWalletSyncTransport(pref_service(), account2));
+  // There should only be one entry in the dictionary.
+  EXPECT_EQ(1U, pref_service()
+                    ->GetDictionary(prefs::kAutofillSyncTransportOptIn)
+                    ->DictSize());
+
+  // Unset the opt-in for the first account.
+  SetUserOptedInWalletSyncTransport(pref_service(), account1, false);
+  EXPECT_FALSE(IsUserOptedInWalletSyncTransport(pref_service(), account1));
+  EXPECT_FALSE(IsUserOptedInWalletSyncTransport(pref_service(), account2));
+  // There should be no entry for the accounts in the dictionary.
+  EXPECT_TRUE(pref_service()
+                  ->GetDictionary(prefs::kAutofillSyncTransportOptIn)
+                  ->DictEmpty());
+
+  // Set the opt-in for the second account.
+  SetUserOptedInWalletSyncTransport(pref_service(), account2, true);
+  EXPECT_FALSE(IsUserOptedInWalletSyncTransport(pref_service(), account1));
+  EXPECT_TRUE(IsUserOptedInWalletSyncTransport(pref_service(), account2));
+  // There should only be one entry in the dictionary.
+  EXPECT_EQ(1U, pref_service()
+                    ->GetDictionary(prefs::kAutofillSyncTransportOptIn)
+                    ->DictSize());
+
+  // Set the opt-in for the first account too.
+  SetUserOptedInWalletSyncTransport(pref_service(), account1, true);
+  EXPECT_TRUE(IsUserOptedInWalletSyncTransport(pref_service(), account1));
+  EXPECT_TRUE(IsUserOptedInWalletSyncTransport(pref_service(), account1));
+  // There should be tow entries in the dictionary.
+  EXPECT_EQ(2U, pref_service()
+                    ->GetDictionary(prefs::kAutofillSyncTransportOptIn)
+                    ->DictSize());
+}
+
+// Tests that AutofillSyncTransportOptIn is not stored using the plain text
+// account id.
+TEST_F(AutofillPrefsTest, WalletSyncTransportPref_UsesHashAccountId) {
+  const std::string account1 = "account1";
+
+  // There should be no opt-in recorded at first.
+  EXPECT_TRUE(pref_service()
+                  ->GetDictionary(prefs::kAutofillSyncTransportOptIn)
+                  ->DictEmpty());
+
+  // Set the opt-in for the first account.
+  SetUserOptedInWalletSyncTransport(pref_service(), account1, true);
+  EXPECT_FALSE(pref_service()
+                   ->GetDictionary(prefs::kAutofillSyncTransportOptIn)
+                   ->DictEmpty());
+
+  // Make sure that the dictionary keys don't contain the account id.
+  auto* dictionary =
+      pref_service()->GetDictionary(prefs::kAutofillSyncTransportOptIn);
+  EXPECT_EQ(NULL,
+            dictionary->FindKeyOfType(account1, base::Value::Type::INTEGER));
+}
+
+// Tests that clearing the AutofillSyncTransportOptIn works as expected.
+TEST_F(AutofillPrefsTest, WalletSyncTransportPref_Clear) {
+  const std::string account1 = "account1";
+  const std::string account2 = "account2";
+
+  // There should be no opt-in recorded at first.
+  EXPECT_TRUE(pref_service()
+                  ->GetDictionary(prefs::kAutofillSyncTransportOptIn)
+                  ->DictEmpty());
+
+  // Set the opt-in for the first account.
+  SetUserOptedInWalletSyncTransport(pref_service(), account1, true);
+  EXPECT_FALSE(pref_service()
+                   ->GetDictionary(prefs::kAutofillSyncTransportOptIn)
+                   ->DictEmpty());
+
+  // Set the opt-in for the second account.
+  SetUserOptedInWalletSyncTransport(pref_service(), account2, true);
+  EXPECT_FALSE(pref_service()
+                   ->GetDictionary(prefs::kAutofillSyncTransportOptIn)
+                   ->DictEmpty());
+
+  // Clear all opt-ins. The dictionary should be empty.
+  ClearSyncTransportOptIns(pref_service());
+  EXPECT_TRUE(pref_service()
+                  ->GetDictionary(prefs::kAutofillSyncTransportOptIn)
+                  ->DictEmpty());
+}
+
+// Tests that the account id hash that we generate can be written and read from
+// JSON properly.
+TEST_F(AutofillPrefsTest, WalletSyncTransportPref_CanBeSetAndReadFromJSON) {
+  const std::string account1 = "account1";
+
+  // Set the opt-in for the first account.
+  SetUserOptedInWalletSyncTransport(pref_service(), account1, true);
+  EXPECT_FALSE(pref_service()
+                   ->GetDictionary(prefs::kAutofillSyncTransportOptIn)
+                   ->DictEmpty());
+
+  const base::DictionaryValue* dictionary =
+      pref_service()->GetDictionary(prefs::kAutofillSyncTransportOptIn);
+
+  std::string output_js;
+  EXPECT_TRUE(base::JSONWriter::Write(*dictionary, &output_js));
+  EXPECT_TRUE(dictionary->Equals(
+      base::DictionaryValue::From(base::JSONReader::ReadDeprecated(output_js))
+          .get()));
 }
 
 }  // namespace prefs

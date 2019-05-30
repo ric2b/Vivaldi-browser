@@ -2,8 +2,14 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//base/win/embedded_i18n/generate_embedded_i18n.gni")
 import("//build/config/chrome_build.gni")
+
 import("//testing/test.gni")
+
+if (defined(is_vivaldi) && is_vivaldi) {
+  import("//vivaldi/gn/config/features.gni")
+}
 
 # This file deliberately has no default "util" target so dependants have to
 # specify with the ":with_no_strings" or ":with_rc_strings" variants. Random
@@ -30,8 +36,7 @@ import("//testing/test.gni")
 # all case", there is no definition of what works and doesn't work, and this may
 # also change over time. As an example at the time of this writing, chrome.exe
 # calls GoogleUpdateSettings::UpdateDidRunState. This function doesn't use any
-# strings, but lots of other functions in BrowserDistribution do use localized
-# strings.
+# strings, but other functions in InstallUtil do use localized strings.
 #
 # Ideally, this should be cleaved in two parts: the main "installer util" and
 # some kind of mini installer util that just contains the functions needed by
@@ -53,8 +58,6 @@ static_library("with_no_strings") {
 
   if (is_win) {
     sources = [
-      "chrome_browser_operations.cc",
-      "chrome_browser_operations.h",
       "delete_after_reboot_helper.cc",
       "delete_after_reboot_helper.h",
       "experiment.cc",
@@ -65,8 +68,6 @@ static_library("with_no_strings") {
       "experiment_metrics.h",
       "experiment_storage.cc",
       "experiment_storage.h",
-      "google_chrome_distribution.cc",
-      "google_chrome_distribution.h",
       "html_dialog.h",
       "html_dialog_impl.cc",
       "logging_installer.cc",
@@ -77,9 +78,6 @@ static_library("with_no_strings") {
       "lzma_util.h",
       "master_preferences.cc",
       "master_preferences.h",
-      "product.cc",
-      "product.h",
-      "product_operations.h",
       "registry_entry.cc",
       "registry_entry.h",
       "scoped_token_privilege.cc",
@@ -90,8 +88,6 @@ static_library("with_no_strings") {
       "self_cleaning_temp_dir.h",
       "shell_util.cc",
       "shell_util.h",
-      "uninstall_metrics.cc",
-      "uninstall_metrics.h",
     ]
 
     deps += [
@@ -100,6 +96,7 @@ static_library("with_no_strings") {
       # target (which actually compiles and causes the generated code to be
       # linked) from the ":util" target.
       ":generate_strings",
+      "//base:i18n",
       "//base/third_party/dynamic_annotations",
       "//chrome/install_static:install_static_util",
       "//components/base32",
@@ -107,8 +104,6 @@ static_library("with_no_strings") {
       "//courgette:courgette_lib",
       "//crypto",
       "//rlz/buildflags",
-      "//third_party/bspatch",
-      "//third_party/crashpad/crashpad/client",
       "//third_party/icu",
       "//third_party/lzma_sdk",
     ]
@@ -132,13 +127,10 @@ static_library("with_no_strings") {
       "app_command.h",
       "app_commands.cc",
       "app_commands.h",
-      "app_registration_data.h",
       "auto_launch_util.cc",
       "auto_launch_util.h",
       "beacons.cc",
       "beacons.h",
-      "browser_distribution.cc",
-      "browser_distribution.h",
       "callback_work_item.cc",
       "callback_work_item.h",
       "channel_info.cc",
@@ -177,22 +169,16 @@ static_library("with_no_strings") {
       "installation_state.h",
       "l10n_string_util.cc",
       "l10n_string_util.h",
-      "language_selector.cc",
-      "language_selector.h",
       "master_preferences_constants.cc",
       "master_preferences_constants.h",
       "move_tree_work_item.cc",
       "move_tree_work_item.h",
-      "non_updating_app_registration_data.cc",
-      "non_updating_app_registration_data.h",
       "registry_key_backup.cc",
       "registry_key_backup.h",
       "self_reg_work_item.cc",
       "self_reg_work_item.h",
       "set_reg_value_work_item.cc",
       "set_reg_value_work_item.h",
-      "updating_app_registration_data.cc",
-      "updating_app_registration_data.h",
       "util_constants.cc",
       "util_constants.h",
       "work_item.cc",
@@ -221,45 +207,44 @@ group("with_rc_strings") {
   }
 }
 
-action("generate_strings") {
+generate_embedded_i18n("generate_strings") {
   visibility = [
     ":strings",
     ":with_no_strings",
   ]
-  script = "prebuild/create_string_rc.py"
-
+  extractor_datafile =
+      "//chrome/installer/util/prebuild/create_installer_string_rc.py"
+  
+  grdfile_folder = "//chrome/app/"
   if (is_chrome_branded) {
-    grdfile = "//chrome/app/google_chrome_strings.grd"
+    grdfile_name = "google_chrome_strings"
   }
   if (defined(is_vivaldi) && is_vivaldi) {
     # Need to use this file and dependency to get the correct list of languages
-    grdfile = "$root_gen_dir/vivaldi_resources/chrome/app/google_chrome_strings/google_chrome_strings.grd"
+    grdfile_folder = "$root_gen_dir/vivaldi_resources/chrome/app/google_chrome_strings/"
+    grdfile_name = "google_chrome_strings"
     deps = [
       "//chrome/app:google_chrome_strings",
+      "//chrome/app:merge_google_chrome_strings",
     ]
+    default_embedded_i18_locales -= ["iw"]
+    default_embedded_i18_locales += ["he"] + vivaldi_pending_locales
   } else {
-    grdfile = "//chrome/app/chromium_strings.grd"
+    grdfile_name = "chromium_strings"
   }
-
-  inputs = [
-    grdfile,
+  xtb_relative_path = "resources"
+  grd_files_info = [
+    [
+      grdfile_folder,
+      grdfile_name,
+      xtb_relative_path,
+      default_embedded_i18_locales
+    ]
   ]
 
-  outputs = [
-    "$target_gen_dir/installer_util_strings.h",
-    "$target_gen_dir/installer_util_strings.rc",
-  ]
+  output_file_name_base = "installer_util_strings"
 
-  args = [
-    "-b",
-    "$branding_path_component",
-    "-i",
-    rebase_path(grdfile, root_build_dir) + ":resources",
-    "-n",
-    "installer_util_strings",
-    "-o",
-    rebase_path(target_gen_dir, root_build_dir),
-  ]
+  branding = branding_path_component
 }
 
 # Compile the generated .rc file.
@@ -307,7 +292,6 @@ if (is_win) {
       "installer_util_test_common.cc",
       "installer_util_test_common.h",
       "l10n_string_util_unittest.cc",
-      "language_selector_unittest.cc",
       "logging_installer_unittest.cc",
       "lzma_file_allocator_unittest.cc",
       "lzma_util_unittest.cc",
@@ -324,9 +308,6 @@ if (is_win) {
       "self_cleaning_temp_dir_unittest.cc",
       "set_reg_value_work_item_unittest.cc",
       "shell_util_unittest.cc",
-      "test_app_registration_data.cc",
-      "test_app_registration_data.h",
-      "uninstall_metrics_unittest.cc",
       "work_item_list_unittest.cc",
       "work_item_mocks.cc",
       "work_item_mocks.h",
@@ -337,9 +318,9 @@ if (is_win) {
       ":test_support",
       ":with_rc_strings",
       "//base",
-      "//base:i18n",
       "//base/test:test_support",
       "//chrome:other_version",
+      "//chrome/common:constants",
       "//chrome/install_static:install_static_util",
       "//chrome/install_static/test:test_support",
       "//chrome/installer/setup:lib",

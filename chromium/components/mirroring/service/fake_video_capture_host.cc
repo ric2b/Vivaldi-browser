@@ -6,6 +6,7 @@
 
 #include "base/memory/read_only_shared_memory_region.h"
 #include "media/base/video_frame.h"
+#include "media/capture/mojom/video_capture_types.mojom.h"
 #include "mojo/public/cpp/base/shared_memory_utils.h"
 
 namespace mirroring {
@@ -51,7 +52,8 @@ void FakeVideoCaptureHost::SendOneFrame(const gfx::Size& size,
   observer_->OnBufferReady(
       0, media::mojom::VideoFrameInfo::New(
              base::TimeDelta(), metadata.GetInternalValues().Clone(),
-             media::PIXEL_FORMAT_I420, size, gfx::Rect(size)));
+             media::PIXEL_FORMAT_I420, size, gfx::Rect(size),
+             gfx::ColorSpace::CreateREC709(), nullptr));
 }
 
 }  // namespace mirroring

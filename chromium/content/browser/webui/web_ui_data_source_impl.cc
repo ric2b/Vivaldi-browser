@@ -98,6 +98,7 @@ class WebUIDataSourceImpl::InternalDataSource : public URLDataSource {
   bool ShouldDenyXFrameOptions() const override {
     return parent_->deny_xframe_options_;
   }
+  bool ShouldServeMimeTypeAsContentTypeHeader() const override { return true; }
   bool IsGzipped(const std::string& path) const override {
     return parent_->IsGzipped(path);
   }
@@ -168,7 +169,6 @@ void WebUIDataSourceImpl::SetJsonPath(base::StringPiece path) {
   DCHECK(!path.empty());
 
   json_path_ = path.as_string();
-  excluded_paths_.insert(json_path_);
 }
 
 void WebUIDataSourceImpl::AddResourcePath(base::StringPiece path,
@@ -219,11 +219,14 @@ void WebUIDataSourceImpl::DisableDenyXFrameOptions() {
   deny_xframe_options_ = false;
 }
 
-void WebUIDataSourceImpl::UseGzip(
-    const std::vector<std::string>& excluded_paths) {
+void WebUIDataSourceImpl::UseGzip() {
   use_gzip_ = true;
-  for (const auto& path : excluded_paths)
-    excluded_paths_.insert(path);
+}
+
+void WebUIDataSourceImpl::UseGzip(
+    base::RepeatingCallback<bool(const std::string&)> is_gzipped_callback) {
+  UseGzip();
+  is_gzipped_callback_ = std::move(is_gzipped_callback);
 }
 
 const ui::TemplateReplacements* WebUIDataSourceImpl::GetReplacements() const {
@@ -264,6 +267,12 @@ std::string WebUIDataSourceImpl::GetMimeType(const std::string& path) const {
   if (base::EndsWith(file_path, ".svg", base::CompareCase::INSENSITIVE_ASCII))
     return "image/svg+xml";
 
+  if (base::EndsWith(file_path, ".jpg", base::CompareCase::INSENSITIVE_ASCII))
+    return "image/jpeg";
+
+  if (base::EndsWith(file_path, ".png", base::CompareCase::INSENSITIVE_ASCII))
+    return "image/png";
+
   return "text/html";
 }
 
@@ -302,8 +311,20 @@ void WebUIDataSourceImpl::SendLocalizedStringsAsJSON(
   callback.Run(base::RefCountedString::TakeString(&template_data));
 }
 
+const base::DictionaryValue* WebUIDataSourceImpl::GetLocalizedStrings() const {
+  return &localized_strings_;
+}
+
 bool WebUIDataSourceImpl::IsGzipped(const std::string& path) const {
-  return use_gzip_ && excluded_paths_.count(CleanUpPath(path)) == 0;
+  if (!use_gzip_)
+    return false;
+
+  // TODO(dbeam): does anybody care about the "dirty" path (i.e. stuff after ?).
+  const std::string clean_path = CleanUpPath(path);
+  if (!json_path_.empty() && clean_path == json_path_)
+    return false;
+
+  return is_gzipped_callback_.is_null() || is_gzipped_callback_.Run(clean_path);
 }
 
 }  // namespace content

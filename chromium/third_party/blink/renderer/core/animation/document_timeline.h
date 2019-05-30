@@ -74,8 +74,9 @@ class CORE_EXPORT DocumentTimeline : public AnimationTimeline {
 
   // Web Animations API IDL constructor
   static DocumentTimeline* Create(ExecutionContext*,
-                                  const DocumentTimelineOptions&);
+                                  const DocumentTimelineOptions*);
 
+  DocumentTimeline(Document*, TimeDelta origin_time, PlatformTiming*);
   ~DocumentTimeline() override = default;
 
   bool IsDocumentTimeline() const final { return true; }
@@ -92,7 +93,7 @@ class CORE_EXPORT DocumentTimeline : public AnimationTimeline {
   bool HasPendingUpdates() const {
     return !animations_needing_update_.IsEmpty();
   }
-  size_t PendingAnimationsCount() const {
+  wtf_size_t PendingAnimationsCount() const {
     return animations_needing_update_.size();
   }
   TimeTicks ZeroTime();
@@ -125,8 +126,6 @@ class CORE_EXPORT DocumentTimeline : public AnimationTimeline {
   void Trace(blink::Visitor*) override;
 
  private:
-  DocumentTimeline(Document*, TimeDelta origin_time, PlatformTiming*);
-
   Member<Document> document_;
   // Origin time for the timeline relative to the time origin of the document.
   // Provided when the timeline is constructed. See

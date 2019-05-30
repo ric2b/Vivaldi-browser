@@ -33,9 +33,7 @@ std::string NotesUIHTMLSource::GetMimeType(const std::string& path) const {
 NotesUIHTMLSource::~NotesUIHTMLSource() {}
 
 NotesUI::NotesUI(content::WebUI* web_ui) : WebUIController(web_ui) {
-  NotesUIHTMLSource* html_source = new NotesUIHTMLSource();
-
   Profile* profile = Profile::FromWebUI(web_ui);
-  content::URLDataSource::Add(profile, html_source);
+  content::URLDataSource::Add(profile, std::make_unique<NotesUIHTMLSource>());
 }
 }  // namespace vivaldi

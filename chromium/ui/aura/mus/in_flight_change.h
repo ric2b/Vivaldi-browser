@@ -11,12 +11,13 @@
 #include <string>
 #include <vector>
 
+#include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/optional.h"
-#include "components/viz/common/surfaces/local_surface_id.h"
+#include "components/viz/common/surfaces/local_surface_id_allocation.h"
 #include "ui/aura/window_observer.h"
-#include "ui/base/cursor/cursor_data.h"
+#include "ui/base/cursor/cursor.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/transform.h"
@@ -139,6 +140,10 @@ class InFlightChange {
   // outstanding, revert the value.
   virtual void Revert() = 0;
 
+  // Called when the change successfully completes and there are no more
+  // changes of this type scheduled.
+  virtual void OnLastChangeOfTypeSucceeded();
+
  private:
   WindowMus* window_;
   const ChangeType change_type_;
@@ -146,21 +151,27 @@ class InFlightChange {
 
 class InFlightBoundsChange : public InFlightChange {
  public:
-  InFlightBoundsChange(
-      WindowTreeClient* window_tree_client,
-      WindowMus* window,
-      const gfx::Rect& revert_bounds,
-      const base::Optional<viz::LocalSurfaceId>& local_surface_id);
+  InFlightBoundsChange(WindowTreeClient* window_tree_client,
+                       WindowMus* window,
+                       const gfx::Rect& revert_bounds,
+                       bool from_server,
+                       const base::Optional<viz::LocalSurfaceIdAllocation>&
+                           local_surface_id_allocation);
   ~InFlightBoundsChange() override;
 
   // InFlightChange:
   void SetRevertValueFrom(const InFlightChange& change) override;
   void Revert() override;
+  void OnLastChangeOfTypeSucceeded() override;
 
  private:
   WindowTreeClient* window_tree_client_;
   gfx::Rect revert_bounds_;
-  base::Optional<viz::LocalSurfaceId> revert_local_surface_id_;
+  // If true the change originated from the server. If false, the change was
+  // initiated by this client.
+  bool from_server_;
+  base::Optional<viz::LocalSurfaceIdAllocation>
+      revert_local_surface_id_allocation_;
 
   DISALLOW_COPY_AND_ASSIGN(InFlightBoundsChange);
 };
@@ -199,7 +210,9 @@ class InFlightTransformChange : public InFlightChange {
 // expected to always complete.
 class CrashInFlightChange : public InFlightChange {
  public:
-  CrashInFlightChange(WindowMus* window, ChangeType type);
+  CrashInFlightChange(const base::Location& from_here,
+                      WindowMus* window,
+                      ChangeType type);
   ~CrashInFlightChange() override;
 
   // InFlightChange:
@@ -208,6 +221,8 @@ class CrashInFlightChange : public InFlightChange {
   void Revert() override;
 
  private:
+  const base::Location location_;
+
   DISALLOW_COPY_AND_ASSIGN(CrashInFlightChange);
 };
 
@@ -296,7 +311,7 @@ class InFlightPropertyChange : public InFlightChange {
 
 class InFlightCursorChange : public InFlightChange {
  public:
-  InFlightCursorChange(WindowMus* window, const ui::CursorData& revert_value);
+  InFlightCursorChange(WindowMus* window, const ui::Cursor& revert_value);
   ~InFlightCursorChange() override;
 
   // InFlightChange:
@@ -304,7 +319,7 @@ class InFlightCursorChange : public InFlightChange {
   void Revert() override;
 
  private:
-  ui::CursorData revert_cursor_;
+  ui::Cursor revert_cursor_;
 
   DISALLOW_COPY_AND_ASSIGN(InFlightCursorChange);
 };

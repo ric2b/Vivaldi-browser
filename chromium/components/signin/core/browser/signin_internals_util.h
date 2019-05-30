@@ -25,10 +25,11 @@ const size_t kTruncateTokenStringLength = 6;
 // Helper enums to access fields from SigninStatus (declared below).
 enum {
   SIGNIN_FIELDS_BEGIN = 0,
-  UNTIMED_FIELDS_BEGIN = SIGNIN_FIELDS_BEGIN
+  UNTIMED_FIELDS_BEGIN_UNTYPED = SIGNIN_FIELDS_BEGIN
 };
 
 enum UntimedSigninStatusField {
+  UNTIMED_FIELDS_BEGIN = UNTIMED_FIELDS_BEGIN_UNTYPED,
   ACCOUNT_ID = UNTIMED_FIELDS_BEGIN,
   GAIA_ID,
   USERNAME,
@@ -37,14 +38,13 @@ enum UntimedSigninStatusField {
 
 enum {
   UNTIMED_FIELDS_COUNT = UNTIMED_FIELDS_END - UNTIMED_FIELDS_BEGIN,
-  TIMED_FIELDS_BEGIN = UNTIMED_FIELDS_END
+  TIMED_FIELDS_BEGIN_UNTYPED = UNTIMED_FIELDS_END
 };
 
 enum TimedSigninStatusField {
+  TIMED_FIELDS_BEGIN = TIMED_FIELDS_BEGIN_UNTYPED,
   AUTHENTICATION_RESULT_RECEIVED = TIMED_FIELDS_BEGIN,
   REFRESH_TOKEN_RECEIVED,
-  SIGNIN_STARTED,
-  SIGNIN_COMPLETED,
   TIMED_FIELDS_END
 };
 
@@ -62,14 +62,6 @@ std::string TokenPrefPath(const std::string& service_name);
 // Returns the name of a SigninStatus field.
 std::string SigninStatusFieldToString(UntimedSigninStatusField field);
 std::string SigninStatusFieldToString(TimedSigninStatusField field);
-
-// An Observer class for authentication and token diagnostic information.
-class SigninDiagnosticsObserver {
- public:
-  // Credentials and signin related changes.
-  virtual void NotifySigninValueChanged(const TimedSigninStatusField& field,
-                                        const std::string& value) {}
-};
 
 // Gets the first 6 hex characters of the SHA256 hash of the passed in string.
 // These are enough to perform equality checks across a single users tokens,

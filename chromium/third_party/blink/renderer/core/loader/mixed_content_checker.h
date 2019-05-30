@@ -37,6 +37,7 @@
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/loader/fetch/https_state.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_request.h"
 #include "third_party/blink/renderer/platform/weborigin/security_violation_reporting_policy.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
@@ -44,7 +45,7 @@
 namespace blink {
 
 class ConsoleMessage;
-class FetchClientSettingsObjectImpl;
+class FetchClientSettingsObject;
 class Frame;
 class FrameFetchContext;
 class LocalFrame;
@@ -67,7 +68,7 @@ class CORE_EXPORT MixedContentChecker final {
 
  public:
   static bool ShouldBlockFetch(LocalFrame*,
-                               WebURLRequest::RequestContext,
+                               mojom::RequestContextType,
                                network::mojom::RequestContextFrameType,
                                ResourceRequest::RedirectStatus,
                                const KURL&,
@@ -75,7 +76,7 @@ class CORE_EXPORT MixedContentChecker final {
                                    SecurityViolationReportingPolicy::kReport);
 
   static bool ShouldBlockFetchOnWorker(const WorkerFetchContext&,
-                                       WebURLRequest::RequestContext,
+                                       mojom::RequestContextType,
                                        ResourceRequest::RedirectStatus,
                                        const KURL&,
                                        SecurityViolationReportingPolicy,
@@ -87,11 +88,14 @@ class CORE_EXPORT MixedContentChecker final {
   static bool IsWebSocketAllowed(const WorkerFetchContext&, const KURL&);
 
   static bool IsMixedContent(const SecurityOrigin*, const KURL&);
-  static bool IsMixedContent(const FetchClientSettingsObjectImpl&, const KURL&);
+  static bool IsMixedContent(const FetchClientSettingsObject&, const KURL&);
   static bool IsMixedFormAction(LocalFrame*,
                                 const KURL&,
                                 SecurityViolationReportingPolicy =
                                     SecurityViolationReportingPolicy::kReport);
+
+  static bool ShouldAutoupgrade(HttpsState context_https_state,
+                                WebMixedContentContextType type);
 
   static void CheckMixedPrivatePublic(LocalFrame*,
                                       const AtomicString& resource_ip_address);
@@ -108,17 +112,24 @@ class CORE_EXPORT MixedContentChecker final {
 
   static void HandleCertificateError(LocalFrame*,
                                      const ResourceResponse&,
-                                     network::mojom::RequestContextFrameType,
-                                     WebURLRequest::RequestContext);
+                                     mojom::RequestContextType);
 
   // Receive information about mixed content found externally.
   static void MixedContentFound(LocalFrame*,
                                 const KURL& main_resource_url,
                                 const KURL& mixed_content_url,
-                                WebURLRequest::RequestContext,
+                                mojom::RequestContextType,
                                 bool was_allowed,
                                 bool had_redirect,
                                 std::unique_ptr<SourceLocation>);
+
+  static ConsoleMessage* CreateConsoleMessageAboutFetchAutoupgrade(
+      const KURL& main_resource_url,
+      const KURL& mixed_content_url);
+
+  static ConsoleMessage* CreateConsoleMessageAboutWebSocketAutoupgrade(
+      const KURL& main_resource_url,
+      const KURL& mixed_content_url);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(MixedContentCheckerTest, HandleCertificateError);
@@ -132,13 +143,13 @@ class CORE_EXPORT MixedContentChecker final {
   static ConsoleMessage* CreateConsoleMessageAboutFetch(
       const KURL&,
       const KURL&,
-      WebURLRequest::RequestContext,
+      mojom::RequestContextType,
       bool allowed,
       std::unique_ptr<SourceLocation>);
   static ConsoleMessage* CreateConsoleMessageAboutWebSocket(const KURL&,
                                                             const KURL&,
                                                             bool allowed);
-  static void Count(Frame*, WebURLRequest::RequestContext, const LocalFrame*);
+  static void Count(Frame*, mojom::RequestContextType, const LocalFrame*);
 
   DISALLOW_COPY_AND_ASSIGN(MixedContentChecker);
 };

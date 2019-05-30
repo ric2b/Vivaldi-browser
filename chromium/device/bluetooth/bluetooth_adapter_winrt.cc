@@ -29,6 +29,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/win/core_winrt_util.h"
+#include "base/win/post_async_results.h"
 #include "device/bluetooth/bluetooth_advertisement_winrt.h"
 #include "device/bluetooth/bluetooth_device_winrt.h"
 #include "device/bluetooth/bluetooth_discovery_filter.h"
@@ -421,9 +422,8 @@ ComPtr<IBluetoothLEAdvertisement> GetAdvertisement(
   return advertisement;
 }
 
-base::Optional<std::string> GetDeviceName(
-    IBluetoothLEAdvertisementReceivedEventArgs* received) {
-  ComPtr<IBluetoothLEAdvertisement> advertisement = GetAdvertisement(received);
+base::Optional<std::string> ExtractDeviceName(
+    IBluetoothLEAdvertisement* advertisement) {
   if (!advertisement)
     return base::nullopt;
 
@@ -434,6 +434,10 @@ base::Optional<std::string> GetDeviceName(
             << logging::SystemErrorCodeToString(hr);
     return base::nullopt;
   }
+
+  // Return early otherwise ScopedHString will create an empty string.
+  if (!local_name)
+    return base::nullopt;
 
   return base::win::ScopedHString(local_name).GetAsUTF8();
 }
@@ -449,6 +453,8 @@ void ExtractAndUpdateAdvertisementData(
   }
 
   ComPtr<IBluetoothLEAdvertisement> advertisement = GetAdvertisement(received);
+  static_cast<BluetoothDeviceWinrt*>(device)->UpdateLocalName(
+      ExtractDeviceName(advertisement.Get()));
   device->UpdateAdvertisementData(rssi, ExtractFlags(advertisement.Get()),
                                   ExtractAdvertisedUUIDs(advertisement.Get()),
                                   ExtractTxPower(advertisement.Get()),
@@ -649,7 +655,7 @@ void BluetoothAdapterWinrt::Init(InitCallback init_cb) {
     return;
   }
 
-  hr = PostAsyncResults(
+  hr = base::win::PostAsyncResults(
       std::move(get_default_adapter_op),
       base::BindOnce(&BluetoothAdapterWinrt::OnGetDefaultAdapter,
                      weak_ptr_factory_.GetWeakPtr(), std::move(on_init)));
@@ -675,9 +681,10 @@ bool BluetoothAdapterWinrt::SetPoweredImpl(bool powered) {
     return false;
   }
 
-  hr = PostAsyncResults(std::move(set_state_op),
-                        base::BindOnce(&BluetoothAdapterWinrt::OnSetRadioState,
-                                       weak_ptr_factory_.GetWeakPtr()));
+  hr = base::win::PostAsyncResults(
+      std::move(set_state_op),
+      base::BindOnce(&BluetoothAdapterWinrt::OnSetRadioState,
+                     weak_ptr_factory_.GetWeakPtr()));
 
   if (FAILED(hr)) {
     VLOG(2) << "PostAsyncResults failed: "
@@ -871,10 +878,8 @@ BluetoothAdapterWinrt::CreateAdvertisement() const {
 }
 
 std::unique_ptr<BluetoothDeviceWinrt> BluetoothAdapterWinrt::CreateDevice(
-    uint64_t raw_address,
-    base::Optional<std::string> local_name) {
-  return std::make_unique<BluetoothDeviceWinrt>(this, raw_address,
-                                                std::move(local_name));
+    uint64_t raw_address) {
+  return std::make_unique<BluetoothDeviceWinrt>(this, raw_address);
 }
 
 void BluetoothAdapterWinrt::OnGetDefaultAdapter(
@@ -925,7 +930,7 @@ void BluetoothAdapterWinrt::OnGetDefaultAdapter(
     return;
   }
 
-  hr = PostAsyncResults(
+  hr = base::win::PostAsyncResults(
       std::move(create_from_id_op),
       base::BindOnce(&BluetoothAdapterWinrt::OnCreateFromIdAsync,
                      weak_ptr_factory_.GetWeakPtr(), std::move(on_init)));
@@ -969,7 +974,7 @@ void BluetoothAdapterWinrt::OnCreateFromIdAsync(
     return;
   }
 
-  hr = PostAsyncResults(
+  hr = base::win::PostAsyncResults(
       std::move(request_access_op),
       base::BindOnce(&BluetoothAdapterWinrt::OnRequestRadioAccess,
                      weak_ptr_factory_.GetWeakPtr(), std::move(on_init)));
@@ -997,7 +1002,7 @@ void BluetoothAdapterWinrt::OnRequestRadioAccess(
     return;
   }
 
-  hr = PostAsyncResults(
+  hr = base::win::PostAsyncResults(
       std::move(get_radio_op),
       base::BindOnce(&BluetoothAdapterWinrt::OnGetRadio,
                      weak_ptr_factory_.GetWeakPtr(), std::move(on_init)));
@@ -1144,8 +1149,7 @@ void BluetoothAdapterWinrt::OnAdvertisementReceived(
   if (is_new_device) {
     bool was_inserted = false;
     std::tie(it, was_inserted) = devices_.emplace(
-        std::move(bluetooth_address),
-        CreateDevice(raw_bluetooth_address, GetDeviceName(received)));
+        std::move(bluetooth_address), CreateDevice(raw_bluetooth_address));
     DCHECK(was_inserted);
   }
 

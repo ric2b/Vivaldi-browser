@@ -27,9 +27,6 @@ struct PasswordForm;
 }
 
 namespace importer {
-#if defined(OS_WIN)
-struct ImporterIE7PasswordInfo;
-#endif
 struct SearchEngineInfo;
 }
 
@@ -49,11 +46,6 @@ class ImporterBridge : public base::RefCountedThreadSafe<ImporterBridge> {
       const std::vector<ImportedSpeedDialEntry>& speeddials) {}
 
   virtual void AddHomePage(const GURL& home_page) = 0;
-
-#if defined(OS_WIN)
-  virtual void AddIE7PasswordInfo(
-      const importer::ImporterIE7PasswordInfo& password_info) = 0;
-#endif
 
   virtual void SetFavicons(
       const favicon_base::FaviconUsageDataList& favicons) = 0;
@@ -87,7 +79,7 @@ class ImporterBridge : public base::RefCountedThreadSafe<ImporterBridge> {
   virtual void NotifyItemEnded(importer::ImportItem item) = 0;
 
   virtual void NotifyItemFailed(importer::ImportItem item,
-                                const std::string& error) {};
+                                const std::string& error) {}
 
   // Notifies the coordinator that the entire import operation has completed.
   virtual void NotifyEnded() = 0;

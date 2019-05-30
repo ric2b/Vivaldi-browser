@@ -13,11 +13,12 @@
 #include "ash/system/message_center/arc/arc_notification_surface_manager.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/arc/accessibility/ax_tree_source_arc.h"
+#include "chrome/browser/chromeos/arc/input_method_manager/arc_input_method_manager_service.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "components/arc/common/accessibility_helper.mojom.h"
 #include "components/arc/connection_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "ui/accessibility/ax_host_delegate.h"
+#include "ui/accessibility/ax_action_handler.h"
 #include "ui/aura/window_tracker.h"
 #include "ui/wm/public/activation_change_observer.h"
 
@@ -26,6 +27,10 @@ class Profile;
 namespace content {
 class BrowserContext;
 }  // namespace content
+
+namespace gfx {
+class Rect;
+}  // namespace gfx
 
 namespace arc {
 
@@ -42,6 +47,7 @@ class ArcAccessibilityHelperBridge
       public wm::ActivationChangeObserver,
       public AXTreeSourceArc::Delegate,
       public ArcAppListPrefs::Observer,
+      public arc::ArcInputMethodManagerService::Observer,
       public ash::ArcNotificationSurfaceManager::Observer {
  public:
   // Returns singleton instance for the given BrowserContext,
@@ -70,9 +76,6 @@ class ArcAccessibilityHelperBridge
   void OnConnectionClosed() override;
 
   // mojom::AccessibilityHelperHost overrides.
-  void OnAccessibilityEventDeprecated(
-      mojom::AccessibilityEventType event_type,
-      mojom::AccessibilityNodeInfoDataPtr event_source) override;
   void OnAccessibilityEvent(
       mojom::AccessibilityEventDataPtr event_data) override;
   void OnNotificationStateChanged(
@@ -84,6 +87,9 @@ class ArcAccessibilityHelperBridge
 
   // ArcAppListPrefs::Observer overrides.
   void OnTaskDestroyed(int32_t task_id) override;
+
+  // ArcInputMethodManagerService::Observer overrides.
+  void OnAndroidVirtualKeyboardVisibilityChanged(bool visible) override;
 
   // ArcNotificationSurfaceManager::Observer overrides.
   void OnNotificationSurfaceAdded(
@@ -113,21 +119,25 @@ class ArcAccessibilityHelperBridge
                          aura::Window* lost_active) override;
 
   void OnActionResult(const ui::AXActionData& data, bool result) const;
+  void OnGetTextLocationDataResult(
+      const ui::AXActionData& data,
+      const base::Optional<gfx::Rect>& result_rect) const;
 
   void OnAccessibilityStatusChanged(
       const chromeos::AccessibilityStatusEventDetails& event_details);
   arc::mojom::AccessibilityFilterType GetFilterTypeForProfile(Profile* profile);
   void UpdateFilterType();
   void UpdateWindowProperties(aura::Window* window);
+  void SetExploreByTouchEnabled(bool enabled);
   void UpdateTreeIdOfNotificationSurface(const std::string& notification_key,
-                                         uint32_t tree_id);
+                                         ui::AXTreeID tree_id);
 
   AXTreeSourceArc* GetFromTaskId(int32_t task_id);
   AXTreeSourceArc* CreateFromTaskId(int32_t task_id);
   AXTreeSourceArc* GetFromNotificationKey(const std::string& notification_key);
   AXTreeSourceArc* CreateFromNotificationKey(
       const std::string& notification_key);
-  AXTreeSourceArc* GetFromTreeId(int32_t tree_id) const;
+  AXTreeSourceArc* GetFromTreeId(ui::AXTreeID tree_id) const;
 
   bool activation_observer_added_ = false;
   Profile* const profile_;
@@ -135,6 +145,7 @@ class ArcAccessibilityHelperBridge
   std::map<int32_t, std::unique_ptr<AXTreeSourceArc>> task_id_to_tree_;
   std::map<std::string, std::unique_ptr<AXTreeSourceArc>>
       notification_key_to_tree_;
+  std::unique_ptr<AXTreeSourceArc> input_method_tree_;
   std::unique_ptr<chromeos::AccessibilityStatusSubscription>
       accessibility_status_subscription_;
   bool use_filter_type_all_for_test_ = false;

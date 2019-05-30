@@ -6,6 +6,7 @@
 
 #include "base/location.h"
 #include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/platform/wtf/functional.h"
 
 namespace blink {
 
@@ -20,12 +21,11 @@ void PausableTask::Post(ExecutionContext* context,
   } else {
     // Manages its own lifetime and invokes the callback when script is
     // unpaused.
-    new PausableTask(context, std::move(callback));
+    MakeGarbageCollected<PausableTask>(context, std::move(callback));
   }
 }
 
 void PausableTask::ContextDestroyed(ExecutionContext* destroyed_context) {
-  PausableTimer::ContextDestroyed(destroyed_context);
   DCHECK(callback_);
 
   Dispose();
@@ -34,7 +34,7 @@ void PausableTask::ContextDestroyed(ExecutionContext* destroyed_context) {
       WebLocalFrame::PausableTaskResult::kContextInvalidOrDestroyed);
 }
 
-void PausableTask::Fired() {
+void PausableTask::Run() {
   CHECK(!GetExecutionContext()->IsContextDestroyed());
   DCHECK(!GetExecutionContext()->IsContextPaused());
   DCHECK(callback_);
@@ -50,23 +50,23 @@ void PausableTask::Fired() {
 
 PausableTask::PausableTask(ExecutionContext* context,
                            WebLocalFrame::PausableTaskCallback callback)
-    : PausableTimer(context, TaskType::kJavascriptTimer),
+    : ContextLifecycleObserver(context),
       callback_(std::move(callback)),
       keep_alive_(this) {
   DCHECK(callback_);
   DCHECK(context);
   DCHECK(!context->IsContextDestroyed());
   DCHECK(context->IsContextPaused());
-
-  StartOneShot(TimeDelta(), FROM_HERE);
-  PauseIfNeeded();
+  task_handle_ = PostCancellableTask(
+      *context->GetTaskRunner(TaskType::kInternalDefault), FROM_HERE,
+      WTF::Bind(&PausableTask::Run, WrapPersistent(this)));
 }
 
 void PausableTask::Dispose() {
   // Remove object as a ContextLifecycleObserver.
-  PausableObject::ClearContext();
+  ContextLifecycleObserver::ClearContext();
   keep_alive_.Clear();
-  Stop();
+  task_handle_.Cancel();
 }
 
 }  // namespace blink

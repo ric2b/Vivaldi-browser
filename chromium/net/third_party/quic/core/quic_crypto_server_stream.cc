@@ -65,7 +65,9 @@ QuicCryptoServerStream::QuicCryptoServerStream(
 QuicCryptoServerStream::~QuicCryptoServerStream() {}
 
 void QuicCryptoServerStream::CancelOutstandingCallbacks() {
-  handshaker()->CancelOutstandingCallbacks();
+  if (handshaker()) {
+    handshaker()->CancelOutstandingCallbacks();
+  }
 }
 
 bool QuicCryptoServerStream::GetBase64SHA256ClientChannelID(
@@ -119,11 +121,6 @@ void QuicCryptoServerStream::SetPreviousCachedNetworkParams(
 
 bool QuicCryptoServerStream::ShouldSendExpectCTHeader() const {
   return handshaker()->ShouldSendExpectCTHeader();
-}
-
-QuicLongHeaderType QuicCryptoServerStream::GetLongHeaderType(
-    QuicStreamOffset offset) const {
-  return handshaker()->GetLongHeaderType(offset);
 }
 
 bool QuicCryptoServerStream::encryption_established() const {

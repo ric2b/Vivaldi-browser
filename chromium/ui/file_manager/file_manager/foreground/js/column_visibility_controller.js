@@ -7,7 +7,7 @@
  * UI.
  * @param {!FileManagerUI} ui
  * @param {!DirectoryModel} directoryModel
- * @param {!VolumeManagerCommon.VolumeInfoProvider} volumeManager
+ * @param {!VolumeManager} volumeManager
  * @constructor
  * @struct
  */
@@ -15,7 +15,7 @@ function ColumnVisibilityController(ui, directoryModel, volumeManager) {
   /** @private {!DirectoryModel} */
   this.directoryModel_ = directoryModel;
 
-  /** @private {!VolumeManagerCommon.VolumeInfoProvider} */
+  /** @private {!VolumeManager} */
   this.volumeManager_  = volumeManager;
 
   /** @private {!FileManagerUI} */
@@ -24,7 +24,7 @@ function ColumnVisibilityController(ui, directoryModel, volumeManager) {
   // Register event listener.
   directoryModel.addEventListener(
       'directory-changed', this.onDirectoryChanged_.bind(this));
-};
+}
 
 /**
  * @param {!Event} event
@@ -36,7 +36,7 @@ ColumnVisibilityController.prototype.onDirectoryChanged_ = function(event) {
   // TODO(kenobi): Once import status is exposed as part of the metadata system,
   // remove this and have the underlying UI determine its own status using
   // metadata.
-  var isImportEligible =
+  const isImportEligible =
       importer.isBeneathMediaDir(event.newDirEntry, this.volumeManager_) &&
       !!this.volumeManager_.getCurrentProfileVolumeInfo(
           VolumeManagerCommon.VolumeType.DRIVE);

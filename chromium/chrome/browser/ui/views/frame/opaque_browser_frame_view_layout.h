@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_FRAME_OPAQUE_BROWSER_FRAME_VIEW_LAYOUT_H_
 #define CHROME_BROWSER_UI_VIEWS_FRAME_OPAQUE_BROWSER_FRAME_VIEW_LAYOUT_H_
 
+#include <vector>
+
 #include "base/macros.h"
 #include "chrome/browser/ui/frame_button_display_types.h"
 #include "chrome/browser/ui/views/frame/opaque_browser_frame_view.h"
@@ -15,7 +17,7 @@ class HostedAppButtonContainer;
 class OpaqueBrowserFrameViewLayoutDelegate;
 
 namespace views {
-class ImageButton;
+class Button;
 class Label;
 }
 
@@ -29,14 +31,14 @@ class OpaqueBrowserFrameViewLayout : public views::LayoutManager {
   static const int kContentEdgeShadowThickness;
 
   // Constants public for testing only.
-  static constexpr int kRefreshNonClientExtraTopThickness = 1;
+  static constexpr int kNonClientExtraTopThickness = 1;
   static const int kFrameBorderThickness;
-  static const int kTitlebarTopEdgeThickness;
+  static const int kTopFrameEdgeThickness;
+  static const int kSideFrameEdgeThickness;
   static const int kIconLeftSpacing;
   static const int kIconTitleSpacing;
   static const int kCaptionSpacing;
   static const int kCaptionButtonBottomPadding;
-  static const int kNewTabCaptionCondensedSpacing;
 
   OpaqueBrowserFrameViewLayout();
   ~OpaqueBrowserFrameViewLayout() override;
@@ -53,11 +55,6 @@ class OpaqueBrowserFrameViewLayout : public views::LayoutManager {
   gfx::Rect GetBoundsForTabStrip(const gfx::Size& tabstrip_preferred_size,
                                  int total_width) const;
 
-  gfx::Size GetMinimumSize(int available_width) const;
-
-  // Distance between the left edge of the NonClientFrameView and the tab strip.
-  int GetTabStripLeftInset() const;
-
   // Returns the bounds of the window required to display the content area at
   // the specified bounds.
   gfx::Rect GetWindowBoundsForClientBounds(
@@ -73,10 +70,6 @@ class OpaqueBrowserFrameViewLayout : public views::LayoutManager {
   // window is restored regardless of the actual mode.
   int FrameTopBorderThickness(bool restored) const;
 
-  // Returns the thickness of the entire nonclient left, right, and bottom
-  // borders, including both the window frame and any client edge.
-  int NonClientBorderThickness() const;
-
   // Returns the height of the entire nonclient top border, from the edge of the
   // window to the top of the tabs. If |restored| is true, this is calculated as
   // if the window was restored, regardless of its current state.
@@ -85,9 +78,8 @@ class OpaqueBrowserFrameViewLayout : public views::LayoutManager {
   int GetTabStripInsetsTop(bool restored) const;
 
   // Returns the y-coordinate of the caption button when native frame buttons
-  // are disabled.  Also used to position the profile chooser button.  If
-  // |restored| is true, acts as if the window is restored regardless of the
-  // real mode.
+  // are disabled.  If |restored| is true, acts as if the window is restored
+  // regardless of the real mode.
   int DefaultCaptionButtonY(bool restored) const;
 
   // Returns the y-coordinate of button |button_id|.  If |restored| is true,
@@ -95,14 +87,15 @@ class OpaqueBrowserFrameViewLayout : public views::LayoutManager {
   virtual int CaptionButtonY(chrome::FrameButtonDisplayType button_id,
                              bool restored) const;
 
-  // Returns the initial spacing between the edge of the browser window and the
-  // first button.
-  virtual int TopAreaPadding() const;
-
-  // Returns the thickness of the 3D edge along the top of the titlebar.  If
+  // Returns the thickness of the top 3D edge of the window frame.  If
   // |restored| is true, acts as if the window is restored regardless of the
   // real mode.
-  int TitlebarTopThickness(bool restored) const;
+  int FrameTopThickness(bool restored) const;
+
+  // Returns the thickness of the left and right 3D edges of the window frame.
+  // If |restored| is true, acts as if the window is restored regardless of the
+  // real mode.
+  int FrameSideThickness(bool restored) const;
 
   // Returns the bounds of the titlebar icon (or where the icon would be if
   // there was one).
@@ -123,10 +116,6 @@ class OpaqueBrowserFrameViewLayout : public views::LayoutManager {
                                       bool leading_spacing,
                                       bool is_leading_button) const;
 
-  void set_extra_caption_y(int extra_caption_y) {
-    extra_caption_y_ = extra_caption_y;
-  }
-
   void set_forced_window_caption_spacing_for_test(
       int forced_window_caption_spacing) {
     forced_window_caption_spacing_ = forced_window_caption_spacing;
@@ -134,11 +123,13 @@ class OpaqueBrowserFrameViewLayout : public views::LayoutManager {
 
   const gfx::Rect& client_view_bounds() const { return client_view_bounds_; }
 
-  // Returns the extra thickness of the area above the tabs. The value returned
-  // is dependent on whether in material refresh mode or not.
+  // Returns the extra thickness of the area above the tabs.
   int GetNonClientRestoredExtraThickness() const;
 
-  bool HasClientEdge() const;
+  // views::LayoutManager:
+  // Called explicitly from OpaqueBrowserFrameView so we can't group it with
+  // the other overrides.
+  gfx::Size GetMinimumSize(const views::View* host) const override;
 
  protected:
   // Whether a specific button should be inserted on the leading or trailing
@@ -148,59 +139,58 @@ class OpaqueBrowserFrameViewLayout : public views::LayoutManager {
     ALIGN_TRAILING
   };
 
-  bool has_trailing_buttons() const { return has_trailing_buttons_; }
+  struct TopAreaPadding {
+    int leading;
+    int trailing;
+  };
 
-  virtual void LayoutNewStyleAvatar(views::View* host);
+  // views::LayoutManager:
+  void Layout(views::View* host) override;
 
-  virtual bool ShouldDrawImageMirrored(views::ImageButton* button,
-                                       ButtonAlignment alignment) const;
+  // Returns the spacing between the edge of the browser window and the first
+  // frame buttons.
+  virtual TopAreaPadding GetTopAreaPadding(bool has_leading_buttons,
+                                           bool has_trailing_buttons) const;
 
   OpaqueBrowserFrameViewLayoutDelegate* delegate_;
-
-  views::View* new_avatar_button_;
 
   // The leading and trailing x positions of the empty space available for
   // laying out titlebar elements.
   int available_space_leading_x_;
   int available_space_trailing_x_;
 
-  // The size of the window buttons, and the avatar menu item (if any). This
-  // does not count labels or other elements that should be counted in a
-  // minimal frame.
+  // The size of the window buttons. This does not count labels or other
+  // elements that should be counted in a minimal frame.
   int minimum_size_for_buttons_;
 
  private:
-  // Determines whether the incognito icon should be shown on the right side of
-  // the tab strip (instead of the usual left).
-  bool ShouldIncognitoIconBeOnRight() const;
-
-  // Determines the amount of spacing between the tabstrip and the caption
-  // buttons.
-  int TabStripCaptionSpacing() const;
-
   // Layout various sub-components of this view.
-  void LayoutWindowControls(views::View* host);
-  void LayoutTitleBar(views::View* host);
-  void LayoutIncognitoIcon(views::View* host);
+  void LayoutWindowControls();
+  void LayoutTitleBar();
 
-  void ConfigureButton(views::View* host,
-                       views::FrameButton button_id,
-                       ButtonAlignment align);
+  void ConfigureButton(views::FrameButton button_id, ButtonAlignment align);
 
   // Sets the visibility of all buttons associated with |button_id| to false.
   void HideButton(views::FrameButton button_id);
 
   // Adds a window caption button to either the leading or trailing side.
   void SetBoundsForButton(views::FrameButton button_id,
-                          views::View* host,
-                          views::ImageButton* button,
+                          views::Button* button,
                           ButtonAlignment align);
 
   // Internal implementation of ViewAdded() and ViewRemoved().
   void SetView(int id, views::View* view);
 
+  // Returns the spacing between the edge of the browser window and the first
+  // frame buttons.
+  TopAreaPadding GetTopAreaPadding() const;
+
+  // Returns true if a 3D edge should be drawn around the window frame.  If
+  // |restored| is true, acts as if the window is restored regardless of the
+  // real mode.
+  bool IsFrameEdgeVisible(bool restored) const;
+
   // views::LayoutManager:
-  void Layout(views::View* host) override;
   gfx::Size GetPreferredSize(const views::View* host) const override;
   void ViewAdded(views::View* host, views::View* view) override;
   void ViewRemoved(views::View* host, views::View* view) override;
@@ -211,31 +201,25 @@ class OpaqueBrowserFrameViewLayout : public views::LayoutManager {
   // The layout of the window icon, if visible.
   gfx::Rect window_icon_bounds_;
 
-  // Whether any of the window control buttons were packed on the
-  // leading or trailing sides.
-  bool has_leading_buttons_;
-  bool has_trailing_buttons_;
-
-  // Extra offset from the top of the frame to the top of the window control
-  // buttons. Configurable based on platform and whether we are under test.
-  int extra_caption_y_;
+  // Whether any of the window control buttons were packed on the leading or
+  // trailing sides.  This state is only valid while Layout() is being run.
+  bool placed_leading_button_;
+  bool placed_trailing_button_;
 
   // Extra offset between the individual window caption buttons.  Set only in
   // testing, otherwise, its value will be -1.
   int forced_window_caption_spacing_;
 
   // Window controls.
-  views::ImageButton* minimize_button_;
-  views::ImageButton* maximize_button_;
-  views::ImageButton* restore_button_;
-  views::ImageButton* close_button_;
+  views::Button* minimize_button_;
+  views::Button* maximize_button_;
+  views::Button* restore_button_;
+  views::Button* close_button_;
 
   views::View* window_icon_;
   views::Label* window_title_;
 
   HostedAppButtonContainer* hosted_app_button_container_ = nullptr;
-
-  views::View* incognito_icon_;
 
   std::vector<views::FrameButton> leading_buttons_;
   std::vector<views::FrameButton> trailing_buttons_;

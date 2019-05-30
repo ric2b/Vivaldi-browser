@@ -56,6 +56,7 @@
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/platform/geometry/int_rect.h"
+#include "third_party/blink/renderer/platform/network/network_utils.h"
 
 namespace blink {
 
@@ -117,7 +118,7 @@ static bool IsIndependentDescendant(const LayoutBlock* layout_object) {
   return layout_object->IsLayoutView() || layout_object->IsFloating() ||
          layout_object->IsOutOfFlowPositioned() ||
          layout_object->IsTableCell() || layout_object->IsTableCaption() ||
-         layout_object->IsFlexibleBoxIncludingDeprecated() ||
+         layout_object->IsFlexibleBoxIncludingDeprecatedAndNG() ||
          (containing_block && containing_block->IsHorizontalWritingMode() !=
                                   layout_object->IsHorizontalWritingMode()) ||
          layout_object->StyleRef().IsDisplayReplacedType() ||
@@ -243,7 +244,8 @@ TextAutosizer::TextAutosizer(const Document* document)
       cluster_stack_(),
       fingerprint_mapper_(),
       page_info_(),
-      update_page_info_deferred_(false) {
+      update_page_info_deferred_(false),
+      did_check_cross_site_use_count_(false) {
 }
 
 TextAutosizer::~TextAutosizer() = default;
@@ -345,6 +347,8 @@ void TextAutosizer::BeginLayout(LayoutBlock* block,
     return;
 
   DCHECK(!cluster_stack_.IsEmpty() || block->IsLayoutView());
+  if (cluster_stack_.IsEmpty())
+    did_check_cross_site_use_count_ = false;
 
   if (Cluster* cluster = MaybeCreateCluster(block))
     cluster_stack_.push_back(base::WrapUnique(cluster));
@@ -434,9 +438,10 @@ float TextAutosizer::Inflate(LayoutObject* parent,
       has_text_child = true;
       // We only calculate this multiplier on-demand to ensure the parent block
       // of this text has entered layout.
-      if (!multiplier)
+      if (!multiplier) {
         multiplier =
             cluster->flags_ & SUPPRESSING ? 1.0f : ClusterMultiplier(cluster);
+      }
       ApplyMultiplier(child, multiplier, layouter);
 
       if (behavior == kDescendToInnerBlocks) {
@@ -449,6 +454,11 @@ float TextAutosizer::Inflate(LayoutObject* parent,
       }
     } else if (child->IsLayoutInline()) {
       multiplier = Inflate(child, layouter, behavior, multiplier);
+      // If this LayoutInline is an anonymous inline that has multiplied
+      // children, apply the multiplifer to the parent too. We compute
+      // ::first-line style from the style of the parent block.
+      if (multiplier && child->IsAnonymous())
+        has_text_child = true;
     } else if (child->IsLayoutBlock() && behavior == kDescendToInnerBlocks &&
                !ClassifyBlock(child,
                               INDEPENDENT | EXPLICIT_WIDTH | SUPPRESSING)) {
@@ -548,10 +558,11 @@ void TextAutosizer::UpdatePageInfoInAllFrames() {
 
   for (Frame* frame = document_->GetFrame(); frame;
        frame = frame->Tree().TraverseNext()) {
-    if (!frame->IsLocalFrame())
+    auto* local_frame = DynamicTo<LocalFrame>(frame);
+    if (!local_frame)
       continue;
 
-    Document* document = ToLocalFrame(frame)->GetDocument();
+    Document* document = local_frame->GetDocument();
     // If document is being detached, skip updatePageInfo.
     if (!document || !document->IsActive())
       continue;
@@ -582,7 +593,7 @@ void TextAutosizer::UpdatePageInfo() {
     if (frame.IsRemoteFrame())
       return;
 
-    LocalFrame& main_frame = ToLocalFrame(frame);
+    LocalFrame& main_frame = To<LocalFrame>(frame);
     IntSize frame_size =
         document_->GetSettings()->TextAutosizingWindowSizeOverride();
     if (frame_size.IsEmpty())
@@ -671,7 +682,7 @@ void TextAutosizer::SetAllTextNeedsLayout(LayoutBlock* container) {
     } else {
       if (object->IsText()) {
         object->SetNeedsLayoutAndFullPaintInvalidation(
-            LayoutInvalidationReason::kTextAutosizing);
+            layout_invalidation_reason::kTextAutosizing);
       }
       object = object->NextInPreOrder(container);
     }
@@ -807,9 +818,9 @@ TextAutosizer::Fingerprint TextAutosizer::ComputeFingerprint(
     data.packed_style_properties_ |=
         (static_cast<unsigned>(style->Floating()) << 4);
     data.packed_style_properties_ |=
-        (static_cast<unsigned>(style->Display()) << 6);
-    data.packed_style_properties_ |= (style->Width().GetType() << 11);
-    // packedStyleProperties effectively using 15 bits now.
+        (static_cast<unsigned>(style->Display()) << 7);
+    data.packed_style_properties_ |= (style->Width().GetType() << 12);
+    // packedStyleProperties effectively using 16 bits now.
 
     // consider for adding: writing mode, padding.
 
@@ -887,11 +898,12 @@ float TextAutosizer::ClusterMultiplier(Cluster* cluster) {
       cluster->multiplier_ = SuperclusterMultiplier(cluster);
       cluster->supercluster_->inherit_parent_multiplier_ =
           kDontInheritMultiplier;
-    } else if (ClusterHasEnoughTextToAutosize(cluster))
+    } else if (ClusterHasEnoughTextToAutosize(cluster)) {
       cluster->multiplier_ =
           MultiplierFromBlock(ClusterWidthProvider(cluster->root_));
-    else
+    } else {
       cluster->multiplier_ = 1.0f;
+    }
   } else {
     cluster->multiplier_ =
         cluster->parent_ ? ClusterMultiplier(cluster->parent_) : 1.0f;
@@ -1119,6 +1131,37 @@ const LayoutObject* TextAutosizer::FindTextLeaf(
   return nullptr;
 }
 
+static bool IsCrossSite(const Frame& frame1, const Frame& frame2) {
+  // Cross-site differs from cross-origin (LocalFrame::IsCrossOriginSubframe).
+  // For example, http://foo.com and http://sub.foo.com are cross-origin but
+  // same-site.  Only cross-site text autosizing is impacted by site isolation
+  // (crbug.com/393285).
+
+  const auto* origin1 = frame1.GetSecurityContext()->GetSecurityOrigin();
+  const auto* origin2 = frame2.GetSecurityContext()->GetSecurityOrigin();
+  if (!origin1 || !origin2 || origin1->CanAccess(origin2))
+    return false;
+
+  if (origin1->Protocol() != origin2->Protocol())
+    return true;
+
+  // Compare eTLD+1.
+  return network_utils::GetDomainAndRegistry(
+             origin1->Host(), network_utils::kIncludePrivateRegistries) !=
+         network_utils::GetDomainAndRegistry(
+             origin2->Host(), network_utils::kIncludePrivateRegistries);
+}
+
+void TextAutosizer::ReportIfCrossSiteFrame() {
+  LocalFrame* frame = document_->GetFrame();
+  LocalFrameView* view = document_->View();
+  if (!frame || !view || !view->IsAttached() || !view->IsVisible() ||
+      view->Size().IsEmpty() || !IsCrossSite(*frame, frame->Tree().Top()))
+    return;
+
+  UseCounter::Count(*document_, WebFeature::kTextAutosizedCrossSiteIframe);
+}
+
 void TextAutosizer::ApplyMultiplier(LayoutObject* layout_object,
                                     float multiplier,
                                     SubtreeLayoutScope* layouter,
@@ -1143,31 +1186,36 @@ void TextAutosizer::ApplyMultiplier(LayoutObject* layout_object,
   if (current_style.TextAutosizingMultiplier() == multiplier)
     return;
 
-  // We need to clone the layoutObject style to avoid breaking style sharing.
   scoped_refptr<ComputedStyle> style = ComputedStyle::Clone(current_style);
   style->SetTextAutosizingMultiplier(multiplier);
-  style->SetUnique();
+
+  if (multiplier > 1 && !did_check_cross_site_use_count_) {
+    ReportIfCrossSiteFrame();
+    did_check_cross_site_use_count_ = true;
+  }
 
   switch (relayout_behavior) {
     case kAlreadyInLayout:
-      // Don't free currentStyle until the end of the layout pass. This allows
+      // Don't free current_style until the end of the layout pass. This allows
       // other parts of the system to safely hold raw ComputedStyle* pointers
-      // during layout, e.g. BreakingContext::m_currentStyle.
+      // during layout, e.g. BreakingContext::current_style_.
       styles_retained_during_layout_.push_back(&current_style);
 
-      layout_object->SetStyleInternal(std::move(style));
+      layout_object->SetModifiedStyleOutsideStyleRecalc(
+          std::move(style), LayoutObject::ApplyStyleChanges::kNo);
       if (layout_object->IsText())
         ToLayoutText(layout_object)->AutosizingMultiplerChanged();
       DCHECK(!layouter || layout_object->IsDescendantOf(&layouter->Root()));
       layout_object->SetNeedsLayoutAndFullPaintInvalidation(
-          LayoutInvalidationReason::kTextAutosizing, kMarkContainerChain,
+          layout_invalidation_reason::kTextAutosizing, kMarkContainerChain,
           layouter);
       layout_object->MarkContainerNeedsCollectInlines();
       break;
 
     case kLayoutNeeded:
       DCHECK(!layouter);
-      layout_object->SetStyle(std::move(style));
+      layout_object->SetModifiedStyleOutsideStyleRecalc(
+          std::move(style), LayoutObject::ApplyStyleChanges::kYes);
       break;
   }
 

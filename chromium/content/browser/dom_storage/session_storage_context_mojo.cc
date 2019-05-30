@@ -11,13 +11,14 @@
 
 #include "base/barrier_closure.h"
 #include "base/bind.h"
-#include "base/debug/stack_trace.h"
+#include "base/bind_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "build/build_config.h"
 #include "components/services/leveldb/public/cpp/util.h"
@@ -27,9 +28,9 @@
 #include "content/browser/dom_storage/storage_area_impl.h"
 #include "content/common/dom_storage/dom_storage_types.h"
 #include "content/public/browser/session_storage_usage_info.h"
-#include "content/public/common/content_features.h"
 #include "services/file/public/mojom/constants.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/leveldatabase/env_chromium.h"
 #include "third_party/leveldatabase/leveldb_chrome.h"
 #include "url/gurl.h"
@@ -89,6 +90,11 @@ void RecordSessionStorageCachePurgedHistogram(
       break;
   }
 }
+
+void SessionStorageErrorResponse(base::OnceClosure callback,
+                                 leveldb::mojom::DatabaseError error) {
+  std::move(callback).Run();
+}
 }  // namespace
 
 SessionStorageContextMojo::SessionStorageContextMojo(
@@ -105,7 +111,7 @@ SessionStorageContextMojo::SessionStorageContextMojo(
                                          reinterpret_cast<uintptr_t>(this))),
       is_low_end_device_(base::SysInfo::IsLowEndDevice()),
       weak_ptr_factory_(this) {
-  DCHECK(base::FeatureList::IsEnabled(features::kMojoSessionStorage));
+  DCHECK(base::FeatureList::IsEnabled(blink::features::kOnionSoupDOMStorage));
   base::trace_event::MemoryDumpManager::GetInstance()
       ->RegisterDumpProviderWithSequencedTaskRunner(
           this, "SessionStorage", std::move(memory_dump_task_runner),
@@ -178,9 +184,9 @@ void SessionStorageContextMojo::CloneSessionNamespace(
 
   std::unique_ptr<SessionStorageNamespaceImplMojo> namespace_impl =
       CreateSessionStorageNamespaceImplMojo(clone_namespace_id);
+  auto clone_from_ns = namespaces_.find(namespace_id_to_clone);
   switch (clone_type) {
     case CloneType::kImmediate: {
-      auto clone_from_ns = namespaces_.find(namespace_id_to_clone);
       // If the namespace doesn't exist or it's not populated yet, just create
       // an empty session storage.
       if (clone_from_ns == namespaces_.end() ||
@@ -191,7 +197,32 @@ void SessionStorageContextMojo::CloneSessionNamespace(
       return;
     }
     case CloneType::kWaitForCloneOnNamespace:
-      namespace_impl->SetWaitingForClonePopulation();
+      if (clone_from_ns != namespaces_.end()) {
+        // The namespace exists and is in-use, so wait until receiving a clone
+        // call on that mojo binding.
+        namespace_impl->SetWaitingForClonePopulation();
+        clone_from_ns->second->AddNamespacesWaitingForClone(clone_namespace_id);
+      } else if (base::ContainsKey(metadata_.namespace_origin_map(),
+                                   namespace_id_to_clone)) {
+        // The namespace exists on disk but is not in-use, so do the appropriate
+        // metadata operations to clone the namespace and set up the new object.
+        std::vector<leveldb::mojom::BatchedOperationPtr> save_operations;
+        auto source_namespace_entry =
+            metadata_.GetOrCreateNamespaceEntry(namespace_id_to_clone);
+        auto namespace_entry =
+            metadata_.GetOrCreateNamespaceEntry(clone_namespace_id);
+        metadata_.RegisterShallowClonedNamespace(
+            source_namespace_entry, namespace_entry, &save_operations);
+        if (database_) {
+          database_->Write(
+              std::move(save_operations),
+              base::BindOnce(&SessionStorageContextMojo::OnCommitResult,
+                             base::Unretained(this)));
+        }
+        namespace_impl->PopulateFromMetadata(database_.get(), namespace_entry);
+      }
+      // If there is no sign of a source namespace, just run with an empty
+      // namespace.
       break;
     default:
       NOTREACHED();
@@ -204,9 +235,16 @@ void SessionStorageContextMojo::CloneSessionNamespace(
 void SessionStorageContextMojo::DeleteSessionNamespace(
     const std::string& namespace_id,
     bool should_persist) {
-  // The object hierarchy uses iterators bound to the metadata object, so make
-  // sure to delete the object hierarchy first.
-  namespaces_.erase(namespace_id);
+  auto namespace_it = namespaces_.find(namespace_id);
+  // If the namespace has pending clones, do the clone now before destroying it.
+  if (namespace_it != namespaces_.end()) {
+    if (namespace_it->second->HasNamespacesWaitingForClone())
+      namespace_it->second->CloneAllNamespacesWaitingForClone();
+
+    // The object hierarchy uses iterators bound to the metadata object, so
+    // make sure to delete the object hierarchy first.
+    namespaces_.erase(namespace_it);
+  }
 
   if (!has_scavenged_ && should_persist)
     protected_namespaces_from_scavenge_.insert(namespace_id);
@@ -253,31 +291,61 @@ void SessionStorageContextMojo::GetStorageUsage(
 }
 
 void SessionStorageContextMojo::DeleteStorage(const url::Origin& origin,
-                                              const std::string& namespace_id) {
+                                              const std::string& namespace_id,
+                                              base::OnceClosure callback) {
   if (connection_state_ != CONNECTION_FINISHED) {
     RunWhenConnected(base::BindOnce(&SessionStorageContextMojo::DeleteStorage,
                                     weak_ptr_factory_.GetWeakPtr(), origin,
-                                    namespace_id));
+                                    namespace_id, std::move(callback)));
     return;
   }
   auto found = namespaces_.find(namespace_id);
   if (found != namespaces_.end() &&
       (found->second->IsPopulated() ||
        found->second->waiting_on_clone_population())) {
-    found->second->RemoveOriginData(origin);
+    found->second->RemoveOriginData(origin, std::move(callback));
   } else {
     // If we don't have the namespace loaded, then we can delete it all
     // using the metadata.
     std::vector<leveldb::mojom::BatchedOperationPtr> delete_operations;
     metadata_.DeleteArea(namespace_id, origin, &delete_operations);
-    database_->Write(std::move(delete_operations),
-                     base::BindOnce(&SessionStorageContextMojo::OnCommitResult,
-                                    base::Unretained(this)));
+    if (database_) {
+      database_->Write(
+          std::move(delete_operations),
+          base::BindOnce(&SessionStorageContextMojo::OnCommitResultWithCallback,
+                         base::Unretained(this), std::move(callback)));
+    } else {
+      std::move(callback).Run();
+    }
+  }
+}
+
+void SessionStorageContextMojo::PerformStorageCleanup(
+    base::OnceClosure callback) {
+  if (connection_state_ != CONNECTION_FINISHED) {
+    RunWhenConnected(
+        base::BindOnce(&SessionStorageContextMojo::PerformStorageCleanup,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+    return;
+  }
+  if (database_) {
+    for (const auto& it : data_maps_)
+      it.second->storage_area()->ScheduleImmediateCommit();
+    database_->RewriteDB(
+        base::BindOnce(&SessionStorageErrorResponse, std::move(callback)));
+  } else {
+    std::move(callback).Run();
   }
 }
 
 void SessionStorageContextMojo::ShutdownAndDelete() {
   DCHECK_NE(connection_state_, CONNECTION_SHUTDOWN);
+
+  // The namespaces will DCHECK if they are destructed with pending clones. It
+  // is valid for to drop these on shutdown.
+  for (auto& namespace_pair : namespaces_) {
+    namespace_pair.second->ClearNamespacesWaitingForClone();
+  }
 
   // Nothing to do if no connection to the database was ever finished.
   if (connection_state_ != CONNECTION_FINISHED) {
@@ -466,9 +534,11 @@ SessionStorageContextMojo::RegisterNewAreaMap(
   scoped_refptr<SessionStorageMetadata::MapData> map_entry =
       metadata_.RegisterNewMap(namespace_entry, origin, &save_operations);
 
-  database_->Write(std::move(save_operations),
-                   base::BindOnce(&SessionStorageContextMojo::OnCommitResult,
-                                  base::Unretained(this)));
+  if (database_) {
+    database_->Write(std::move(save_operations),
+                     base::BindOnce(&SessionStorageContextMojo::OnCommitResult,
+                                    base::Unretained(this)));
+  }
   return map_entry;
 }
 
@@ -514,6 +584,13 @@ void SessionStorageContextMojo::OnCommitResult(
   }
 }
 
+void SessionStorageContextMojo::OnCommitResultWithCallback(
+    base::OnceClosure callback,
+    leveldb::mojom::DatabaseError error) {
+  OnCommitResult(error);
+  std::move(callback).Run();
+}
+
 scoped_refptr<SessionStorageDataMap>
 SessionStorageContextMojo::MaybeGetExistingDataMapForId(
     const std::vector<uint8_t>& map_number_as_bytes) {
@@ -540,13 +617,14 @@ void SessionStorageContextMojo::RegisterShallowClonedNamespace(
     }
   }
 
-  SessionStorageMetadata::NamespaceEntry namespace_entry =
-      metadata_.GetOrCreateNamespaceEntry(new_namespace_id);
+  auto namespace_entry = metadata_.GetOrCreateNamespaceEntry(new_namespace_id);
   metadata_.RegisterShallowClonedNamespace(source_namespace_entry,
                                            namespace_entry, &save_operations);
-  database_->Write(std::move(save_operations),
-                   base::BindOnce(&SessionStorageContextMojo::OnCommitResult,
-                                  base::Unretained(this)));
+  if (database_) {
+    database_->Write(std::move(save_operations),
+                     base::BindOnce(&SessionStorageContextMojo::OnCommitResult,
+                                    base::Unretained(this)));
+  }
 
   if (found) {
     it->second->PopulateAsClone(database_.get(), namespace_entry,
@@ -578,9 +656,11 @@ void SessionStorageContextMojo::DoDatabaseDelete(
   DCHECK_EQ(connection_state_, CONNECTION_FINISHED);
   std::vector<leveldb::mojom::BatchedOperationPtr> delete_operations;
   metadata_.DeleteNamespace(namespace_id, &delete_operations);
-  database_->Write(std::move(delete_operations),
-                   base::BindOnce(&SessionStorageContextMojo::OnCommitResult,
-                                  base::Unretained(this)));
+  if (database_) {
+    database_->Write(std::move(delete_operations),
+                     base::BindOnce(&SessionStorageContextMojo::OnCommitResult,
+                                    base::Unretained(this)));
+  }
 }
 
 void SessionStorageContextMojo::RunWhenConnected(base::OnceClosure callback) {
@@ -674,6 +754,19 @@ void SessionStorageContextMojo::OnDirectoryOpened(base::File::Error err) {
                      weak_ptr_factory_.GetWeakPtr(), false));
 }
 
+void SessionStorageContextMojo::OnMojoConnectionDestroyed() {
+  UMA_HISTOGRAM_BOOLEAN("SessionStorageContext.OnConnectionDestroyed", true);
+  LOG(ERROR) << "Lost connection to database";
+  for (const auto& it : data_maps_)
+    it.second->storage_area()->CancelAllPendingRequests();
+
+  for (const auto& namespace_pair : namespaces_)
+    namespace_pair.second->Reset();
+
+  DCHECK(data_maps_.empty());
+  database_.reset();
+}
+
 void SessionStorageContextMojo::OnDatabaseOpened(
     bool in_memory,
     leveldb::mojom::DatabaseError status) {
@@ -701,6 +794,9 @@ void SessionStorageContextMojo::OnDatabaseOpened(
 
   // Verify DB schema version.
   if (database_) {
+    database_.set_connection_error_handler(
+        base::BindOnce(&SessionStorageContextMojo::OnMojoConnectionDestroyed,
+                       weak_ptr_factory_.GetWeakPtr()));
     database_->Get(
         std::vector<uint8_t>(
             SessionStorageMetadata::kDatabaseVersionBytes,
@@ -824,6 +920,7 @@ void SessionStorageContextMojo::OnConnectionFinished() {
   if (database_)
     tried_to_recreate_during_open_ = false;
 
+  LogDatabaseOpenResult(OpenResult::kSuccess);
   open_result_histogram_ = nullptr;
 
   // |database_| should be known to either be valid or invalid by now. Run our
@@ -919,7 +1016,7 @@ void SessionStorageContextMojo::GetStatistics(size_t* total_cache_size,
 
 void SessionStorageContextMojo::LogDatabaseOpenResult(OpenResult result) {
   if (result != OpenResult::kSuccess) {
-    LOG(ERROR) << "Got error when openning: " << static_cast<int>(result);
+    LOG(ERROR) << "Got error when opening: " << static_cast<int>(result);
     UMA_HISTOGRAM_ENUMERATION("SessionStorageContext.OpenError", result);
   }
   if (open_result_histogram_) {

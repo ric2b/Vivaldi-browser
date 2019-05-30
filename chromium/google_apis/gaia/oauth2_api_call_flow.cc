@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/strings/stringprintf.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/gaia_urls.h"
@@ -94,10 +95,6 @@ std::unique_ptr<network::SimpleURLLoader> OAuth2ApiCallFlow::CreateURLLoader(
                              MakeAuthorizationValue(access_token));
   std::unique_ptr<network::SimpleURLLoader> result =
       network::SimpleURLLoader::Create(std::move(request), traffic_annotation);
-
-  // TODO(https://crbug.com/808498) re-add data use measurement once
-  // SimpleURLLoader supports it. Previously:
-  //     gaia::MarkURLFetcherAsGaia(result.get());
 
   // Fetchers are sometimes cancelled because a network change was detected,
   // especially at startup and after sign-in on ChromeOS. Retrying once should

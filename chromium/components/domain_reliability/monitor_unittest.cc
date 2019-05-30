@@ -19,7 +19,6 @@
 #include "components/domain_reliability/config.h"
 #include "components/domain_reliability/google_configs.h"
 #include "components/domain_reliability/test_util.h"
-#include "net/base/host_port_pair.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
@@ -54,17 +53,13 @@ class DomainReliabilityMonitorTest : public testing::Test {
   typedef DomainReliabilityMonitor::RequestInfo RequestInfo;
 
   DomainReliabilityMonitorTest()
-      : pref_task_runner_(new base::TestSimpleTaskRunner()),
-        network_task_runner_(new base::TestSimpleTaskRunner()),
+      : network_task_runner_(new base::TestSimpleTaskRunner()),
         url_request_context_getter_(
             new net::TestURLRequestContextGetter(network_task_runner_)),
         time_(new MockTime()),
         monitor_("test-reporter",
                  DomainReliabilityContext::UploadAllowedCallback(),
-                 pref_task_runner_,
-                 network_task_runner_,
                  std::unique_ptr<MockableTime>(time_)) {
-    monitor_.MoveToNetworkThread();
     monitor_.InitURLRequestContext(url_request_context_getter_);
     monitor_.SetDiscardUploads(false);
   }
@@ -76,8 +71,8 @@ class DomainReliabilityMonitorTest : public testing::Test {
   static RequestInfo MakeRequestInfo() {
     RequestInfo request;
     request.status = net::URLRequestStatus();
-    request.response_info.socket_address =
-        net::HostPortPair::FromString("12.34.56.78:80");
+    request.response_info.remote_endpoint =
+        net::IPEndPoint(net::IPAddress(12, 34, 56, 78), 80);
     request.response_info.headers = MakeHttpResponseHeaders(
         "HTTP/1.1 200 OK\n\n");
     request.response_info.was_cached = false;
@@ -104,7 +99,6 @@ class DomainReliabilityMonitorTest : public testing::Test {
     return monitor_.AddContextForTesting(std::move(config));
   }
 
-  scoped_refptr<base::TestSimpleTaskRunner> pref_task_runner_;
   scoped_refptr<base::TestSimpleTaskRunner> network_task_runner_;
   scoped_refptr<net::URLRequestContextGetter> url_request_context_getter_;
   MockTime* time_;
@@ -207,8 +201,8 @@ TEST_F(DomainReliabilityMonitorTest, WasFetchedViaProxy) {
   RequestInfo request = MakeRequestInfo();
   request.url = GURL("http://example/");
   request.status = net::URLRequestStatus::FromError(net::ERR_CONNECTION_RESET);
-  request.response_info.socket_address =
-      net::HostPortPair::FromString("127.0.0.1:3128");
+  request.response_info.remote_endpoint =
+      net::IPEndPoint(net::IPAddress(127, 0, 0, 1), 3128);
   request.response_info.was_fetched_via_proxy = true;
   OnRequestLegComplete(request);
 

@@ -147,4 +147,9 @@ struct ParserHelper {
   int precedence;
 };
 
+// Renders parse subtree as a formatted text, indenting by the given number of
+// spaces.
+void RenderToText(const base::Value& node, int indent_level,
+    std::ostringstream& os);
+
 #endif  // TOOLS_GN_PARSER_H_

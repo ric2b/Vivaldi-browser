@@ -1,0 +1,178 @@
+//
+// Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved.
+//
+
+[
+  {
+    "namespace": "bookmarkContextMenu",
+    "description": "Use the <code>vivaldi.bookmarkContextMenu</code> API to show a bookmark menu for the bookmark bar",
+    "types": [
+      {
+        "id": "SortOrder",
+        "type": "string",
+        "description": "Defines how to sort container items.",
+        "enum": ["ascending", "descending"]
+      },
+      {
+        "id": "SortField",
+        "type": "string",
+        "description": "Defines what element to use as sort key",
+        "enum": ["title", "url", "nickname", "description", "dateadded"]
+      },
+      {
+        "id": "EventState",
+        "type": "object",
+        "description": "Describes keyboard modifiers and mouse button state",
+        "properties": {
+          "ctrl": {
+            "type": "boolean",
+            "description": "true if the Ctrl key is pressed when activating the menu."
+          },
+          "shift": {
+            "type": "boolean",
+            "description": "true if the Shift key is pressed when activating the menu."
+          },
+          "alt": {
+            "type": "boolean",
+            "description": "true if the Alt key is pressed when activating the menu."
+          },
+          "command": {
+            "type": "boolean",
+            "description": "true if the Command key (Mac) is pressed when activating the menu."
+          },
+          "left": {
+            "type": "boolean",
+            "description": "true if the left mouse button activated the menu."
+          },
+          "right": {
+            "type": "boolean",
+            "description": "true if the right mouse button activated the menu."
+          },
+          "center": {
+            "type": "boolean",
+            "description": "true if the center mouse button activated the menu."
+          }
+        }
+      },
+      {
+        "id": "Disposition",
+        "type": "string",
+        "description": "Defines where a bookmark should be opened",
+        "enum": [ "setting", "current", "new-tab", "new-window", "new-private-window" ]
+      },
+      {
+        "id": "Action",
+        "type": "string",
+        "description": "Defines non-navigation action to preform",
+        "enum": [ "edit", "addactivetab", "addfolder", "addbookmark", "cut", "copy", "paste"]
+      },
+      {
+        "id": "Icons",
+        "type": "array",
+        "description": "Icons encoded as base64",
+        "items": { "type": "string" }
+      }
+    ],
+    "functions": [
+      {
+        "name": "show",
+        "type": "function",
+        "description": "Shows a context menu.",
+        "parameters": [
+          {
+            "name": "properties",
+            "type": "object",
+            "properties": {
+              "x": {"type": "integer", "description": "Left position of item that opens menu, screen coordinates."},
+              "y": {"type": "integer", "description": "Top position of item that opens menu, screen coordinates."},
+              "width": {"type": "integer", "description": "Width of item that opens menu."},
+              "height": {"type": "integer", "description": "Height of item that opens menu."},
+              "sortField": {"$ref": "SortField", "optional": true},
+              "sortOrder": {"$ref": "SortOrder", "optional": true},
+              "icons": {"$ref": "Icons", "description": "Default and folder icons"},
+              "folderGroup": {"type": "boolean", "description": "When true, sorted content will have folders first or last in list"},
+              "id": {"type": "string", "description": "Bookmark folder id"},
+              "offset": {"type": "integer", "description": "Offset into folder"}
+            }
+          },
+          {
+            "name": "callback",
+            "type": "function",
+            "optional": false,
+            "description": "Notifies caller that menu has closed"
+          }
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "onActivated",
+        "type": "function",
+        "description": "Fired when a bookmark/folder item is activated",
+        "parameters": [
+          {
+            "name": "id",
+            "type": "string",
+            "description": "Bookmark id"
+          },
+          {
+            "name": "disposition",
+            "$ref": "Disposition",
+            "description": "Where to open the bookmark"
+          },
+          {
+            "name": "background",
+            "type": "boolean",
+            "description": "Extends disposition with a background option"
+          },
+          {
+            "name": "state",
+            "$ref": "EventState",
+            "description": "Keyboard and mouse state when activation occured"
+          }
+        ]
+      },
+      {
+        "name": "onAction",
+        "type": "function",
+        "description": "Fired for non bookmark activations",
+        "parameters": [
+          {
+            "name": "id",
+            "type": "string",
+            "description": "Bookmark id"
+          },
+          {
+            "name": "action",
+            "$ref": "Action",
+            "description": "What action to execute"
+          }
+        ]
+      },
+      {
+        "name": "onOpen",
+        "type": "function",
+        "description": "Fires before menu opens",
+        "parameters": []
+      },
+      {
+        "name": "onClose",
+        "type": "function",
+        "description": "Fires before menu closes",
+        "parameters": []
+      },
+      {
+        "name": "onHover",
+        "type": "function",
+        "description": "Fired when a menu item with a url is highlighted",
+        "parameters": [
+          {
+            "name": "url",
+            "type": "string",
+            "description": "Url in menu item"
+          }
+        ]
+      }
+    ]
+  }
+]

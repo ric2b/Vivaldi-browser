@@ -595,6 +595,34 @@
       }
     },
     {
+      "command": "enableLogging",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [79, 69]
+        }
+      }
+    },
+    {
+      "command": "disableLogging",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [79, 68]
+        }
+      }
+    },
+    {
+      "command": "dumpTree",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [68, 84],
+          "ctrlKey": [true]
+        }
+      }
+    },
+    {
       "command": "help",
       "sequence": {
         "cvoxModifier": true,
@@ -966,6 +994,24 @@
         "cvoxModifier": true,
         "keys": {
           "keyCode": [79, 83]
+        }
+      }
+    },
+    {
+      "command": "getBatteryDescription",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [79, 66]
+        }
+      }
+    },
+    {
+      "command": "getRichTextDescription",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [65, 70]
         }
       }
     }

@@ -11,14 +11,14 @@
 #include "third_party/blink/renderer/core/style/computed_style.h"
 
 namespace blink {
-namespace CSSLonghand {
+namespace css_longhand {
 
 const CSSValue* AnimationIterationCount::ParseSingleValue(
     CSSParserTokenRange& range,
     const CSSParserContext&,
     const CSSParserLocalContext&) const {
-  return CSSPropertyParserHelpers::ConsumeCommaSeparatedList(
-      CSSParsingUtils::ConsumeAnimationIterationCount, range);
+  return css_property_parser_helpers::ConsumeCommaSeparatedList(
+      css_parsing_utils::ConsumeAnimationIterationCount, range);
 }
 
 const CSSValue* AnimationIterationCount::CSSValueFromComputedStyleInternal(
@@ -30,7 +30,8 @@ const CSSValue* AnimationIterationCount::CSSValueFromComputedStyleInternal(
   CSSValueList* list = CSSValueList::CreateCommaSeparated();
   const CSSAnimationData* animation_data = style.Animations();
   if (animation_data) {
-    for (size_t i = 0; i < animation_data->IterationCountList().size(); ++i) {
+    for (wtf_size_t i = 0; i < animation_data->IterationCountList().size();
+         ++i) {
       list->Append(*ComputedStyleUtils::ValueForAnimationIterationCount(
           animation_data->IterationCountList()[i]));
     }
@@ -42,11 +43,11 @@ const CSSValue* AnimationIterationCount::CSSValueFromComputedStyleInternal(
 
 const CSSValue* AnimationIterationCount::InitialValue() const {
   DEFINE_STATIC_LOCAL(
-      CSSValue, value,
+      Persistent<CSSValue>, value,
       (CSSPrimitiveValue::Create(CSSAnimationData::InitialIterationCount(),
                                  CSSPrimitiveValue::UnitType::kNumber)));
-  return &value;
+  return value;
 }
 
-}  // namespace CSSLonghand
+}  // namespace css_longhand
 }  // namespace blink

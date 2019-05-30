@@ -97,8 +97,10 @@ void DOMSelection::UpdateFrameSelection(
   Element* focused_element = GetFrame()->GetDocument()->FocusedElement();
   frame_selection.DidSetSelectionDeprecated(options);
   if (GetFrame() && GetFrame()->GetDocument() &&
-      focused_element != GetFrame()->GetDocument()->FocusedElement())
-    UseCounter::Count(GetFrame(), WebFeature::kSelectionFuncionsChangeFocus);
+      focused_element != GetFrame()->GetDocument()->FocusedElement()) {
+    UseCounter::Count(GetFrame()->GetDocument(),
+                      WebFeature::kSelectionFuncionsChangeFocus);
+  }
 }
 
 VisibleSelection DOMSelection::GetVisibleSelection() const {
@@ -231,7 +233,8 @@ void DOMSelection::collapse(Node* node,
   // 1. If node is null, this method must behave identically as
   // removeAllRanges() and abort these steps.
   if (!node) {
-    UseCounter::Count(GetFrame(), WebFeature::kSelectionCollapseNull);
+    UseCounter::Count(GetFrame()->GetDocument(),
+                      WebFeature::kSelectionCollapseNull);
     GetFrame()->Selection().Clear();
     return;
   }
@@ -356,12 +359,14 @@ void DOMSelection::setBaseAndExtent(Node* base_node,
   // TODO(editing-dev): Behavior on where base or extent is null is still
   // under discussion: https://github.com/w3c/selection-api/issues/72
   if (!base_node) {
-    UseCounter::Count(GetFrame(), WebFeature::kSelectionSetBaseAndExtentNull);
+    UseCounter::Count(GetFrame()->GetDocument(),
+                      WebFeature::kSelectionSetBaseAndExtentNull);
     GetFrame()->Selection().Clear();
     return;
   }
   if (!extent_node) {
-    UseCounter::Count(GetFrame(), WebFeature::kSelectionSetBaseAndExtentNull);
+    UseCounter::Count(GetFrame()->GetDocument(),
+                      WebFeature::kSelectionSetBaseAndExtentNull);
     extent_offset = 0;
   }
 
@@ -455,8 +460,10 @@ void DOMSelection::modify(const String& alter_string,
   GetFrame()->Selection().Modify(alter, direction, granularity,
                                  SetSelectionBy::kSystem);
   if (GetFrame() && GetFrame()->GetDocument() &&
-      focused_element != GetFrame()->GetDocument()->FocusedElement())
-    UseCounter::Count(GetFrame(), WebFeature::kSelectionFuncionsChangeFocus);
+      focused_element != GetFrame()->GetDocument()->FocusedElement()) {
+    UseCounter::Count(GetFrame()->GetDocument(),
+                      WebFeature::kSelectionFuncionsChangeFocus);
+  }
 }
 
 // https://www.w3.org/TR/selection-api/#dom-selection-extend
@@ -624,7 +631,7 @@ void DOMSelection::addRange(Range* new_range) {
     return;
 
   if (!new_range->IsConnected()) {
-    AddConsoleError("The given range isn't in document.");
+    AddConsoleWarning("addRange(): The given range isn't in document.");
     return;
   }
 
@@ -832,13 +839,14 @@ bool DOMSelection::IsValidForPosition(Node* node) const {
          node->isConnected();
 }
 
-void DOMSelection::AddConsoleError(const String& message) {
-  if (tree_scope_)
-    tree_scope_->GetDocument().AddConsoleMessage(
-        ConsoleMessage::Create(kJSMessageSource, kErrorMessageLevel, message));
+void DOMSelection::AddConsoleWarning(const String& message) {
+  if (tree_scope_) {
+    tree_scope_->GetDocument().AddConsoleMessage(ConsoleMessage::Create(
+        kJSMessageSource, mojom::ConsoleMessageLevel::kWarning, message));
+  }
 }
 
-void DOMSelection::Trace(blink::Visitor* visitor) {
+void DOMSelection::Trace(Visitor* visitor) {
   visitor->Trace(tree_scope_);
   ScriptWrappable::Trace(visitor);
   ContextClient::Trace(visitor);

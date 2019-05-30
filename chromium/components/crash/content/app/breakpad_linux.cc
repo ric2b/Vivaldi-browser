@@ -2125,7 +2125,7 @@ bool IsCrashReporterEnabled() {
   return g_is_crash_reporter_enabled;
 }
 
-void SetFirstChanceExceptionHandler(bool (*handler)(int, void*, void*)) {
+void SetFirstChanceExceptionHandler(bool (*handler)(int, siginfo_t*, void*)) {
   google_breakpad::SetFirstChanceExceptionHandler(handler);
 }
 

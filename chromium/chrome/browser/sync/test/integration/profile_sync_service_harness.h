@@ -11,6 +11,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
+#include "base/optional.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/engine/cycle/sync_cycle_snapshot.h"
@@ -41,49 +42,66 @@ class ProfileSyncServiceHarness {
       const std::string& username,
       const std::string& password,
       SigninType signin_type);
-  virtual ~ProfileSyncServiceHarness();
+  ~ProfileSyncServiceHarness();
 
-  // Creates a ProfileSyncService for the profile passed at construction and
-  // signs in without actually enabling sync the feature.
-  bool SignIn();
+  // Signs in to a primary account without actually enabling sync the feature.
+  bool SignInPrimaryAccount();
 
-  // Creates a ProfileSyncService for the profile passed at construction and
-  // enables sync for all available datatypes. Returns true only after sync has
-  // been fully initialized and authenticated, and we are ready to process
-  // changes.
+#if !defined(OS_CHROMEOS)
+  // Signs out of the primary account. ChromeOS doesn't have the concept of
+  // sign-out, so this only exists on other platforms.
+  void SignOutPrimaryAccount();
+#endif  // !OS_CHROMEOS
+
+  // Enters/exits the "Sync paused" state, which in real life happens if a
+  // syncing user signs out of the content area.
+  void EnterSyncPausedStateForPrimaryAccount();
+  void ExitSyncPausedStateForPrimaryAccount();
+
+  // Enables and configures sync for all available datatypes. Returns true only
+  // after sync has been fully initialized and authenticated, and we are ready
+  // to process changes.
   bool SetupSync();
 
-  // Setup sync without the authenticating through the passphrase encryption.
-  // Use this method when you need to setup a client that you're going to call
-  // StopSyncService(), StartSyncService() directly after.
-  bool SetupSyncForClearingServerData();
+  // Enables and configures sync only for the given |synced_datatypes|.
+  // Does not wait for sync to be ready to process changes -- callers need to
+  // ensure this by calling AwaitSyncSetupCompletion() or
+  // AwaitSyncTransportActive().
+  // Returns true on success.
+  bool SetupSyncNoWaitForCompletion(syncer::ModelTypeSet synced_datatypes);
 
-  // Both SetupSync and SetupSyncForClear call into this method.
-  // Same as the above method, but enables sync only for the datatypes contained
-  // in |synced_datatypes|.
-  bool SetupSync(syncer::ModelTypeSet synced_datatypes,
-                 bool skip_passphrase_verification = false);
+  // Same as SetupSyncNoWaitForCompletion(), but also sets the given encryption
+  // passphrase during setup.
+  bool SetupSyncWithEncryptionPassphraseNoWaitForCompletion(
+      syncer::ModelTypeSet synced_datatypes,
+      const std::string& passphrase);
+
+  // Same as SetupSyncNoWaitForCompletion(), but also sets the given decryption
+  // passphrase during setup.
+  bool SetupSyncWithDecryptionPassphraseNoWaitForCompletion(
+      syncer::ModelTypeSet synced_datatypes,
+      const std::string& passphrase);
+
+  // Signals that sync setup is complete, and that PSS may begin syncing.
+  // Typically SetupSync does this automatically, but if that returned false,
+  // then setup may have been left incomplete.
+  void FinishSyncSetup();
 
   // Methods to stop and restart the sync service.
   //
   // For example, this can be used to simulate a sign-in/sign-out or can be
   // useful to recover from a lost birthday.
-  // To start from a clear slate, clear server
-  // data first, then call StopSyncService(syncer::SyncService::CLEAR_DATA)
-  // followed by StartSyncService().
+  // To start from a clear slate, clear server data first, then call
+  // StopSyncServiceAndClearData() followed by StartSyncService().
   // To simulate the user being offline for a while, call
-  // StopSyncService(syncer::SyncService::KEEP_DATA) followed by
-  // StartSyncService();
-  // Stops the sync service.
-  void StopSyncService(syncer::SyncService::SyncStopDataFate data_fate);
+  // StopSyncServiceWithoutClearingData() followed by StartSyncService().
+
+  // Stops the sync service and clears all local sync data.
+  void StopSyncServiceAndClearData();
+  // Stops the sync service but keeps all local sync data around.
+  void StopSyncServiceWithoutClearingData();
   // Starts the sync service after a previous stop.
   bool StartSyncService();
-
-#if !defined(OS_CHROMEOS)
-  // Sign out of sync service. ChromeOS doesn't have the concept of sign-out,
-  // so this only exists on other platforms.
-  void SignoutSyncService();
-#endif  // !OS_CHROMEOS
 
   // Returns whether this client has unsynced items. Avoid verifying false
   // return values, because tests typically shouldn't make assumptions about
@@ -99,13 +117,6 @@ class ProfileSyncServiceHarness {
   // exactly one client is waiting to receive those changes.
   bool AwaitMutualSyncCycleCompletion(ProfileSyncServiceHarness* partner);
 
-  // Blocks the caller until |this| completes its ongoing sync cycle and every
-  // other client in |partners| have achieved identical download progresses.
-  // Note: Use this method when exactly one client makes local change(s),
-  // and more than one client is waiting to receive those changes.
-  bool AwaitGroupSyncCycleCompletion(
-      const std::vector<ProfileSyncServiceHarness*>& partners);
-
   // Blocks the caller until every client in |clients| completes its ongoing
   // sync cycle and all the clients' progress markers match.  Note: Use this
   // method when more than one client makes local change(s), and more than one
@@ -114,15 +125,19 @@ class ProfileSyncServiceHarness {
       const std::vector<ProfileSyncServiceHarness*>& clients);
 
   // Blocks the caller until the sync engine is initialized or some end state
-  // (e.g., auth error) is reached. Returns true if and only if the engine
-  // initialized successfully. See ProfileSyncService's IsEngineInitialized()
-  // method for the definition of engine initialization.
-  bool AwaitEngineInitialization(bool skip_passphrase_verification = false);
+  // (e.g., auth error) is reached. Returns true only if the engine initialized
+  // successfully. See ProfileSyncService's IsEngineInitialized() method for the
+  // definition of engine initialization.
+  bool AwaitEngineInitialization();
 
-  // Blocks the caller until sync setup is complete. Returns true if and only
-  // if sync setup completed successfully. See syncer::SyncService's
-  // IsSyncActive() method for the definition of what successful means here.
-  bool AwaitSyncSetupCompletion(bool skip_passphrase_verification);
+  // Blocks the caller until sync setup is complete, and sync-the-feature is
+  // active. Returns true if and only if sync setup completed successfully. Make
+  // sure to call SetupSync() or one of its variants before.
+  bool AwaitSyncSetupCompletion();
+
+  // Blocks the caller until the sync transport layer is active. Returns true if
+  // successful.
+  bool AwaitSyncTransportActive();
 
   // Returns the ProfileSyncService member of the sync client.
   browser_sync::ProfileSyncService* service() const { return service_; }
@@ -145,53 +160,56 @@ class ProfileSyncServiceHarness {
   // Returns a snapshot of the current sync session.
   syncer::SyncCycleSnapshot GetLastCycleSnapshot() const;
 
-  // Check if |type| is being synced.
-  bool IsTypePreferred(syncer::ModelType type);
-
-  // Returns a string that can be used as the value of an oauth2 refresh token.
-  // This function guarantees that a different string is returned each time
-  // it is called.
-  std::string GenerateFakeOAuth2RefreshTokenString();
-
-  // Returns a string with relevant info about client's sync state (if
-  // available), annotated with |message|. Useful for logging.
-  std::string GetClientInfoString(const std::string& message) const;
-
-  // Signals that sync setup is complete, and that PSS may begin syncing.
-  void FinishSyncSetup();
-
  private:
+  enum class EncryptionSetupMode {
+    kNoEncryption,  // Setup sync without encryption support.
+    kDecryption,    // Setup sync with only decryption support. This only
+                    // supports cases where there's already encrypted data on
+                    // the server. Turning on custom passphrase encryption on
+                    // this client is not supported.
+    kEncryption     // Setup sync with full encryption support. This includes
+                    // turning on custom passphrase encryption on the client.
+  };
+
   ProfileSyncServiceHarness(Profile* profile,
                             const std::string& username,
                             const std::string& password,
                             SigninType signin_type);
 
+  // Sets up sync with custom passphrase support as specified by
+  // |encryption_mode|.
+  // If |encryption_mode| is kDecryption or kEncryption, |encryption_passphrase|
+  // has to have a value which will be used to properly setup sync.
+  bool SetupSyncImpl(syncer::ModelTypeSet synced_datatypes,
+                     EncryptionSetupMode encryption_mode,
+                     const base::Optional<std::string>& encryption_passphrase);
+
   // Gets detailed status from |service_| in pretty-printable form.
   std::string GetServiceStatus();
+
+  // Returns a string with relevant info about client's sync state (if
+  // available), annotated with |message|. Useful for logging.
+  std::string GetClientInfoString(const std::string& message) const;
 
   // Returns true if the user has enabled and configured sync for this client.
   // Note that this does not imply sync is actually running.
   bool IsSyncEnabledByUser() const;
 
-  // Sync profile associated with this sync client.
-  Profile* profile_;
+  // Profile associated with this sync client.
+  Profile* const profile_;
 
   // ProfileSyncService object associated with |profile_|.
-  browser_sync::ProfileSyncService* service_;
+  browser_sync::ProfileSyncService* const service_;
 
   // Prevents Sync from running until configuration is complete.
   std::unique_ptr<syncer::SyncSetupInProgressHandle> sync_blocker_;
 
   // Credentials used for GAIA authentication.
-  std::string username_;
-  std::string password_;
+  const std::string username_;
+  const std::string password_;
 
   // Used to decide what method of profile signin to use.
   const SigninType signin_type_;
-
-  // Number used by GenerateFakeOAuth2RefreshTokenString() to make sure that
-  // all refresh tokens used in the tests are different.
-  int oauth2_refesh_token_number_;
 
   // Used for logging.
   const std::string profile_debug_name_;

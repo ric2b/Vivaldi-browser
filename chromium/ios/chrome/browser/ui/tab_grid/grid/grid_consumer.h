@@ -5,6 +5,8 @@
 #ifndef IOS_CHROME_BROWSER_UI_TAB_GRID_GRID_GRID_CONSUMER_H_
 #define IOS_CHROME_BROWSER_UI_TAB_GRID_GRID_GRID_CONSUMER_H_
 
+#import <Foundation/Foundation.h>
+
 @class GridItem;
 
 // Supports idempotent insert/delete/updates to a grid.
@@ -40,6 +42,7 @@
 
 // Tells the consumer to replace the item with ID |itemID| with |item|.
 // It's an error if |item|'s ID duplicates any other item's ID besides |itemID|.
+// The consumer should ignore this call if |itemID| has not yet been inserted.
 - (void)replaceItemID:(NSString*)itemID withItem:(GridItem*)item;
 
 // Tells the consumer to move the item with id |itemID| to |toIndex|. Note that

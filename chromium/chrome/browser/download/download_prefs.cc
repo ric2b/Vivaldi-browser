@@ -13,10 +13,10 @@
 #include "base/bind_helpers.h"
 #include "base/feature_list.h"
 #include "base/files/file_util.h"
-#include "base/lazy_instance.h"
 #include "base/logging.h"
-#include "base/macros.h"
+#include "base/no_destructor.h"
 #include "base/path_service.h"
+#include "base/stl_util.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
@@ -86,10 +86,7 @@ class DefaultDownloadDirectory {
  public:
   const base::FilePath& path() const { return path_; }
 
- private:
-  friend struct base::LazyInstanceTraitsBase<DefaultDownloadDirectory>;
-
-  DefaultDownloadDirectory() {
+  void Initialize() {
     if (!base::PathService::Get(chrome::DIR_DEFAULT_DOWNLOADS, &path_)) {
       NOTREACHED();
     }
@@ -102,13 +99,20 @@ class DefaultDownloadDirectory {
     }
   }
 
+ private:
+  friend class base::NoDestructor<DefaultDownloadDirectory>;
+
+  DefaultDownloadDirectory() { Initialize(); }
+
   base::FilePath path_;
 
   DISALLOW_COPY_AND_ASSIGN(DefaultDownloadDirectory);
 };
 
-base::LazyInstance<DefaultDownloadDirectory>::DestructorAtExit
-    g_default_download_directory = LAZY_INSTANCE_INITIALIZER;
+DefaultDownloadDirectory& GetDefaultDownloadDirectorySingleton() {
+  static base::NoDestructor<DefaultDownloadDirectory> instance;
+  return *instance;
+}
 
 }  // namespace
 
@@ -125,12 +129,22 @@ DownloadPrefs::DownloadPrefs(Profile* profile) : profile_(profile) {
       prefs::kSaveFileDefaultDirectory,
       prefs::kDownloadDefaultDirectory
   };
-  for (size_t i = 0; i < arraysize(path_pref); ++i) {
+  for (size_t i = 0; i < base::size(path_pref); ++i) {
     const base::FilePath current = prefs->GetFilePath(path_pref[i]);
     base::FilePath migrated;
     if (!current.empty() &&
         file_manager::util::MigratePathFromOldFormat(
-            profile_, current, &migrated)) {
+            profile_, GetDefaultDownloadDirectory(), current, &migrated)) {
+      prefs->SetFilePath(path_pref[i], migrated);
+
+      // In M73 migrate /home/chronos/u-<hash>/Downloads to
+      // /home/chronos/u-<hash>/MyFiles/Downloads.  This code can be removed
+      // when M72 and earlier is no longer supported.
+    } else if (file_manager::util::MigrateFromDownloadsToMyFiles(
+                   profile_, current, &migrated)) {
+      prefs->SetFilePath(path_pref[i], migrated);
+    } else if (file_manager::util::MigrateToDriveFs(profile_, current,
+                                                    &migrated)) {
       prefs->SetFilePath(path_pref[i], migrated);
     }
   }
@@ -263,8 +277,13 @@ base::FilePath DownloadPrefs::GetDefaultDownloadDirectoryForProfile() const {
 }
 
 // static
+void DownloadPrefs::ReinitializeDefaultDownloadDirectoryForTesting() {
+  GetDefaultDownloadDirectorySingleton().Initialize();
+}
+
+// static
 const base::FilePath& DownloadPrefs::GetDefaultDownloadDirectory() {
-  return g_default_download_directory.Get().path();
+  return GetDefaultDownloadDirectorySingleton().path();
 }
 
 // static
@@ -289,22 +308,11 @@ DownloadPrefs* DownloadPrefs::FromBrowserContext(
 
 bool DownloadPrefs::IsFromTrustedSource(const download::DownloadItem& item) {
   if (!trusted_sources_manager_)
-    trusted_sources_manager_.reset(TrustedSourcesManager::Create());
+    trusted_sources_manager_ = TrustedSourcesManager::Create();
   return trusted_sources_manager_->IsFromTrustedSource(item.GetURL());
 }
 
 base::FilePath DownloadPrefs::DownloadPath() const {
-#if defined(OS_CHROMEOS)
-  // If the download path is under /drive, and DriveIntegrationService isn't
-  // available (which it isn't for incognito mode, for instance), use the
-  // default download directory (/Downloads).
-  if (drive::util::IsUnderDriveMountPoint(*download_path_)) {
-    drive::DriveIntegrationService* integration_service =
-        drive::DriveIntegrationServiceFactory::FindForProfile(profile_);
-    if (!integration_service || !integration_service->is_enabled())
-      return GetDefaultDownloadDirectoryForProfile();
-  }
-#endif
   return SanitizeDownloadTargetPath(*download_path_);
 }
 
@@ -427,8 +435,7 @@ void DownloadPrefs::ResetAutoOpen() {
 
 void DownloadPrefs::SaveAutoOpenState() {
   std::string extensions;
-  for (AutoOpenSet::iterator it = auto_open_.begin();
-       it != auto_open_.end(); ++it) {
+  for (auto it = auto_open_.begin(); it != auto_open_.end(); ++it) {
 #if defined(OS_POSIX)
     std::string this_extension = *it;
 #elif defined(OS_WIN)
@@ -446,48 +453,49 @@ void DownloadPrefs::SaveAutoOpenState() {
 base::FilePath DownloadPrefs::SanitizeDownloadTargetPath(
     const base::FilePath& path) const {
 #if defined(OS_CHROMEOS)
-  // If |path| isn't absolute, fall back to the default directory.
-  base::FilePath profile_download_dir = GetDefaultDownloadDirectoryForProfile();
-  if (!path.IsAbsolute())
-    return profile_download_dir;
-
-  // Allow paths that are under the default download directory.
-  base::FilePath relative;
-  if (profile_download_dir.AppendRelativePath(path, &relative) &&
-      !relative.ReferencesParent()) {
-    return profile_download_dir.Append(relative);
+  base::FilePath migrated_drive_path;
+  // Managed prefs may force a legacy Drive path as the download path. Ensure
+  // the path is valid when DriveFS is enabled.
+  if (file_manager::util::MigrateToDriveFs(profile_, path,
+                                           &migrated_drive_path)) {
+    return SanitizeDownloadTargetPath(migrated_drive_path);
   }
 
-  // Allow paths under the drive mount point.
-  if (drive::util::IsUnderDriveMountPoint(path) && !path.ReferencesParent())
+  // If |path| isn't absolute, fall back to the default directory.
+  base::FilePath profile_myfiles_path =
+      file_manager::util::GetMyFilesFolderForProfile(profile_);
+
+  if (!path.IsAbsolute() || path.ReferencesParent())
+    return profile_myfiles_path;
+
+  // Allow myfiles directory and subdirs.
+  if (profile_myfiles_path == path || profile_myfiles_path.IsParent(path))
     return path;
 
-  // Allow removable media.
-  base::FilePath media_mount_point =
-      chromeos::CrosDisksClient::GetRemovableDiskMountPoint();
-  if (media_mount_point.AppendRelativePath(path, &relative) &&
-      !relative.ReferencesParent()) {
-    return media_mount_point.Append(relative);
+  // Allow paths under the drive mount point.
+  drive::DriveIntegrationService* integration_service =
+      drive::DriveIntegrationServiceFactory::FindForProfile(profile_);
+  if (integration_service && integration_service->is_enabled() &&
+      integration_service->GetMountPointPath().IsParent(path)) {
+    return path;
   }
+
+  // Allow removable media.
+  if (chromeos::CrosDisksClient::GetRemovableDiskMountPoint().IsParent(path))
+    return path;
 
   // Allow paths under the Android files mount point.
-  base::FilePath android_files_mount_point(
-      file_manager::util::kAndroidFilesPath);
-  if (android_files_mount_point.AppendRelativePath(path, &relative) &&
-      !relative.ReferencesParent()) {
-    return android_files_mount_point.Append(relative);
-  }
+  if (base::FilePath(file_manager::util::kAndroidFilesPath).IsParent(path))
+    return path;
 
-  // Allow paths under the Linux files mount point.
-  base::FilePath linux_files_mount_point =
+  // Allow Linux files mount point and subdirs.
+  base::FilePath linux_files =
       file_manager::util::GetCrostiniMountDirectory(profile_);
-  if (linux_files_mount_point.AppendRelativePath(path, &relative) &&
-      !relative.ReferencesParent()) {
-    return linux_files_mount_point.Append(relative);
-  }
+  if (linux_files == path || linux_files.IsParent(path))
+    return path;
 
   // Fall back to the default download directory for all other paths.
-  return profile_download_dir;
+  return GetDefaultDownloadDirectoryForProfile();
 #endif
   return path;
 }

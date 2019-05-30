@@ -137,18 +137,6 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_TITLE" desc="Title of the screen where users select an account to use. [Length: 20em] [iOS only]">
         Sign in to Chrome
       </message>
-      <message name="IDS_IOS_ACCOUNT_UNIFIED_CONSENT_BETTER_BROWSER" desc="Description on the sign-in consent dialog to explain the benefit to sign-in. [Length: unlimited] [iOS only]">
-      Improve Chrome and its security by sending system and usage data to Google
-      </message>
-      <message name="IDS_IOS_ACCOUNT_UNIFIED_CONSENT_SETTINGS" desc="Description on the sign-in consent dialog to explain the benefit to sign-in. [Length: unlimited] [iOS only]">
-      <ph name="BEGIN_LINK">BEGIN_LINK</ph>Settings<ph name="END_LINK">END_LINK</ph> can be customized anytime. Google may use content on sites you visit, browser interactions and activity to personalize Chrome and Google services like Translate, Search and ads.
-      </message>
-      <message name="IDS_IOS_ACCOUNT_UNIFIED_CONSENT_TITLE" desc="Title on the sign-in consent dialog to explain why sign-in can be useful for the user. [iOS only]">
-        Get Google smarts in Chrome
-      </message>
-      <message name="IDS_IOS_APP_RATING_PROMO_STRING" desc="Text displayed for the rate this app promo. [iOS only]">
-        Enjoying Chrome? <ph name="BEGIN_LINK"><ex>BEGIN_LINK</ex>BEGIN_LINK</ph>Rate this app<ph name="END_LINK"><ex>END_LINK</ex>END_LINK</ph>
-      </message>
       <message name="IDS_IOS_AUTOFILL_DESCRIBE_LOCAL_COPY" desc="Text label that describes a Wallet credit card which has been copied to the local Chrome instance. Title case. [Length: 20em] [iOS only]">
         Copied to Chrome
       </message>
@@ -165,14 +153,11 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_CLEAR_BROWSING_DATA_HISTORY_NOTICE_TITLE" desc="Title of a dialog that informs the user that the deletion of Chrome's browsing data has been completed.">
         Cleared Chrome data
       </message>
-      <message name="IDS_IOS_CONSENT_BUMP_PERSONALIZATION_MESSAGE" desc="Title for the Consent Bump personalization menu, presented when the user wants more informations and control over the sync personalization [iOS only]">
-        The settings that control sync, personalization, and other Google services in Chrome have changed. This may affect your current settings.
-      </message>
-      <message name="IDS_IOS_CONSENT_BUMP_TURN_ON_TEXT" desc="Text for the Consent Bump personalization option to turn on the sync. [iOS only]">
-        You can customize this anytime in Chrome Settings
-      </message>
       <message name="IDS_IOS_DISCONNECT_DIALOG_TITLE" desc="The title of the disconnect dialog [Length: 30em].">
         Sign out of Chrome?
+      </message>
+      <message name="IDS_IOS_FACE_ID_USAGE_DESCRIPTION" desc="Specifies the reason for using the device's Face ID capabilities.">
+        Chrome uses Face ID to ensure authorized access to your passwords.
       </message>
       <message name="IDS_IOS_FIRSTRUN_AGREE_TO_TERMS" desc="Label containing a link to the Terms of Service and Privacy Notice, displayed in the first run flow. [Length: 117em] [iOS only]">
       By using this application, you agree to Chrome’s <ph name="BEGIN_LINK_TOS">BEGIN_LINK_TOS</ph>Terms of Service<ph name="END_LINK_TOS">END_LINK_TOS</ph> and <ph name="BEGIN_LINK_PRIVACY">BEGIN_LINK_PRIVACY</ph>Privacy Notice<ph name="END_LINK_PRIVACY">END_LINK_PRIVACY</ph>.
@@ -189,11 +174,11 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_FIRSTRUN_WELCOME_TO_CHROME" desc="Title on the Welcome to Chrome screen presented to the user on First Run. [iOS only]">
         Welcome to Chrome
       </message>
-      <message name="IDS_IOS_GOOGLE_SERVICES_SETTINGS_NON_PERSONALIZED_SERVICES_DETAIL" desc="Section detail text for the list of all the non-personalized features to enable/disable in the settings. Related to 'Non-personalized Services'. [iOS only]">
-        Communicates with Google to improve browsing and Chrome
-      </message>
       <message name="IDS_IOS_GOOGLE_SERVICES_SETTINGS_IMPROVE_CHROME_TEXT" desc="Feature title in the settings for the user enable or disable. Related with 'Automatically sends usage statistics and crash reports to Google'. [iOS only]">
         Help improve Chrome's features and performance
+      </message>
+      <message name="IDS_IOS_GOOGLE_SERVICES_SETTINGS_SYNC_CHROME_DATA" desc="Turns off and on all the sync data (like bookmarks, history and others). [iOS only]">
+        Sync your Chrome data
       </message>
       <message name="IDS_IOS_LOCATION_AUTHORIZATION_ALERT" desc="Specifies the reason for sending the user's location to Google [Length: unlimited] [iOS only].">
           Get a better Google experience in Chrome based on your location.
@@ -207,8 +192,17 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_LONG_PRESS_TOOLBAR_IPH_PROMOTION_VOICE_OVER" desc="Text to be read by VoiceOver when the LongPress Toolbar Tip is presented to the user. Read by Text-to-Speech.">
         Chrome tip. For more tab options, press and hold the Show Tabs button in the toolbar, which is at the bottom or top of your screen.
       </message>
-      <message name="IDS_IOS_MANAGED_DISCONNECT_DIALOG_INFO" desc="Message explaini ng that signing out of a managed account will clear all the Chrome data.[Length: 200em, may be line wrapped to multiple lines at run time.].">
+      <message name="IDS_IOS_MANAGE_SYNC_DATA_FROM_CHROME_SYNC_TITLE" desc="Title for the cell to open 'Data from Chrome sync' web page where the user can control all their data data from sync.">
+        Data from Chrome sync
+      </message>
+      <message name="IDS_IOS_MANAGED_DISCONNECT_DIALOG_INFO" desc="Message explaining that signing out of a managed account will clear all the Chrome data.[Length: 200em, may be line wrapped to multiple lines at run time.] [iOS only].">
         You are signing out of an account managed by <ph name="SIGNOUT_MANAGED_DOMAIN">$1<ex>google.com</ex></ph>. This will delete your Chrome data from this device, but your data will remain in your Google account.
+      </message>
+      <message name="IDS_IOS_MANAGED_DISCONNECT_DIALOG_INFO_UNITY" desc="Message explaining that signing out of a managed account will clear all the Chrome data. [Length: 200em, may be line wrapped to multiple lines at run time.] [iOS only].">
+        Because you're signing out of an account managed by <ph name="SIGNOUT_MANAGED_DOMAIN">$1<ex>google.com</ex></ph>, your Chrome data will be deleted from this device. Your data will remain in your Google Account.
+      </message>
+      <message name="IDS_IOS_MANAGED_DISCONNECT_DIALOG_TITLE_UNITY" desc="Title of the dialog shown when signing out of a managed account.[Length: 50em] [iOS only].">
+        Clear your Chrome data from this device?
       </message>
       <message name="IDS_IOS_MANAGED_SIGNIN_SUBTITLE" desc="The subtitle of the Sign in to a managed account dialog. [300em]">
         You are signing in with an account managed by <ph name="DOMAIN">$1<ex>doe.com</ex></ph> and giving its administrator control over your Chrome data. Your data will become permanently tied to this account. Signing out of Chrome will delete your data from this device, but it will remain stored in your Google Account.
@@ -236,9 +230,6 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_IOS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY" desc="The text of the identity section for iOS.">
         Chrome verified that <ph name="ISSUER">$1<ex>VeriSign</ex></ph> issued this website's certificate.
-      </message>
-      <message name="IDS_IOS_PASSWORD_MANAGER_SAVE_PASSWORD_PROMPT" desc="Info bar message to save a password. [Length: 60em]">
-        Do you want Chrome to save your password for this site?
       </message>
       <message name="IDS_IOS_PRODUCT_NAME" desc="The Chrome application name">
         Google Chrome

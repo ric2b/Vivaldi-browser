@@ -11,17 +11,20 @@
 #include <set>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/process/process.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/post_task.h"
 #include "chrome/browser/extensions/api/tabs/tabs_constants.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/task_manager/task_manager_interface.h"
 #include "chrome/common/extensions/api/processes.h"
 #include "content/public/browser/browser_child_process_host.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_data.h"
 #include "content/public/browser/render_frame_host.h"
@@ -99,6 +102,7 @@ api::processes::ProcessType GetProcessType(
 
     case task_manager::Task::UNKNOWN:
     case task_manager::Task::ARC:
+    case task_manager::Task::CROSTINI:
     case task_manager::Task::SANDBOX_HELPER:
     case task_manager::Task::ZYGOTE:
       return api::processes::PROCESS_TYPE_OTHER;
@@ -286,7 +290,7 @@ void ProcessesEventRouter::OnTasksRefreshedWithBackgroundCalculations(
 
     // Store each process indexed by the string version of its ChildProcessHost
     // ID.
-    processes_dictionary.Set(base::IntToString(child_process_host_id),
+    processes_dictionary.Set(base::NumberToString(child_process_host_id),
                              process.ToValue());
   }
 
@@ -459,8 +463,8 @@ ExtensionFunction::ResponseAction ProcessesGetProcessIdForTabFunction::Run() {
           tab_id, Profile::FromBrowserContext(browser_context()),
           include_incognito_information(), nullptr, nullptr, &contents,
           &tab_index)) {
-    return RespondNow(Error(tabs_constants::kTabNotFoundError,
-                            base::IntToString(tab_id)));
+    return RespondNow(
+        Error(tabs_constants::kTabNotFoundError, base::NumberToString(tab_id)));
   }
 
   // TODO(https://crbug.com/767563): chrome.processes.getProcessIdForTab API
@@ -485,11 +489,11 @@ ExtensionFunction::ResponseAction ProcessesTerminateFunction::Run() {
   child_process_host_id_ = params->process_id;
   if (child_process_host_id_ < 0) {
     return RespondNow(Error(errors::kInvalidArgument,
-                            base::IntToString(child_process_host_id_)));
+                            base::NumberToString(child_process_host_id_)));
   } else if (child_process_host_id_ == 0) {
     // Cannot kill the browser process.
     return RespondNow(Error(errors::kNotAllowedToTerminate,
-                            base::IntToString(child_process_host_id_)));
+                            base::NumberToString(child_process_host_id_)));
   }
 
   // Check if it's a renderer.
@@ -502,11 +506,9 @@ ExtensionFunction::ResponseAction ProcessesTerminateFunction::Run() {
   // This could be a non-renderer child process like a plugin or a nacl
   // process. Try to get its handle from the BrowserChildProcessHost on the
   // IO thread.
-  content::BrowserThread::PostTaskAndReplyWithResult(
-      content::BrowserThread::IO,
-      FROM_HERE,
-      base::Bind(&ProcessesTerminateFunction::GetProcessHandleOnIO,
-                 this,
+  base::PostTaskWithTraitsAndReplyWithResult(
+      FROM_HERE, {content::BrowserThread::IO},
+      base::Bind(&ProcessesTerminateFunction::GetProcessHandleOnIO, this,
                  child_process_host_id_),
       base::Bind(&ProcessesTerminateFunction::OnProcessHandleOnUI, this));
 
@@ -520,7 +522,7 @@ base::ProcessHandle ProcessesTerminateFunction::GetProcessHandleOnIO(
 
   auto* host = content::BrowserChildProcessHost::FromID(child_process_host_id);
   if (host)
-    return host->GetData().GetHandle();
+    return host->GetData().GetProcess().Handle();
 
   return base::kNullProcessHandle;
 }
@@ -536,25 +538,25 @@ ExtensionFunction::ResponseValue
 ProcessesTerminateFunction::TerminateIfAllowed(base::ProcessHandle handle) {
   if (handle == base::kNullProcessHandle) {
     return Error(errors::kProcessNotFound,
-                 base::IntToString(child_process_host_id_));
+                 base::NumberToString(child_process_host_id_));
   }
 
   if (handle == base::GetCurrentProcessHandle()) {
     // Cannot kill the browser process.
     return Error(errors::kNotAllowedToTerminate,
-                 base::IntToString(child_process_host_id_));
+                 base::NumberToString(child_process_host_id_));
   }
 
   base::Process process = base::Process::Open(base::GetProcId(handle));
   if (!process.IsValid()) {
     return Error(errors::kProcessNotFound,
-                 base::IntToString(child_process_host_id_));
+                 base::NumberToString(child_process_host_id_));
   }
 
   const bool did_terminate =
       process.Terminate(content::RESULT_CODE_KILLED, true /* wait */);
   if (did_terminate)
-    UMA_HISTOGRAM_COUNTS("ChildProcess.KilledByExtensionAPI", 1);
+    UMA_HISTOGRAM_COUNTS_1M("ChildProcess.KilledByExtensionAPI", 1);
 
   return ArgumentList(
       api::processes::Terminate::Results::Create(did_terminate));
@@ -673,15 +675,15 @@ void ProcessesGetProcessInfoFunction::GatherDataAndRespond(
     // Store each process indexed by the string version of its
     // ChildProcessHost ID.
     processes.additional_properties.Set(
-        base::IntToString(child_process_host_id),
-        process.ToValue());
+        base::NumberToString(child_process_host_id), process.ToValue());
   }
 
   // Report the invalid host ids sent in the arguments.
   for (const auto& host_id : process_host_ids_) {
-    WriteToConsole(content::CONSOLE_MESSAGE_LEVEL_ERROR,
-                   ErrorUtils::FormatErrorMessage(errors::kProcessNotFound,
-                                                  base::IntToString(host_id)));
+    WriteToConsole(
+        content::CONSOLE_MESSAGE_LEVEL_ERROR,
+        ErrorUtils::FormatErrorMessage(errors::kProcessNotFound,
+                                       base::NumberToString(host_id)));
   }
 
   // Send the response.

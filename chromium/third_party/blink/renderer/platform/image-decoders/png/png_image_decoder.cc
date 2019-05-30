@@ -39,6 +39,8 @@
 #include "third_party/blink/renderer/platform/image-decoders/png/png_image_decoder.h"
 
 #include <memory>
+
+#include "base/numerics/checked_math.h"
 #include "third_party/skia/third_party/skcms/skcms.h"
 
 #if (defined(__ARM_NEON__) || defined(__ARM_NEON))
@@ -528,10 +530,15 @@ void PNGImageDecoder::RowAvailable(unsigned char* row_buffer,
     if (PNG_INTERLACE_ADAM7 ==
         png_get_interlace_type(png, reader_->InfoPtr())) {
       unsigned color_channels = has_alpha_channel_ ? 4 : 3;
-      unsigned interlace_buffer_size = color_channels * Size().Area();
+      base::CheckedNumeric<int> interlace_buffer_size = color_channels;
+      interlace_buffer_size *= Size().Area();
       if (decode_to_half_float_)
         interlace_buffer_size *= 2;
-      reader_->CreateInterlaceBuffer(interlace_buffer_size);
+      if (!interlace_buffer_size.IsValid()) {
+        longjmp(JMPBUF(png), 1);
+        return;
+      }
+      reader_->CreateInterlaceBuffer(interlace_buffer_size.ValueOrDie());
       if (!reader_->InterlaceBuffer()) {
         longjmp(JMPBUF(png), 1);
         return;
@@ -596,8 +603,10 @@ void PNGImageDecoder::RowAvailable(unsigned char* row_buffer,
   png_bytep row = row_buffer;
 
   if (png_bytep interlace_buffer = reader_->InterlaceBuffer()) {
-    unsigned color_channels = has_alpha ? 4 : 3;
-    row = interlace_buffer + (row_index * color_channels * Size().Width());
+    unsigned bytes_per_pixel = has_alpha ? 4 : 3;
+    if (decode_to_half_float_)
+      bytes_per_pixel *= 2;
+    row = interlace_buffer + (row_index * bytes_per_pixel * Size().Width());
     png_progressive_combine_row(reader_->PngPtr(), row, row_buffer);
   }
 

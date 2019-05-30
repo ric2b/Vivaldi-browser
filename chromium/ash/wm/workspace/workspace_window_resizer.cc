@@ -17,10 +17,15 @@
 #include "ash/shell.h"
 #include "ash/wm/default_window_resizer.h"
 #include "ash/wm/drag_window_resizer.h"
-#include "ash/wm/tablet_mode/tablet_mode_browser_window_drag_controller.h"
+#include "ash/wm/overview/overview_controller.h"
+#include "ash/wm/pip/pip_window_resizer.h"
+#include "ash/wm/tablet_mode/tablet_mode_browser_window_drag_delegate.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
+#include "ash/wm/tablet_mode/tablet_mode_window_drag_controller.h"
+#include "ash/wm/tablet_mode/tablet_mode_window_drag_delegate.h"
 #include "ash/wm/window_positioning_utils.h"
 #include "ash/wm/window_state.h"
+#include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
 #include "ash/wm/workspace/phantom_window_controller.h"
 #include "ash/wm/workspace/two_step_edge_cycler.h"
@@ -41,12 +46,104 @@
 
 namespace ash {
 
+namespace {
+
+constexpr double kMinHorizVelocityForWindowSwipe = 1100;
+constexpr double kMinVertVelocityForWindowMinimize = 1000;
+
+// The drag delegate for app windows. It not only includes the logic in
+// TabletModeWindowDragDelegate, but also has special logic for app windows.
+class TabletModeAppWindowDragDelegate : public TabletModeWindowDragDelegate {
+ public:
+  TabletModeAppWindowDragDelegate() = default;
+  ~TabletModeAppWindowDragDelegate() override = default;
+
+ private:
+  // TabletModeWindowDragDelegate:
+  void PrepareWindowDrag(const gfx::Point& location_in_screen) override {}
+  void UpdateWindowDrag(const gfx::Point& location_in_screen) override {}
+  void EndingWindowDrag(wm::WmToplevelWindowEventHandler::DragResult result,
+                        const gfx::Point& location_in_screen) override {}
+  void EndedWindowDrag(const gfx::Point& location_in_screen) override {}
+  void StartFling(const ui::GestureEvent* event) override {
+    if (ShouldFlingIntoOverview(event)) {
+      DCHECK(Shell::Get()->overview_controller()->IsSelecting());
+      Shell::Get()->overview_controller()->overview_session()->AddItem(
+          dragged_window_, /*reposition=*/true, /*animate=*/false);
+    }
+  }
+
+  DISALLOW_COPY_AND_ASSIGN(TabletModeAppWindowDragDelegate);
+};
+
+// Returns true if |window| can be dragged from the top of the screen in tablet
+// mode.
+std::unique_ptr<WindowResizer> CreateWindowResizerForTabletMode(
+    aura::Window* window,
+    const gfx::Point& point_in_parent,
+    int window_component,
+    ::wm::WindowMoveSource source) {
+  wm::WindowState* window_state = wm::GetWindowState(window);
+  // Only maximized/fullscreen/snapped window can be dragged from the top of
+  // the screen.
+  if (!window_state->IsMaximized() && !window_state->IsFullscreen() &&
+      !window_state->IsSnapped()) {
+    return nullptr;
+  }
+
+  AppType app_type =
+      static_cast<AppType>(window->GetProperty(aura::client::kAppType));
+  // App windows can be dragged from the client area (see
+  // WmToplevelWindowEventHandler).
+  if (app_type != AppType::BROWSER && window_component == HTCLIENT) {
+    DCHECK_EQ(source, ::wm::WINDOW_MOVE_SOURCE_TOUCH);
+    window_state->CreateDragDetails(point_in_parent, HTCLIENT,
+                                    ::wm::WINDOW_MOVE_SOURCE_TOUCH);
+    std::unique_ptr<WindowResizer> window_resizer =
+        std::make_unique<TabletModeWindowDragController>(
+            window_state, std::make_unique<TabletModeAppWindowDragDelegate>());
+    window_resizer = std::make_unique<DragWindowResizer>(
+        std::move(window_resizer), window_state);
+    return window_resizer;
+  }
+
+  // Only allow drag that happens on caption or top area. Note: for a maxmized
+  // or fullscreen window, the window component here is always HTCAPTION, but
+  // for a snapped window, the window component here can either be HTCAPTION or
+  // HTTOP.
+  if (window_component != HTCAPTION && window_component != HTTOP)
+    return nullptr;
+
+  // Note: only browser windows and chrome app windows are included here.
+  // For browser windows, this piece of codes will be called no matter the
+  // drag happens on the tab(s) or on the non-tabstrip caption or top area.
+  // But for app window, this piece of codes will only be called if the chrome
+  // app window has its customized caption area and can't be hidden in tablet
+  // mode (and thus the drag for this type of chrome app window always happens
+  // on caption or top area). The case where the caption area of the chrome app
+  // window can be hidden is handled above.
+  if (app_type != AppType::BROWSER && app_type != AppType::CHROME_APP)
+    return nullptr;
+
+  window_state->CreateDragDetails(point_in_parent, window_component, source);
+  std::unique_ptr<WindowResizer> window_resizer =
+      std::make_unique<TabletModeWindowDragController>(
+          window_state,
+          std::make_unique<TabletModeBrowserWindowDragDelegate>());
+  window_resizer = std::make_unique<DragWindowResizer>(
+      std::move(window_resizer), window_state);
+  return window_resizer;
+}
+
+}  // namespace
+
 std::unique_ptr<WindowResizer> CreateWindowResizer(
     aura::Window* window,
     const gfx::Point& point_in_parent,
     int window_component,
     ::wm::WindowMoveSource source) {
   DCHECK(window);
+
   wm::WindowState* window_state = wm::GetWindowState(window);
   // No need to return a resizer when the window cannot get resized or when a
   // resizer already exists for this window.
@@ -66,29 +163,20 @@ std::unique_ptr<WindowResizer> CreateWindowResizer(
   // refactor and eliminate chaining.
   std::unique_ptr<WindowResizer> window_resizer;
 
-  if (Shell::Get()
-          ->tablet_mode_controller()
-          ->IsTabletModeWindowManagerEnabled() &&
-      !window_state->IsPip()) {
-    // We still don't allow any dragging or resizing happening on the area other
-    // then caption or top area. Note: for a maxmized or fullscreen window, the
-    // window component here is always HTCAPTION, but for a snapped window, the
-    // window component here can either be HTCAPTION or HTTOP.
-    if ((window_component != HTCAPTION && window_component != HTTOP) ||
-        window->GetProperty(aura::client::kAppType) !=
-            static_cast<int>(AppType::BROWSER)) {
-      return nullptr;
-    }
-
+  if (window_state->IsPip()) {
     window_state->CreateDragDetails(point_in_parent, window_component, source);
-    window_resizer =
-        std::make_unique<TabletModeBrowserWindowDragController>(window_state);
-    window_resizer = std::make_unique<DragWindowResizer>(
-        std::move(window_resizer), window_state);
+    window_resizer = std::make_unique<PipWindowResizer>(window_state);
     return window_resizer;
   }
 
-  if (!window_state->IsNormalOrSnapped() && !window_state->IsPip())
+  if (Shell::Get()
+          ->tablet_mode_controller()
+          ->IsTabletModeWindowManagerEnabled()) {
+    return CreateWindowResizerForTabletMode(window, point_in_parent,
+                                            window_component, source);
+  }
+
+  if (!window_state->IsNormalOrSnapped())
     return nullptr;
 
   int bounds_change =
@@ -386,7 +474,7 @@ void WorkspaceWindowResizer::Drag(const gfx::Point& location_in_parent,
     // the drag and quit early if so.
     base::WeakPtr<WorkspaceWindowResizer> resizer(
         weak_ptr_factory_.GetWeakPtr());
-    GetTarget()->SetBounds(bounds);
+    SetBoundsDuringResize(bounds);
     if (!resizer)
       return;
   }
@@ -500,6 +588,63 @@ void WorkspaceWindowResizer::RevertDrag() {
   }
 }
 
+void WorkspaceWindowResizer::FlingOrSwipe(ui::GestureEvent* event) {
+  if (event->type() != ui::ET_SCROLL_FLING_START &&
+      event->type() != ui::ET_GESTURE_SWIPE) {
+    return;
+  }
+
+  if (event->type() == ui::ET_SCROLL_FLING_START) {
+    CompleteDrag();
+
+    if (details().bounds_change != WindowResizer::kBoundsChange_Repositions ||
+        !wm::GetWindowState(GetTarget())->IsNormalOrSnapped()) {
+      return;
+    }
+
+    if (event->details().velocity_y() > kMinVertVelocityForWindowMinimize) {
+      SetWindowStateTypeFromGesture(GetTarget(),
+                                    mojom::WindowStateType::MINIMIZED);
+    } else if (event->details().velocity_y() <
+               -kMinVertVelocityForWindowMinimize) {
+      SetWindowStateTypeFromGesture(GetTarget(),
+                                    mojom::WindowStateType::MAXIMIZED);
+    } else if (event->details().velocity_x() >
+               kMinHorizVelocityForWindowSwipe) {
+      SetWindowStateTypeFromGesture(GetTarget(),
+                                    mojom::WindowStateType::RIGHT_SNAPPED);
+    } else if (event->details().velocity_x() <
+               -kMinHorizVelocityForWindowSwipe) {
+      SetWindowStateTypeFromGesture(GetTarget(),
+                                    mojom::WindowStateType::LEFT_SNAPPED);
+    }
+  } else {
+    DCHECK_EQ(event->type(), ui::ET_GESTURE_SWIPE);
+    DCHECK_GT(event->details().touch_points(), 0);
+    if (event->details().touch_points() == 1)
+      return;
+    if (!wm::GetWindowState(GetTarget())->IsNormalOrSnapped())
+      return;
+
+    CompleteDrag();
+
+    if (event->details().swipe_down()) {
+      SetWindowStateTypeFromGesture(GetTarget(),
+                                    mojom::WindowStateType::MINIMIZED);
+    } else if (event->details().swipe_up()) {
+      SetWindowStateTypeFromGesture(GetTarget(),
+                                    mojom::WindowStateType::MAXIMIZED);
+    } else if (event->details().swipe_right()) {
+      SetWindowStateTypeFromGesture(GetTarget(),
+                                    mojom::WindowStateType::RIGHT_SNAPPED);
+    } else {
+      SetWindowStateTypeFromGesture(GetTarget(),
+                                    mojom::WindowStateType::LEFT_SNAPPED);
+    }
+  }
+  event->StopPropagation();
+}
+
 WorkspaceWindowResizer::WorkspaceWindowResizer(
     wm::WindowState* window_state,
     const std::vector<aura::Window*>& attached_windows)
@@ -549,6 +694,8 @@ WorkspaceWindowResizer::WorkspaceWindowResizer(
     total_available += std::max(min_size, initial_size) - min_size;
   }
   instance = this;
+
+  pre_drag_window_bounds_ = window_state->window()->bounds();
 
   window_state->OnDragStarted(details().window_component);
 }
@@ -1001,6 +1148,46 @@ bool WorkspaceWindowResizer::AreBoundsValidSnappedBounds(
     snapped_bounds.set_x(snapped_bounds.right() - bounds_in_parent.width());
   snapped_bounds.set_width(bounds_in_parent.width());
   return bounds_in_parent == snapped_bounds;
+}
+
+void WorkspaceWindowResizer::SetWindowStateTypeFromGesture(
+    aura::Window* window,
+    mojom::WindowStateType new_state_type) {
+  wm::WindowState* window_state = wm::GetWindowState(window);
+  // TODO(oshima): Move extra logic (set_unminimize_to_restore_bounds,
+  // SetRestoreBoundsInParent) that modifies the window state
+  // into WindowState.
+  switch (new_state_type) {
+    case mojom::WindowStateType::MINIMIZED:
+      if (window_state->CanMinimize()) {
+        window_state->Minimize();
+        window_state->set_unminimize_to_restore_bounds(true);
+        window_state->SetRestoreBoundsInParent(pre_drag_window_bounds_);
+      }
+      break;
+    case mojom::WindowStateType::MAXIMIZED:
+      if (window_state->CanMaximize()) {
+        window_state->SetRestoreBoundsInParent(pre_drag_window_bounds_);
+        window_state->Maximize();
+      }
+      break;
+    case mojom::WindowStateType::LEFT_SNAPPED:
+      if (window_state->CanSnap()) {
+        window_state->SetRestoreBoundsInParent(pre_drag_window_bounds_);
+        const wm::WMEvent event(wm::WM_EVENT_SNAP_LEFT);
+        window_state->OnWMEvent(&event);
+      }
+      break;
+    case mojom::WindowStateType::RIGHT_SNAPPED:
+      if (window_state->CanSnap()) {
+        window_state->SetRestoreBoundsInParent(pre_drag_window_bounds_);
+        const wm::WMEvent event(wm::WM_EVENT_SNAP_RIGHT);
+        window_state->OnWMEvent(&event);
+      }
+      break;
+    default:
+      NOTREACHED();
+  }
 }
 
 }  // namespace ash

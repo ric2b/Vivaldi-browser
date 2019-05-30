@@ -31,6 +31,10 @@ class ASH_EXPORT AccessibilityFocusRingGroup {
   void SetColor(SkColor color, AccessibilityLayerDelegate* delegate);
   void ResetColor(AccessibilityLayerDelegate* delegate);
 
+  void EnableDoubleFocusRing(SkColor secondary_color,
+                             AccessibilityLayerDelegate* delegate);
+  void DisableDoubleFocusRing(AccessibilityLayerDelegate* delegate);
+
   void UpdateFocusRingsFromFocusRects(AccessibilityLayerDelegate* delegate);
   bool CanAnimate() const;
   void AnimateFocusRings(base::TimeTicks timestamp);
@@ -47,6 +51,8 @@ class ASH_EXPORT AccessibilityFocusRingGroup {
                              base::TimeTicks timestamp);
 
   LayerAnimationInfo* focus_animation_info() { return &focus_animation_info_; }
+
+  void set_no_fade_for_testing() { no_fade_for_testing_ = true; }
 
   const std::vector<std::unique_ptr<AccessibilityFocusRingLayer>>&
   focus_layers_for_testing() const {
@@ -75,12 +81,14 @@ class ASH_EXPORT AccessibilityFocusRingGroup {
 
   std::vector<gfx::Rect> focus_rects_;
   base::Optional<SkColor> focus_ring_color_;
+  base::Optional<SkColor> focus_ring_secondary_color_;
   std::vector<AccessibilityFocusRing> previous_focus_rings_;
   std::vector<std::unique_ptr<AccessibilityFocusRingLayer>> focus_layers_;
   std::vector<AccessibilityFocusRing> focus_rings_;
   LayerAnimationInfo focus_animation_info_;
   mojom::FocusRingBehavior focus_ring_behavior_ =
       mojom::FocusRingBehavior::FADE_OUT_FOCUS_RING;
+  bool no_fade_for_testing_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(AccessibilityFocusRingGroup);
 };

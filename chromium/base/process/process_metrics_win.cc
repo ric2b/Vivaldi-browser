@@ -15,9 +15,9 @@
 
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/process/memory.h"
 #include "base/process/process_metrics_iocounters.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
+#include "base/threading/scoped_blocking_call.h"
 
 namespace base {
 namespace {
@@ -45,6 +45,8 @@ struct SYSTEM_PERFORMANCE_INFORMATION {
   ULONG WriteOperationCount;
   // The amount of other operations.
   ULONG OtherOperationCount;
+  // The number of pages of physical memory available to processes running on
+  // the system.
   ULONG AvailablePages;
   ULONG TotalCommittedPages;
   ULONG TotalCommitLimit;
@@ -54,7 +56,9 @@ struct SYSTEM_PERFORMANCE_INFORMATION {
   ULONG TransitionFaults;
   ULONG CacheTransitionFaults;
   ULONG DemandZeroFaults;
+  // The number of pages read from disk to resolve page faults.
   ULONG PagesRead;
+  // The number of read operations initiated to resolve page faults.
   ULONG PageReadIos;
   ULONG CacheReads;
   ULONG CacheIos;
@@ -130,88 +134,6 @@ std::unique_ptr<ProcessMetrics> ProcessMetrics::CreateProcessMetrics(
     ProcessHandle process) {
   return WrapUnique(new ProcessMetrics(process));
 }
-
-namespace {
-
-class WorkingSetInformationBuffer {
- public:
-  WorkingSetInformationBuffer() {}
-  ~WorkingSetInformationBuffer() { Clear(); }
-
-  bool Reserve(size_t size) {
-    Clear();
-    // Use UncheckedMalloc here because this can be called from the code
-    // that handles low memory condition.
-    return UncheckedMalloc(size, reinterpret_cast<void**>(&buffer_));
-  }
-
-  const PSAPI_WORKING_SET_INFORMATION* operator ->() const { return buffer_; }
-
-  size_t GetPageEntryCount() const { return number_of_entries; }
-
-  // This function is used to get page entries for a process.
-  bool QueryPageEntries(const ProcessHandle& process) {
-    int retries = 5;
-    number_of_entries = 4096;  // Just a guess.
-
-    for (;;) {
-      size_t buffer_size =
-          sizeof(PSAPI_WORKING_SET_INFORMATION) +
-          (number_of_entries * sizeof(PSAPI_WORKING_SET_BLOCK));
-
-      if (!Reserve(buffer_size))
-        return false;
-
-      // On success, |buffer_| is populated with info about the working set of
-      // |process|. On ERROR_BAD_LENGTH failure, increase the size of the
-      // buffer and try again.
-      if (QueryWorkingSet(process, buffer_, buffer_size))
-        break;  // Success
-
-      if (GetLastError() != ERROR_BAD_LENGTH)
-        return false;
-
-      number_of_entries = buffer_->NumberOfEntries;
-
-      // Maybe some entries are being added right now. Increase the buffer to
-      // take that into account. Increasing by 10% should generally be enough,
-      // especially considering the potentially low memory condition during the
-      // call (when called from OomMemoryDetails) and the potentially high
-      // number of entries (300K was observed in crash dumps).
-      number_of_entries *= 1.1;
-
-      if (--retries == 0) {
-        // If we're looping, eventually fail.
-        return false;
-      }
-    }
-
-    // TODO(chengx): Remove the comment and the logic below. It is no longer
-    // needed since we don't have Win2000 support.
-    // On windows 2000 the function returns 1 even when the buffer is too small.
-    // The number of entries that we are going to parse is the minimum between
-    // the size we allocated and the real number of entries.
-    number_of_entries = std::min(number_of_entries,
-                                 static_cast<size_t>(buffer_->NumberOfEntries));
-
-    return true;
-  }
-
- private:
-  void Clear() {
-    free(buffer_);
-    buffer_ = nullptr;
-  }
-
-  PSAPI_WORKING_SET_INFORMATION* buffer_ = nullptr;
-
-  // Number of page entries.
-  size_t number_of_entries = 0;
-
-  DISALLOW_COPY_AND_ASSIGN(WorkingSetInformationBuffer);
-};
-
-}  // namespace
 
 TimeDelta ProcessMetrics::GetCumulativeCPUUsage() {
   FILETIME creation_time;
@@ -307,23 +229,26 @@ std::unique_ptr<Value> SystemPerformanceInfo::ToValue() const {
 
   // Write out uint64_t variables as doubles.
   // Note: this may discard some precision, but for JS there's no other option.
-  result->SetDouble("idle_time", static_cast<double>(idle_time));
+  result->SetDouble("idle_time", strict_cast<double>(idle_time));
   result->SetDouble("read_transfer_count",
-                    static_cast<double>(read_transfer_count));
+                    strict_cast<double>(read_transfer_count));
   result->SetDouble("write_transfer_count",
-                    static_cast<double>(write_transfer_count));
+                    strict_cast<double>(write_transfer_count));
   result->SetDouble("other_transfer_count",
-                    static_cast<double>(other_transfer_count));
+                    strict_cast<double>(other_transfer_count));
   result->SetDouble("read_operation_count",
-                    static_cast<double>(read_operation_count));
+                    strict_cast<double>(read_operation_count));
   result->SetDouble("write_operation_count",
-                    static_cast<double>(write_operation_count));
+                    strict_cast<double>(write_operation_count));
   result->SetDouble("other_operation_count",
-                    static_cast<double>(other_operation_count));
+                    strict_cast<double>(other_operation_count));
   result->SetDouble("pagefile_pages_written",
-                    static_cast<double>(pagefile_pages_written));
+                    strict_cast<double>(pagefile_pages_written));
   result->SetDouble("pagefile_pages_write_ios",
-                    static_cast<double>(pagefile_pages_write_ios));
+                    strict_cast<double>(pagefile_pages_write_ios));
+  result->SetDouble("available_pages", strict_cast<double>(available_pages));
+  result->SetDouble("pages_read", strict_cast<double>(pages_read));
+  result->SetDouble("page_read_ios", strict_cast<double>(page_read_ios));
 
   return result;
 }
@@ -338,12 +263,16 @@ BASE_EXPORT bool GetSystemPerformanceInfo(SystemPerformanceInfo* info) {
     return false;
 
   SYSTEM_PERFORMANCE_INFORMATION counters = {};
-  const NTSTATUS status = query_system_information_ptr(
-      ::SystemPerformanceInformation, &counters,
-      sizeof(SYSTEM_PERFORMANCE_INFORMATION), nullptr);
-
-  if (status != STATUS_SUCCESS)
-    return false;
+  {
+    // The call to NtQuerySystemInformation might block on a lock.
+    base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                  BlockingType::MAY_BLOCK);
+    if (query_system_information_ptr(::SystemPerformanceInformation, &counters,
+                                     sizeof(SYSTEM_PERFORMANCE_INFORMATION),
+                                     nullptr) != STATUS_SUCCESS) {
+      return false;
+    }
+  }
 
   info->idle_time = counters.IdleTime.QuadPart;
   info->read_transfer_count = counters.ReadTransferCount.QuadPart;
@@ -354,6 +283,9 @@ BASE_EXPORT bool GetSystemPerformanceInfo(SystemPerformanceInfo* info) {
   info->other_operation_count = counters.OtherOperationCount;
   info->pagefile_pages_written = counters.PagefilePagesWritten;
   info->pagefile_pages_write_ios = counters.PagefilePageWriteIos;
+  info->available_pages = counters.AvailablePages;
+  info->pages_read = counters.PagesRead;
+  info->page_read_ios = counters.PageReadIos;
 
   return true;
 }

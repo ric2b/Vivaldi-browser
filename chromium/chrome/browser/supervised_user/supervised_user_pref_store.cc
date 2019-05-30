@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/supervised_user/supervised_user_constants.h"
@@ -22,6 +23,10 @@
 #include "components/prefs/pref_value_map.h"
 #include "components/signin/core/browser/signin_pref_names.h"
 #include "content/public/browser/notification_source.h"
+
+#if defined(OS_ANDROID)
+#include "chrome/browser/android/contextual_suggestions/contextual_suggestions_prefs.h"
+#endif
 
 namespace {
 
@@ -133,11 +138,16 @@ void SupervisedUserPrefStore::OnNewSettingsAvailable(
     prefs_->SetBoolean(prefs::kSigninAllowed, false);
     prefs_->SetBoolean(ntp_snippets::prefs::kEnableSnippets, false);
 
+#if defined(OS_ANDROID)
+    prefs_->SetBoolean(
+        contextual_suggestions::prefs::kContextualSuggestionsEnabled, false);
+#endif
+
     // Copy supervised user settings to prefs.
     for (const auto& entry : kSupervisedUserSettingsPrefMapping) {
       const base::Value* value = NULL;
       if (settings->GetWithoutPathExpansion(entry.settings_name, &value))
-        prefs_->SetValue(entry.pref_name, value->CreateDeepCopy());
+        prefs_->SetValue(entry.pref_name, value->Clone());
     }
 
     // Manually set preferences that aren't direct copies of the settings value.
@@ -148,13 +158,6 @@ void SupervisedUserPrefStore::OnNewSettingsAvailable(
       prefs_->SetInteger(prefs::kIncognitoModeAvailability,
                          record_history ? IncognitoModePrefs::DISABLED
                                         : IncognitoModePrefs::ENABLED);
-
-      bool record_history_includes_session_sync = true;
-      settings->GetBoolean(supervised_users::kRecordHistoryIncludesSessionSync,
-                           &record_history_includes_session_sync);
-      prefs_->SetBoolean(
-          prefs::kForceSessionSync,
-          record_history && record_history_includes_session_sync);
     }
 
     {

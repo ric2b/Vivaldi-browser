@@ -51,13 +51,29 @@ RemoteWindowProxy::RemoteWindowProxy(v8::Isolate* isolate,
 
 void RemoteWindowProxy::DisposeContext(Lifecycle next_status,
                                        FrameReuseStatus) {
-  DCHECK(next_status == Lifecycle::kGlobalObjectIsDetached ||
-         next_status == Lifecycle::kFrameIsDetached);
+  DCHECK(next_status == Lifecycle::kV8MemoryIsForciblyPurged ||
+         next_status == Lifecycle::kGlobalObjectIsDetached ||
+         next_status == Lifecycle::kFrameIsDetached ||
+         next_status == Lifecycle::kFrameIsDetachedAndV8MemoryIsPurged);
+
+  // If the current lifecycle is kV8MemoryIsForciblyPurged, next status should
+  // be either kFrameIsDetachedAndV8MemoryIsPurged, or kGlobalObjectIsDetached.
+  // If the former, |global_proxy_| should become weak, and if the latter, the
+  // necessary operations are already done so can return here.
+  if (lifecycle_ == Lifecycle::kV8MemoryIsForciblyPurged) {
+    DCHECK(next_status == Lifecycle::kGlobalObjectIsDetached ||
+           next_status == Lifecycle::kFrameIsDetachedAndV8MemoryIsPurged);
+    if (next_status == Lifecycle::kFrameIsDetachedAndV8MemoryIsPurged)
+      global_proxy_.SetPhantom();
+    lifecycle_ = next_status;
+    return;
+  }
 
   if (lifecycle_ != Lifecycle::kContextIsInitialized)
     return;
 
-  if (next_status == Lifecycle::kGlobalObjectIsDetached &&
+  if ((next_status == Lifecycle::kV8MemoryIsForciblyPurged ||
+       next_status == Lifecycle::kGlobalObjectIsDetached) &&
       !global_proxy_.IsEmpty()) {
     global_proxy_.Get().SetWrapperClassId(0);
     V8DOMWrapper::ClearNativeInfo(GetIsolate(),
@@ -96,7 +112,7 @@ void RemoteWindowProxy::CreateContext() {
   // Create a new v8::Context with the window object as the global object
   // (aka the inner global). Reuse the outer global proxy if it already exists.
   v8::Local<v8::ObjectTemplate> global_template =
-      V8Window::domTemplate(GetIsolate(), *world_)->InstanceTemplate();
+      V8Window::DomTemplate(GetIsolate(), *world_)->InstanceTemplate();
   CHECK(!global_template.IsEmpty());
 
   v8::Local<v8::Object> global_proxy =

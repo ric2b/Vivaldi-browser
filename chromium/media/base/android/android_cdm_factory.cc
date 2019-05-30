@@ -4,6 +4,7 @@
 
 #include "media/base/android/android_cdm_factory.h"
 
+#include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
@@ -55,7 +56,7 @@ void AndroidCdmFactory::Create(
   // Bound |cdm_created_cb| so we always fire it asynchronously.
   CdmCreatedCB bound_cdm_created_cb = BindToCurrentLoop(cdm_created_cb);
 
-  if (security_origin.unique()) {
+  if (security_origin.opaque()) {
     bound_cdm_created_cb.Run(nullptr, "Invalid origin.");
     return;
   }

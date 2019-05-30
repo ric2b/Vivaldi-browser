@@ -47,21 +47,7 @@ class CCScrollTextPage(ToughCompositorScrollPage):
 # Why: Baseline JS scrolling page. A long page with only text. """
 class JSScrollTextPage(ToughCompositorScrollPage):
   BASE_NAME = 'js_scroll_text_only'
-  URL = 'http://jsbin.com/wixadinu/2/quiet?JS_SCROLL_TEXT_ONLY'
-
-
-# Why: Scroll by a large number of CC layers """
-# TODO(crbug.com/878951): Remove after 'n_layer' tests below are fully landed.
-class CCScroll200LayerPage(ToughCompositorScrollPage):
-  BASE_NAME = 'cc_scroll_200_layer_grid'
-  URL = 'http://jsbin.com/yakagevo/1/quiet?CC_SCROLL_200_LAYER_GRID'
-
-
-# Why: Scroll by a large number of JS layers """
-# TODO(crbug.com/878951): Remove after 'n_layer' tests below are fully landed.
-class JSScroll200LayerPage(ToughCompositorScrollPage):
-  BASE_NAME = 'js_scroll_200_layer_grid'
-  URL = 'http://jsbin.com/jevibahi/4/quiet?JS_SCROLL_200_LAYER_GRID'
+  URL = 'http://jsbin.com/dozirar/quiet?JS_SCROLL_TEXT_ONLY'
 
 
 class ToughCompositorWaitPage(ToughCompositorPage):
@@ -77,6 +63,7 @@ class ToughCompositorWaitPage(ToughCompositorPage):
 class CCPosterCirclePage(ToughCompositorWaitPage):
   BASE_NAME = 'cc_poster_circle'
   URL = 'http://jsbin.com/falefice/1/quiet?CC_POSTER_CIRCLE'
+  TAGS = ToughCompositorWaitPage.TAGS + [story_tags.REPRESENTATIVE_MAC_DESKTOP]
 
 
 # Why: JS poster circle animates/commits many layers """
@@ -134,6 +121,7 @@ class CSSOpacityPlusNLayers99(ToughCompositorWaitPage):
   SUPPORTED_PLATFORMS = platforms.ALL_PLATFORMS
   URL = ('file://../../../../chrome/test/data/perf/tough_compositor_cases/'
          'css_opacity_plus_n_layers.html?layer_count=306&visible_layers=46')
+  TAGS = ToughCompositorWaitPage.TAGS + [story_tags.REPRESENTATIVE_WIN_DESKTOP]
 
 
 # Why: JS driven CSS property change on 1 layer baseline """
@@ -174,6 +162,7 @@ class JSOpacityPlusNLayers99(ToughCompositorWaitPage):
   SUPPORTED_PLATFORMS = platforms.ALL_PLATFORMS
   URL = ('file://../../../../chrome/test/data/perf/tough_compositor_cases/'
          'js_opacity_plus_n_layers.html?layer_count=306&visible_layers=46')
+  TAGS = ToughCompositorWaitPage.TAGS + [story_tags.REPRESENTATIVE_MAC_DESKTOP]
 
 
 # Why: Painting 1 layer baseline """
@@ -224,7 +213,7 @@ class InfiniteScrollElementNLayersPage(ToughCompositorPage):
           selector='#container', speed_in_pixels_per_second=1000)
 
 
-# Why: Infinite root scroller with 1 layer baseline"""
+# Why: Infinite non-root scroller with 1 layer baseline"""
 class InfiniteScrollElementNLayers0(InfiniteScrollElementNLayersPage):
   BASE_NAME = 'infinite_scroll_element_n_layers_0'
   SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
@@ -232,7 +221,7 @@ class InfiniteScrollElementNLayers0(InfiniteScrollElementNLayersPage):
          'infinite_scroll_element_n_layers.html?layer_count=1')
 
 
-# Why: Infinite root scroller with 50%-ile layer count"""
+# Why: Infinite non-root scroller with 50%-ile layer count"""
 class InfiniteScrollElementNLayers50(InfiniteScrollElementNLayersPage):
   BASE_NAME = 'infinite_scroll_element_n_layers_50'
   SUPPORTED_PLATFORMS = platforms.NO_PLATFORMS
@@ -240,7 +229,7 @@ class InfiniteScrollElementNLayers50(InfiniteScrollElementNLayersPage):
          'infinite_scroll_element_n_layers.html?layer_count=31')
 
 
-# Why: Infinite root scroller with 75%-ile layer count"""
+# Why: Infinite non-root scroller with 75%-ile layer count"""
 class InfiniteScrollElementNLayers75(InfiniteScrollElementNLayersPage):
   BASE_NAME = 'infinite_scroll_element_n_layers_75'
   SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
@@ -248,7 +237,7 @@ class InfiniteScrollElementNLayers75(InfiniteScrollElementNLayersPage):
          'infinite_scroll_element_n_layers.html?layer_count=53')
 
 
-# Why: Infinite root scroller with 95%-ile layer count"""
+# Why: Infinite non-root scroller with 95%-ile layer count"""
 class InfiniteScrollElementNLayers95(InfiniteScrollElementNLayersPage):
   BASE_NAME = 'infinite_scroll_element_n_layers_95'
   SUPPORTED_PLATFORMS = platforms.NO_PLATFORMS
@@ -256,7 +245,7 @@ class InfiniteScrollElementNLayers95(InfiniteScrollElementNLayersPage):
          'infinite_scroll_element_n_layers.html?layer_count=144')
 
 
-# Why: Infinite root scroller with 99%-ile layer count"""
+# Why: Infinite non-root scroller with 99%-ile layer count"""
 class InfiniteScrollElementNLayers99(InfiniteScrollElementNLayersPage):
   BASE_NAME = 'infinite_scroll_element_n_layers_99'
   SUPPORTED_PLATFORMS = platforms.ALL_PLATFORMS
@@ -272,7 +261,7 @@ class InfiniteScrollRootNLayersPage(ToughCompositorPage):
                                speed_in_pixels_per_second=1000)
 
 
-# Why: Infinite non-root scroller with 1 layer baseline """
+# Why: Infinite root scroller with 1 layer baseline """
 class InfiniteScrollRootNLayers0(InfiniteScrollRootNLayersPage):
   BASE_NAME = 'infinite_scroll_root_n_layers_0'
   SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
@@ -280,7 +269,7 @@ class InfiniteScrollRootNLayers0(InfiniteScrollRootNLayersPage):
          'infinite_scroll_root_n_layers.html?layer_count=1')
 
 
-# Why: Infinite non-root scroller with 50%-ile layer count"""
+# Why: Infinite root scroller with 50%-ile layer count"""
 class InfiniteScrollRootNLayers50(InfiniteScrollRootNLayersPage):
   BASE_NAME = 'infinite_scroll_root_n_layers_50'
   SUPPORTED_PLATFORMS = platforms.NO_PLATFORMS
@@ -288,7 +277,7 @@ class InfiniteScrollRootNLayers50(InfiniteScrollRootNLayersPage):
          'infinite_scroll_root_n_layers.html?layer_count=31')
 
 
-# Why: Infinite non-root scroller with 75%-ile layer count"""
+# Why: Infinite root scroller with 75%-ile layer count"""
 class InfiniteScrollRootNLayers75(InfiniteScrollRootNLayersPage):
   BASE_NAME = 'infinite_scroll_root_n_layers_75'
   SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
@@ -296,7 +285,7 @@ class InfiniteScrollRootNLayers75(InfiniteScrollRootNLayersPage):
          'infinite_scroll_root_n_layers.html?layer_count=53')
 
 
-# Why: Infinite non-root scroller with 95%-ile layer count"""
+# Why: Infinite root scroller with 95%-ile layer count"""
 class InfiniteScrollRootNLayers95(InfiniteScrollRootNLayersPage):
   BASE_NAME = 'infinite_scroll_root_n_layers_95'
   SUPPORTED_PLATFORMS = platforms.NO_PLATFORMS
@@ -304,9 +293,53 @@ class InfiniteScrollRootNLayers95(InfiniteScrollRootNLayersPage):
          'infinite_scroll_root_n_layers.html?layer_count=144')
 
 
-# Why: Infinite non-root scroller with 99%-ile layer count"""
+# Why: Infinite root scroller with 99%-ile layer count"""
 class InfiniteScrollRootNLayers99(InfiniteScrollRootNLayersPage):
   BASE_NAME = 'infinite_scroll_root_n_layers_99'
   SUPPORTED_PLATFORMS = platforms.ALL_PLATFORMS
   URL = ('file://../../../../chrome/test/data/perf/tough_compositor_cases/'
          'infinite_scroll_root_n_layers.html?layer_count=306')
+
+
+# Why: Infinite root scroller + fixed element, with 1 layer baseline """
+class InfiniteScrollRootFixedNLayers0(InfiniteScrollRootNLayersPage):
+  BASE_NAME = 'infinite_scroll_root_fixed_n_layers_0'
+  SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
+  URL = ('file://../../../../chrome/test/data/perf/tough_compositor_cases/'
+         'infinite_scroll_root_fixed_n_layers.html?layer_count=1')
+
+
+# Why: Infinite root scroller + fixed element, with 50%-ile layer count"""
+class InfiniteScrollRootFixedNLayers50(InfiniteScrollRootNLayersPage):
+  BASE_NAME = 'infinite_scroll_root_fixed_n_layers_50'
+  SUPPORTED_PLATFORMS = platforms.NO_PLATFORMS
+  URL = ('file://../../../../chrome/test/data/perf/tough_compositor_cases/'
+         'infinite_scroll_root_fixed_n_layers.html?layer_count=31')
+
+
+# Why: Infinite root scroller + fixed element, with 75%-ile layer count"""
+class InfiniteScrollRootFixedNLayers75(InfiniteScrollRootNLayersPage):
+  BASE_NAME = 'infinite_scroll_root_fixed_n_layers_75'
+  SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
+  URL = ('file://../../../../chrome/test/data/perf/tough_compositor_cases/'
+         'infinite_scroll_root_fixed_n_layers.html?layer_count=53')
+
+
+# Why: Infinite root scroller + fixed element, with 95%-ile layer count"""
+class InfiniteScrollRootFixedNLayers95(InfiniteScrollRootNLayersPage):
+  BASE_NAME = 'infinite_scroll_root_fixed_n_layers_95'
+  SUPPORTED_PLATFORMS = platforms.NO_PLATFORMS
+  URL = ('file://../../../../chrome/test/data/perf/tough_compositor_cases/'
+         'infinite_scroll_root_fixed_n_layers.html?layer_count=144')
+
+
+# Why: Infinite root scroller + fixed element, with 99%-ile layer count"""
+class InfiniteScrollRootFixedNLayers99(InfiniteScrollRootNLayersPage):
+  BASE_NAME = 'infinite_scroll_root_fixed_n_layers_99'
+  SUPPORTED_PLATFORMS = platforms.ALL_PLATFORMS
+  URL = ('file://../../../../chrome/test/data/perf/tough_compositor_cases/'
+         'infinite_scroll_root_fixed_n_layers.html?layer_count=306')
+  TAGS = InfiniteScrollRootNLayersPage.TAGS + [
+      story_tags.REPRESENTATIVE_WIN_DESKTOP,
+      story_tags.REPRESENTATIVE_MAC_DESKTOP,
+  ]

@@ -6,8 +6,8 @@
 
 #include "base/bits.h"
 #include "base/stl_util.h"
-
-#define DVLOGF(level) DVLOG(level) << __func__ << "(): "
+#include "media/gpu/macros.h"
+#include "media/video/h264_level_limits.h"
 
 namespace media {
 namespace {
@@ -30,9 +30,6 @@ constexpr size_t kMaxRefIdxL1Size = 0;
 // HRD parameters (ch. E.2.2 in H264 spec).
 constexpr int kBitRateScale = 0;  // bit_rate_scale for SPS HRD parameters.
 constexpr int kCPBSizeScale = 0;  // cpb_size_scale for SPS HRD parameters.
-
-// Default to H264 profile 4.1.
-constexpr int kDefaultLevelIDC = 41;
 
 // 4:2:0
 constexpr int kChromaFormatIDC = 1;
@@ -59,27 +56,30 @@ H264Encoder::~H264Encoder() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 }
 
-bool H264Encoder::Initialize(const gfx::Size& visible_size,
-                             VideoCodecProfile profile,
-                             uint32_t initial_bitrate,
-                             uint32_t initial_framerate) {
+bool H264Encoder::Initialize(const VideoEncodeAccelerator::Config& config) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  switch (profile) {
+  switch (config.output_profile) {
     case H264PROFILE_BASELINE:
     case H264PROFILE_MAIN:
     case H264PROFILE_HIGH:
       break;
 
     default:
-      NOTIMPLEMENTED() << "Unsupported profile " << GetProfileName(profile);
+      NOTIMPLEMENTED() << "Unsupported profile "
+                       << GetProfileName(config.output_profile);
       return false;
   }
 
-  DCHECK(!visible_size.IsEmpty());
-  visible_size_ = visible_size;
+  if (config.input_visible_size.IsEmpty()) {
+    DVLOGF(1) << "Input visible size could not be empty";
+    return false;
+  }
+  visible_size_ = config.input_visible_size;
   // For 4:2:0, the pixel sizes have to be even.
-  DCHECK_EQ(visible_size_.width() % 2, 0);
-  DCHECK_EQ(visible_size_.height() % 2, 0);
+  if ((visible_size_.width() % 2 != 0) || (visible_size_.height() % 2 != 0)) {
+    DVLOGF(1) << "The pixel sizes are not even: " << visible_size_.ToString();
+    return false;
+  }
   constexpr size_t kH264MacroblockSizeInPixels = 16;
   coded_size_ = gfx::Size(
       base::bits::Align(visible_size_.width(), kH264MacroblockSizeInPixels),
@@ -87,9 +87,17 @@ bool H264Encoder::Initialize(const gfx::Size& visible_size,
   mb_width_ = coded_size_.width() / kH264MacroblockSizeInPixels;
   mb_height_ = coded_size_.height() / kH264MacroblockSizeInPixels;
 
-  profile_ = profile;
+  profile_ = config.output_profile;
+  level_ = config.h264_output_level.value_or(
+      VideoEncodeAccelerator::kDefaultH264Level);
+  uint32_t initial_framerate = config.initial_framerate.value_or(
+      VideoEncodeAccelerator::kDefaultFramerate);
+  if (!CheckH264LevelLimits(profile_, level_, config.initial_bitrate,
+                            initial_framerate, mb_width_ * mb_height_))
+    return false;
+
   VideoBitrateAllocation initial_bitrate_allocation;
-  initial_bitrate_allocation.SetBitrate(0, 0, initial_bitrate);
+  initial_bitrate_allocation.SetBitrate(0, 0, config.initial_bitrate);
   if (!UpdateRates(initial_bitrate_allocation, initial_framerate))
     return false;
 
@@ -164,6 +172,8 @@ bool H264Encoder::PrepareEncodeJob(EncodeJob* encode_job) {
   }
 
   if (pic->type == H264SliceHeader::kISlice) {
+    // We always generate SPS and PPS with I(DR) frame. This will help for Seek
+    // operation on the generated stream.
     if (!accelerator_->SubmitPackedHeaders(encode_job, packed_sps_,
                                            packed_pps_)) {
       DVLOGF(1) << "Failed submitting keyframe headers";
@@ -205,7 +215,19 @@ bool H264Encoder::UpdateRates(const VideoBitrateAllocation& bitrate_allocation,
   curr_params_.cpb_size_bits =
       curr_params_.bitrate_bps * curr_params_.cpb_window_size_ms / 1000;
 
+  bool previous_encoding_parameters_changed = encoding_parameters_changed_;
+
   UpdateSPS();
+
+  // If SPS parameters are updated, it is required to send the SPS with IDR
+  // frame. However, as a special case, we do not generate IDR frame if only
+  // bitrate and framerate parameters are updated. This is safe because these
+  // will not make a difference on decoder processing. The updated SPS will be
+  // sent a next periodic or requested I(DR) frame. On the other hand, bitrate
+  // and framerate parameter
+  // changes must be affected for encoding. UpdateSPS()+SubmitFrameParameters()
+  // shall apply them to an encoder properly.
+  encoding_parameters_changed_ = previous_encoding_parameters_changed;
   return true;
 }
 
@@ -234,7 +256,10 @@ void H264Encoder::UpdateSPS() {
       return;
   }
 
-  current_sps_.level_idc = kDefaultLevelIDC;
+  H264SPS::GetLevelConfigFromProfileLevel(profile_, level_,
+                                          &current_sps_.level_idc,
+                                          &current_sps_.constraint_set3_flag);
+
   current_sps_.seq_parameter_set_id = 0;
   current_sps_.chroma_format_idc = kChromaFormatIDC;
 

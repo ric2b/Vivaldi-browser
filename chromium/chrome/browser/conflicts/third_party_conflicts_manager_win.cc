@@ -16,33 +16,29 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
 #include "base/sequenced_task_runner.h"
+#include "base/strings/stringprintf.h"
 #include "base/task/post_task.h"
 #include "base/task_runner.h"
 #include "base/task_runner_util.h"
+#include "base/win/registry.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/conflicts/incompatible_applications_updater_win.h"
 #include "chrome/browser/conflicts/installed_applications_win.h"
 #include "chrome/browser/conflicts/module_blacklist_cache_updater_win.h"
 #include "chrome/browser/conflicts/module_blacklist_cache_util_win.h"
 #include "chrome/browser/conflicts/module_info_util_win.h"
+#include "chrome/browser/conflicts/module_info_win.h"
 #include "chrome/browser/conflicts/module_list_filter_win.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/install_static/install_util.h"
+#include "chrome_elf/third_party_dlls/packed_list_format.h"
+#include "chrome_elf/third_party_dlls/status_codes.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 
 namespace {
-
-std::unique_ptr<CertificateInfo> CreateExeCertificateInfo() {
-  auto certificate_info = std::make_unique<CertificateInfo>();
-
-  base::FilePath exe_path;
-  if (base::PathService::Get(base::FILE_EXE, &exe_path))
-    GetCertificateInfo(exe_path, certificate_info.get());
-
-  return certificate_info;
-}
 
 scoped_refptr<ModuleListFilter> CreateModuleListFilter(
     const base::FilePath& module_list_path) {
@@ -74,6 +70,53 @@ ReadInitialBlacklistedModules() {
   return initial_blacklisted_modules;
 }
 
+// Log the initialization status of the chrome_elf component that is responsible
+// for blocking third-party DLLs. The status is stored in the
+// kStatusCodesRegValue registry key during chrome_elf's initialization.
+void LogChromeElfThirdPartyStatus() {
+  base::win::RegKey registry_key(
+      HKEY_CURRENT_USER,
+      base::StringPrintf(L"%ls%ls", install_static::GetRegistryPath().c_str(),
+                         third_party_dlls::kThirdPartyRegKeyName)
+          .c_str(),
+      KEY_QUERY_VALUE);
+
+  // Early return if the registry key can't be opened.
+  if (!registry_key.Valid())
+    return;
+
+  // Read the status code. Since the data is basically an array of integers, and
+  // resets every startups, a starting size of 128 should always be sufficient.
+  DWORD size = 128;
+  std::vector<uint8_t> buffer(size);
+  DWORD key_type;
+  DWORD result = registry_key.ReadValue(third_party_dlls::kStatusCodesRegValue,
+                                        buffer.data(), &size, &key_type);
+
+  if (result == ERROR_MORE_DATA) {
+    buffer.resize(size);
+    result = registry_key.ReadValue(third_party_dlls::kStatusCodesRegValue,
+                                    buffer.data(), &size, &key_type);
+  }
+
+  // Give up if it failed to retrieve the status codes.
+  if (result != ERROR_SUCCESS)
+    return;
+
+  // The real size of the data is most probably smaller than the initial size.
+  buffer.resize(size);
+
+  // Sanity check the type of data.
+  if (key_type != REG_BINARY)
+    return;
+
+  std::vector<third_party_dlls::ThirdPartyStatus> status_array;
+  third_party_dlls::ConvertBufferToStatusCodes(buffer, &status_array);
+
+  for (auto status : status_array)
+    UMA_HISTOGRAM_ENUMERATION("ChromeElf.ThirdPartyStatus", status);
+}
+
 }  // namespace
 
 ThirdPartyConflictsManager::ThirdPartyConflictsManager(
@@ -89,12 +132,16 @@ ThirdPartyConflictsManager::ThirdPartyConflictsManager(
       module_list_update_needed_(false),
       component_update_service_observer_(this),
       weak_ptr_factory_(this) {
+  LogChromeElfThirdPartyStatus();
+
   module_database_event_source_->AddObserver(this);
-  base::PostTaskAndReplyWithResult(
-      background_sequence_.get(), FROM_HERE,
-      base::BindOnce(&CreateExeCertificateInfo),
-      base::BindOnce(&ThirdPartyConflictsManager::OnExeCertificateCreated,
-                     weak_ptr_factory_.GetWeakPtr()));
+
+  // Get the path to the current executable as it will be used to retrieve its
+  // associated CertificateInfo from the ModuleDatabase. This shouldn't fail,
+  // but it is assumed that without the path, the executable is not signed
+  // (hence an empty CertificateInfo).
+  if (!base::PathService::Get(base::FILE_EXE, &exe_path_))
+    exe_certificate_info_ = std::make_unique<CertificateInfo>();
 }
 
 ThirdPartyConflictsManager::~ThirdPartyConflictsManager() {
@@ -134,6 +181,26 @@ void ThirdPartyConflictsManager::ShutdownAndDestroy(
     std::unique_ptr<ThirdPartyConflictsManager> instance) {
   DisableThirdPartyModuleBlocking(instance->background_sequence_.get());
   // |instance| is intentionally destroyed at the end of the function scope.
+}
+
+void ThirdPartyConflictsManager::OnNewModuleFound(
+    const ModuleInfoKey& module_key,
+    const ModuleInfoData& module_data) {
+  // Keep looking for the CertificateInfo of the current executable as long as
+  // it wasn't found yet.
+  if (exe_certificate_info_)
+    return;
+
+  DCHECK(!exe_path_.empty());
+
+  // The module represent the current executable only if the paths matches.
+  if (exe_path_ != module_key.module_path)
+    return;
+
+  exe_certificate_info_ = std::make_unique<CertificateInfo>(
+      module_data.inspection_result->certificate_info);
+
+  InitializeIfReady();
 }
 
 void ThirdPartyConflictsManager::OnModuleDatabaseIdle() {
@@ -266,11 +333,12 @@ void ThirdPartyConflictsManager::OnEvent(Events event,
     SetTerminalState(State::kNoModuleListAvailableFailure);
 }
 
-void ThirdPartyConflictsManager::OnExeCertificateCreated(
-    std::unique_ptr<CertificateInfo> exe_certificate_info) {
-  exe_certificate_info_ = std::move(exe_certificate_info);
-
-  InitializeIfReady();
+void ThirdPartyConflictsManager::DisableModuleAnalysis() {
+  module_analysis_disabled_ = true;
+  if (incompatible_applications_updater_)
+    incompatible_applications_updater_->DisableModuleAnalysis();
+  if (incompatible_applications_updater_)
+    incompatible_applications_updater_->DisableModuleAnalysis();
 }
 
 void ThirdPartyConflictsManager::OnModuleListFilterCreated(
@@ -340,7 +408,8 @@ void ThirdPartyConflictsManager::InitializeIfReady() {
             module_list_filter_, *initial_blacklisted_modules_,
             base::BindRepeating(
                 &ThirdPartyConflictsManager::OnModuleBlacklistCacheUpdated,
-                base::Unretained(this)));
+                base::Unretained(this)),
+            module_analysis_disabled_);
   }
 
   // The |incompatible_applications_updater_| instance must be created last so
@@ -352,7 +421,8 @@ void ThirdPartyConflictsManager::InitializeIfReady() {
     incompatible_applications_updater_ =
         std::make_unique<IncompatibleApplicationsUpdater>(
             module_database_event_source_, *exe_certificate_info_,
-            module_list_filter_, *installed_applications_);
+            module_list_filter_, *installed_applications_,
+            module_analysis_disabled_);
   }
 
   if (!incompatible_applications_updater_) {

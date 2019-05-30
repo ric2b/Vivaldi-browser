@@ -8,12 +8,21 @@ import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
 
 declare_args() {
   enable_mojo_tracing = false
+
+  # enable_random_mojo_delays starts a task runner that periodically pauses
+  # random Mojo bindings and later resumes them, in order to test whether parts
+  # of the code implicitly rely on FIFO processing of messages sent on different
+  # message pipes (which they should not).
+  enable_random_mojo_delays = false
 }
 
 buildflag_header("mojo_buildflags") {
   header = "mojo_buildflags.h"
 
-  flags = [ "MOJO_TRACE_ENABLED=$enable_mojo_tracing" ]
+  flags = [
+    "MOJO_TRACE_ENABLED=$enable_mojo_tracing",
+    "MOJO_RANDOM_DELAYS_ENABLED=$enable_random_mojo_delays",
+  ]
 }
 
 # Headers and sources which generated bindings can depend upon. No need for
@@ -30,6 +39,8 @@ component("bindings_base") {
     "disconnect_reason.h",
     "enum_traits.h",
     "equals_traits.h",
+    "features.cc",
+    "features.h",
     "interface_data_view.h",
     "interface_id.h",
     "lib/array_internal.cc",
@@ -53,13 +64,13 @@ component("bindings_base") {
     "lib/message_internal.h",
     "lib/scoped_interface_endpoint_handle.cc",
     "lib/serialization.h",
-    "lib/serialization.h",
     "lib/serialization_context.cc",
     "lib/serialization_context.h",
     "lib/serialization_forward.h",
     "lib/serialization_util.h",
     "lib/string_serialization.h",
     "lib/template_util.h",
+    "lib/tracing_helper.h",
     "lib/unserialized_message_context.cc",
     "lib/unserialized_message_context.h",
     "lib/validate_params.h",
@@ -109,7 +120,8 @@ component("bindings") {
     "associated_interface_request.h",
     "binding.h",
     "binding_set.h",
-    "bindings_export.h",
+    "call_internal.cc",
+    "call_internal.h",
     "callback_helpers.h",
     "connection_error_callback.h",
     "connector.h",
@@ -152,10 +164,14 @@ component("bindings") {
     "lib/task_runner_helper.cc",
     "lib/task_runner_helper.h",
     "native_enum.h",
+    "pending_receiver.h",
+    "pending_remote.h",
     "pipe_control_message_handler.h",
     "pipe_control_message_handler_delegate.h",
     "pipe_control_message_proxy.h",
     "raw_ptr_impl_ref_traits.h",
+    "receiver.h",
+    "remote.h",
     "sequence_local_sync_event_watcher.h",
     "strong_associated_binding.h",
     "strong_binding.h",
@@ -167,6 +183,13 @@ component("bindings") {
     "thread_safe_interface_ptr.h",
     "unique_ptr_impl_ref_traits.h",
   ]
+
+  if (enable_random_mojo_delays) {
+    sources += [
+      "lib/test_random_mojo_delays.cc",
+      "lib/test_random_mojo_delays.h",
+    ]
+  }
 
   if (enable_ipc_fuzzer && !is_nacl_nonsfi) {
     sources += [
@@ -189,7 +212,7 @@ component("bindings") {
     "//ipc:native_handle_type_converters",
   ]
 
-  defines = [ "MOJO_CPP_BINDINGS_IMPLEMENTATION" ]
+  defines = [ "IS_MOJO_CPP_BINDINGS_IMPL" ]
 }
 
 source_set("struct_traits") {
@@ -208,6 +231,7 @@ if (!is_ios) {
   # TODO(yzshen): crbug.com/617718 Consider moving this into blink.
   source_set("wtf_support") {
     sources = [
+      "array_traits_web_vector.h",
       "array_traits_wtf_vector.h",
       "lib/string_traits_wtf.cc",
       "lib/wtf_clone_equals_util.h",
@@ -219,6 +243,7 @@ if (!is_ios) {
 
     public_deps = [
       ":bindings",
+      "//third_party/blink/public:blink_headers",
       "//third_party/blink/renderer/platform:platform_export",
       "//third_party/blink/renderer/platform/wtf",
     ]

@@ -23,6 +23,7 @@ class GaiaUrls {
   const GURL& client_login_url() const;
   const GURL& service_login_url() const;
   const GURL& embedded_setup_chromeos_url(unsigned version) const;
+  const GURL& embedded_setup_windows_url() const;
   const GURL& signin_chrome_sync_dice() const;
   const GURL& service_login_auth_url() const;
   const GURL& service_logout_url() const;
@@ -41,7 +42,6 @@ class GaiaUrls {
 
   const std::string& oauth2_chrome_client_id() const;
   const std::string& oauth2_chrome_client_secret() const;
-  const GURL& deprecated_client_login_to_oauth2_url() const;
   const GURL& oauth2_auth_url() const;
   const GURL& oauth2_token_url() const;
   const GURL& oauth2_issue_token_url() const;
@@ -67,13 +67,11 @@ class GaiaUrls {
   GURL gaia_url_;
   GURL captcha_base_url_;
 
-  GURL lso_origin_url_;
-  GURL google_apis_origin_url_;
-
   GURL client_login_url_;
   GURL service_login_url_;
   GURL embedded_setup_chromeos_url_v1_;
   GURL embedded_setup_chromeos_url_v2_;
+  GURL embedded_setup_windows_url_;
   GURL signin_chrome_sync_dice_;
   GURL service_login_auth_url_;
   GURL service_logout_url_;
@@ -95,7 +93,6 @@ class GaiaUrls {
   std::string oauth2_chrome_client_id_;
   std::string oauth2_chrome_client_secret_;
 
-  GURL deprecated_client_login_to_oauth2_url_;
   GURL oauth2_auth_url_;
   GURL oauth2_token_url_;
   GURL oauth2_issue_token_url_;

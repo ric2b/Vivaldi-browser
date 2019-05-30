@@ -28,7 +28,7 @@ suite('SiteDetailsPermission', function() {
             settings.ContentSettingsTypes.CAMERA,
             [test_util.createRawSiteException('https://www.example.com')])]);
 
-    loadTimeData.overrideValues({enableBlockAutoplayContentSetting: true});
+    loadTimeData.overrideValues({enableAutoplayWhitelistContentSetting: true});
 
     browserProxy = new TestSiteSettingsPrefsBrowserProxy();
     settings.SiteSettingsPrefsBrowserProxyImpl.instance_ = browserProxy;
@@ -38,7 +38,7 @@ suite('SiteDetailsPermission', function() {
     // Set the camera icon on <site-details-permission> manually to avoid
     // failures on undefined icons during teardown in PolymerTest.testIronIcons.
     // In practice, this is done from the parent.
-    testElement.icon = 'settings:videocam';
+    testElement.icon = 'cr:videocam';
     document.body.appendChild(testElement);
   });
 
@@ -278,7 +278,7 @@ suite('SiteDetailsPermission', function() {
       source: settings.SiteSettingSource.ADS_FILTER_BLACKLIST,
     };
     assertEquals(
-        'Site tends to show intrusive ads' +
+        'Site shows intrusive or misleading ads' +
             '\nAllow\nBlock\nAsk',
         testElement.$.permissionItem.innerText.trim());
     assertTrue(testElement.$.permissionItem.classList.contains('two-line'));
@@ -292,7 +292,7 @@ suite('SiteDetailsPermission', function() {
       source: settings.SiteSettingSource.PREFERENCE,
     };
     assertEquals(
-        'Block if site tends to show intrusive ads' +
+        'Block if site shows intrusive or misleading ads' +
             '\nAllow\nBlock\nAsk',
         testElement.$.permissionItem.innerText.trim());
     assertTrue(testElement.$.permissionItem.classList.contains('two-line'));
@@ -306,7 +306,7 @@ suite('SiteDetailsPermission', function() {
       source: settings.SiteSettingSource.DEFAULT,
     };
     assertEquals(
-        'Block if site tends to show intrusive ads' +
+        'Block if site shows intrusive or misleading ads' +
             '\nBlock (default)\nAllow\nBlock\nAsk',
         testElement.$.permissionItem.innerText.trim());
     assertTrue(testElement.$.permissionItem.classList.contains('two-line'));

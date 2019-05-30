@@ -6,6 +6,7 @@
 
 #include "base/memory/singleton.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
@@ -34,14 +35,16 @@ PersonalDataManagerFactory::PersonalDataManagerFactory()
         "PersonalDataManager",
         BrowserContextDependencyManager::GetInstance()) {
   DependsOn(IdentityManagerFactory::GetInstance());
+  DependsOn(HistoryServiceFactory::GetInstance());
   DependsOn(WebDataServiceFactory::GetInstance());
 }
 
 PersonalDataManagerFactory::~PersonalDataManagerFactory() {
 }
 
-KeyedService* PersonalDataManagerFactory::BuildServiceInstanceFor(
-    content::BrowserContext* context) const {
+KeyedService* PersonalDataManagerFactory::BuildPersonalDataManager(
+    autofill::AutofillProfileValidator* autofill_validator,
+    content::BrowserContext* context) {
   Profile* profile = Profile::FromBrowserContext(context);
   PersonalDataManager* service =
       new PersonalDataManager(g_browser_process->GetApplicationLocale());
@@ -49,10 +52,19 @@ KeyedService* PersonalDataManagerFactory::BuildServiceInstanceFor(
       profile, ServiceAccessType::EXPLICIT_ACCESS);
   auto account_storage = WebDataServiceFactory::GetAutofillWebDataForAccount(
       profile, ServiceAccessType::EXPLICIT_ACCESS);
+  auto* history_service = HistoryServiceFactory::GetForProfile(
+      profile, ServiceAccessType::EXPLICIT_ACCESS);
   service->Init(local_storage, account_storage, profile->GetPrefs(),
                 IdentityManagerFactory::GetForProfile(profile),
+                autofill_validator, history_service,
                 profile->IsOffTheRecord());
   return service;
+}
+
+KeyedService* PersonalDataManagerFactory::BuildServiceInstanceFor(
+    content::BrowserContext* context) const {
+  return BuildPersonalDataManager(
+      AutofillProfileValidatorFactory::GetInstance(), context);
 }
 
 content::BrowserContext* PersonalDataManagerFactory::GetBrowserContextToUse(

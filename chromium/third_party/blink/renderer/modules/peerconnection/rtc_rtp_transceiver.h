@@ -14,7 +14,7 @@
 #include "third_party/blink/renderer/platform/heap/member.h"
 #include "third_party/blink/renderer/platform/heap/visitor.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
-#include "third_party/webrtc/api/rtptransceiverinterface.h"
+#include "third_party/webrtc/api/rtp_transceiver_interface.h"
 
 namespace blink {
 
@@ -22,7 +22,7 @@ class RTCPeerConnection;
 class RTCRtpReceiver;
 class RTCRtpSender;
 
-webrtc::RtpTransceiverInit ToRtpTransceiverInit(const RTCRtpTransceiverInit&);
+webrtc::RtpTransceiverInit ToRtpTransceiverInit(const RTCRtpTransceiverInit*);
 
 class RTCRtpTransceiver final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();

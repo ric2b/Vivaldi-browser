@@ -7,6 +7,7 @@
 
 #include <ostream>
 
+#include "components/arc/common/app.mojom.h"
 #include "components/arc/common/auth.mojom.h"
 
 class Profile;
@@ -36,8 +37,10 @@ enum class OptInActionType : int {
   // ARC was opted out by user from session.
   SESSION_OPTED_OUT = 9,
 
-  // The size of this enum; keep last.
-  SIZE,
+  // ARC was opted in due to configuration in OOBE flow.
+  OOBE_OPTED_IN_CONFIGURATION = 10,
+
+  kMaxValue = OOBE_OPTED_IN_CONFIGURATION,
 };
 
 enum class OptInCancelReason {
@@ -63,8 +66,7 @@ enum class OptInCancelReason {
   // Cannot start ARC because it is busy.
   SESSION_BUSY = 8,
 
-  // The size of this enum; keep last.
-  SIZE,
+  kMaxValue = SESSION_BUSY,
 };
 
 enum class OptInSilentAuthCode {
@@ -95,13 +97,12 @@ enum class OptInSilentAuthCode {
   // No Auth code in response.
   NO_AUTH_CODE_IN_RESPONSE = 8,
 
-  // The size of this enum, keep last.
-  SIZE,
+  kMaxValue = NO_AUTH_CODE_IN_RESPONSE,
 };
 
-// The values should be listed in ascending order for SIZE a last, for safety.
-// They are also persisted to logs, and their values should therefore never be
-// renumbered nor reused. For detailed meaning, please consult auth.mojom.
+// The values should be listed in ascending order. They are also persisted to
+// logs, and their values should therefore never be renumbered nor reused. For
+// detailed meaning, please consult auth.mojom.
 enum class ProvisioningResult : int {
   // Provisioning was successful. Note, SUCCESS_ALREADY_PROVISIONED is also
   // successful state.
@@ -159,8 +160,10 @@ enum class ProvisioningResult : int {
   // Device was already provisioned.
   SUCCESS_ALREADY_PROVISIONED = 21,
 
-  // The size of this enum; keep last.
-  SIZE,
+  // Account type is not supported for authorization.
+  UNSUPPORTED_ACCOUNT_TYPE = 22,
+
+  kMaxValue = UNSUPPORTED_ACCOUNT_TYPE,
 };
 
 enum class OptInFlowResult : int {
@@ -179,8 +182,7 @@ enum class OptInFlowResult : int {
   // OptIn has been canceled after an error was reported.
   CANCELED_AFTER_ERROR = 4,
 
-  // The size of this enum; keep last.
-  SIZE,
+  kMaxValue = CANCELED_AFTER_ERROR,
 };
 
 enum class ArcEnabledState {
@@ -207,28 +209,39 @@ enum class ArcEnabledState {
   // ARC++ is disabled and ARC++ is not allowed for the device.
   DISABLED_NOT_ALLOWED = 6,
 
-  // The size of this enum; keep last.
-  SIZE,
+  kMaxValue = DISABLED_NOT_ALLOWED,
 };
+
+// Called from the Chrome OS metrics provider to record Arc.StateByUserType
+// strictly once per every metrics recording interval. This way they are in
+// every record uploaded to the server and therefore can be used to split and
+// compare analysis data for all other metrics.
+// TODO(shaochuan): Decouple profile-related logic and move recording to
+// components/arc.
+void UpdateEnabledStateByUserTypeUMA();
 
 void UpdateOptInActionUMA(OptInActionType type);
 void UpdateOptInCancelUMA(OptInCancelReason reason);
 void UpdateOptInFlowResultUMA(OptInFlowResult result);
-void UpdateEnabledStateUMA(bool enabled);
-void UpdateEnabledStateByUserTypeUMA(bool enabled, const Profile* profile);
 void UpdateProvisioningResultUMA(ProvisioningResult result,
                                  const Profile* profile);
+void UpdateSecondarySigninResultUMA(ProvisioningResult result);
 void UpdateProvisioningTiming(const base::TimeDelta& elapsed_time,
                               bool success,
                               const Profile* profile);
 void UpdateReauthorizationResultUMA(ProvisioningResult result,
                                     const Profile* profile);
+void UpdatePlayAutoInstallRequestState(mojom::PaiFlowState state,
+                                       const Profile* profile);
+void UpdatePlayAutoInstallRequestTime(const base::TimeDelta& elapsed_time,
+                                      const Profile* profile);
 void UpdatePlayStoreShowTime(const base::TimeDelta& elapsed_time,
                              const Profile* profile);
 void UpdateSilentAuthCodeUMA(OptInSilentAuthCode state);
 void UpdateSupervisionTransitionResultUMA(
     mojom::SupervisionChangeStatus result);
 void UpdateReauthorizationSilentAuthCodeUMA(OptInSilentAuthCode state);
+void UpdateSecondaryAccountSilentAuthCodeUMA(OptInSilentAuthCode state);
 void UpdateAuthTiming(const char* histogram_name, base::TimeDelta elapsed_time);
 void UpdateAuthCheckinAttempts(int32_t num_attempts);
 void UpdateAuthAccountCheckStatus(mojom::AccountCheckStatus status);

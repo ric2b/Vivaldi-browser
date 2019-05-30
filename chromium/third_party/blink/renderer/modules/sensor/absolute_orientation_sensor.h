@@ -15,16 +15,15 @@ class AbsoluteOrientationSensor final : public OrientationSensor {
 
  public:
   static AbsoluteOrientationSensor* Create(ExecutionContext*,
-                                           const SpatialSensorOptions&,
+                                           const SpatialSensorOptions*,
                                            ExceptionState&);
   static AbsoluteOrientationSensor* Create(ExecutionContext*, ExceptionState&);
 
-  void Trace(blink::Visitor*) override;
-
- private:
   AbsoluteOrientationSensor(ExecutionContext*,
-                            const SpatialSensorOptions&,
+                            const SpatialSensorOptions*,
                             ExceptionState&);
+
+  void Trace(blink::Visitor*) override;
 };
 
 }  // namespace blink

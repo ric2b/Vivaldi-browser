@@ -12,21 +12,22 @@
 namespace cc {
 
 UniqueNotifier::UniqueNotifier(base::SequencedTaskRunner* task_runner,
-                               const base::Closure& closure)
+                               base::RepeatingClosure closure)
     : task_runner_(task_runner),
-      closure_(closure),
+      closure_(std::move(closure)),
       notification_pending_(false),
-      weak_ptr_factory_(this) {
-}
+      weak_ptr_factory_(this) {}
 
 UniqueNotifier::~UniqueNotifier() = default;
 
 void UniqueNotifier::Cancel() {
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   base::AutoLock hold(lock_);
   notification_pending_ = false;
 }
 
 void UniqueNotifier::Schedule() {
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   base::AutoLock hold(lock_);
   if (notification_pending_)
     return;
@@ -38,6 +39,7 @@ void UniqueNotifier::Schedule() {
 }
 
 void UniqueNotifier::Notify() {
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   // Scope to release |lock_| before running the closure.
   {
     base::AutoLock hold(lock_);

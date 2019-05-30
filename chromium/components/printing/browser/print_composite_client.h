@@ -49,10 +49,6 @@ class PrintCompositeClient
                                  int document_cookie,
                                  content::RenderFrameHost* subframe_host);
 
-  // NOTE: |content.metafile_data_handle| must be a READ-ONLY
-  // base::SharedMemoryHandle, i.e. one acquired by
-  // base::SharedMemory::GetReadOnlyHandle().
-
   // Printing single pages is only used by print preview for early return of
   // rendered results. In this case, the pages share the content with printed
   // document. The entire document will always be printed and sent at the end.
@@ -60,7 +56,6 @@ class PrintCompositeClient
   void DoCompositePageToPdf(
       int cookie,
       content::RenderFrameHost* render_frame_host,
-      int page_num,
       const PrintHostMsg_DidPrintContent_Params& content,
       mojom::PdfCompositor::CompositePageToPdfCallback callback);
 
@@ -72,7 +67,10 @@ class PrintCompositeClient
       const PrintHostMsg_DidPrintContent_Params& content,
       mojom::PdfCompositor::CompositeDocumentToPdfCallback callback);
 
+  void SetUserAgent(const std::string& user_agent) { user_agent_ = user_agent; }
+
  private:
+  friend class content::WebContentsUserData<PrintCompositeClient>;
   // Callback functions for getting the replies.
   static void OnDidCompositePageToPdf(
       mojom::PdfCompositor::CompositePageToPdfCallback callback,
@@ -108,6 +106,10 @@ class PrintCompositeClient
   // Stores the mapping between document cookie and all the printed subframes
   // for that document.
   std::map<int, base::flat_set<uint64_t>> printed_subframes_;
+
+  std::string user_agent_;
+
+  WEB_CONTENTS_USER_DATA_KEY_DECL();
 
   DISALLOW_COPY_AND_ASSIGN(PrintCompositeClient);
 };

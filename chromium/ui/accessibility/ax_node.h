@@ -7,30 +7,56 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <ostream>
 #include <vector>
 
+#include "build/build_config.h"
 #include "ui/accessibility/ax_export.h"
 #include "ui/accessibility/ax_node_data.h"
 
 namespace ui {
 
+class AXTableInfo;
+class AXLanguageInfo;
+
 // One node in an AXTree.
 class AX_EXPORT AXNode final {
  public:
+  // Interface to the tree class that owns an AXNode. We use this instead
+  // of letting AXNode have a pointer to its AXTree directly so that we're
+  // forced to think twice before calling an AXTree interface that might not
+  // be necessary.
+  class OwnerTree {
+   public:
+    // See AXTree.
+    virtual AXTableInfo* GetTableInfo(const AXNode* table_node) const = 0;
+    // See AXTree.
+    virtual AXNode* GetFromId(int32_t id) const = 0;
+
+    virtual int32_t GetPosInSet(const AXNode& node,
+                                const AXNode* ordered_set) = 0;
+    virtual int32_t GetSetSize(const AXNode& node,
+                               const AXNode* ordered_set) = 0;
+  };
+
   // The constructor requires a parent, id, and index in parent, but
   // the data is not required. After initialization, only index_in_parent
   // is allowed to change, the others are guaranteed to never change.
-  AXNode(AXNode* parent, int32_t id, int32_t index_in_parent);
+  AXNode(OwnerTree* tree, AXNode* parent, int32_t id, int32_t index_in_parent);
   virtual ~AXNode();
 
   // Accessors.
+  OwnerTree* tree() const { return tree_; }
   int32_t id() const { return data_.id; }
   AXNode* parent() const { return parent_; }
   int child_count() const { return static_cast<int>(children_.size()); }
   const AXNodeData& data() const { return data_; }
   const std::vector<AXNode*>& children() const { return children_; }
   int index_in_parent() const { return index_in_parent_; }
+
+  // Returns ownership of |data_| to the caller; effectively clearing |data_|.
+  AXNodeData&& TakeData();
 
   // Get the child at the given index.
   AXNode* ChildAtIndex(int index) const { return children_[index]; }
@@ -166,21 +192,118 @@ class AX_EXPORT AXNode final {
     return data().GetHtmlAttribute(attribute, value);
   }
 
+  // PosInSet and SetSize public methods.
+  bool IsOrderedSetItem() const;
+  bool IsOrderedSet() const;
+  int32_t GetPosInSet();
+  int32_t GetSetSize();
+
+  // Helpers for GetPosInSet and GetSetSize.
+  // Returns true if the role of ordered set matches the role of item.
+  // Returns false otherwise.
+  bool SetRoleMatchesItemRole(const AXNode* ordered_set) const;
+
   const std::string& GetInheritedStringAttribute(
       ax::mojom::StringAttribute attribute) const;
   base::string16 GetInheritedString16Attribute(
       ax::mojom::StringAttribute attribute) const;
+
+  // Return a pointer to a string for the language code.
+  // This will consider the language declared in the DOM, and may eventually
+  // attempt to automatically detect the language from the text.
+  //
+  // This language code will be BCP 47.
+  //
+  // Returns empty string if no appropriate language was found.
+  std::string GetLanguage();
+
+  //
+  // Helper functions for tables, table rows, and table cells.
+  // Most of these functions construct and cache an AXTableInfo behind
+  // the scenes to infer many properties of tables.
+  //
+  // These interfaces use attributes provided by the source of the
+  // AX tree where possible, but fills in missing details and ignores
+  // specified attributes when they're bad or inconsistent. That way
+  // you're guaranteed to get a valid, consistent table when using these
+  // interfaces.
+  //
+
+  // Table-like nodes (including grids). All indices are 0-based except
+  // ARIA indices are all 1-based. In other words, the top-left corner
+  // of the table is row 0, column 0, cell index 0 - but that same cell
+  // has a minimum ARIA row index of 1 and column index of 1.
+  bool IsTable() const;
+  int32_t GetTableColCount() const;
+  int32_t GetTableRowCount() const;
+  base::Optional<int32_t> GetTableAriaColCount() const;
+  base::Optional<int32_t> GetTableAriaRowCount() const;
+  int32_t GetTableCellCount() const;
+  AXNode* GetTableCaption() const;
+  AXNode* GetTableCellFromIndex(int32_t index) const;
+  AXNode* GetTableCellFromCoords(int32_t row_index, int32_t col_index) const;
+  void GetTableColHeaderNodeIds(int32_t col_index,
+                                std::vector<int32_t>* col_header_ids) const;
+  void GetTableRowHeaderNodeIds(int32_t row_index,
+                                std::vector<int32_t>* row_header_ids) const;
+  void GetTableUniqueCellIds(std::vector<int32_t>* row_header_ids) const;
+  // Extra computed nodes for the accessibility tree for macOS:
+  // one column node for each table column, followed by one
+  // table header container node, or nullptr if not applicable.
+  std::vector<AXNode*>* GetExtraMacNodes() const;
+
+  // Table row-like nodes.
+  bool IsTableRow() const;
+  int32_t GetTableRowRowIndex() const;
+
+#if defined(OS_MACOSX)
+  // Table column-like nodes. These nodes are only present on macOS.
+  bool IsTableColumn() const;
+  int32_t GetTableColColIndex() const;
+#endif  // defined(OS_MACOSX)
+
+  // Table cell-like nodes.
+  bool IsTableCellOrHeader() const;
+  int32_t GetTableCellIndex() const;
+  int32_t GetTableCellColIndex() const;
+  int32_t GetTableCellRowIndex() const;
+  int32_t GetTableCellColSpan() const;
+  int32_t GetTableCellRowSpan() const;
+  int32_t GetTableCellAriaColIndex() const;
+  int32_t GetTableCellAriaRowIndex() const;
+  void GetTableCellColHeaderNodeIds(std::vector<int32_t>* col_header_ids) const;
+  void GetTableCellRowHeaderNodeIds(std::vector<int32_t>* row_header_ids) const;
+  void GetTableCellColHeaders(std::vector<AXNode*>* col_headers) const;
+  void GetTableCellRowHeaders(std::vector<AXNode*>* row_headers) const;
 
  private:
   // Computes the text offset where each line starts by traversing all child
   // leaf nodes.
   void ComputeLineStartOffsets(std::vector<int>* line_offsets,
                                int* start_offset) const;
+  AXTableInfo* GetAncestorTableInfo() const;
+  void IdVectorToNodeVector(std::vector<int32_t>& ids,
+                            std::vector<AXNode*>* nodes) const;
 
+  // Finds and returns a pointer to ordered set containing node.
+  AXNode* GetOrderedSet() const;
+
+  OwnerTree* tree_;  // Owns this.
   int index_in_parent_;
   AXNode* parent_;
   std::vector<AXNode*> children_;
   AXNodeData data_;
+
+  std::unique_ptr<AXLanguageInfo> language_info_;
+
+  // Return an object containing information about the languages used.
+  // Will walk up tree if needed to determine language.
+  //
+  // Clients should not retain this pointer, instead they should request it
+  // every time it is needed.
+  //
+  // Returns nullptr if the node has no detectable language.
+  const AXLanguageInfo* GetLanguageInfo();
 };
 
 AX_EXPORT std::ostream& operator<<(std::ostream& stream, const AXNode& node);

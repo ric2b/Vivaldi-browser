@@ -73,7 +73,7 @@ class SafeBrowsingBlockingPageFactoryImpl
         BaseBlockingPage::IsMainPageLoadBlocked(unsafe_resources),
         is_extended_reporting_opt_in_allowed,
         web_contents->GetBrowserContext()->IsOffTheRecord(),
-        IsExtendedReportingEnabled(*prefs), IsScout(*prefs),
+        IsExtendedReportingEnabled(*prefs),
         IsExtendedReportingPolicyManaged(*prefs), is_proceed_anyway_disabled,
         true,  // should_open_links_in_new_tab
         true,  // always_show_back_to_safety
@@ -148,7 +148,7 @@ SafeBrowsingBlockingPage::~SafeBrowsingBlockingPage() {
 }
 
 void SafeBrowsingBlockingPage::OverrideRendererPrefs(
-      content::RendererPreferences* prefs) {
+    blink::mojom::RendererPreferences* prefs) {
   Profile* profile = Profile::FromBrowserContext(
       web_contents()->GetBrowserContext());
   renderer_preferences_util::UpdateFromSystemSettings(prefs, profile);
@@ -158,7 +158,7 @@ void SafeBrowsingBlockingPage::HandleSubresourcesAfterProceed() {
   // Check to see if some new notifications of unsafe resources have been
   // received while we were showing the interstitial.
   UnsafeResourceMap* unsafe_resource_map = GetUnsafeResourcesMap();
-  UnsafeResourceMap::iterator iter = unsafe_resource_map->find(web_contents());
+  auto iter = unsafe_resource_map->find(web_contents());
   if (iter != unsafe_resource_map->end() && !iter->second.empty()) {
     // All queued unsafe resources should be for the same page:
     UnsafeResourceList unsafe_resources = iter->second;

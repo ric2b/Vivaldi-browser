@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "chrome/common/apps/platform_apps/chrome_apps_api_provider.h"
 #include "extensions/common/alias.h"
 #include "extensions/common/extensions_api_provider.h"
 #include "extensions/common/features/json_feature_provider_source.h"
@@ -17,12 +18,6 @@
 namespace extensions {
 
 namespace {
-
-std::vector<Alias> GetVivaldiPermissionAliases() {
-  // In alias constructor, first value is the alias name; second value is the
-  // real name. See also alias.h.
-  return std::vector<Alias>();
-}
 
 class VivaldiExtensionsAPIProvider : public ExtensionsAPIProvider {
  public:
@@ -50,16 +45,15 @@ class VivaldiExtensionsAPIProvider : public ExtensionsAPIProvider {
     return vivaldi::VivaldiGeneratedSchemas::Get(name);
   }
 
-  void AddPermissionsProviders(PermissionsInfo* permissions_info) override {
-    permissions_info->AddProvider(vivaldi_api_permissions_,
-                                  GetVivaldiPermissionAliases());
+  void RegisterPermissions(PermissionsInfo* permissions_info) override {
+    permissions_info->RegisterPermissions(
+        vivaldi_api_permissions::GetPermissionInfos(),
+        base::span<const extensions::Alias>());
   }
 
   void RegisterManifestHandlers() override {}
 
  private:
-  const VivaldiAPIPermissions vivaldi_api_permissions_;
-
   DISALLOW_COPY_AND_ASSIGN(VivaldiExtensionsAPIProvider);
 };
 
@@ -67,6 +61,7 @@ class VivaldiExtensionsAPIProvider : public ExtensionsAPIProvider {
 
 VivaldiExtensionsClient::VivaldiExtensionsClient() {
   AddAPIProvider(std::make_unique<VivaldiExtensionsAPIProvider>());
+  AddAPIProvider(std::make_unique<chrome_apps::ChromeAppsAPIProvider>());
 }
 
 VivaldiExtensionsClient::~VivaldiExtensionsClient() {}

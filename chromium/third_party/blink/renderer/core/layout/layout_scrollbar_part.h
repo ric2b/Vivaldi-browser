@@ -27,7 +27,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_LAYOUT_SCROLLBAR_PART_H_
 
 #include "third_party/blink/renderer/core/layout/layout_block.h"
-#include "third_party/blink/renderer/platform/scroll/scroll_types.h"
+#include "third_party/blink/renderer/core/scroll/scroll_types.h"
 
 namespace blink {
 
@@ -81,9 +81,7 @@ class LayoutScrollbarPart final : public LayoutBlock {
   void StyleWillChange(StyleDifference,
                        const ComputedStyle& new_style) override;
   void StyleDidChange(StyleDifference, const ComputedStyle* old_style) override;
-  void ImageChanged(WrappedImagePtr,
-                    CanDeferInvalidation,
-                    const IntRect* = nullptr) override;
+  void ImageChanged(WrappedImagePtr, CanDeferInvalidation) override;
 
  private:
   LayoutScrollbarPart(ScrollableArea*, LayoutScrollbar*, ScrollbarPart);

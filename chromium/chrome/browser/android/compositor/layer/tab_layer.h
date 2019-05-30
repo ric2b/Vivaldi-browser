@@ -6,9 +6,11 @@
 #define CHROME_BROWSER_ANDROID_COMPOSITOR_LAYER_TAB_LAYER_H_
 
 #include <memory>
+#include <vector>
 
 #include "base/macros.h"
 #include "chrome/browser/android/compositor/layer/layer.h"
+#include "ui/android/resources/nine_patch_resource.h"
 
 namespace cc {
 class Layer;
@@ -42,9 +44,11 @@ class TabLayer : public Layer {
                                         LayerTitleCache* layer_title_cache,
                                         TabContentManager* tab_content_manager);
 
+  // TODO(meiliang): This method needs another parameter, a resource that can be
+  // used to indicate the currently selected tab for the TabLayer.
   void SetProperties(int id,
+                     const std::vector<int>& ids,
                      bool can_use_live_layer,
-                     bool modern_design_enabled,
                      int toolbar_resource_id,
                      int close_button_resource_id,
                      int shadow_resource_id,
@@ -77,6 +81,7 @@ class TabLayer : public Layer {
                      float saturation,
                      float brightness,
                      float close_btn_width,
+                     float close_btn_asset_size,
                      float static_to_view_blend,
                      float content_width,
                      float content_height,
@@ -115,8 +120,21 @@ class TabLayer : public Layer {
  private:
   void SetTitle(DecorationTitle* title);
 
+  void SetContentProperties(int id,
+                            const std::vector<int>& tab_ids,
+                            bool can_use_live_layer,
+                            float static_to_view_blend,
+                            bool should_override_content_alpha,
+                            float content_alpha_override,
+                            float saturation,
+                            bool should_clip,
+                            const gfx::Rect& clip,
+                            ui::NinePatchResource* inner_shadow_resource,
+                            float inner_shadow_alpha);
+
   const bool incognito_;
   ui::ResourceManager* resource_manager_;
+  TabContentManager* tab_content_manager_;
   LayerTitleCache* layer_title_cache_;
 
   // [layer]-+-[toolbar]

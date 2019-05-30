@@ -49,7 +49,7 @@ namespace blink {
 
 namespace {
 
-NavigationPolicy NavigationPolicyFromEventModifiers(unsigned short button,
+NavigationPolicy NavigationPolicyFromEventModifiers(int16_t button,
                                                     bool ctrl,
                                                     bool shift,
                                                     bool alt,
@@ -117,7 +117,7 @@ NavigationPolicy NavigationPolicyFromCurrentEvent() {
   if (!event)
     return kNavigationPolicyCurrentTab;
 
-  unsigned short button = 0;
+  int16_t button = 0;
   if (event->GetType() == WebInputEvent::kMouseUp) {
     const WebMouseEvent* mouse_event = static_cast<const WebMouseEvent*>(event);
 
@@ -207,7 +207,6 @@ NavigationPolicy NavigationPolicyForCreateWindow(
   return user_policy;
 }
 
-STATIC_ASSERT_ENUM(kWebNavigationPolicyIgnore, kNavigationPolicyIgnore);
 STATIC_ASSERT_ENUM(kWebNavigationPolicyDownload, kNavigationPolicyDownload);
 STATIC_ASSERT_ENUM(kWebNavigationPolicyCurrentTab, kNavigationPolicyCurrentTab);
 STATIC_ASSERT_ENUM(kWebNavigationPolicyNewBackgroundTab,

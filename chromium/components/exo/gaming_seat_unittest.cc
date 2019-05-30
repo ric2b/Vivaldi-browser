@@ -27,8 +27,8 @@ class MockGamingSeatDelegate : public GamingSeatDelegate {
   MOCK_CONST_METHOD1(CanAcceptGamepadEventsForSurface, bool(Surface*));
   MOCK_METHOD0(GamepadAdded, GamepadDelegate*());
   MOCK_METHOD0(Die, void());
-  void OnGamingSeatDestroying(GamingSeat*) override { delete this; };
-  ~MockGamingSeatDelegate() { Die(); };
+  void OnGamingSeatDestroying(GamingSeat*) override { delete this; }
+  ~MockGamingSeatDelegate() { Die(); }
 };
 
 class MockGamepadDelegate : public GamepadDelegate {
@@ -58,7 +58,7 @@ class GamingSeatTest : public test::ExoTestBase {
     std::vector<ui::InputDevice> gamepad_devices;
     for (auto& id : gamepad_device_ids) {
       gamepad_devices.push_back(ui::InputDevice(
-          id, ui::InputDeviceType::INPUT_DEVICE_EXTERNAL, "gamepad"));
+          id, ui::InputDeviceType::INPUT_DEVICE_USB, "gamepad"));
     }
     ui::GamepadProviderOzone::GetInstance()->DispatchGamepadDevicesUpdated(
         gamepad_devices);

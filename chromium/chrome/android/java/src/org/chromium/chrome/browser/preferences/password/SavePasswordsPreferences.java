@@ -23,15 +23,14 @@ import android.view.MenuInflater;
 import android.view.MenuItem;
 
 import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.base.StrictModeContext;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.ChromeBaseCheckBoxPreference;
 import org.chromium.chrome.browser.preferences.ChromeBasePreference;
 import org.chromium.chrome.browser.preferences.ChromeSwitchPreference;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
-import org.chromium.chrome.browser.preferences.Preferences;
 import org.chromium.chrome.browser.preferences.PreferencesLauncher;
 import org.chromium.chrome.browser.preferences.SearchUtils;
 import org.chromium.chrome.browser.preferences.TextMessagePreference;
@@ -122,7 +121,7 @@ public class SavePasswordsPreferences
         setPreferenceScreen(getPreferenceManager().createPreferenceScreen(getActivity()));
         PasswordManagerHandlerProvider.getInstance().addObserver(this);
 
-        setHasOptionsMenu(ExportFlow.providesPasswordExport() || providesPasswordSearch());
+        setHasOptionsMenu(true); // Password Export might be optional but Search is always present.
 
         if (savedInstanceState == null) return;
 
@@ -140,14 +139,12 @@ public class SavePasswordsPreferences
         menu.findItem(R.id.export_passwords).setVisible(ExportFlow.providesPasswordExport());
         menu.findItem(R.id.export_passwords).setEnabled(false);
         mSearchItem = menu.findItem(R.id.menu_id_search);
-        mSearchItem.setVisible(providesPasswordSearch());
-        if (providesPasswordSearch()) {
-            mHelpItem = menu.findItem(R.id.menu_id_general_help);
-            SearchUtils.initializeSearchView(mSearchItem, mSearchQuery, getActivity(), (query) -> {
-                maybeRecordTriggeredPasswordSearch(true);
-                filterPasswords(query);
-            });
-        }
+        mSearchItem.setVisible(true);
+        mHelpItem = menu.findItem(R.id.menu_id_general_help);
+        SearchUtils.initializeSearchView(mSearchItem, mSearchQuery, getActivity(), (query) -> {
+            maybeRecordTriggeredPasswordSearch(true);
+            filterPasswords(query);
+        });
     }
 
     /**
@@ -156,7 +153,7 @@ public class SavePasswordsPreferences
      * @param searchTriggered Whether to log a triggered search or no triggered search.
      */
     private void maybeRecordTriggeredPasswordSearch(boolean searchTriggered) {
-        if (providesPasswordSearch() && !mSearchRecorded) {
+        if (!mSearchRecorded) {
             mSearchRecorded = true;
             RecordHistogram.recordBooleanHistogram(
                     "PasswordManager.Android.PasswordSearchTriggered", searchTriggered);
@@ -385,11 +382,11 @@ public class SavePasswordsPreferences
         } else {
             // Launch preference activity with PasswordEntryEditor fragment with
             // intent extras specifying the object.
-            Intent intent = PreferencesLauncher.createIntentForSettingsPage(
-                    getActivity(), PasswordEntryEditor.class.getName());
-            intent.putExtra(Preferences.EXTRA_SHOW_FRAGMENT_ARGUMENTS, preference.getExtras());
-            intent.putExtra(SavePasswordsPreferences.EXTRA_FOUND_VIA_SEARCH, mSearchQuery != null);
-            startActivity(intent);
+            Bundle fragmentAgs = new Bundle(preference.getExtras());
+            fragmentAgs.putBoolean(
+                    SavePasswordsPreferences.EXTRA_FOUND_VIA_SEARCH, mSearchQuery != null);
+            PreferencesLauncher.launchSettingsPage(
+                    getActivity(), PasswordEntryEditor.class, fragmentAgs);
         }
         return true;
     }
@@ -413,7 +410,10 @@ public class SavePasswordsPreferences
         });
         mSavePasswordsSwitch.setManagedPreferenceDelegate(
                 preference -> PrefServiceBridge.getInstance().isRememberPasswordsManaged());
-        getPreferenceScreen().addPreference(mSavePasswordsSwitch);
+
+        try (StrictModeContext ctx = StrictModeContext.allowDiskReads()) {
+            getPreferenceScreen().addPreference(mSavePasswordsSwitch);
+        }
 
         // Note: setting the switch state before the preference is added to the screen results in
         // some odd behavior where the switch state doesn't always match the internal enabled state
@@ -469,14 +469,6 @@ public class SavePasswordsPreferences
         mLinkPref.setOnPreferenceClickListener(this);
         mLinkPref.setOrder(ORDER_MANAGE_ACCOUNT_LINK);
         getPreferenceScreen().addPreference(mLinkPref);
-    }
-
-    /**
-     * Returns whether the password search feature is ready to use.
-     * @return Returns true if the flag is set.
-     */
-    private boolean providesPasswordSearch() {
-        return ChromeFeatureList.isEnabled(ChromeFeatureList.PASSWORD_SEARCH);
     }
 
     @VisibleForTesting

@@ -3,40 +3,70 @@
 // found in the LICENSE file.
 
 #include "base/bind.h"
+#include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/bind_test_util.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/bookmarks/bookmark_drag_drop.h"
 #include "chrome/browser/ui/bookmarks/bookmark_tab_helper.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/bookmarks/browser/url_and_title.h"
 #include "components/bookmarks/test/bookmark_test_helpers.h"
+#include "components/security_interstitials/content/security_interstitial_tab_helper.h"
 #include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "testing/gmock/include/gmock/gmock.h"
+#include "ui/base/dragdrop/os_exchange_data.h"
+#include "ui/gfx/image/image_skia.h"
 
 using bookmarks::BookmarkModel;
+using bookmarks::BookmarkNode;
 using bookmarks::UrlAndTitle;
 
 namespace {
 const char kPersistBookmarkURL[] = "http://www.cnn.com/";
 const char kPersistBookmarkTitle[] = "CNN";
-} // namespace
+
+bool AreCommittedInterstitialsEnabled() {
+  return base::FeatureList::IsEnabled(features::kSSLCommittedInterstitials);
+}
+
+bool IsShowingInterstitial(content::WebContents* tab) {
+  if (AreCommittedInterstitialsEnabled()) {
+    security_interstitials::SecurityInterstitialTabHelper* helper =
+        security_interstitials::SecurityInterstitialTabHelper::FromWebContents(
+            tab);
+    if (!helper) {
+      return false;
+    }
+    return helper->GetBlockingPageForCurrentlyCommittedNavigationForTesting() !=
+           nullptr;
+  }
+  return tab->GetInterstitialPage() != nullptr;
+}
+
+}  // namespace
 
 class TestBookmarkTabHelperObserver : public BookmarkTabHelperObserver {
  public:
@@ -74,9 +104,8 @@ class BookmarkBrowsertest : public InProcessBrowserTest {
 
     base::RepeatingTimer timer;
     timer.Start(
-        FROM_HERE,
-        base::TimeDelta::FromMilliseconds(15),
-        base::Bind(&CheckAnimation, browser(), runner->QuitClosure()));
+        FROM_HERE, base::TimeDelta::FromMilliseconds(15),
+        base::BindRepeating(&CheckAnimation, browser(), runner->QuitClosure()));
     runner->Run();
     return base::Time::Now() - start;
   }
@@ -88,7 +117,13 @@ class BookmarkBrowsertest : public InProcessBrowserTest {
     return bookmark_model;
   }
 
+  base::HistogramTester* histogram_tester() { return &histogram_tester_; }
+
  private:
+  // We make the histogram tester a member field to make sure it starts
+  // recording as early as possible.
+  base::HistogramTester histogram_tester_;
+
   DISALLOW_COPY_AND_ASSIGN(BookmarkBrowsertest);
 };
 
@@ -109,19 +144,17 @@ IN_PROC_BROWSER_TEST_F(BookmarkBrowsertest, BookmarkBarVisibleWait) {
 IN_PROC_BROWSER_TEST_F(BookmarkBrowsertest, PRE_Persist) {
   BookmarkModel* bookmark_model = WaitForBookmarkModel(browser()->profile());
 
-  bookmarks::AddIfNotBookmarked(bookmark_model,
-                                GURL(kPersistBookmarkURL),
+  bookmarks::AddIfNotBookmarked(bookmark_model, GURL(kPersistBookmarkURL),
                                 base::ASCIIToUTF16(kPersistBookmarkTitle));
 }
 
-#if defined(THREAD_SANITIZER) || defined(OS_WIN)
-// BookmarkBrowsertest.Persist fails under ThreadSanitizer on Linux, see
-// http://crbug.com/340223.
-// Also flaky under Windows. See crbug.com/813759.
+#if defined(OS_WIN)
+// TODO(crbug.com/935607): The test fails on Windows.
 #define MAYBE_Persist DISABLED_Persist
 #else
 #define MAYBE_Persist Persist
 #endif
+
 IN_PROC_BROWSER_TEST_F(BookmarkBrowsertest, MAYBE_Persist) {
   BookmarkModel* bookmark_model = WaitForBookmarkModel(browser()->profile());
 
@@ -149,8 +182,7 @@ IN_PROC_BROWSER_TEST_F(BookmarkBrowsertest, DISABLED_MultiProfile) {
   Browser* browser2 = observer.WaitForSingleNewBrowser();
   BookmarkModel* bookmark_model2 = WaitForBookmarkModel(browser2->profile());
 
-  bookmarks::AddIfNotBookmarked(bookmark_model1,
-                                GURL(kPersistBookmarkURL),
+  bookmarks::AddIfNotBookmarked(bookmark_model1, GURL(kPersistBookmarkURL),
                                 base::ASCIIToUTF16(kPersistBookmarkTitle));
   std::vector<UrlAndTitle> urls1, urls2;
   bookmark_model1->GetBookmarks(&urls1);
@@ -161,16 +193,8 @@ IN_PROC_BROWSER_TEST_F(BookmarkBrowsertest, DISABLED_MultiProfile) {
 
 #endif
 
-// Flaky on Linux: http://crbug.com/504869.
-#if defined(OS_LINUX)
-#define MAYBE_HideStarOnNonbookmarkedInterstitial \
-    DISABLED_HideStarOnNonbookmarkedInterstitial
-#else
-#define MAYBE_HideStarOnNonbookmarkedInterstitial \
-    HideStarOnNonbookmarkedInterstitial
-#endif
 IN_PROC_BROWSER_TEST_F(BookmarkBrowsertest,
-                       MAYBE_HideStarOnNonbookmarkedInterstitial) {
+                       HideStarOnNonbookmarkedInterstitial) {
   // Start an HTTPS server with a certificate error.
   net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
   https_server.SetSSLConfig(net::EmbeddedTestServer::CERT_MISMATCHED_NAME);
@@ -180,8 +204,7 @@ IN_PROC_BROWSER_TEST_F(BookmarkBrowsertest,
 
   BookmarkModel* bookmark_model = WaitForBookmarkModel(browser()->profile());
   GURL bookmark_url = embedded_test_server()->GetURL("example.test", "/");
-  bookmarks::AddIfNotBookmarked(bookmark_model,
-                                bookmark_url,
+  bookmarks::AddIfNotBookmarked(bookmark_model, bookmark_url,
                                 base::ASCIIToUTF16("Bookmark"));
 
   TestBookmarkTabHelperObserver bookmark_observer;
@@ -193,17 +216,173 @@ IN_PROC_BROWSER_TEST_F(BookmarkBrowsertest,
 
   // Go to a bookmarked url. Bookmark star should show.
   ui_test_utils::NavigateToURL(browser(), bookmark_url);
-  EXPECT_FALSE(web_contents->ShowingInterstitialPage());
+  EXPECT_FALSE(IsShowingInterstitial(web_contents));
   EXPECT_TRUE(bookmark_observer.is_starred());
-
   // Now go to a non-bookmarked url which triggers an SSL warning. Bookmark
   // star should disappear.
   GURL error_url = https_server.GetURL("/");
   ui_test_utils::NavigateToURL(browser(), error_url);
   web_contents = browser()->tab_strip_model()->GetActiveWebContents();
-  content::WaitForInterstitialAttach(web_contents);
-  EXPECT_TRUE(web_contents->ShowingInterstitialPage());
+  if (!AreCommittedInterstitialsEnabled())
+    content::WaitForInterstitialAttach(web_contents);
+  EXPECT_TRUE(IsShowingInterstitial(web_contents));
   EXPECT_FALSE(bookmark_observer.is_starred());
 
   tab_helper->RemoveObserver(&bookmark_observer);
 }
+
+// Provides coverage for the Bookmark Manager bookmark drag and drag image
+// generation for dragging a single bookmark.
+IN_PROC_BROWSER_TEST_F(BookmarkBrowsertest, DragSingleBookmark) {
+  BookmarkModel* model = WaitForBookmarkModel(browser()->profile());
+  const base::string16 page_title(base::ASCIIToUTF16("foo"));
+  const GURL page_url("http://www.google.com");
+  const BookmarkNode* root = model->bookmark_bar_node();
+  const BookmarkNode* node = model->AddURL(root, 0, page_title, page_url);
+
+  auto run_loop = std::make_unique<base::RunLoop>();
+
+  chrome::DoBookmarkDragCallback cb = base::BindLambdaForTesting(
+      [&run_loop, page_title, page_url](
+          const ui::OSExchangeData& drag_data, gfx::NativeView native_view,
+          ui::DragDropTypes::DragEventSource source, int operation) {
+        GURL url;
+        base::string16 title;
+        EXPECT_TRUE(drag_data.provider().GetURLAndTitle(
+            ui::OSExchangeData::FilenameToURLPolicy::DO_NOT_CONVERT_FILENAMES,
+            &url, &title));
+        EXPECT_EQ(page_url, url);
+        EXPECT_EQ(page_title, title);
+#if !defined(OS_WIN)
+        // On Windows, GetDragImage() is a NOTREACHED() as the Windows
+        // implementation of OSExchangeData just sets the drag image on the OS
+        // API.
+        // See https://crbug.com/893388.
+        EXPECT_FALSE(drag_data.provider().GetDragImage().isNull());
+#endif
+        run_loop->Quit();
+      });
+
+  constexpr int kDragNodeIndex = 0;
+  chrome::DragBookmarksForTest(
+      browser()->profile(),
+      {{node},
+       kDragNodeIndex,
+       platform_util::GetViewForWindow(browser()->window()->GetNativeWindow()),
+       ui::DragDropTypes::DRAG_EVENT_SOURCE_MOUSE},
+      std::move(cb));
+
+  run_loop->Run();
+}
+
+// Provides coverage for the Bookmark Manager bookmark drag and drag image
+// generation for dragging multiple bookmarks.
+IN_PROC_BROWSER_TEST_F(BookmarkBrowsertest, DragMultipleBookmarks) {
+  BookmarkModel* model = WaitForBookmarkModel(browser()->profile());
+  const base::string16 page_title(base::ASCIIToUTF16("foo"));
+  const GURL page_url("http://www.google.com");
+  const BookmarkNode* root = model->bookmark_bar_node();
+  const BookmarkNode* node1 = model->AddURL(root, 0, page_title, page_url);
+  const BookmarkNode* node2 = model->AddFolder(root, 0, page_title);
+
+  auto run_loop = std::make_unique<base::RunLoop>();
+
+  chrome::DoBookmarkDragCallback cb = base::BindLambdaForTesting(
+      [&run_loop](const ui::OSExchangeData& drag_data,
+                  gfx::NativeView native_view,
+                  ui::DragDropTypes::DragEventSource source, int operation) {
+#if !defined(OS_MACOSX)
+        GURL url;
+        base::string16 title;
+        // On Mac 10.11 and 10.12, this returns true, even though we set no url.
+        // See https://crbug.com/893432.
+        EXPECT_FALSE(drag_data.provider().GetURLAndTitle(
+            ui::OSExchangeData::FilenameToURLPolicy::DO_NOT_CONVERT_FILENAMES,
+            &url, &title));
+#endif
+#if !defined(OS_WIN)
+        // On Windows, GetDragImage() is a NOTREACHED() as the Windows
+        // implementation of OSExchangeData just sets the drag image on the OS
+        // API.
+        // See https://crbug.com/893388.
+        EXPECT_FALSE(drag_data.provider().GetDragImage().isNull());
+#endif
+        run_loop->Quit();
+      });
+
+  constexpr int kDragNodeIndex = 1;
+  chrome::DragBookmarksForTest(browser()->profile(),
+                               {
+                                   {node1, node2},
+                                   kDragNodeIndex,
+                                   platform_util::GetViewForWindow(
+                                       browser()->window()->GetNativeWindow()),
+                                   ui::DragDropTypes::DRAG_EVENT_SOURCE_MOUSE,
+                               },
+                               std::move(cb));
+
+  run_loop->Run();
+}
+
+// ChromeOS initializes two profiles (Default and test-user) and it's impossible
+// to distinguish UMA samples separately.
+#if !defined(OS_CHROMEOS)
+
+IN_PROC_BROWSER_TEST_F(BookmarkBrowsertest, PRE_EmitUmaForDuplicates) {
+  BookmarkModel* bookmark_model = WaitForBookmarkModel(browser()->profile());
+  const BookmarkNode* parent = bookmarks::GetParentForNewNodes(bookmark_model);
+  // Add one bookmark with a unique URL, two other bookmarks with a shared URL,
+  // and three more with another shared URL.
+  bookmark_model->AddURL(parent, parent->child_count(),
+                         base::ASCIIToUTF16("title1"), GURL("http://a.com"));
+  bookmark_model->AddURL(parent, parent->child_count(),
+                         base::ASCIIToUTF16("title2"), GURL("http://b.com"));
+  bookmark_model->AddURL(parent, parent->child_count(),
+                         base::ASCIIToUTF16("title3"), GURL("http://b.com"));
+  bookmark_model->AddURL(parent, parent->child_count(),
+                         base::ASCIIToUTF16("title4"), GURL("http://c.com"));
+  bookmark_model->AddURL(parent, parent->child_count(),
+                         base::ASCIIToUTF16("title5"), GURL("http://c.com"));
+  bookmark_model->AddURL(parent, parent->child_count(),
+                         base::ASCIIToUTF16("title6"), GURL("http://c.com"));
+}
+
+IN_PROC_BROWSER_TEST_F(BookmarkBrowsertest, EmitUmaForDuplicates) {
+  WaitForBookmarkModel(browser()->profile());
+
+  ASSERT_THAT(
+      histogram_tester()->GetAllSamples("Bookmarks.Count.OnProfileLoad"),
+      testing::ElementsAre(base::Bucket(/*min=*/6, /*count=*/1)));
+  EXPECT_THAT(histogram_tester()->GetAllSamples(
+                  "Bookmarks.Count.OnProfileLoad.DuplicateUrl"),
+              testing::ElementsAre(base::Bucket(/*min=*/5, /*count=*/1)));
+}
+
+IN_PROC_BROWSER_TEST_F(BookmarkBrowsertest, PRE_EmitUmaForEmptyTitles) {
+  BookmarkModel* bookmark_model = WaitForBookmarkModel(browser()->profile());
+  const BookmarkNode* parent = bookmarks::GetParentForNewNodes(bookmark_model);
+  // Add two bookmarks with a non-empty title and three with an empty one.
+  bookmark_model->AddURL(parent, parent->child_count(),
+                         base::ASCIIToUTF16("title1"), GURL("http://a.com"));
+  bookmark_model->AddURL(parent, parent->child_count(),
+                         base::ASCIIToUTF16("title2"), GURL("http://b.com"));
+  bookmark_model->AddURL(parent, parent->child_count(), base::string16(),
+                         GURL("http://c.com"));
+  bookmark_model->AddURL(parent, parent->child_count(), base::string16(),
+                         GURL("http://d.com"));
+  bookmark_model->AddURL(parent, parent->child_count(), base::string16(),
+                         GURL("http://e.com"));
+}
+
+IN_PROC_BROWSER_TEST_F(BookmarkBrowsertest, EmitUmaForEmptyTitles) {
+  WaitForBookmarkModel(browser()->profile());
+
+  ASSERT_THAT(
+      histogram_tester()->GetAllSamples("Bookmarks.Count.OnProfileLoad"),
+      testing::ElementsAre(base::Bucket(/*min=*/5, /*count=*/1)));
+  EXPECT_THAT(histogram_tester()->GetAllSamples(
+                  "Bookmarks.Count.OnProfileLoad.EmptyTitle"),
+              testing::ElementsAre(base::Bucket(/*min=*/3, /*count=*/1)));
+}
+
+#endif  // !defined(OS_CHROMEOS)

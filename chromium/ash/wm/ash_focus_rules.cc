@@ -5,6 +5,7 @@
 #include "ash/wm/ash_focus_rules.h"
 
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "ash/wm/container_finder.h"
 #include "ash/wm/focus_rules.h"
@@ -27,6 +28,14 @@ bool BelongsToContainerWithEqualOrGreaterId(const aura::Window* window,
   return false;
 }
 
+bool BelongsToContainerWithId(const aura::Window* window, int container_id) {
+  for (; window; window = window->parent()) {
+    if (window->id() == container_id)
+      return true;
+  }
+  return false;
+}
+
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -39,26 +48,34 @@ AshFocusRules::~AshFocusRules() = default;
 ////////////////////////////////////////////////////////////////////////////////
 // AshFocusRules, ::wm::FocusRules:
 
-bool AshFocusRules::IsToplevelWindow(aura::Window* window) const {
+bool AshFocusRules::IsToplevelWindow(const aura::Window* window) const {
   return ash::IsToplevelWindow(window);
 }
 
-bool AshFocusRules::SupportsChildActivation(aura::Window* window) const {
+bool AshFocusRules::SupportsChildActivation(const aura::Window* window) const {
   return ash::IsActivatableShellWindowId(window->id());
 }
 
 bool AshFocusRules::IsWindowConsideredVisibleForActivation(
-    aura::Window* window) const {
+    const aura::Window* window) const {
   return ash::IsWindowConsideredVisibleForActivation(window);
 }
 
-bool AshFocusRules::CanActivateWindow(aura::Window* window) const {
+bool AshFocusRules::CanActivateWindow(const aura::Window* window) const {
   // Clearing activation is always permissible.
   if (!window)
     return true;
 
-  if (!BaseFocusRules::CanActivateWindow(window)) {
+  if (!BaseFocusRules::CanActivateWindow(window))
     return false;
+
+  // Special case to allow the login shelf to be activatable when the OOBE
+  // modal is visible. See http://crbug/871184
+  // TODO: remove this special case once login shelf is moved into a child
+  // widget of the lock screen (https://crbug.com/767235).
+  if (Shell::Get()->session_controller()->IsUserSessionBlocked() &&
+      BelongsToContainerWithId(window, kShellWindowId_ShelfContainer)) {
+    return true;
   }
 
   int modal_container_id = Shell::GetOpenSystemModalWindowContainerId();
@@ -68,7 +85,7 @@ bool AshFocusRules::CanActivateWindow(aura::Window* window) const {
   return true;
 }
 
-bool AshFocusRules::CanFocusWindow(aura::Window* window,
+bool AshFocusRules::CanFocusWindow(const aura::Window* window,
                                    const ui::Event* event) const {
   if (!window)
     return true;

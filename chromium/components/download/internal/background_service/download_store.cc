@@ -11,7 +11,7 @@
 #include "components/download/internal/background_service/entry.h"
 #include "components/download/internal/background_service/proto/entry.pb.h"
 #include "components/download/internal/background_service/proto_conversions.h"
-#include "components/leveldb_proto/proto_database_impl.h"
+#include "components/leveldb_proto/public/proto_database_provider.h"
 
 namespace download {
 
@@ -21,6 +21,14 @@ const char kDatabaseClientName[] = "DownloadService";
 using KeyVector = std::vector<std::string>;
 using ProtoEntryVector = std::vector<protodb::Entry>;
 using KeyProtoEntryVector = std::vector<std::pair<std::string, protodb::Entry>>;
+
+leveldb_env::Options GetDownloadDBOptions() {
+  // These options reduce memory consumption.
+  leveldb_env::Options options = leveldb_proto::CreateSimpleOptions();
+  options.reuse_logs = false;
+  options.write_buffer_size = 64 << 10;  // 64 KiB
+  return options;
+}
 
 }  // namespace
 
@@ -40,11 +48,7 @@ bool DownloadStore::IsInitialized() {
 
 void DownloadStore::Initialize(InitCallback callback) {
   DCHECK(!IsInitialized());
-  // These options reduce memory consumption.
-  leveldb_env::Options options = leveldb_proto::CreateSimpleOptions();
-  options.reuse_logs = false;
-  options.write_buffer_size = 64 << 10;  // 64 KiB
-  db_->Init(kDatabaseClientName, database_dir_, options,
+  db_->Init(kDatabaseClientName, database_dir_, GetDownloadDBOptions(),
             base::BindOnce(&DownloadStore::OnDatabaseInited,
                            weak_factory_.GetWeakPtr(), std::move(callback)));
 }
@@ -85,8 +89,7 @@ void DownloadStore::OnDatabaseDestroyed(StoreCallback callback, bool success) {
     return;
   }
 
-  db_->Init(kDatabaseClientName, database_dir_,
-            leveldb_proto::CreateSimpleOptions(),
+  db_->Init(kDatabaseClientName, database_dir_, GetDownloadDBOptions(),
             base::BindOnce(&DownloadStore::OnDatabaseInitedAfterDestroy,
                            weak_factory_.GetWeakPtr(), std::move(callback)));
 }

@@ -10,17 +10,19 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
+#include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_android.h"
 #include "chrome/browser/search_provider_logos/logo_service_factory.h"
+#include "components/search_provider_logos/logo_observer.h"
 #include "components/search_provider_logos/logo_service.h"
-#include "components/search_provider_logos/logo_tracker.h"
+#include "content/public/browser/storage_partition.h"
 #include "jni/LogoBridge_jni.h"
-#include "net/url_request/url_fetcher.h"
-#include "net/url_request/url_fetcher_delegate.h"
-#include "net/url_request/url_request_context_getter.h"
-#include "net/url_request/url_request_status.h"
+#include "net/http/http_status_code.h"
+#include "services/network/public/cpp/resource_response_info.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/cpp/simple_url_loader.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/android/java_bitmap.h"
 #include "url/gurl.h"
@@ -108,75 +110,6 @@ class LogoObserverAndroid : public search_provider_logos::LogoObserver {
 
 }  // namespace
 
-class LogoBridge::AnimatedLogoFetcher : public net::URLFetcherDelegate {
- public:
-  AnimatedLogoFetcher(
-      const scoped_refptr<net::URLRequestContextGetter>& request_context)
-      : request_context_(request_context) {}
-
-  ~AnimatedLogoFetcher() override {}
-
-  void Start(JNIEnv* env,
-             const GURL& url,
-             const JavaParamRef<jobject>& j_callback) {
-    DCHECK(j_callback);
-
-    if (fetcher_ && fetcher_->GetOriginalURL() == url)
-      return;
-
-    j_callback_.Reset(env, j_callback);
-    fetcher_ = net::URLFetcher::Create(url, net::URLFetcher::GET, this);
-    fetcher_->SetRequestContext(request_context_.get());
-    fetcher_->Start();
-    start_time_ = base::TimeTicks::Now();
-  }
-
- private:
-  void OnURLFetchComplete(const net::URLFetcher* source) override {
-    DCHECK_EQ(source, fetcher_.get());
-    DCHECK(!j_callback_.is_null());
-    if (!source->GetStatus().is_success() ||
-        (source->GetResponseCode() != 200)) {
-      ClearFetcher();
-      return;
-    }
-
-    UMA_HISTOGRAM_TIMES("NewTabPage.AnimatedLogoDownloadTime",
-                        base::TimeTicks::Now() - start_time_);
-
-    std::string response;
-    source->GetResponseAsString(&response);
-    JNIEnv* env = base::android::AttachCurrentThread();
-
-    ScopedJavaLocalRef<jbyteArray> j_bytes =
-        ToJavaByteArray(env, reinterpret_cast<const uint8_t*>(response.data()),
-                        response.length());
-    ScopedJavaLocalRef<jobject> j_gif_image =
-        Java_LogoBridge_createGifImage(env, j_bytes);
-    Java_AnimatedLogoCallback_onAnimatedLogoAvailable(env, j_callback_,
-                                                      j_gif_image);
-    ClearFetcher();
-  }
-
-  void ClearFetcher() {
-    fetcher_.reset();
-    j_callback_.Reset();
-  }
-
-  scoped_refptr<net::URLRequestContextGetter> request_context_;
-
-  base::android::ScopedJavaGlobalRef<jobject> j_callback_;
-
-  // The URLFetcher currently fetching the animated logo, or nullptr when not
-  // fetching.
-  std::unique_ptr<net::URLFetcher> fetcher_;
-
-  // The time when the current fetch was started.
-  base::TimeTicks start_time_;
-
-  DISALLOW_COPY_AND_ASSIGN(AnimatedLogoFetcher);
-};
-
 static jlong JNI_LogoBridge_Init(JNIEnv* env,
                                  const JavaParamRef<jobject>& obj,
                                  const JavaParamRef<jobject>& j_profile) {
@@ -190,9 +123,6 @@ LogoBridge::LogoBridge(const JavaRef<jobject>& j_profile)
   DCHECK(profile);
 
   logo_service_ = LogoServiceFactory::GetForProfile(profile);
-
-  animated_logo_fetcher_ =
-      std::make_unique<AnimatedLogoFetcher>(profile->GetRequestContext());
 }
 
 LogoBridge::~LogoBridge() {}
@@ -208,12 +138,4 @@ void LogoBridge::GetCurrentLogo(JNIEnv* env,
   LogoObserverAndroid* observer = new LogoObserverAndroid(
       weak_ptr_factory_.GetWeakPtr(), env, j_logo_observer);
   logo_service_->GetLogo(observer);
-}
-
-void LogoBridge::GetAnimatedLogo(JNIEnv* env,
-                                 const JavaParamRef<jobject>& obj,
-                                 const JavaParamRef<jobject>& j_callback,
-                                 const JavaParamRef<jstring>& j_url) {
-  GURL url = GURL(ConvertJavaStringToUTF8(env, j_url));
-  animated_logo_fetcher_->Start(env, url, j_callback);
 }

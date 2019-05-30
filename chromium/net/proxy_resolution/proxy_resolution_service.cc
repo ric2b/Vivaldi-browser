@@ -21,6 +21,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "net/base/net_errors.h"
 #include "net/base/proxy_delegate.h"
 #include "net/base/url_util.h"
@@ -332,8 +333,7 @@ std::unique_ptr<base::Value> NetLogBadProxyListCallback(
   auto dict = std::make_unique<base::DictionaryValue>();
   auto list = std::make_unique<base::ListValue>();
 
-  for (ProxyRetryInfoMap::const_iterator iter = retry_info->begin();
-       iter != retry_info->end(); ++iter) {
+  for (auto iter = retry_info->begin(); iter != retry_info->end(); ++iter) {
     list->AppendString(iter->first);
   }
   dict->Set("bad_proxy_list", std::move(list));
@@ -432,6 +432,7 @@ class ProxyResolutionService::InitProxyResolver {
   InitProxyResolver()
       : proxy_resolver_factory_(nullptr),
         proxy_resolver_(NULL),
+        resolver_using_auto_detected_script_(nullptr),
         next_state_(STATE_NONE),
         quick_check_enabled_(true) {}
 
@@ -442,8 +443,12 @@ class ProxyResolutionService::InitProxyResolver {
 
   // Begins initializing the proxy resolver; calls |callback| when done. A
   // ProxyResolver instance will be created using |proxy_resolver_factory| and
-  // returned via |proxy_resolver| if the final result is OK.
+  // assigned to |*proxy_resolver| if the final result is OK.
+  // |*resolver_using_auto_detected_script| will be set to true if
+  // |proxy_resolver| was initialized using script data that originates from
+  // proxy auto-detection.
   int Start(std::unique_ptr<ProxyResolver>* proxy_resolver,
+            bool* resolver_using_auto_detected_script,
             ProxyResolverFactory* proxy_resolver_factory,
             PacFileFetcher* pac_file_fetcher,
             DhcpPacFileFetcher* dhcp_pac_file_fetcher,
@@ -453,6 +458,7 @@ class ProxyResolutionService::InitProxyResolver {
             CompletionOnceCallback callback) {
     DCHECK_EQ(STATE_NONE, next_state_);
     proxy_resolver_ = proxy_resolver;
+    resolver_using_auto_detected_script_ = resolver_using_auto_detected_script;
     proxy_resolver_factory_ = proxy_resolver_factory;
 
     decider_.reset(
@@ -469,16 +475,21 @@ class ProxyResolutionService::InitProxyResolver {
   // Similar to Start(), however it skips the PacFileDecider stage. Instead
   // |effective_config|, |decider_result| and |script_data| will be used as the
   // inputs for initializing the ProxyResolver. A ProxyResolver instance will
-  // be created using |proxy_resolver_factory| and returned via
-  // |proxy_resolver| if the final result is OK.
+  // be created using |proxy_resolver_factory| and assigned to
+  // |*proxy_resolver| if the final result is OK.
+  // |*resolver_using_auto_detected_script| will be set to true if
+  // |proxy_resolver| was initialized using script data that originates from
+  // proxy auto-detection.
   int StartSkipDecider(std::unique_ptr<ProxyResolver>* proxy_resolver,
+                       bool* resolver_using_auto_detected_script,
                        ProxyResolverFactory* proxy_resolver_factory,
                        const ProxyConfigWithAnnotation& effective_config,
                        int decider_result,
-                       PacFileData* script_data,
+                       const PacFileDataWithSource& script_data,
                        CompletionOnceCallback callback) {
     DCHECK_EQ(STATE_NONE, next_state_);
     proxy_resolver_ = proxy_resolver;
+    resolver_using_auto_detected_script_ = resolver_using_auto_detected_script;
     proxy_resolver_factory_ = proxy_resolver_factory;
 
     effective_config_ = effective_config;
@@ -501,7 +512,7 @@ class ProxyResolutionService::InitProxyResolver {
 
   // Returns the PAC script data that was selected by PacFileDecider.
   // Should only be called upon completion of the initialization.
-  const scoped_refptr<PacFileData>& script_data() {
+  const PacFileDataWithSource& script_data() {
     DCHECK_EQ(STATE_NONE, next_state_);
     return script_data_;
   }
@@ -583,18 +594,21 @@ class ProxyResolutionService::InitProxyResolver {
   }
 
   int DoCreateResolver() {
-    DCHECK(script_data_.get());
+    DCHECK(script_data_.data);
     // TODO(eroman): Should log this latency to the NetLog.
     next_state_ = STATE_CREATE_RESOLVER_COMPLETE;
     return proxy_resolver_factory_->CreateProxyResolver(
-        script_data_, proxy_resolver_,
+        script_data_.data, proxy_resolver_,
         base::Bind(&InitProxyResolver::OnIOCompletion, base::Unretained(this)),
         &create_resolver_request_);
   }
 
   int DoCreateResolverComplete(int result) {
-    if (result != OK)
+    if (result == OK) {
+      *resolver_using_auto_detected_script_ = script_data_.from_auto_detect;
+    } else {
       proxy_resolver_->reset();
+    }
     return result;
   }
 
@@ -607,12 +621,13 @@ class ProxyResolutionService::InitProxyResolver {
 
   ProxyConfigWithAnnotation config_;
   ProxyConfigWithAnnotation effective_config_;
-  scoped_refptr<PacFileData> script_data_;
+  PacFileDataWithSource script_data_;
   TimeDelta wait_delay_;
   std::unique_ptr<PacFileDecider> decider_;
   ProxyResolverFactory* proxy_resolver_factory_;
   std::unique_ptr<ProxyResolverFactory::Request> create_resolver_request_;
   std::unique_ptr<ProxyResolver>* proxy_resolver_;
+  bool* resolver_using_auto_detected_script_;
   CompletionOnceCallback callback_;
   State next_state_;
   bool quick_check_enabled_;
@@ -629,7 +644,7 @@ class ProxyResolutionService::InitProxyResolver {
 class ProxyResolutionService::PacFileDeciderPoller {
  public:
   typedef base::Callback<
-      void(int, PacFileData*, const ProxyConfigWithAnnotation&)>
+      void(int, const PacFileDataWithSource&, const ProxyConfigWithAnnotation&)>
       ChangeCallback;
 
   // Builds a poller helper, and starts polling for updates. Whenever a change
@@ -658,7 +673,7 @@ class ProxyResolutionService::PacFileDeciderPoller {
                        PacFileFetcher* pac_file_fetcher,
                        DhcpPacFileFetcher* dhcp_pac_file_fetcher,
                        int init_net_error,
-                       const scoped_refptr<PacFileData>& init_script_data,
+                       const PacFileDataWithSource& init_script_data,
                        NetLog* net_log)
       : change_callback_(callback),
         config_(config),
@@ -704,7 +719,8 @@ class ProxyResolutionService::PacFileDeciderPoller {
 
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE,
-        base::Bind(&PacFileDeciderPoller::DoPoll, weak_factory_.GetWeakPtr()),
+        base::BindOnce(&PacFileDeciderPoller::DoPoll,
+                       weak_factory_.GetWeakPtr()),
         next_poll_delay_);
   }
 
@@ -751,7 +767,7 @@ class ProxyResolutionService::PacFileDeciderPoller {
       // the notification.
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE,
-          base::Bind(
+          base::BindOnce(
               &PacFileDeciderPoller::NotifyProxyResolutionServiceOfChange,
               weak_factory_.GetWeakPtr(), result, decider_->script_data(),
               decider_->effective_config()));
@@ -768,7 +784,7 @@ class ProxyResolutionService::PacFileDeciderPoller {
   }
 
   bool HasScriptDataChanged(int result,
-                            const scoped_refptr<PacFileData>& script_data) {
+                            const PacFileDataWithSource& script_data) {
     if (result != last_error_) {
       // Something changed -- it was failing before and now it succeeded, or
       // conversely it succeeded before and now it failed. Or it failed in
@@ -785,16 +801,17 @@ class ProxyResolutionService::PacFileDeciderPoller {
     // Otherwise if it succeeded both this time and last time, we need to look
     // closer and see if we ended up downloading different content for the PAC
     // script.
-    return !script_data->Equals(last_script_data_.get());
+    return !script_data.data->Equals(last_script_data_.data.get()) ||
+           (script_data.from_auto_detect != last_script_data_.from_auto_detect);
   }
 
   void NotifyProxyResolutionServiceOfChange(
       int result,
-      const scoped_refptr<PacFileData>& script_data,
+      const PacFileDataWithSource& script_data,
       const ProxyConfigWithAnnotation& effective_config) {
     // Note that |this| may be deleted after calling into the
     // ProxyResolutionService.
-    change_callback_.Run(result, script_data.get(), effective_config);
+    change_callback_.Run(result, script_data, effective_config);
   }
 
   ChangeCallback change_callback_;
@@ -804,7 +821,7 @@ class ProxyResolutionService::PacFileDeciderPoller {
   DhcpPacFileFetcher* dhcp_pac_file_fetcher_;
 
   int last_error_;
-  scoped_refptr<PacFileData> last_script_data_;
+  PacFileDataWithSource last_script_data_;
 
   std::unique_ptr<PacFileDecider> decider_;
   TimeDelta next_poll_delay_;
@@ -835,7 +852,6 @@ class ProxyResolutionService::RequestImpl
   RequestImpl(ProxyResolutionService* service,
               const GURL& url,
               const std::string& method,
-              ProxyDelegate* proxy_delegate,
               ProxyInfo* results,
               const CompletionOnceCallback user_callback,
               const NetLogWithSource& net_log);
@@ -880,11 +896,11 @@ class ProxyResolutionService::RequestImpl
   // Outstanding requests are cancelled during ~ProxyResolutionService, so this
   // is guaranteed to be valid throughout our lifetime.
   ProxyResolutionService* service_;
+  bool resolver_using_auto_detected_script_;
   CompletionOnceCallback user_callback_;
   ProxyInfo* results_;
   GURL url_;
   std::string method_;
-  ProxyDelegate* proxy_delegate_;
   std::unique_ptr<ProxyResolver::Request> resolve_job_;
   MutableNetworkTrafficAnnotationTag traffic_annotation_;
   NetLogWithSource net_log_;
@@ -899,7 +915,6 @@ ProxyResolutionService::RequestImpl::RequestImpl(
     ProxyResolutionService* service,
     const GURL& url,
     const std::string& method,
-    ProxyDelegate* proxy_delegate,
     ProxyInfo* results,
     CompletionOnceCallback user_callback,
     const NetLogWithSource& net_log)
@@ -908,7 +923,6 @@ ProxyResolutionService::RequestImpl::RequestImpl(
       results_(results),
       url_(url),
       method_(method),
-      proxy_delegate_(proxy_delegate),
       resolve_job_(nullptr),
       net_log_(net_log),
       creation_time_(base::TimeTicks::Now()) {
@@ -938,6 +952,11 @@ int ProxyResolutionService::RequestImpl::Start() {
   traffic_annotation_ = MutableNetworkTrafficAnnotationTag(
       service_->config_->traffic_annotation());
 
+  if (service_->ApplyPacBypassRules(url_, results_))
+    return OK;
+
+  resolver_using_auto_detected_script_ =
+      service_->resolver_using_auto_detected_script_;
   return resolver()->GetProxyForURL(
       url_, results_,
       base::Bind(&ProxyResolutionService::RequestImpl::QueryComplete,
@@ -947,8 +966,7 @@ int ProxyResolutionService::RequestImpl::Start() {
 
 void ProxyResolutionService::RequestImpl::
     StartAndCompleteCheckingForSynchronous() {
-  int rv =
-      service_->TryToCompleteSynchronously(url_, proxy_delegate_, results_);
+  int rv = service_->TryToCompleteSynchronously(url_, results_);
   if (rv == ERR_IO_PENDING)
     rv = Start();
   if (rv != ERR_IO_PENDING)
@@ -970,12 +988,14 @@ int ProxyResolutionService::RequestImpl::QueryDidComplete(int result_code) {
   resolve_job_.reset();
 
   // Note that DidFinishResolvingProxy might modify |results_|.
-  int rv = service_->DidFinishResolvingProxy(url_, method_, proxy_delegate_,
-                                             results_, result_code, net_log_);
+  int rv = service_->DidFinishResolvingProxy(url_, method_, results_,
+                                             result_code, net_log_);
 
   // Make a note in the results which configuration was in use at the
   // time of the resolve.
   results_->did_use_pac_script_ = true;
+  results_->did_use_auto_detected_pac_script_ =
+      resolver_using_auto_detected_script_;
   results_->proxy_resolve_start_time_ = creation_time_;
   results_->proxy_resolve_end_time_ = TimeTicks::Now();
 
@@ -1107,6 +1127,22 @@ ProxyResolutionService::CreateFixedFromPacResult(
   // ProxyResolver dependency we give it will never be used.
   std::unique_ptr<ProxyConfigService> proxy_config_service(
       new ProxyConfigServiceFixed(ProxyConfigWithAnnotation(
+          ProxyConfig::CreateFromCustomPacURL(
+              GURL("https://my-pac-script.invalid/wpad.dat")),
+          traffic_annotation)));
+
+  return std::make_unique<ProxyResolutionService>(
+      std::move(proxy_config_service),
+      std::make_unique<ProxyResolverFactoryForPacResult>(pac_string), nullptr);
+}
+
+// static
+std::unique_ptr<ProxyResolutionService>
+ProxyResolutionService::CreateFixedFromAutoDetectedPacResult(
+    const std::string& pac_string,
+    const NetworkTrafficAnnotationTag& traffic_annotation) {
+  std::unique_ptr<ProxyConfigService> proxy_config_service(
+      new ProxyConfigServiceFixed(ProxyConfigWithAnnotation(
           ProxyConfig::CreateAutoDetect(), traffic_annotation)));
 
   return std::make_unique<ProxyResolutionService>(
@@ -1119,23 +1155,10 @@ int ProxyResolutionService::ResolveProxy(const GURL& raw_url,
                                          ProxyInfo* result,
                                          CompletionOnceCallback callback,
                                          std::unique_ptr<Request>* out_request,
-                                         ProxyDelegate* proxy_delegate,
                                          const NetLogWithSource& net_log) {
-  DCHECK(!callback.is_null());
-  return ResolveProxyHelper(raw_url, method, result, std::move(callback),
-                            out_request, proxy_delegate, net_log);
-}
-
-int ProxyResolutionService::ResolveProxyHelper(
-    const GURL& raw_url,
-    const std::string& method,
-    ProxyInfo* result,
-    CompletionOnceCallback callback,
-    std::unique_ptr<Request>* out_request,
-    ProxyDelegate* proxy_delegate,
-    const NetLogWithSource& net_log) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  DCHECK(out_request || callback.is_null());
+  DCHECK(!callback.is_null());
+  DCHECK(out_request);
 
   net_log.BeginEvent(NetLogEventType::PROXY_RESOLUTION_SERVICE);
 
@@ -1156,18 +1179,14 @@ int ProxyResolutionService::ResolveProxyHelper(
 
   // Check if the request can be completed right away. (This is the case when
   // using a direct connection for example).
-  int rv = TryToCompleteSynchronously(url, proxy_delegate, result);
+  int rv = TryToCompleteSynchronously(url, result);
   if (rv != ERR_IO_PENDING) {
-    rv = DidFinishResolvingProxy(url, method, proxy_delegate, result, rv,
-                                 net_log);
+    rv = DidFinishResolvingProxy(url, method, result, rv, net_log);
     return rv;
   }
 
-  if (callback.is_null())
-    return ERR_IO_PENDING;
-
   std::unique_ptr<RequestImpl> req = std::make_unique<RequestImpl>(
-      this, url, method, proxy_delegate, result, std::move(callback), net_log);
+      this, url, method, result, std::move(callback), net_log);
 
   if (current_state_ == STATE_READY) {
     // Start the resolve request.
@@ -1189,20 +1208,8 @@ int ProxyResolutionService::ResolveProxyHelper(
   return rv;  // ERR_IO_PENDING
 }
 
-bool ProxyResolutionService::TryResolveProxySynchronously(
-    const GURL& raw_url,
-    const std::string& method,
-    ProxyInfo* result,
-    ProxyDelegate* proxy_delegate,
-    const NetLogWithSource& net_log) {
-  return ResolveProxyHelper(raw_url, method, result, CompletionOnceCallback(),
-                            nullptr /* out_request*/, proxy_delegate,
-                            net_log) == OK;
-}
-
 int ProxyResolutionService::TryToCompleteSynchronously(
     const GURL& url,
-    ProxyDelegate* proxy_delegate,
     ProxyInfo* result) {
   DCHECK_NE(STATE_NONE, current_state_);
 
@@ -1212,8 +1219,13 @@ int ProxyResolutionService::TryToCompleteSynchronously(
   DCHECK(config_);
   // If it was impossible to fetch or parse the PAC script, we cannot complete
   // the request here and bail out.
-  if (permanent_error_ != OK)
+  if (permanent_error_ != OK) {
+    // Before returning the permanent error check if the URL would have been
+    // implicitly bypassed.
+    if (ApplyPacBypassRules(url, result))
+      return OK;
     return permanent_error_;
+  }
 
   if (config_->value().HasAutomaticSettings())
     return ERR_IO_PENDING;  // Must submit the request to the proxy resolver.
@@ -1246,8 +1258,7 @@ ProxyResolutionService::~ProxyResolutionService() {
 }
 
 void ProxyResolutionService::SuspendAllPendingRequests() {
-  for (PendingRequests::iterator it = pending_requests_.begin();
-       it != pending_requests_.end();
+  for (auto it = pending_requests_.begin(); it != pending_requests_.end();
        ++it) {
     RequestImpl* req = *it;
     if (req->is_started()) {
@@ -1367,24 +1378,23 @@ bool ProxyResolutionService::MarkProxiesAsBadUntil(
   return result.proxy_list_.size() > (additional_bad_proxies.size() + 1);
 }
 
-void ProxyResolutionService::ReportSuccess(const ProxyInfo& result,
-                                           ProxyDelegate* proxy_delegate) {
+void ProxyResolutionService::ReportSuccess(const ProxyInfo& result) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   const ProxyRetryInfoMap& new_retry_info = result.proxy_retry_info();
   if (new_retry_info.empty())
     return;
 
-  for (ProxyRetryInfoMap::const_iterator iter = new_retry_info.begin();
-       iter != new_retry_info.end(); ++iter) {
-    ProxyRetryInfoMap::iterator existing = proxy_retry_info_.find(iter->first);
+  for (auto iter = new_retry_info.begin(); iter != new_retry_info.end();
+       ++iter) {
+    auto existing = proxy_retry_info_.find(iter->first);
     if (existing == proxy_retry_info_.end()) {
       proxy_retry_info_[iter->first] = iter->second;
-      if (proxy_delegate) {
+      if (proxy_delegate_) {
         const ProxyServer& bad_proxy =
             ProxyServer::FromURI(iter->first, ProxyServer::SCHEME_HTTP);
         const ProxyRetryInfo& proxy_retry_info = iter->second;
-        proxy_delegate->OnFallback(bad_proxy, proxy_retry_info.net_error);
+        proxy_delegate_->OnFallback(bad_proxy, proxy_retry_info.net_error);
       }
     }
     else if (existing->second.bad_until < iter->second.bad_until)
@@ -1409,16 +1419,17 @@ void ProxyResolutionService::RemovePendingRequest(RequestImpl* req) {
 int ProxyResolutionService::DidFinishResolvingProxy(
     const GURL& url,
     const std::string& method,
-    ProxyDelegate* proxy_delegate,
     ProxyInfo* result,
     int result_code,
     const NetLogWithSource& net_log) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
   // Log the result of the proxy resolution.
   if (result_code == OK) {
     // Allow the proxy delegate to interpose on the resolution decision,
     // possibly modifying the ProxyInfo.
-    if (proxy_delegate)
-      proxy_delegate->OnResolveProxy(url, method, proxy_retry_info_, result);
+    if (proxy_delegate_)
+      proxy_delegate_->OnResolveProxy(url, method, proxy_retry_info_, result);
 
     net_log.AddEvent(
         NetLogEventType::PROXY_RESOLUTION_SERVICE_RESOLVED_PROXY_LIST,
@@ -1451,8 +1462,8 @@ int ProxyResolutionService::DidFinishResolvingProxy(
 
       // Allow the proxy delegate to interpose on the resolution decision,
       // possibly modifying the ProxyInfo.
-      if (proxy_delegate)
-        proxy_delegate->OnResolveProxy(url, method, proxy_retry_info_, result);
+      if (proxy_delegate_)
+        proxy_delegate_->OnResolveProxy(url, method, proxy_retry_info_, result);
     } else {
       result_code = ERR_MANDATORY_PROXY_CONFIGURATION_FAILED;
     }
@@ -1479,6 +1490,16 @@ void ProxyResolutionService::SetPacFileFetchers(
   dhcp_pac_file_fetcher_ = std::move(dhcp_pac_file_fetcher);
   if (previous_state != STATE_NONE)
     ApplyProxyConfigIfAvailable();
+}
+
+void ProxyResolutionService::SetProxyDelegate(ProxyDelegate* delegate) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  proxy_delegate_ = delegate;
+}
+
+void ProxyResolutionService::AssertNoProxyDelegate() const {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  DCHECK(!proxy_delegate_);
 }
 
 void ProxyResolutionService::OnShutdown() {
@@ -1579,6 +1600,9 @@ ProxyResolutionService::CreateSystemProxyConfigService(
 #elif defined(OS_ANDROID)
   return std::make_unique<ProxyConfigServiceAndroid>(
       main_task_runner, base::ThreadTaskRunnerHandle::Get());
+#elif defined(OS_FUCHSIA)
+  // TODO(crbug.com/889195): Implement a system proxy service for Fuchsia.
+  return std::make_unique<ProxyConfigServiceDirect>();
 #else
   LOG(WARNING) << "Failed to choose a system proxy settings fetcher "
                   "for this platform.";
@@ -1637,6 +1661,18 @@ void ProxyResolutionService::OnProxyConfigChanged(
   InitializeUsingLastFetchedConfig();
 }
 
+bool ProxyResolutionService::ApplyPacBypassRules(const GURL& url,
+                                                 ProxyInfo* results) {
+  DCHECK(config_);
+
+  if (ProxyBypassRules::MatchesImplicitRules(url)) {
+    results->UseDirectWithBypassedProxy();
+    return true;
+  }
+
+  return false;
+}
+
 void ProxyResolutionService::InitializeUsingLastFetchedConfig() {
   ResetProxyConfig(false);
 
@@ -1657,7 +1693,8 @@ void ProxyResolutionService::InitializeUsingLastFetchedConfig() {
   init_proxy_resolver_.reset(new InitProxyResolver());
   init_proxy_resolver_->set_quick_check_enabled(quick_check_enabled_);
   int rv = init_proxy_resolver_->Start(
-      &resolver_, resolver_factory_.get(), pac_file_fetcher_.get(),
+      &resolver_, &resolver_using_auto_detected_script_,
+      resolver_factory_.get(), pac_file_fetcher_.get(),
       dhcp_pac_file_fetcher_.get(), net_log_, fetched_config_.value(),
       wait_delay,
       base::Bind(&ProxyResolutionService::OnInitProxyResolverComplete,
@@ -1669,7 +1706,7 @@ void ProxyResolutionService::InitializeUsingLastFetchedConfig() {
 
 void ProxyResolutionService::InitializeUsingDecidedConfig(
     int decider_result,
-    PacFileData* script_data,
+    const PacFileDataWithSource& script_data,
     const ProxyConfigWithAnnotation& effective_config) {
   DCHECK(fetched_config_);
   DCHECK(fetched_config_->value().HasAutomaticSettings());
@@ -1680,8 +1717,8 @@ void ProxyResolutionService::InitializeUsingDecidedConfig(
 
   init_proxy_resolver_.reset(new InitProxyResolver());
   int rv = init_proxy_resolver_->StartSkipDecider(
-      &resolver_, resolver_factory_.get(), effective_config, decider_result,
-      script_data,
+      &resolver_, &resolver_using_auto_detected_script_,
+      resolver_factory_.get(), effective_config, decider_result, script_data,
       base::Bind(&ProxyResolutionService::OnInitProxyResolverComplete,
                  base::Unretained(this)));
 

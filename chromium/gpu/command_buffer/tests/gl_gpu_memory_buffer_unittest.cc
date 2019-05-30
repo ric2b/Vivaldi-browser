@@ -179,13 +179,8 @@ void SetRow(gfx::BufferFormat format,
             ((pixel[0] << 2) | (pixel[0] >> 6));         // R
       }
       return;
-    case gfx::BufferFormat::ATC:
-    case gfx::BufferFormat::ATCIA:
     case gfx::BufferFormat::BGRX_8888:
     case gfx::BufferFormat::BGRX_1010102:
-    case gfx::BufferFormat::DXT1:
-    case gfx::BufferFormat::DXT5:
-    case gfx::BufferFormat::ETC1:
     case gfx::BufferFormat::R_16:
     case gfx::BufferFormat::RG_88:
     case gfx::BufferFormat::UYVY_422:
@@ -216,13 +211,8 @@ GLenum InternalFormat(gfx::BufferFormat format) {
       return GL_BGRA_EXT;
     case gfx::BufferFormat::RGBA_F16:
       return GL_RGBA;
-    case gfx::BufferFormat::ATC:
-    case gfx::BufferFormat::ATCIA:
     case gfx::BufferFormat::BGRX_8888:
     case gfx::BufferFormat::BGRX_1010102:
-    case gfx::BufferFormat::DXT1:
-    case gfx::BufferFormat::DXT5:
-    case gfx::BufferFormat::ETC1:
     case gfx::BufferFormat::RGBX_8888:
     case gfx::BufferFormat::UYVY_422:
     case gfx::BufferFormat::YVU_420:
@@ -449,15 +439,15 @@ TEST_F(GpuMemoryBufferTestEGL, GLCreateImageCHROMIUMFromNativePixmap) {
 }
 #endif  // defined(OS_LINUX)
 
-INSTANTIATE_TEST_CASE_P(GpuMemoryBufferTests,
-                        GpuMemoryBufferTest,
-                        ::testing::Values(gfx::BufferFormat::R_8,
-                                          gfx::BufferFormat::BGR_565,
-                                          gfx::BufferFormat::RGBA_4444,
-                                          gfx::BufferFormat::RGBA_8888,
-                                          gfx::BufferFormat::RGBX_1010102,
-                                          gfx::BufferFormat::BGRA_8888,
-                                          gfx::BufferFormat::RGBA_F16));
+INSTANTIATE_TEST_SUITE_P(GpuMemoryBufferTests,
+                         GpuMemoryBufferTest,
+                         ::testing::Values(gfx::BufferFormat::R_8,
+                                           gfx::BufferFormat::BGR_565,
+                                           gfx::BufferFormat::RGBA_4444,
+                                           gfx::BufferFormat::RGBA_8888,
+                                           gfx::BufferFormat::RGBX_1010102,
+                                           gfx::BufferFormat::BGRA_8888,
+                                           gfx::BufferFormat::RGBA_F16));
 
 }  // namespace gles2
 }  // namespace gpu

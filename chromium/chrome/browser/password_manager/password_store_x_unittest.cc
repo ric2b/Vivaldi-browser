@@ -144,6 +144,12 @@ class FailingBackend : public PasswordStoreX::NativeBackend {
 
 class MockBackend : public PasswordStoreX::NativeBackend {
  public:
+  ~MockBackend() override {
+    if (save_on_destruct_) {
+      *save_on_destruct_ = std::move(all_forms_);
+    }
+  }
+
   bool Init() override { return true; }
 
   PasswordStoreChangeList AddLogin(const PasswordForm& form) override {
@@ -245,6 +251,10 @@ class MockBackend : public PasswordStoreX::NativeBackend {
     return nullptr;
   }
 
+  void SaveFormsOnDestruct(std::vector<PasswordForm>* forms) {
+    save_on_destruct_ = forms;
+  }
+
  private:
   void erase(size_t index) {
     if (index < all_forms_.size() - 1)
@@ -252,6 +262,7 @@ class MockBackend : public PasswordStoreX::NativeBackend {
     all_forms_.pop_back();
   }
 
+  std::vector<PasswordForm>* save_on_destruct_ = nullptr;
   std::vector<PasswordForm> all_forms_;
 };
 
@@ -355,7 +366,7 @@ PasswordStoreXTestDelegate::PasswordStoreXTestDelegate(BackendType backend_type)
   fake_pref_service.registry()->RegisterIntegerPref(
       password_manager::prefs::kMigrationToLoginDBStep,
       PasswordStoreX::NOT_ATTEMPTED);
-  store_ = new PasswordStoreX(std::move(login_db),
+  store_ = new PasswordStoreX(std::move(login_db), test_login_db_file_path(),
                               test_encrypted_login_db_file_path(),
                               GetBackend(backend_type_), &fake_pref_service);
   store_->Init(syncer::SyncableService::StartSyncFlare(), nullptr);
@@ -411,13 +422,13 @@ std::vector<std::unique_ptr<PasswordForm>> ReadLoginDB(
 
 namespace password_manager {
 
-INSTANTIATE_TYPED_TEST_CASE_P(XNoBackend,
-                              PasswordStoreOriginTest,
-                              PasswordStoreXNoBackendTestDelegate);
+INSTANTIATE_TYPED_TEST_SUITE_P(XNoBackend,
+                               PasswordStoreOriginTest,
+                               PasswordStoreXNoBackendTestDelegate);
 
-INSTANTIATE_TYPED_TEST_CASE_P(XWorkingBackend,
-                              PasswordStoreOriginTest,
-                              PasswordStoreXWorkingBackendTestDelegate);
+INSTANTIATE_TYPED_TEST_SUITE_P(XWorkingBackend,
+                               PasswordStoreOriginTest,
+                               PasswordStoreXWorkingBackendTestDelegate);
 }
 
 class PasswordStoreXTest : public testing::TestWithParam<BackendType> {
@@ -459,9 +470,10 @@ class PasswordStoreXTest : public testing::TestWithParam<BackendType> {
 TEST_P(PasswordStoreXTest, Notifications) {
   std::unique_ptr<password_manager::LoginDatabase> login_db(
       new password_manager::LoginDatabase(test_login_db_file_path()));
-  scoped_refptr<PasswordStoreX> store(new PasswordStoreX(
-      std::move(login_db), test_encrypted_login_db_file_path(),
-      GetBackend(GetParam()), &fake_pref_service_));
+  scoped_refptr<PasswordStoreX> store(
+      new PasswordStoreX(std::move(login_db), test_login_db_file_path(),
+                         test_encrypted_login_db_file_path(),
+                         GetBackend(GetParam()), &fake_pref_service_));
   store->Init(syncer::SyncableService::StartSyncFlare(), nullptr);
 
   password_manager::PasswordFormData form_data = {
@@ -561,9 +573,10 @@ TEST_P(PasswordStoreXTest, NativeMigration) {
 
   // Initializing the PasswordStore shouldn't trigger a native migration (yet).
   login_db.reset(new password_manager::LoginDatabase(login_db_file));
-  scoped_refptr<PasswordStoreX> store(new PasswordStoreX(
-      std::move(login_db), test_encrypted_login_db_file_path(),
-      GetBackend(GetParam()), &fake_pref_service_));
+  scoped_refptr<PasswordStoreX> store(
+      new PasswordStoreX(std::move(login_db), test_login_db_file_path(),
+                         test_encrypted_login_db_file_path(),
+                         GetBackend(GetParam()), &fake_pref_service_));
   store->Init(syncer::SyncableService::StartSyncFlare(), nullptr);
 
   MockPasswordStoreConsumer consumer;
@@ -643,6 +656,11 @@ TEST_P(PasswordStoreXTest, MigrationToEncryption) {
   InitExpectedForms(true, 6, &old_credentials);
   std::unique_ptr<PasswordStoreX::NativeBackend> backend =
       GetBackend(GetParam());
+  std::vector<PasswordForm> native_backend_last_state;
+  if (GetParam() == WORKING_BACKEND) {
+    static_cast<MockBackend*>(backend.get())
+        ->SaveFormsOnDestruct(&native_backend_last_state);
+  }
   if (GetParam() != NO_BACKEND) {
     for (int i = 0; i < 3; i++)
       backend->AddLogin(*old_credentials[i]);
@@ -658,9 +676,10 @@ TEST_P(PasswordStoreXTest, MigrationToEncryption) {
 
   login_db = std::make_unique<password_manager::LoginDatabase>(
       test_login_db_file_path());
-  scoped_refptr<PasswordStoreX> store(new PasswordStoreX(
-      std::move(login_db), test_encrypted_login_db_file_path(),
-      std::move(backend), &fake_pref_service_));
+  scoped_refptr<PasswordStoreX> store(
+      new PasswordStoreX(std::move(login_db), test_login_db_file_path(),
+                         test_encrypted_login_db_file_path(),
+                         std::move(backend), &fake_pref_service_));
   store->Init(syncer::SyncableService::StartSyncFlare(), nullptr);
 
   // Make modifications, so that we trigger the migration and so that we can
@@ -705,9 +724,9 @@ TEST_P(PasswordStoreXTest, MigrationToEncryption) {
       LinuxBackendMigrationStatus::kNotAttempted, 1);
 
   if (GetParam() == WORKING_BACKEND) {
-    // Verify that the encrypted loginDB is up-to-date.
+    // Verify that the login database contains all the values, now encrypted.
     std::vector<std::unique_ptr<PasswordForm>> stored_forms =
-        ReadLoginDB(test_encrypted_login_db_file_path(), true);
+        ReadLoginDB(test_login_db_file_path(), true);
     EXPECT_EQ(6u, stored_forms.size());
     EXPECT_THAT(
         stored_forms,
@@ -715,11 +734,26 @@ TEST_P(PasswordStoreXTest, MigrationToEncryption) {
             Pointee(*new_form), Pointee(*old_credentials[1]),
             Pointee(*old_credentials[2]), Pointee(*old_credentials[3]),
             Pointee(*old_credentials[4]), Pointee(*old_credentials[5])));
+    EXPECT_TRUE(native_backend_last_state.empty());
 
-    stored_forms = ReadLoginDB(test_login_db_file_path(), false);
+    stored_forms = ReadLoginDB(test_encrypted_login_db_file_path(), false);
     EXPECT_TRUE(stored_forms.empty());
-    EXPECT_EQ(PasswordStoreX::COPIED_ALL, migration_step_pref_.GetValue());
-  } else {
+    EXPECT_EQ(PasswordStoreX::LOGIN_DB_REPLACED,
+              migration_step_pref_.GetValue());
+
+    histogram_tester_.ExpectBucketCount(
+        "PasswordManager.LinuxBackendMigration.AttemptResult",
+        LinuxBackendMigrationStatus::kLoginDBReplaced, 1);
+  } else if (GetParam() == FAILING_BACKEND) {
+    // No values should be written if we can't read the backend.
+    auto stored_forms = ReadLoginDB(test_encrypted_login_db_file_path(), true);
+    EXPECT_TRUE(stored_forms.empty());
+    EXPECT_THAT(migration_step_pref_.GetValue(), PasswordStoreX::POSTPONED);
+
+    histogram_tester_.ExpectBucketCount(
+        "PasswordManager.LinuxBackendMigration.AttemptResult",
+        LinuxBackendMigrationStatus::kPostponed, 1);
+  } else {  // NO_BACKEND
     // No values should be moved without a working backend.
     auto stored_forms = ReadLoginDB(test_encrypted_login_db_file_path(), true);
     EXPECT_TRUE(stored_forms.empty());
@@ -740,7 +774,7 @@ TEST_P(PasswordStoreXTest, MigrationToEncryption_OnlyOnce) {
   migration_step_pref_.Init(password_manager::prefs::kMigrationToLoginDBStep,
                             &fake_pref_service_);
   // Signal that the migration has been completed.
-  migration_step_pref_.SetValue(PasswordStoreX::COPIED_ALL);
+  migration_step_pref_.SetValue(PasswordStoreX::LOGIN_DB_REPLACED);
 
   // We add new credentials into a backend. They should be completely ignored by
   // the store.
@@ -750,21 +784,22 @@ TEST_P(PasswordStoreXTest, MigrationToEncryption_OnlyOnce) {
   for (int i = 0; i < 3; i++)
     backend->AddLogin(*old_credentials[i]);
 
-  // Add existing credentials into the encrypted loginDB. They should be the
-  // only thing that's available in the store.
-  auto encrypted_login_db = std::make_unique<password_manager::LoginDatabase>(
-      test_encrypted_login_db_file_path());
-  ASSERT_TRUE(encrypted_login_db->Init());
-  for (int i = 3; i < 6; i++)
-    ignore_result(encrypted_login_db->AddLogin(*old_credentials[i]));
-  encrypted_login_db.reset();
-
-  // Create the store.
+  // Add existing credentials into loginDB. They should be the only thing that's
+  // available in the store.
   auto login_db = std::make_unique<password_manager::LoginDatabase>(
       test_login_db_file_path());
-  scoped_refptr<PasswordStoreX> store = new PasswordStoreX(
-      std::move(login_db), test_encrypted_login_db_file_path(),
-      std::move(backend), &fake_pref_service_);
+  ASSERT_TRUE(login_db->Init());
+  for (int i = 3; i < 6; i++)
+    ignore_result(login_db->AddLogin(*old_credentials[i]));
+  login_db.reset();
+
+  // Create the store.
+  login_db = std::make_unique<password_manager::LoginDatabase>(
+      test_login_db_file_path());
+  scoped_refptr<PasswordStoreX> store =
+      new PasswordStoreX(std::move(login_db), test_login_db_file_path(),
+                         test_encrypted_login_db_file_path(),
+                         std::move(backend), &fake_pref_service_);
   store->Init(syncer::SyncableService::StartSyncFlare(), nullptr);
 
   // Make modifications and check the contents.
@@ -785,25 +820,90 @@ TEST_P(PasswordStoreXTest, MigrationToEncryption_OnlyOnce) {
   store.reset();
   WaitForPasswordStore();
 
-  // The previous results were served from the encrypted LoginDB.
+  // The previous results were served from an encrypted login database.
   std::vector<std::unique_ptr<PasswordForm>> stored_forms =
-      ReadLoginDB(test_encrypted_login_db_file_path(), true);
+      ReadLoginDB(test_login_db_file_path(), true);
   EXPECT_EQ(2u, stored_forms.size());
-  EXPECT_EQ(PasswordStoreX::COPIED_ALL, migration_step_pref_.GetValue());
+  EXPECT_EQ(PasswordStoreX::LOGIN_DB_REPLACED, migration_step_pref_.GetValue());
   EXPECT_THAT(stored_forms, UnorderedElementsAre(Pointee(*old_credentials[4]),
                                                  Pointee(*old_credentials[5])));
 
   histogram_tester_.ExpectBucketCount(
       "PasswordManager.LinuxBackendMigration.Adoption",
-      LinuxBackendMigrationStatus::kCopiedAll, 1);
+      LinuxBackendMigrationStatus::kLoginDBReplaced, 1);
+  histogram_tester_.ExpectTotalCount(
+      "PasswordManager.LinuxBackendMigration.AttemptResult", 0);
 }
 
-INSTANTIATE_TEST_CASE_P(NoBackend,
-                        PasswordStoreXTest,
-                        testing::Values(NO_BACKEND));
-INSTANTIATE_TEST_CASE_P(FailingBackend,
-                        PasswordStoreXTest,
-                        testing::Values(FAILING_BACKEND));
-INSTANTIATE_TEST_CASE_P(WorkingBackend,
-                        PasswordStoreXTest,
-                        testing::Values(WORKING_BACKEND));
+TEST_P(PasswordStoreXTest, MigrationToEncryption_DropIllegalEntries) {
+  if (GetParam() != WORKING_BACKEND)
+    return;
+
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      password_manager::features::kMigrateLinuxToLoginDB);
+  IntegerPrefMember migration_step_pref_;
+  migration_step_pref_.Init(password_manager::prefs::kMigrationToLoginDBStep,
+                            &fake_pref_service_);
+
+  EXPECT_EQ(PasswordStoreX::NOT_ATTEMPTED, migration_step_pref_.GetValue());
+
+  // Add existing credentials into the backend.
+  std::vector<std::unique_ptr<PasswordForm>> old_credentials;
+  InitExpectedForms(true, 4, &old_credentials);
+  // Create illegal entries.
+  old_credentials[1]->origin = GURL();
+  old_credentials[3]->signon_realm.clear();
+
+  std::unique_ptr<PasswordStoreX::NativeBackend> backend =
+      GetBackend(GetParam());
+  std::vector<PasswordForm> native_backend_last_state;
+  static_cast<MockBackend*>(backend.get())
+      ->SaveFormsOnDestruct(&native_backend_last_state);
+  for (int i = 0; i < 3; i++)
+    backend->AddLogin(*old_credentials[i]);
+
+  auto login_db = std::make_unique<password_manager::LoginDatabase>(
+      test_login_db_file_path());
+  scoped_refptr<PasswordStoreX> store(
+      new PasswordStoreX(std::move(login_db), test_login_db_file_path(),
+                         test_encrypted_login_db_file_path(),
+                         std::move(backend), &fake_pref_service_));
+  store->Init(syncer::SyncableService::StartSyncFlare(), nullptr);
+
+  MockPasswordStoreConsumer consumer;
+  // The store has the native backend data, minus the illegal entries.
+  // The call to GetAutofillableLogins() both triggers the opportunistic
+  // migration and returns the data for the test.
+  EXPECT_CALL(consumer,
+              OnGetPasswordStoreResultsConstRef(UnorderedElementsAre(
+                  Pointee(*old_credentials[0]), Pointee(*old_credentials[2]))));
+  store->GetAutofillableLogins(&consumer);
+
+  WaitForPasswordStore();
+  store->ShutdownOnUIThread();
+  store.reset();
+  WaitForPasswordStore();
+
+  // Verify that the login database contains all the values, now encrypted.
+  std::vector<std::unique_ptr<PasswordForm>> stored_forms =
+      ReadLoginDB(test_login_db_file_path(), true);
+  EXPECT_EQ(2u, stored_forms.size());
+  EXPECT_THAT(stored_forms, UnorderedElementsAre(Pointee(*old_credentials[0]),
+                                                 Pointee(*old_credentials[2])));
+  EXPECT_EQ(PasswordStoreX::LOGIN_DB_REPLACED, migration_step_pref_.GetValue());
+
+  histogram_tester_.ExpectBucketCount(
+      "PasswordManager.LinuxBackendMigration.AttemptResult",
+      LinuxBackendMigrationStatus::kLoginDBReplaced, 1);
+}
+
+INSTANTIATE_TEST_SUITE_P(NoBackend,
+                         PasswordStoreXTest,
+                         testing::Values(NO_BACKEND));
+INSTANTIATE_TEST_SUITE_P(FailingBackend,
+                         PasswordStoreXTest,
+                         testing::Values(FAILING_BACKEND));
+INSTANTIATE_TEST_SUITE_P(WorkingBackend,
+                         PasswordStoreXTest,
+                         testing::Values(WORKING_BACKEND));

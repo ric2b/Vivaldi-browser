@@ -13,15 +13,15 @@
 namespace blink {
 
 class LayoutBox;
+class NGBaselineRequest;
 class NGBreakToken;
 class NGConstraintSpace;
-class NGFragmentBuilder;
+class NGBoxFragmentBuilder;
 class NGLayoutResult;
 class NGPhysicalBoxFragment;
 class NGPhysicalContainerFragment;
 class NGPhysicalFragment;
 struct MinMaxSize;
-struct NGBaselineRequest;
 struct NGBoxStrut;
 struct NGLogicalOffset;
 
@@ -29,11 +29,13 @@ struct NGLogicalOffset;
 class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
   friend NGLayoutInputNode;
  public:
-  explicit NGBlockNode(LayoutBox*);
+  explicit NGBlockNode(LayoutBox* box) : NGLayoutInputNode(box, kBlock) {}
 
-  scoped_refptr<NGLayoutResult> Layout(
+  NGBlockNode(std::nullptr_t) : NGLayoutInputNode(nullptr) {}
+
+  scoped_refptr<const NGLayoutResult> Layout(
       const NGConstraintSpace& constraint_space,
-      NGBreakToken* break_token = nullptr);
+      const NGBreakToken* break_token = nullptr);
   NGLayoutInputNode NextSibling() const;
 
   // Computes the value of min-content and max-content for this node's border
@@ -58,12 +60,16 @@ class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
                                const MinMaxSizeInput&,
                                const NGConstraintSpace* = nullptr);
 
-  MinMaxSize ComputeMinMaxSizeFromLegacy(NGMinMaxSizeType) const;
+  MinMaxSize ComputeMinMaxSizeFromLegacy(const MinMaxSizeInput&) const;
 
   NGBoxStrut GetScrollbarSizes() const;
 
   NGLayoutInputNode FirstChild() const;
 
+  NGBlockNode GetRenderedLegend() const;
+  NGBlockNode GetFieldsetContent() const;
+
+  bool ChildrenInline() const;
   bool IsInlineLevel() const;
   bool IsAtomicInlineLevel() const;
 
@@ -72,17 +78,19 @@ class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
   bool UseLogicalBottomMarginEdgeForInlineBlockBaseline() const;
 
   // Layout an atomic inline; e.g., inline block.
-  scoped_refptr<NGLayoutResult> LayoutAtomicInline(const NGConstraintSpace&,
-                                                   FontBaseline,
-                                                   bool use_first_line_style);
+  scoped_refptr<const NGLayoutResult> LayoutAtomicInline(
+      const NGConstraintSpace& parent_constraint_space,
+      const ComputedStyle& parent_style,
+      FontBaseline,
+      bool use_first_line_style);
 
   // Runs layout on the underlying LayoutObject and creates a fragment for the
   // resulting geometry.
-  scoped_refptr<NGLayoutResult> RunOldLayout(const NGConstraintSpace&);
+  scoped_refptr<const NGLayoutResult> RunOldLayout(const NGConstraintSpace&);
 
   // Called if this is an out-of-flow block which needs to be
   // positioned with legacy layout.
-  void UseOldOutOfFlowPositioning();
+  void UseOldOutOfFlowPositioning() const;
 
   // Save static position for legacy AbsPos layout.
   void SaveStaticOffsetForLegacy(const NGLogicalOffset&,
@@ -99,9 +107,12 @@ class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
  private:
   void PrepareForLayout();
 
-  void FinishLayout(const NGConstraintSpace&,
-                    NGBreakToken*,
-                    scoped_refptr<NGLayoutResult>);
+  // If this node is a LayoutNGMixin, the caller must pass the layout object for
+  // this node cast to a LayoutBlockFlow as the first argument.
+  void FinishLayout(LayoutBlockFlow*,
+                    const NGConstraintSpace&,
+                    const NGBreakToken*,
+                    scoped_refptr<const NGLayoutResult>);
 
   // After we run the layout algorithm, this function copies back the geometry
   // data to the layout box.
@@ -119,14 +130,16 @@ class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
                                  const NGPhysicalBoxFragment&);
   void CopyChildFragmentPosition(
       const NGPhysicalFragment& fragment,
-      const NGPhysicalOffset& fragment_offset,
-      const NGPhysicalOffset& additional_offset = NGPhysicalOffset());
+      const NGPhysicalOffset fragment_offset,
+      const NGPhysicalOffset additional_offset = NGPhysicalOffset());
 
-  void CopyBaselinesFromOldLayout(const NGConstraintSpace&, NGFragmentBuilder*);
+  void CopyBaselinesFromOldLayout(const NGConstraintSpace&,
+                                  NGBoxFragmentBuilder*);
   LayoutUnit AtomicInlineBaselineFromOldLayout(const NGBaselineRequest&,
                                                const NGConstraintSpace&);
 
   void UpdateShapeOutsideInfoIfNeeded(
+      const NGLayoutResult&,
       LayoutUnit percentage_resolution_inline_size);
 };
 

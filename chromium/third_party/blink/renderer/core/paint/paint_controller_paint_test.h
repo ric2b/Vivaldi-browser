@@ -27,7 +27,7 @@ class PaintControllerPaintTestBase : public RenderingTest {
  protected:
   LayoutView& GetLayoutView() const { return *GetDocument().GetLayoutView(); }
   PaintController& RootPaintController() const {
-    if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled())
+    if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
       return *GetDocument().View()->GetPaintController();
     return GetLayoutView()
         .Layer()
@@ -40,15 +40,15 @@ class PaintControllerPaintTestBase : public RenderingTest {
     EnableCompositing();
   }
 
-  bool PaintWithoutCommit(const IntRect* interest_rect = nullptr) {
+  bool PaintWithoutCommit(
+      const base::Optional<IntRect>& interest_rect = base::nullopt) {
     GetDocument().View()->Lifecycle().AdvanceTo(DocumentLifecycle::kInPaint);
-    if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
+    if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
       if (GetLayoutView().Layer()->NeedsRepaint()) {
         GraphicsContext graphics_context(RootPaintController());
         GetDocument().View()->Paint(
             graphics_context, kGlobalPaintNormalPhase,
-            interest_rect ? CullRect(*interest_rect)
-                          : CullRect(LayoutRect::InfiniteIntRect()));
+            interest_rect ? CullRect(*interest_rect) : CullRect::Infinite());
         return true;
       }
       GetDocument().View()->Lifecycle().AdvanceTo(
@@ -56,8 +56,10 @@ class PaintControllerPaintTestBase : public RenderingTest {
       return false;
     }
     // Only root graphics layer is supported.
-    if (!GetLayoutView().Layer()->GraphicsLayerBacking()->PaintWithoutCommit(
-            interest_rect)) {
+    if (!GetLayoutView()
+             .Layer()
+             ->GraphicsLayerBacking()
+             ->PaintWithoutCommitForTesting(interest_rect)) {
       GetDocument().View()->Lifecycle().AdvanceTo(
           DocumentLifecycle::kPaintClean);
       return false;
@@ -65,13 +67,10 @@ class PaintControllerPaintTestBase : public RenderingTest {
     return true;
   }
 
-  const DisplayItemClient& ViewBackgroundClient() {
-    if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
-      // With SPv1, the document background uses the scrolling contents
-      // layer as its DisplayItemClient.
-      return *GetLayoutView().Layer()->GraphicsLayerBacking();
-    }
-    return GetLayoutView();
+  const DisplayItemClient& ViewScrollingBackgroundClient() {
+    return GetLayoutView()
+        .GetScrollableArea()
+        ->GetScrollingBackgroundDisplayItemClient();
   }
 
   void CommitAndFinishCycle() {
@@ -81,7 +80,7 @@ class PaintControllerPaintTestBase : public RenderingTest {
     GetDocument().View()->Lifecycle().AdvanceTo(DocumentLifecycle::kPaintClean);
   }
 
-  void Paint(const IntRect* interest_rect = nullptr) {
+  void Paint(const base::Optional<IntRect>& interest_rect = base::nullopt) {
     // Only root graphics layer is supported.
     if (PaintWithoutCommit(interest_rect))
       CommitAndFinishCycle();
@@ -110,7 +109,7 @@ class PaintControllerPaintTestBase : public RenderingTest {
 
   void InvalidateAll(PaintController& paint_controller) {
     paint_controller.InvalidateAllForTesting();
-    if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
+    if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
       DCHECK_EQ(&paint_controller, GetDocument().View()->GetPaintController());
       GetLayoutView().Layer()->SetNeedsRepaint();
     }
@@ -118,6 +117,11 @@ class PaintControllerPaintTestBase : public RenderingTest {
 
   bool ClientCacheIsValid(const DisplayItemClient& client) {
     return RootPaintController().ClientCacheIsValid(client);
+  }
+
+  using SubsequenceMarkers = PaintController::SubsequenceMarkers;
+  SubsequenceMarkers* GetSubsequenceMarkers(const DisplayItemClient& client) {
+    return RootPaintController().GetSubsequenceMarkers(client);
   }
 };
 
@@ -127,6 +131,29 @@ class PaintControllerPaintTest : public PaintTestConfigurations,
   PaintControllerPaintTest(LocalFrameClient* local_frame_client = nullptr)
       : PaintControllerPaintTestBase(local_frame_client) {}
 };
+
+// Shorter names for frequently used display item types in core/ tests.
+const DisplayItem::Type kNonScrollingBackgroundChunkType =
+    DisplayItem::PaintPhaseToDrawingType(PaintPhase::kSelfBlockBackgroundOnly);
+const DisplayItem::Type kScrollingBackgroundChunkType =
+    DisplayItem::PaintPhaseToClipType(PaintPhase::kSelfBlockBackgroundOnly);
+const DisplayItem::Type kNonScrollingContentsBackgroundChunkType =
+    DisplayItem::PaintPhaseToDrawingType(
+        PaintPhase::kDescendantBlockBackgroundsOnly);
+const DisplayItem::Type kScrollingContentsBackgroundChunkType =
+    DisplayItem::PaintPhaseToClipType(
+        PaintPhase::kDescendantBlockBackgroundsOnly);
+
+#define EXPECT_SUBSEQUENCE(client, expected_start, expected_end)        \
+  do {                                                                  \
+    auto* subsequence = GetSubsequenceMarkers(client);                  \
+    ASSERT_NE(nullptr, subsequence);                                    \
+    EXPECT_EQ(static_cast<size_t>(expected_start), subsequence->start); \
+    EXPECT_EQ(static_cast<size_t>(expected_end), subsequence->end);     \
+  } while (false)
+
+#define EXPECT_NO_SUBSEQUENCE(client) \
+  EXPECT_EQ(nullptr, GetSubsequenceMarkers(client)
 
 }  // namespace blink
 

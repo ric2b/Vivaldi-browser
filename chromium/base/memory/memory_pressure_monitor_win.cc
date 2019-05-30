@@ -6,6 +6,7 @@
 
 #include <windows.h>
 
+#include "base/bind.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -85,8 +86,8 @@ void MemoryPressureMonitor::CheckMemoryPressureSoon() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, Bind(&MemoryPressureMonitor::CheckMemoryPressure,
-                      weak_ptr_factory_.GetWeakPtr()));
+      FROM_HERE, BindOnce(&MemoryPressureMonitor::CheckMemoryPressure,
+                          weak_ptr_factory_.GetWeakPtr()));
 }
 
 MemoryPressureListener::MemoryPressureLevel

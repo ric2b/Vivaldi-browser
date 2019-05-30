@@ -17,7 +17,6 @@
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_restrictions.h"
 #include "net/base/completion_once_callback.h"
-#include "net/base/host_port_pair.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/base/upload_data_stream.h"
@@ -208,9 +207,9 @@ HttpResponseHeaders* TestURLFetcher::GetResponseHeaders() const {
   return fake_response_headers_.get();
 }
 
-HostPortPair TestURLFetcher::GetSocketAddress() const {
+IPEndPoint TestURLFetcher::GetSocketAddress() const {
   NOTIMPLEMENTED();
-  return HostPortPair();
+  return IPEndPoint();
 }
 
 const ProxyServer& TestURLFetcher::ProxyServerUsed() const {
@@ -350,12 +349,12 @@ std::unique_ptr<URLFetcher> TestURLFetcherFactory::CreateURLFetcher(
 }
 
 TestURLFetcher* TestURLFetcherFactory::GetFetcherByID(int id) const {
-  Fetchers::const_iterator i = fetchers_.find(id);
+  auto i = fetchers_.find(id);
   return i == fetchers_.end() ? NULL : i->second;
 }
 
 void TestURLFetcherFactory::RemoveFetcherFromMap(int id) {
-  Fetchers::iterator i = fetchers_.find(id);
+  auto i = fetchers_.find(id);
   DCHECK(i != fetchers_.end());
   fetchers_.erase(i);
 }
@@ -399,7 +398,7 @@ void FakeURLFetcher::Start() {
   TestURLFetcher::Start();
   base::SequencedTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
-      base::Bind(&FakeURLFetcher::RunDelegate, weak_factory_.GetWeakPtr()));
+      base::BindOnce(&FakeURLFetcher::RunDelegate, weak_factory_.GetWeakPtr()));
 }
 
 void FakeURLFetcher::RunDelegate() {

@@ -203,6 +203,18 @@ TEST(Functions, DeclareArgs) {
   ASSERT_FALSE(err.has_error());
 }
 
+TEST(Functions, NotNeeded) {
+  TestWithScope setup;
+
+  TestParseInput input("not_needed({ a = 1 }, \"*\")");
+  ASSERT_FALSE(input.has_error());
+
+  Err err;
+  input.parsed()->Execute(setup.scope(), &err);
+  ASSERT_FALSE(err.has_error())
+      << err.message() << err.location().Describe(true);
+}
+
 TEST(Functions, DeclareOverrides) {
   TestWithScope setup;
   Err err;

@@ -20,6 +20,7 @@ class HTMLImportTreeRoot final : public HTMLImport, public NameClient {
  public:
   static HTMLImportTreeRoot* Create(Document*);
 
+  explicit HTMLImportTreeRoot(Document*);
   ~HTMLImportTreeRoot() final;
   void Dispose();
 
@@ -34,14 +35,12 @@ class HTMLImportTreeRoot final : public HTMLImport, public NameClient {
   HTMLImportChild* Add(HTMLImportChild*);
   HTMLImportChild* Find(const KURL&) const;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
   const char* NameInHeapSnapshot() const override {
     return "HTMLImportTreeRoot";
   }
 
  private:
-  explicit HTMLImportTreeRoot(Document*);
-
   void RecalcTimerFired(TimerBase*);
 
   TraceWrapperMember<Document> document_;

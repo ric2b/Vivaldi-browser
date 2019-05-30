@@ -27,6 +27,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_WEBAUDIO_AUDIO_NODE_INPUT_H_
 
 #include <memory>
+#include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_node.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_summing_junction.h"
 #include "third_party/blink/renderer/platform/audio/audio_bus.h"
@@ -42,12 +43,15 @@ class AudioNodeOutput;
 // input will act as a unity-gain summing junction, mixing all the outputs.  The
 // number of channels of the input's bus is the maximum of the number of
 // channels of all its connections.
-
-class AudioNodeInput final : public AudioSummingJunction {
+//
+// Use AudioNodeWiring to connect the AudioNodeOutput of another node to this,
+// and to disconnect, enable or disable that connection afterward.
+class MODULES_EXPORT AudioNodeInput final : public AudioSummingJunction {
   USING_FAST_MALLOC(AudioNodeInput);
 
  public:
   static std::unique_ptr<AudioNodeInput> Create(AudioHandler&);
+  ~AudioNodeInput() override;
 
   // AudioSummingJunction
   void DidUpdate() override;
@@ -55,24 +59,13 @@ class AudioNodeInput final : public AudioSummingJunction {
   // Can be called from any thread.
   AudioHandler& Handler() const { return handler_; }
 
-  // Must be called with the context's graph lock.
-  void Connect(AudioNodeOutput&);
-  void Disconnect(AudioNodeOutput&);
-
-  // disable() will take the output out of the active connections list and set
-  // aside in a disabled list.
-  // enable() will put the output back into the active connections list.
-  // Must be called with the context's graph lock.
-  void Enable(AudioNodeOutput&);
-  void Disable(AudioNodeOutput&);
-
   // pull() processes all of the AudioNodes connected to us.
   // In the case of multiple connections it sums the result into an internal
   // summing bus.  In the single connection case, it allows in-place processing
   // where possible using inPlaceBus.  It returns the bus which it rendered
   // into, returning inPlaceBus if in-place processing was performed.
   // Called from context's audio thread.
-  AudioBus* Pull(AudioBus* in_place_bus, size_t frames_to_process);
+  AudioBus* Pull(AudioBus* in_place_bus, uint32_t frames_to_process);
 
   // bus() contains the rendered audio after pull() has been called for each
   // time quantum.
@@ -107,9 +100,12 @@ class AudioNodeInput final : public AudioSummingJunction {
 
   // Called from context's audio thread.
   AudioBus* InternalSummingBus();
-  void SumAllConnections(AudioBus* summing_bus, size_t frames_to_process);
+  void SumAllConnections(AudioBus* summing_bus, uint32_t frames_to_process);
 
   scoped_refptr<AudioBus> internal_summing_bus_;
+
+  // Used to connect inputs and outputs together.
+  friend class AudioNodeWiring;
 };
 
 }  // namespace blink

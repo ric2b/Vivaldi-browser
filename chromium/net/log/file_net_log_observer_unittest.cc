@@ -7,8 +7,8 @@
 #include <string>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/files/file.h"
-#include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
@@ -127,7 +127,7 @@ struct ParsedNetLog {
   }
 
   base::JSONReader reader;
-  container = reader.ReadToValue(input);
+  container = reader.ReadToValueDeprecated(input);
   if (!container) {
     return ::testing::AssertionFailure() << reader.GetErrorMessage();
   }
@@ -345,9 +345,9 @@ class FileNetLogObserverBoundedTest : public ::testing::Test,
 };
 
 // Instantiates each FileNetLogObserverTest to use bounded and unbounded modes.
-INSTANTIATE_TEST_CASE_P(,
-                        FileNetLogObserverTest,
-                        ::testing::Values(true, false));
+INSTANTIATE_TEST_SUITE_P(,
+                         FileNetLogObserverTest,
+                         ::testing::Values(true, false));
 
 // Tests deleting a FileNetLogObserver without first calling StopObserving().
 TEST_P(FileNetLogObserverTest, ObserverDestroyedWithoutStopObserving) {
@@ -578,8 +578,8 @@ TEST_P(FileNetLogObserverTest, AddEventsFromMultipleThreads) {
   // Add events in parallel from all the threads.
   for (size_t i = 0; i < kNumThreads; ++i) {
     threads[i]->task_runner()->PostTask(
-        FROM_HERE, base::Bind(&AddEntries, base::Unretained(logger_.get()),
-                              kNumEventsAddedPerThread, kDummyEventSize));
+        FROM_HERE, base::BindOnce(&AddEntries, base::Unretained(logger_.get()),
+                                  kNumEventsAddedPerThread, kDummyEventSize));
   }
 
   // Join all the threads.
@@ -963,8 +963,9 @@ TEST_P(FileNetLogObserverTest, AddEventsFromMultipleThreadsWithStopObserving) {
   // Add events in parallel from all the threads.
   for (size_t i = 0; i < kNumThreads; ++i) {
     threads[i]->task_runner()->PostTask(
-        FROM_HERE, base::Bind(&AddEntriesViaNetLog, base::Unretained(&net_log_),
-                              kNumEventsAddedPerThread));
+        FROM_HERE,
+        base::BindOnce(&AddEntriesViaNetLog, base::Unretained(&net_log_),
+                       kNumEventsAddedPerThread));
   }
 
   // Stop observing.
@@ -998,8 +999,9 @@ TEST_P(FileNetLogObserverTest,
   // Add events in parallel from all the threads.
   for (size_t i = 0; i < kNumThreads; ++i) {
     threads[i]->task_runner()->PostTask(
-        FROM_HERE, base::Bind(&AddEntriesViaNetLog, base::Unretained(&net_log_),
-                              kNumEventsAddedPerThread));
+        FROM_HERE,
+        base::BindOnce(&AddEntriesViaNetLog, base::Unretained(&net_log_),
+                       kNumEventsAddedPerThread));
   }
 
   // Destroy logger.

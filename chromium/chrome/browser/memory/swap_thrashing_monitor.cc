@@ -7,11 +7,20 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/task_runner_util.h"
 #include "base/time/time.h"
 
 #if defined(OS_WIN)
 #include "chrome/browser/memory/swap_thrashing_monitor_delegate_win.h"
 #endif
+
+namespace features {
+
+// Feature flag controlling whether or not this monitor should be enabled.
+const base::Feature kSwapThrashingMonitor{"SwapThrashingMonitor",
+                                          base::FEATURE_DISABLED_BY_DEFAULT};
+
+}  // namespace features
 
 namespace memory {
 namespace {
@@ -61,6 +70,14 @@ SwapThrashingLevelUMA SwapThrashingLevelToUmaEnumValue(
   return UMA_SWAP_THRASHING_LEVEL_NONE;
 }
 
+std::unique_ptr<SwapThrashingMonitorDelegate> GetPlatformSpecificDelegate() {
+#if defined(OS_WIN)
+  return std::make_unique<SwapThrashingMonitorDelegateWin>();
+#else
+  return std::make_unique<SwapThrashingMonitorDelegate>();
+#endif
+}
+
 }  // namespace
 
 // static
@@ -74,13 +91,12 @@ SwapThrashingMonitor* SwapThrashingMonitor::GetInstance() {
 }
 
 SwapThrashingMonitor::SwapThrashingMonitor()
-    : current_swap_thrashing_level_(
-          SwapThrashingLevel::SWAP_THRASHING_LEVEL_NONE) {
-#if defined(OS_WIN)
-  delegate_ = std::make_unique<SwapThrashingMonitorDelegateWin>();
-#else
-  delegate_ = std::make_unique<SwapThrashingMonitorDelegate>();
-#endif
+    : delegate_(GetPlatformSpecificDelegate().release(),
+                base::OnTaskRunnerDeleter(blocking_task_runner_)),
+      current_swap_thrashing_level_(
+          SwapThrashingLevel::SWAP_THRASHING_LEVEL_NONE),
+      weak_factory_(this) {
+  DCHECK(base::FeatureList::IsEnabled(features::kSwapThrashingMonitor));
   StartObserving();
 }
 
@@ -96,8 +112,32 @@ SwapThrashingLevel SwapThrashingMonitor::GetCurrentSwapThrashingLevel() {
 void SwapThrashingMonitor::CheckSwapThrashingPressureAndRecordStatistics() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  SwapThrashingLevel swap_thrashing_level =
-      delegate_->SampleAndCalculateSwapThrashingLevel();
+  base::PostTaskAndReplyWithResult(
+      blocking_task_runner_.get(), FROM_HERE,
+      base::BindOnce(
+          &SwapThrashingMonitorDelegate::SampleAndCalculateSwapThrashingLevel,
+          base::Unretained(delegate_.get())),
+      base::BindOnce(&SwapThrashingMonitor::RecordSwapThrashingLevel,
+                     weak_factory_.GetWeakPtr()));
+}
+
+void SwapThrashingMonitor::StartObserving() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  // TODO(sebmarchand): Determine if the system is using on-disk swap, abort if
+  // it isn't as there won't be any swap-paging to observe (on-disk swap could
+  // later become available if the user turn it on but this case is rare that
+  // it's safe to ignore it). See crbug.com/779309.
+  check_timer_.Start(
+      FROM_HERE, kSamplingInterval,
+      base::BindRepeating(
+          &SwapThrashingMonitor::CheckSwapThrashingPressureAndRecordStatistics,
+          base::Unretained(this)));
+}
+
+void SwapThrashingMonitor::RecordSwapThrashingLevel(
+    SwapThrashingLevel swap_thrashing_level) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // Record the state changes.
   if (swap_thrashing_level != current_swap_thrashing_level_) {
@@ -139,19 +179,6 @@ void SwapThrashingMonitor::CheckSwapThrashingPressureAndRecordStatistics() {
       "Memory.Experimental.SwapThrashingLevel",
       SwapThrashingLevelToUmaEnumValue(current_swap_thrashing_level_),
       UMA_SWAP_THRASHING_LEVEL_COUNT);
-}
-
-void SwapThrashingMonitor::StartObserving() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  // TODO(sebmarchand): Determine if the system is using on-disk swap, abort if
-  // it isn't as there won't be any swap-paging to observe (on-disk swap could
-  // later become available if the user turn it on but this case is rare that
-  // it's safe to ignore it). See crbug.com/779309.
-  check_timer_.Start(
-      FROM_HERE, kSamplingInterval,
-      base::Bind(
-          &SwapThrashingMonitor::CheckSwapThrashingPressureAndRecordStatistics,
-          base::Unretained(this)));
 }
 
 }  // namespace memory

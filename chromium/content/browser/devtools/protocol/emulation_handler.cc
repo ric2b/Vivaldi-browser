@@ -8,18 +8,20 @@
 
 #include "base/strings/string_number_conversions.h"
 #include "build/build_config.h"
-#include "content/browser/devtools/devtools_session.h"
+#include "content/browser/devtools/devtools_agent_host_impl.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/input/touch_emulator.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
-#include "content/common/view_messages.h"
+#include "content/common/widget_messages.h"
 #include "content/public/common/url_constants.h"
 #include "net/http/http_util.h"
 #include "services/device/public/cpp/geolocation/geoposition.h"
 #include "services/device/public/mojom/geolocation_context.mojom.h"
 #include "services/device/public/mojom/geoposition.mojom.h"
 #include "ui/events/gesture_detection/gesture_provider_config_helper.h"
+
+#include "app/vivaldi_apptools.h"
 
 namespace content {
 namespace protocol {
@@ -69,19 +71,19 @@ EmulationHandler::~EmulationHandler() {
 // static
 std::vector<EmulationHandler*> EmulationHandler::ForAgentHost(
     DevToolsAgentHostImpl* host) {
-  return DevToolsSession::HandlersForAgentHost<EmulationHandler>(
-      host, Emulation::Metainfo::domainName);
+  return host->HandlersByName<EmulationHandler>(
+      Emulation::Metainfo::domainName);
 }
 
 void EmulationHandler::SetRenderer(int process_host_id,
                                    RenderFrameHostImpl* frame_host) {
   if (host_ == frame_host)
     return;
-
   host_ = frame_host;
   if (touch_emulation_enabled_)
     UpdateTouchEventEmulationState();
-  UpdateDeviceEmulationState();
+  if (device_emulation_enabled_)
+    UpdateDeviceEmulationState();
 }
 
 void EmulationHandler::Wire(UberDispatcher* dispatcher) {
@@ -94,8 +96,10 @@ Response EmulationHandler::Disable() {
     UpdateTouchEventEmulationState();
   }
   user_agent_ = std::string();
-  device_emulation_enabled_ = false;
-  UpdateDeviceEmulationState();
+  if (device_emulation_enabled_) {
+    device_emulation_enabled_ = false;
+    UpdateDeviceEmulationState();
+  }
   return Response::OK();
 }
 
@@ -181,7 +185,7 @@ Response EmulationHandler::SetDeviceMetricsOverride(
       screen_height.fromMaybe(0) > max_size) {
     return Response::InvalidParams(
         "Screen width and height values must be positive, not greater than " +
-        base::IntToString(max_size));
+        base::NumberToString(max_size));
   }
 
   if (position_x.fromMaybe(0) < 0 || position_y.fromMaybe(0) < 0 ||
@@ -193,7 +197,7 @@ Response EmulationHandler::SetDeviceMetricsOverride(
   if (width < 0 || height < 0 || width > max_size || height > max_size) {
     return Response::InvalidParams(
         "Width and height values must be positive, not greater than " +
-        base::IntToString(max_size));
+        base::NumberToString(max_size));
   }
 
   if (device_scale_factor < 0)
@@ -217,7 +221,7 @@ Response EmulationHandler::SetDeviceMetricsOverride(
     if (orientationAngle < 0 || orientationAngle >= max_orientation_angle) {
       return Response::InvalidParams(
           "Screen orientation angle must be non-negative, less than " +
-          base::IntToString(max_orientation_angle));
+          base::NumberToString(max_orientation_angle));
     }
   }
 
@@ -368,6 +372,9 @@ void EmulationHandler::UpdateTouchEventEmulationState() {
           TouchEmulationConfigurationToType(touch_emulation_configuration_));
     }
   } else {
+    // NOTE(david@vivaldi.com): In Vivaldi only disable touch emulation if
+    // there is no other existing RenderWidgetHostImpl which still needs it.
+    if (!vivaldi::IsVivaldiRunning() || !IsTouchEmulationRequiredByOthers())
     if (auto* touch_emulator = host_->GetRenderWidgetHost()->GetTouchEmulator())
       touch_emulator->Disable();
   }
@@ -387,14 +394,29 @@ void EmulationHandler::UpdateDeviceEmulationState() {
   // emulation params were applied. That way, we can avoid having to handle
   // Set/ClearDeviceMetricsOverride in the renderer. With the old IPC system,
   // this is tricky since we'd have to track the DevTools message id with the
-  // ViewMsg and acknowledgment, as well as plump the acknowledgment back to the
-  // EmulationHandler somehow. Mojo callbacks should make this much simpler.
+  // WidgetMsg and acknowledgment, as well as plump the acknowledgment back to
+  // the EmulationHandler somehow. Mojo callbacks should make this much simpler.
   if (device_emulation_enabled_) {
-    host_->GetRenderWidgetHost()->Send(new ViewMsg_EnableDeviceEmulation(
+    // NOTE(david@vivaldi.com): We need to inform
+    // RenderWidgetHostImpl that device emulation has been activated.
+    if (vivaldi::IsVivaldiRunning())
+      host_->GetRenderWidgetHost()->SetDeviceEmulationActive(true);
+
+    host_->GetRenderWidgetHost()->Send(new WidgetMsg_EnableDeviceEmulation(
         host_->GetRenderWidgetHost()->GetRoutingID(),
         device_emulation_params_));
   } else {
-    host_->GetRenderWidgetHost()->Send(new ViewMsg_DisableDeviceEmulation(
+    // NOTE(david@vivaldi.com): In Vivaldi we need to reset the cursor and then
+    // inform RenderWidgetHostImpl that device emulation has been deactivated.
+    if (vivaldi::IsVivaldiRunning()) {
+      if (auto* touch_emulator =
+              host_->GetRenderWidgetHost()->GetTouchEmulator())
+        host_->GetRenderWidgetHost()->SetCursor(
+            touch_emulator->GetDefaultCursor());
+      host_->GetRenderWidgetHost()->SetDeviceEmulationActive(false);
+    }
+
+    host_->GetRenderWidgetHost()->Send(new WidgetMsg_DisableDeviceEmulation(
         host_->GetRenderWidgetHost()->GetRoutingID()));
   }
 }

@@ -36,6 +36,7 @@
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_client.h"
 #include "third_party/blink/renderer/platform/text/segmented_string.h"
+#include "third_party/blink/renderer/platform/wtf/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/compiler.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
 #include "third_party/blink/renderer/platform/wtf/ref_counted.h"
@@ -52,6 +53,8 @@ class LocalFrameView;
 class Text;
 
 class XMLParserContext : public RefCounted<XMLParserContext> {
+  USING_FAST_MALLOC(XMLParserContext);
+
  public:
   static scoped_refptr<XMLParserContext>
   CreateMemoryParser(xmlSAXHandlerPtr, void* user_data, const CString& chunk);
@@ -72,13 +75,17 @@ class XMLDocumentParser final : public ScriptableDocumentParser,
 
  public:
   static XMLDocumentParser* Create(Document& document, LocalFrameView* view) {
-    return new XMLDocumentParser(document, view);
+    return MakeGarbageCollected<XMLDocumentParser>(document, view);
   }
   static XMLDocumentParser* Create(DocumentFragment* fragment,
                                    Element* element,
                                    ParserContentPolicy parser_content_policy) {
-    return new XMLDocumentParser(fragment, element, parser_content_policy);
+    return MakeGarbageCollected<XMLDocumentParser>(fragment, element,
+                                                   parser_content_policy);
   }
+
+  explicit XMLDocumentParser(Document&, LocalFrameView* = nullptr);
+  XMLDocumentParser(DocumentFragment*, Element*, ParserContentPolicy);
   ~XMLDocumentParser() override;
   void Trace(blink::Visitor*) override;
 
@@ -116,9 +123,6 @@ class XMLDocumentParser final : public ScriptableDocumentParser,
   void SetScriptStartPosition(TextPosition);
 
  private:
-  explicit XMLDocumentParser(Document&, LocalFrameView* = nullptr);
-  XMLDocumentParser(DocumentFragment*, Element*, ParserContentPolicy);
-
   // From DocumentParser
   void insert(const String&) override { NOTREACHED(); }
   void Append(const String&) override;

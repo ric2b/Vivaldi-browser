@@ -28,6 +28,7 @@
 #include "third_party/blink/renderer/core/css/media_query_list_listener.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
+#include "third_party/blink/renderer/core/event_interface_names.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/inspector/inspector_trace_events.h"
@@ -44,7 +45,7 @@ std::pair<EventTarget*, StringImpl*> EventTargetKey(const Event* event) {
 ScriptedAnimationController::ScriptedAnimationController(Document* document)
     : document_(document), callback_collection_(document), suspend_count_(0) {}
 
-void ScriptedAnimationController::Trace(blink::Visitor* visitor) {
+void ScriptedAnimationController::Trace(Visitor* visitor) {
   visitor->Trace(document_);
   visitor->Trace(callback_collection_);
   visitor->Trace(event_queue_);
@@ -57,7 +58,7 @@ void ScriptedAnimationController::Pause() {
 }
 
 void ScriptedAnimationController::Unpause() {
-  // It would be nice to put an DCHECK(m_suspendCount > 0) here, but in WK1
+  // It would be nice to put an DCHECK_GT(suspend_count_, 0) here, but in WK1
   // resume() can be called even when suspend hasn't (if a tab was created in
   // the background).
   if (suspend_count_ > 0)
@@ -66,7 +67,7 @@ void ScriptedAnimationController::Unpause() {
 }
 
 void ScriptedAnimationController::DispatchEventsAndCallbacksForPrinting() {
-  DispatchEvents(EventNames::MediaQueryListEvent);
+  DispatchEvents(event_interface_names::kMediaQueryListEvent);
   CallMediaQueryListListeners();
 }
 

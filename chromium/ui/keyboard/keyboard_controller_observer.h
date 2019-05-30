@@ -47,11 +47,11 @@ class KEYBOARD_EXPORT KeyboardControllerObserver {
 
   // Called when the keyboard bounds have changed in a way that should affect
   // the usable region of the workspace. The user interface should respond to
-  // this event by moving important elements away from |new_bounds| so that they
-  // don't overlap. However, drastic visual changes should be avoided, as the
-  // occluded bounds may change frequently.
+  // this event by moving important elements away from |new_bounds_in_screen|
+  // so that they don't overlap. However, drastic visual changes should be
+  // avoided, as the occluded bounds may change frequently.
   virtual void OnKeyboardWorkspaceOccludedBoundsChanged(
-      const gfx::Rect& new_bounds) {}
+      const gfx::Rect& new_bounds_in_screen) {}
 
   // Called when the keyboard bounds have changed in a way that affects how the
   // workspace should change to not take up the screen space occupied by the
@@ -67,18 +67,20 @@ class KEYBOARD_EXPORT KeyboardControllerObserver {
   virtual void OnKeyboardAppearanceChanged(
       const KeyboardStateDescriptor& state) {}
 
-  // Called when the keyboard was disabled (e.g. when user switches convertible
-  // to laptop mode)
-  virtual void OnKeyboardDisabled() {}
+  // Called when an enable flag affecting the requested enabled state changes.
+  virtual void OnKeyboardEnableFlagsChanged(
+      std::set<mojom::KeyboardEnableFlag>& keyboard_enable_flags) {}
+
+  // Called when the keyboard is enabled or disabled. NOTE: This is called
+  // when Enabled() or Disabled() is called, not when the requested enabled
+  // state (IsEnableRequested) changes.
+  virtual void OnKeyboardEnabledChanged(bool is_enabled) {}
 
   // Called when the keyboard has been hidden and the hiding animation finished
-  // successfully. This is same as |state| == HIDDEN on OnStateChanged.
+  // successfully.
   // When |is_temporary_hide| is true, this hide is immediately followed by a
   // show (e.g. when changing to floating keyboard)
   virtual void OnKeyboardHidden(bool is_temporary_hide) {}
-
-  // Called when the state changed.
-  virtual void OnStateChanged(KeyboardControllerState state) {}
 
   // Called when the virtual keyboard IME config changed.
   virtual void OnKeyboardConfigChanged() {}

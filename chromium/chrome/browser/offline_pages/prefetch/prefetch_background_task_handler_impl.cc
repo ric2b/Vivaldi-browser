@@ -4,10 +4,13 @@
 
 #include "chrome/browser/offline_pages/prefetch/prefetch_background_task_handler_impl.h"
 
+#include "base/time/default_tick_clock.h"
 #include "base/time/time.h"
 #include "chrome/browser/offline_pages/prefetch/prefetch_background_task_scheduler.h"
 #include "chrome/common/pref_names.h"
+#include "components/offline_pages/core/offline_clock.h"
 #include "components/offline_pages/core/offline_page_feature.h"
+#include "components/offline_pages/core/prefetch/prefetch_prefs.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "net/base/backoff_entry_serializer.h"
@@ -27,15 +30,9 @@ const net::BackoffEntry::Policy kPrefetchBackoffPolicy = {
 };
 }  // namespace
 
-// static
-void PrefetchBackgroundTaskHandlerImpl::RegisterPrefs(
-    PrefRegistrySimple* registry) {
-  registry->RegisterListPref(prefs::kOfflinePrefetchBackoff);
-}
-
 PrefetchBackgroundTaskHandlerImpl::PrefetchBackgroundTaskHandlerImpl(
     PrefService* prefs)
-    : prefs_(prefs) {}
+    : prefs_(prefs), tick_clock_(base::DefaultTickClock::GetInstance()) {}
 PrefetchBackgroundTaskHandlerImpl::~PrefetchBackgroundTaskHandlerImpl() =
     default;
 
@@ -44,7 +41,7 @@ void PrefetchBackgroundTaskHandlerImpl::CancelBackgroundTask() {
 }
 
 void PrefetchBackgroundTaskHandlerImpl::EnsureTaskScheduled() {
-  if (IsLimitlessPrefetchingEnabled()) {
+  if (prefetch_prefs::IsLimitlessPrefetchingEnabled(prefs_)) {
     PrefetchBackgroundTaskScheduler::ScheduleLimitless(
         GetAdditionalBackoffSeconds());
   } else {
@@ -59,15 +56,15 @@ int PrefetchBackgroundTaskHandlerImpl::GetAdditionalBackoffSeconds() const {
 
 std::unique_ptr<net::BackoffEntry>
 PrefetchBackgroundTaskHandlerImpl::GetCurrentBackoff() const {
-  const base::ListValue* value =
-      prefs_->GetList(prefs::kOfflinePrefetchBackoff);
+  const base::ListValue* value = prefs_->GetList(prefetch_prefs::kBackoff);
   std::unique_ptr<net::BackoffEntry> result;
   if (value) {
     result = net::BackoffEntrySerializer::DeserializeFromValue(
-        *value, &kPrefetchBackoffPolicy, clock_, base::Time::Now());
+        *value, &kPrefetchBackoffPolicy, tick_clock_, OfflineTimeNow());
   }
   if (!result)
-    return std::make_unique<net::BackoffEntry>(&kPrefetchBackoffPolicy, clock_);
+    return std::make_unique<net::BackoffEntry>(&kPrefetchBackoffPolicy,
+                                               tick_clock_);
   return result;
 }
 
@@ -88,7 +85,7 @@ void PrefetchBackgroundTaskHandlerImpl::PauseBackoffUntilNextRun() {
   // Erase the existing delay but retain the failure count so that the next
   // time we run if backoff is requested again we will continue the exponential
   // backoff from where we left off.
-  current->SetCustomReleaseTime(base::TimeTicks::Now());
+  current->SetCustomReleaseTime(tick_clock_->NowTicks());
   UpdateBackoff(current.get());
 }
 
@@ -99,7 +96,7 @@ void PrefetchBackgroundTaskHandlerImpl::Suspend() {
   // Set a custom delay to be a 1 day interval. After the day passes, the next
   // backoff value will be back to the initial 30s delay.
   current->SetCustomReleaseTime(
-      base::TimeTicks::Now() +
+      tick_clock_->NowTicks() +
       base::TimeDelta::FromDays(kDefaultSuspensionDays));
   UpdateBackoff(current.get());
 }
@@ -114,16 +111,15 @@ void PrefetchBackgroundTaskHandlerImpl::RemoveSuspension() {
 }
 
 void PrefetchBackgroundTaskHandlerImpl::SetTickClockForTesting(
-    const base::TickClock* clock) {
-  clock_ = clock;
+    const base::TickClock* tick_clock) {
+  tick_clock_ = tick_clock;
 }
 
 void PrefetchBackgroundTaskHandlerImpl::UpdateBackoff(
     net::BackoffEntry* backoff) {
   std::unique_ptr<base::Value> value =
-      net::BackoffEntrySerializer::SerializeToValue(*backoff,
-                                                    base::Time::Now());
-  prefs_->Set(prefs::kOfflinePrefetchBackoff, *value);
+      net::BackoffEntrySerializer::SerializeToValue(*backoff, OfflineTimeNow());
+  prefs_->Set(prefetch_prefs::kBackoff, *value);
 }
 
 }  // namespace offline_pages

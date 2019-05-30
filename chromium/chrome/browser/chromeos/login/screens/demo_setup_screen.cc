@@ -8,20 +8,25 @@
 #include "chrome/browser/chromeos/login/screens/base_screen_delegate.h"
 #include "chrome/browser/chromeos/login/screens/demo_setup_screen_view.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
+#include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/session_manager_client.h"
 
 namespace {
 
 constexpr char kUserActionStartSetup[] = "start-setup";
 constexpr char kUserActionClose[] = "close-setup";
+constexpr char kUserActionPowerwash[] = "powerwash";
 
 }  // namespace
 
 namespace chromeos {
 
 DemoSetupScreen::DemoSetupScreen(BaseScreenDelegate* base_screen_delegate,
-                                 DemoSetupScreenView* view)
+                                 DemoSetupScreenView* view,
+                                 const ScreenExitCallback& exit_callback)
     : BaseScreen(base_screen_delegate, OobeScreen::SCREEN_OOBE_DEMO_SETUP),
       view_(view),
+      exit_callback_(exit_callback),
       weak_ptr_factory_(this) {
   DCHECK(view_);
   view_->Bind(this);
@@ -46,16 +51,16 @@ void DemoSetupScreen::OnUserAction(const std::string& action_id) {
   if (action_id == kUserActionStartSetup) {
     StartEnrollment();
   } else if (action_id == kUserActionClose) {
-    Finish(ScreenExitCode::DEMO_MODE_SETUP_CANCELED);
+    exit_callback_.Run(Result::CANCELED);
+  } else if (action_id == kUserActionPowerwash) {
+    chromeos::DBusThreadManager::Get()
+        ->GetSessionManagerClient()
+        ->StartDeviceWipe();
   } else {
     BaseScreen::OnUserAction(action_id);
   }
 }
 
-void DemoSetupScreen::OnSetupError(DemoSetupController::DemoSetupError error) {
-  // TODO(mukai): propagate |error| information and change the error message.
-  view_->OnSetupFinished(false, std::string());
-}
 
 void DemoSetupScreen::StartEnrollment() {
   // Demo setup screen is only shown in OOBE.
@@ -68,8 +73,13 @@ void DemoSetupScreen::StartEnrollment() {
                                          weak_ptr_factory_.GetWeakPtr()));
 }
 
+void DemoSetupScreen::OnSetupError(
+    const DemoSetupController::DemoSetupError& error) {
+  view_->OnSetupFailed(error);
+}
+
 void DemoSetupScreen::OnSetupSuccess() {
-  Finish(ScreenExitCode::DEMO_MODE_SETUP_FINISHED);
+  exit_callback_.Run(Result::COMPLETED);
 }
 
 void DemoSetupScreen::OnViewDestroyed(DemoSetupScreenView* view) {

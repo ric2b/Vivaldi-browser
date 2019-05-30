@@ -5,7 +5,7 @@
 #ifndef IOS_CHROME_BROWSER_UI_POPUP_MENU_CELLS_POPUP_MENU_NAVIGATION_ITEM_H_
 #define IOS_CHROME_BROWSER_UI_POPUP_MENU_CELLS_POPUP_MENU_NAVIGATION_ITEM_H_
 
-#import "ios/chrome/browser/ui/popup_menu/cells/popup_menu_item.h"
+#import "ios/chrome/browser/ui/popup_menu/public/cells/popup_menu_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_item.h"
 
 namespace web {
@@ -23,10 +23,15 @@ class NavigationItem;
 @end
 
 // Associated cell for a PopupMenuNavigationItem.
-@interface PopupMenuNavigationCell : UITableViewCell
+@interface PopupMenuNavigationCell : TableViewCell
 
 - (void)setTitle:(NSString*)title;
 - (void)setFavicon:(UIImage*)favicon;
+
+// After this is called, the cell is listening for the
+// UIContentSizeCategoryDidChangeNotification notification and updates its font
+// size to the new category.
+- (void)registerForContentSizeUpdates;
 
 @end
 

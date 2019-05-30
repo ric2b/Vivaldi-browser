@@ -4,12 +4,19 @@
 
 #include "chrome/browser/media/media_engagement_service.h"
 
+#include <memory>
+#include <string>
+#include <utility>
+
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
+#include "base/test/test_mock_time_task_runner.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -94,11 +101,14 @@ base::Time GetReferenceTime() {
 }
 
 std::unique_ptr<KeyedService> BuildTestHistoryService(
+    scoped_refptr<base::SequencedTaskRunner> backend_runner,
     content::BrowserContext* context) {
   std::unique_ptr<history::HistoryService> service(
       new history::HistoryService());
+  if (backend_runner)
+    service->set_backend_task_runner_for_testing(std::move(backend_runner));
   service->Init(history::TestHistoryDatabaseParamsForPath(g_temp_history_dir));
-  return std::move(service);
+  return service;
 }
 
 }  // namespace
@@ -106,13 +116,15 @@ std::unique_ptr<KeyedService> BuildTestHistoryService(
 class MediaEngagementServiceTest : public ChromeRenderViewHostTestHarness {
  public:
   void SetUp() override {
+    mock_time_task_runner_ =
+        base::MakeRefCounted<base::TestMockTimeTaskRunner>();
     scoped_feature_list_.InitAndEnableFeature(
         media::kRecordMediaEngagementScores);
     ChromeRenderViewHostTestHarness::SetUp();
 
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
     g_temp_history_dir = temp_dir_.GetPath();
-    ConfigureHistoryService();
+    ConfigureHistoryService(nullptr);
 
     test_clock_.SetNow(GetReferenceTime());
     service_ = base::WrapUnique(StartNewMediaEngagementService());
@@ -127,18 +139,21 @@ class MediaEngagementServiceTest : public ChromeRenderViewHostTestHarness {
     return service;
   }
 
-  void ConfigureHistoryService() {
+  void ConfigureHistoryService(
+      scoped_refptr<base::SequencedTaskRunner> backend_runner) {
     HistoryServiceFactory::GetInstance()->SetTestingFactory(
-        profile(), &BuildTestHistoryService);
+        profile(), base::BindRepeating(&BuildTestHistoryService,
+                                       std::move(backend_runner)));
   }
 
-  void RestartHistoryService() {
+  void RestartHistoryService(
+      scoped_refptr<base::SequencedTaskRunner> backend_runner) {
     history::HistoryService* history_old = HistoryServiceFactory::GetForProfile(
         profile(), ServiceAccessType::IMPLICIT_ACCESS);
     history_old->Shutdown();
 
     HistoryServiceFactory::ShutdownForProfile(profile());
-    ConfigureHistoryService();
+    ConfigureHistoryService(std::move(backend_runner));
     history::HistoryService* history = HistoryServiceFactory::GetForProfile(
         profile(), ServiceAccessType::IMPLICIT_ACCESS);
     history->AddObserver(service());
@@ -249,6 +264,9 @@ class MediaEngagementServiceTest : public ChromeRenderViewHostTestHarness {
   std::vector<MediaEngagementScore> GetAllStoredScores() const {
     return GetAllStoredScores(service_.get());
   }
+
+ protected:
+  scoped_refptr<base::TestMockTimeTaskRunner> mock_time_task_runner_;
 
  private:
   base::SimpleTestClock test_clock_;
@@ -468,7 +486,8 @@ TEST_F(MediaEngagementServiceTest, CleanupOriginsOnHistoryDeletion) {
     base::CancelableTaskTracker task_tracker;
     // Expire origin1, origin1a, origin2, and origin3a's most recent visit.
     history->ExpireHistoryBetween(std::set<GURL>(), yesterday, today,
-                                  base::DoNothing(), &task_tracker);
+                                  /*user_initiated*/ true, base::DoNothing(),
+                                  &task_tracker);
     waiter.Wait();
 
     // origin1 should have a score that is not zero and is the same as the old
@@ -600,7 +619,12 @@ TEST_F(MediaEngagementServiceTest, CleanUpDatabaseWhenHistoryIsExpired) {
 
   // Expire history older than |threshold|.
   MediaEngagementChangeWaiter waiter(profile());
-  RestartHistoryService();
+  RestartHistoryService(mock_time_task_runner_);
+  // First, run the task that schedules backend initialization.
+  mock_time_task_runner_->RunUntilIdle();
+  // Now, fast forward time to ensure that the expiration job is completed. 30
+  // seconds is the value of kExpirationDelaySec.
+  mock_time_task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(30));
   waiter.Wait();
 
   // Check the scores for the test origins.
@@ -669,6 +693,7 @@ TEST_F(MediaEngagementServiceTest, CleanUpDatabaseWhenHistoryIsDeleted) {
     base::CancelableTaskTracker task_tracker;
     // Clear all history.
     history->ExpireHistoryBetween(std::set<GURL>(), base::Time(), base::Time(),
+                                  /*user_initiated*/ true,
                                   run_loop.QuitClosure(), &task_tracker);
     run_loop.Run();
 
@@ -814,35 +839,6 @@ TEST_F(MediaEngagementServiceTest, CleanupDataOnSiteDataCleanup_NoTimeSet) {
                                     1);
   histogram_tester.ExpectBucketCount(
       MediaEngagementService::kHistogramClearName, 1, 1);
-}
-
-TEST_F(MediaEngagementServiceTest, LogScoresOnStartupToHistogram) {
-  GURL url1("https://www.google.com");
-  GURL url2("https://www.google.co.uk");
-  GURL url3("https://www.example.com");
-
-  SetScores(url1, 24, 20);
-  SetScores(url2, 24, 12);
-  RecordVisitAndPlaybackAndAdvanceClock(url3);
-
-  ExpectScores(url1, 5.0 / 6.0, 24, 20, TimeNotSet());
-  ExpectScores(url2, 0.5, 24, 12, TimeNotSet());
-  ExpectScores(url3, 0.05, 1, 1, Now());
-
-  base::HistogramTester histogram_tester;
-  std::unique_ptr<MediaEngagementService> new_service =
-      base::WrapUnique<MediaEngagementService>(
-          StartNewMediaEngagementService());
-  new_service->Shutdown();
-
-  histogram_tester.ExpectTotalCount(
-      MediaEngagementService::kHistogramScoreAtStartupName, 3);
-  histogram_tester.ExpectBucketCount(
-      MediaEngagementService::kHistogramScoreAtStartupName, 5, 1);
-  histogram_tester.ExpectBucketCount(
-      MediaEngagementService::kHistogramScoreAtStartupName, 50, 1);
-  histogram_tester.ExpectBucketCount(
-      MediaEngagementService::kHistogramScoreAtStartupName, 83, 1);
 }
 
 TEST_F(MediaEngagementServiceTest, CleanupDataOnSiteDataCleanup_All) {

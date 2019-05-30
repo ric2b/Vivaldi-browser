@@ -18,8 +18,9 @@
 #include "ui/views/views_export.h"
 
 namespace base {
-template <typename T> struct DefaultSingletonTraits;
-}
+template <typename T>
+class NoDestructor;
+}  // namespace base
 
 namespace aura {
 class Window;
@@ -45,8 +46,11 @@ class VIEWS_EXPORT AXAuraObjCache : public aura::client::FocusChangeObserver {
                          ax::mojom::Event event_type) = 0;
   };
 
-  // Get or create an entry in the cache based on an Aura view.
+  // Get or create an entry in the cache. May return null if the View is not
+  // associated with a Widget.
   AXAuraObjWrapper* GetOrCreate(View* view);
+
+  // Get or create an entry in the cache.
   AXAuraObjWrapper* GetOrCreate(Widget* widget);
   AXAuraObjWrapper* GetOrCreate(aura::Window* window);
 
@@ -69,7 +73,8 @@ class VIEWS_EXPORT AXAuraObjCache : public aura::client::FocusChangeObserver {
   // Lookup a cached entry based on an id.
   AXAuraObjWrapper* Get(int32_t id);
 
-  // Get all top level windows this cache knows about.
+  // Get all top level windows this cache knows about. Under classic ash and
+  // SingleProcessMash this is a list of per-display root windows.
   void GetTopLevelWindows(std::vector<AXAuraObjWrapper*>* children);
 
   // Get the object that has focus.
@@ -81,9 +86,6 @@ class VIEWS_EXPORT AXAuraObjCache : public aura::client::FocusChangeObserver {
   // Tell our delegate to fire an event on a given object.
   void FireEvent(AXAuraObjWrapper* aura_obj, ax::mojom::Event event_type);
 
-  // Indicates if this object's currently being destroyed.
-  bool is_destroying() { return is_destroying_; }
-
   // Notifies this cache of a change in root window.
   void OnRootWindowObjCreated(aura::Window* window);
 
@@ -92,8 +94,15 @@ class VIEWS_EXPORT AXAuraObjCache : public aura::client::FocusChangeObserver {
 
   void SetDelegate(Delegate* delegate) { delegate_ = delegate; }
 
+  // Changes the behavior of GetFocusedView() so that it only considers
+  // views within the given Widget, this enables making tests
+  // involving focus reliable.
+  void set_focused_widget_for_testing(views::Widget* widget) {
+    focused_widget_for_testing_ = widget;
+  }
+
  private:
-  friend struct base::DefaultSingletonTraits<AXAuraObjCache>;
+  friend class base::NoDestructor<AXAuraObjCache>;
 
   AXAuraObjCache();
   ~AXAuraObjCache() override;
@@ -124,12 +133,11 @@ class VIEWS_EXPORT AXAuraObjCache : public aura::client::FocusChangeObserver {
 
   std::map<int32_t, std::unique_ptr<AXAuraObjWrapper>> cache_;
 
-  // True immediately when entering this object's destructor.
-  bool is_destroying_ = false;
-
   Delegate* delegate_ = nullptr;
 
   std::set<aura::Window*> root_windows_;
+
+  views::Widget* focused_widget_for_testing_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(AXAuraObjCache);
 };

@@ -25,7 +25,7 @@ import android.widget.TextView;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
-import org.chromium.ui.UiUtils;
+import org.chromium.ui.KeyboardVisibilityDelegate;
 
 /**
  * A utility class for the UI recording exceptions to the blocked list for site
@@ -109,7 +109,8 @@ public class AddExceptionPreference extends Preference implements OnPreferenceCl
             }
         };
 
-        AlertDialog.Builder alert = new AlertDialog.Builder(getContext(), R.style.AlertDialogTheme);
+        AlertDialog.Builder alert =
+                new AlertDialog.Builder(getContext(), R.style.Theme_Chromium_AlertDialog);
         AlertDialog alertDialog = alert
                 .setTitle(R.string.website_settings_add_site_dialog_title)
                 .setMessage(mDialogMessage)
@@ -121,7 +122,7 @@ public class AddExceptionPreference extends Preference implements OnPreferenceCl
         alertDialog.setOnShowListener(new DialogInterface.OnShowListener() {
             @Override
             public void onShow(DialogInterface dialog) {
-                UiUtils.showKeyboard(input);
+                KeyboardVisibilityDelegate.getInstance().showKeyboard(input);
             }
         });
         alertDialog.show();

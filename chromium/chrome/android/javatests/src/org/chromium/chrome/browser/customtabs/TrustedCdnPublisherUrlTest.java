@@ -34,6 +34,7 @@ import org.chromium.base.PathUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.LibraryProcessType;
+import org.chromium.base.task.PostTask;
 import org.chromium.base.test.util.AnnotationRule;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
@@ -50,14 +51,16 @@ import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.omnibox.UrlBar;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TrustedCdn;
 import org.chromium.chrome.browser.test.ScreenShooter;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.offlinepages.SavePageResult;
 import org.chromium.components.url_formatter.UrlFormatter;
-import org.chromium.content.browser.test.util.Criteria;
-import org.chromium.content.browser.test.util.CriteriaHelper;
-import org.chromium.content.browser.test.util.TestTouchUtils;
+import org.chromium.content_public.browser.UiThreadTaskTraits;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.TestTouchUtils;
 import org.chromium.net.NetworkChangeNotifier;
 import org.chromium.net.test.util.TestWebServer;
 import org.chromium.ui.base.DeviceFormFactor;
@@ -278,8 +281,8 @@ public class TrustedCdnPublisherUrlTest {
                         ChromeTabbedActivity.class.getName(), /* result = */ null, false);
         CustomTabActivity customTabActivity = mCustomTabActivityTestRule.getActivity();
         final Tab tab = customTabActivity.getActivityTab();
-        ThreadUtils.postOnUiThread(() -> {
-            Assert.assertEquals(publisherUrl, tab.getTrustedCdnPublisherUrl());
+        PostTask.postTask(UiThreadTaskTraits.DEFAULT, () -> {
+            Assert.assertEquals(publisherUrl, TrustedCdn.getPublisherUrl(tab));
             customTabActivity.openCurrentUrlInBrowser(true);
             Assert.assertNull(customTabActivity.getActivityTab());
         });
@@ -296,7 +299,7 @@ public class TrustedCdnPublisherUrlTest {
         CriteriaHelper.pollUiThread(() -> newActivity.getActivityTab() == tab, "Tab did not load");
 
         ThreadUtils.runOnUiThreadBlocking(
-                () -> { Assert.assertNull(tab.getTrustedCdnPublisherUrl()); });
+                () -> { Assert.assertNull(TrustedCdn.getPublisherUrl(tab)); });
 
         String testUrl = mWebServer.getResponseUrl("/test.html");
         String expectedUrl = UrlFormatter.formatUrlForDisplayOmitScheme(testUrl);

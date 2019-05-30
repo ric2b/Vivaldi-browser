@@ -27,7 +27,8 @@
 #include "extensions/common/extension.h"
 #include "extensions/common/features/feature.h"
 #include "ipc/ipc_message.h"
-#include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_object.mojom-forward.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom-forward.h"
 
 class ExtensionFunction;
 class UIThreadExtensionFunction;
@@ -130,12 +131,10 @@ class ExtensionFunction
 
   // Returns true if the function has permission to run.
   //
-  // The default implementation is to check the Extension's permissions against
-  // what this function requires to run, but some APIs may require finer
-  // grained control, such as tabs.executeScript being allowed for active tabs.
-  //
-  // This will be run after the function has been set up but before Run().
-  virtual bool HasPermission();
+  // This checks the Extension's permissions against the features declared in
+  // the *_features.json files. Note that some functions may perform additional
+  // checks in Run(), such as for specific host permissions or user gestures.
+  bool HasPermission() const;
 
   // The result of a function call.
   //
@@ -234,9 +233,9 @@ class ExtensionFunction
   // returns an error.
   virtual void OnQuotaExceeded(const std::string& violation_error);
 
-  // Specifies the raw arguments to the function, as a JSON value.
-  // TODO(dcheng): This should take a const ref.
-  virtual void SetArgs(const base::ListValue* args);
+  // Specifies the raw arguments to the function, as a JSON value. Expects a
+  // base::Value of type LIST.
+  void SetArgs(base::Value args);
 
   // Retrieves the results of the function as a ListValue.
   const base::ListValue* GetResultList() const;
@@ -272,10 +271,10 @@ class ExtensionFunction
   int request_id() { return request_id_; }
 
   void set_source_url(const GURL& source_url) { source_url_ = source_url; }
-  const GURL& source_url() { return source_url_; }
+  const GURL& source_url() const { return source_url_; }
 
   void set_has_callback(bool has_callback) { has_callback_ = has_callback; }
-  bool has_callback() { return has_callback_; }
+  bool has_callback() const { return has_callback_; }
 
   void set_include_incognito_information(bool include) {
     include_incognito_information_ = include;
@@ -347,7 +346,7 @@ class ExtensionFunction
   // Error. chrome.runtime.lastError.message will be set to |error|.
   ResponseValue Error(const std::string& error);
   // Error with formatting. Args are processed using
-  // ErrorUtils::FormatErrorMessage, that is, each occurence of * is replaced
+  // ErrorUtils::FormatErrorMessage, that is, each occurrence of * is replaced
   // by the corresponding |s*|:
   // Error("Error in *: *", "foo", "bar") <--> Error("Error in foo: bar").
   ResponseValue Error(const std::string& format, const std::string& s1);
@@ -610,18 +609,14 @@ class IOThreadExtensionFunction : public ExtensionFunction {
   void SetBadMessage() final;
 
   void set_ipc_sender(
-      base::WeakPtr<extensions::IOThreadExtensionMessageFilter> ipc_sender,
-      int routing_id) {
+      base::WeakPtr<extensions::IOThreadExtensionMessageFilter> ipc_sender) {
     ipc_sender_ = ipc_sender;
-    routing_id_ = routing_id;
   }
 
   base::WeakPtr<extensions::IOThreadExtensionMessageFilter> ipc_sender_weak()
       const {
     return ipc_sender_;
   }
-
-  int routing_id() const { return routing_id_; }
 
   void set_extension_info_map(const extensions::InfoMap* extension_info_map) {
     extension_info_map_ = extension_info_map;
@@ -641,7 +636,6 @@ class IOThreadExtensionFunction : public ExtensionFunction {
 
  private:
   base::WeakPtr<extensions::IOThreadExtensionMessageFilter> ipc_sender_;
-  int routing_id_;
 
   scoped_refptr<const extensions::InfoMap> extension_info_map_;
 

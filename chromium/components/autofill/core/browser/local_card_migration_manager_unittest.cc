@@ -26,16 +26,18 @@
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/credit_card.h"
+#include "components/autofill/core/browser/mock_autocomplete_history_manager.h"
 #include "components/autofill/core/browser/payments/test_payments_client.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
+#include "components/autofill/core/browser/sync_utils.h"
 #include "components/autofill/core/browser/test_autofill_client.h"
 #include "components/autofill/core/browser/test_autofill_clock.h"
 #include "components/autofill/core/browser/test_autofill_driver.h"
 #include "components/autofill/core/browser/test_autofill_manager.h"
 #include "components/autofill/core/browser/test_credit_card_save_manager.h"
+#include "components/autofill/core/browser/test_form_data_importer.h"
 #include "components/autofill/core/browser/test_local_card_migration_manager.h"
 #include "components/autofill/core/browser/test_personal_data_manager.h"
-#include "components/autofill/core/browser/test_sync_service.h"
 #include "components/autofill/core/browser/validation.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #include "components/autofill/core/common/autofill_clock.h"
@@ -44,6 +46,7 @@
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/prefs/pref_service.h"
+#include "components/sync/driver/test_sync_service.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_test_util.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
@@ -70,6 +73,8 @@ class LocalCardMigrationManagerTest : public testing::Test {
     payments_client_ = new payments::TestPaymentsClient(
         autofill_driver_->GetURLLoaderFactory(), autofill_client_.GetPrefs(),
         autofill_client_.GetIdentityManager(), &personal_data_);
+    autofill_client_.set_test_payments_client(
+        std::unique_ptr<payments::TestPaymentsClient>(payments_client_));
     credit_card_save_manager_ =
         new TestCreditCardSaveManager(autofill_driver_.get(), &autofill_client_,
                                       payments_client_, &personal_data_);
@@ -77,12 +82,22 @@ class LocalCardMigrationManagerTest : public testing::Test {
     local_card_migration_manager_ = new TestLocalCardMigrationManager(
         autofill_driver_.get(), &autofill_client_, payments_client_,
         &personal_data_);
+    std::unique_ptr<TestStrikeDatabase> test_strike_database =
+        std::make_unique<TestStrikeDatabase>();
+    strike_database_ = test_strike_database.get();
+    autofill_client_.set_test_strike_database(std::move(test_strike_database));
+    autofill::TestFormDataImporter* test_form_data_importer =
+        new TestFormDataImporter(
+            &autofill_client_, payments_client_,
+            std::unique_ptr<CreditCardSaveManager>(credit_card_save_manager_),
+            &personal_data_, "en-US",
+            std::unique_ptr<LocalCardMigrationManager>(
+                local_card_migration_manager_));
+    autofill_client_.set_test_form_data_importer(
+        std::unique_ptr<TestFormDataImporter>(test_form_data_importer));
     autofill_manager_.reset(new TestAutofillManager(
         autofill_driver_.get(), &autofill_client_, &personal_data_,
-        std::unique_ptr<CreditCardSaveManager>(credit_card_save_manager_),
-        payments_client_,
-        std::unique_ptr<LocalCardMigrationManager>(
-            local_card_migration_manager_)));
+        &autocomplete_history_manager_));
     autofill_manager_->SetExpectedObservedSubmission(true);
   }
 
@@ -98,23 +113,13 @@ class LocalCardMigrationManagerTest : public testing::Test {
     request_context_ = nullptr;
   }
 
-  void EnableAutofillCreditCardLocalCardMigrationExperiment() {
-    scoped_feature_list_.InitAndEnableFeature(
-        features::kAutofillCreditCardLocalCardMigration);
-  }
-
-  void DisableAutofillCreditCardLocalCardMigrationExperiment() {
-    scoped_feature_list_.InitAndDisableFeature(
-        features::kAutofillCreditCardLocalCardMigration);
-  }
-
   void FormsSeen(const std::vector<FormData>& forms) {
     autofill_manager_->OnFormsSeen(forms, base::TimeTicks());
   }
 
   void FormSubmitted(const FormData& form) {
-    autofill_manager_->OnFormSubmitted(
-        form, false, SubmissionSource::FORM_SUBMISSION, base::TimeTicks::Now());
+    autofill_manager_->OnFormSubmitted(form, false,
+                                       SubmissionSource::FORM_SUBMISSION);
   }
 
   void EditCreditCardFrom(FormData& credit_card_form,
@@ -131,17 +136,19 @@ class LocalCardMigrationManagerTest : public testing::Test {
     credit_card_form.fields[4].value = ASCIIToUTF16(cvc);
   }
 
-  void AddLocalCrediCard(TestPersonalDataManager& personal_data,
-                         const char* name_on_card,
-                         const char* card_number,
-                         const char* expiration_month,
-                         const char* expiration_year,
-                         const std::string& billing_address_id) {
+  void AddLocalCreditCard(TestPersonalDataManager& personal_data,
+                          const char* name_on_card,
+                          const char* card_number,
+                          const char* expiration_month,
+                          const char* expiration_year,
+                          const std::string& billing_address_id,
+                          const std::string& guid) {
     CreditCard local_card;
     test::SetCreditCardInfo(&local_card, name_on_card, card_number,
                             expiration_month, expiration_year,
                             billing_address_id);
     local_card.set_record_type(CreditCard::LOCAL_CARD);
+    local_card.set_guid(guid);
     personal_data.AddCreditCard(local_card);
   }
 
@@ -162,19 +169,24 @@ class LocalCardMigrationManagerTest : public testing::Test {
   std::unique_ptr<TestAutofillManager> autofill_manager_;
   scoped_refptr<net::TestURLRequestContextGetter> request_context_;
   TestPersonalDataManager personal_data_;
-  TestSyncService sync_service_;
+  MockAutocompleteHistoryManager autocomplete_history_manager_;
+  syncer::TestSyncService sync_service_;
   base::test::ScopedFeatureList scoped_feature_list_;
+  // Ends up getting owned (and destroyed) by TestAutofillClient:
+  TestStrikeDatabase* strike_database_;
   // Ends up getting owned (and destroyed) by TestFormDataImporter:
   TestCreditCardSaveManager* credit_card_save_manager_;
+  // Ends up getting owned (and destroyed) by TestFormDataImporter:
   TestLocalCardMigrationManager* local_card_migration_manager_;
-  // Ends up getting owned (and destroyed) by TestAutofillManager:
+  // Ends up getting owned (and destroyed) by TestAutofillClient:
   payments::TestPaymentsClient* payments_client_;
 };
 
 // Having one local card on file and using it will not trigger migration.
 TEST_F(LocalCardMigrationManagerTest,
        MigrateCreditCard_UseLocalCardWithOneLocal) {
-  EnableAutofillCreditCardLocalCardMigrationExperiment();
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillCreditCardLocalCardMigration);
 
   // Set the billing_customer_number Priority Preference to designate
   // existence of a Payments account.
@@ -182,8 +194,8 @@ TEST_F(LocalCardMigrationManagerTest,
                                          12345);
   // Add a local credit card whose |TypeAndLastFourDigits| matches what we will
   // enter below.
-  AddLocalCrediCard(personal_data_, "Flo Master", "4111111111111111", "11",
-                    test::NextYear().c_str(), "1");
+  AddLocalCreditCard(personal_data_, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "1", "guid1");
 
   // Set up our credit card form data.
   FormData credit_card_form;
@@ -207,19 +219,20 @@ TEST_F(LocalCardMigrationManagerTest,
 // trigger migration.
 TEST_F(LocalCardMigrationManagerTest,
        MigrateCreditCard_UseNewCardWithAnyLocal) {
-  EnableAutofillCreditCardLocalCardMigrationExperiment();
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillCreditCardLocalCardMigration);
 
   // Set the billing_customer_number Priority Preference to designate
   // existence of a Payments account.
   autofill_client_.GetPrefs()->SetDouble(prefs::kAutofillBillingCustomerNumber,
                                          12345);
   // Add a local credit card (but it will not match what we will enter below).
-  AddLocalCrediCard(personal_data_, "Flo Master", "4111111111111111", "11",
-                    test::NextYear().c_str(), "1");
+  AddLocalCreditCard(personal_data_, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "1", "guid1");
   // Add another local credit card (but it will not match what we will enter
   // below).
-  AddLocalCrediCard(personal_data_, "Flo Master", "4444333322221111", "11",
-                    test::NextYear().c_str(), "1");
+  AddLocalCreditCard(personal_data_, "Flo Master", "4444333322221111", "11",
+                     test::NextYear().c_str(), "1", "guid2");
 
   // Set up our credit card form data.
   FormData credit_card_form;
@@ -237,7 +250,8 @@ TEST_F(LocalCardMigrationManagerTest,
 // migration.
 TEST_F(LocalCardMigrationManagerTest,
        MigrateCreditCard_UseLocalCardWithMoreLocal) {
-  EnableAutofillCreditCardLocalCardMigrationExperiment();
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillCreditCardLocalCardMigration);
 
   // Set the billing_customer_number Priority Preference to designate
   // existence of a Payments account.
@@ -245,11 +259,11 @@ TEST_F(LocalCardMigrationManagerTest,
                                          12345);
   // Add a local credit card whose |TypeAndLastFourDigits| matches what we will
   // enter below.
-  AddLocalCrediCard(personal_data_, "Flo Master", "4111111111111111", "11",
-                    test::NextYear().c_str(), "1");
+  AddLocalCreditCard(personal_data_, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "1", "guid1");
   // Add another local credit card, so it will trigger migration.
-  AddLocalCrediCard(personal_data_, "Flo Master", "5555555555554444", "11",
-                    test::NextYear().c_str(), "1");
+  AddLocalCreditCard(personal_data_, "Flo Master", "5555555555554444", "11",
+                     test::NextYear().c_str(), "1", "guid2");
 
   // Set up our credit card form data.
   FormData credit_card_form;
@@ -283,7 +297,8 @@ TEST_F(LocalCardMigrationManagerTest,
 // cards as long as the other local cards are not eligible for migration.
 TEST_F(LocalCardMigrationManagerTest,
        MigrateCreditCard_UseLocalCardWithInvalidLocal) {
-  EnableAutofillCreditCardLocalCardMigrationExperiment();
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillCreditCardLocalCardMigration);
 
   // Set the billing_customer_number Priority Preference to designate
   // existence of a Payments account.
@@ -291,14 +306,14 @@ TEST_F(LocalCardMigrationManagerTest,
                                          12345);
   // Add a local credit card whose |TypeAndLastFourDigits| matches what we will
   // enter below.
-  AddLocalCrediCard(personal_data_, "Flo Master", "4111111111111111", "11",
-                    test::NextYear().c_str(), "1");
+  AddLocalCreditCard(personal_data_, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "1", "guid1");
   // Add other invalid local credit cards(invalid card number or expired), so it
   // will not trigger migration.
-  AddLocalCrediCard(personal_data_, "Flo Master", "4111111111111112", "11",
-                    test::NextYear().c_str(), "1");
-  AddLocalCrediCard(personal_data_, "Flo Master", "5555555555554444", "11",
-                    test::LastYear().c_str(), "1");
+  AddLocalCreditCard(personal_data_, "Flo Master", "4111111111111112", "11",
+                     test::NextYear().c_str(), "1", "guid2");
+  AddLocalCreditCard(personal_data_, "Flo Master", "5555555555554444", "11",
+                     test::LastYear().c_str(), "1", "guid3");
 
   // Set up our credit card form data.
   FormData credit_card_form;
@@ -316,7 +331,8 @@ TEST_F(LocalCardMigrationManagerTest,
 // will trigger migration.
 TEST_F(LocalCardMigrationManagerTest,
        MigrateCreditCard_UseServerCardWithOneValidLocal) {
-  EnableAutofillCreditCardLocalCardMigrationExperiment();
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillCreditCardLocalCardMigration);
 
   // Set the billing_customer_number Priority Preference to designate
   // existence of a Payments account.
@@ -330,8 +346,8 @@ TEST_F(LocalCardMigrationManagerTest,
   credit_card.SetNetworkForMaskedCard(kVisaCard);
   personal_data_.AddServerCreditCard(credit_card);
   // Add one valid local credit card, so it will trigger migration
-  AddLocalCrediCard(personal_data_, "Flo Master", "5555555555554444", "11",
-                    test::NextYear().c_str(), "1");
+  AddLocalCreditCard(personal_data_, "Flo Master", "5555555555554444", "11",
+                     test::NextYear().c_str(), "1", "guid1");
 
   // Set up our credit card form data.
   FormData credit_card_form;
@@ -365,7 +381,8 @@ TEST_F(LocalCardMigrationManagerTest,
 // cards as long as the other local cards are not eligible for migration.
 TEST_F(LocalCardMigrationManagerTest,
        MigrateCreditCard_UseServerCardWithNoneValidLocal) {
-  EnableAutofillCreditCardLocalCardMigrationExperiment();
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillCreditCardLocalCardMigration);
 
   // Set the billing_customer_number Priority Preference to designate
   // existence of a Payments account.
@@ -380,10 +397,10 @@ TEST_F(LocalCardMigrationManagerTest,
   personal_data_.AddServerCreditCard(credit_card);
   // Add other invalid local credit cards(invalid card number or expired), so it
   // will not trigger migration.
-  AddLocalCrediCard(personal_data_, "Flo Master", "4111111111111112", "11",
-                    test::NextYear().c_str(), "1");
-  AddLocalCrediCard(personal_data_, "Flo Master", "5555555555554444", "11",
-                    test::LastYear().c_str(), "1");
+  AddLocalCreditCard(personal_data_, "Flo Master", "4111111111111112", "11",
+                     test::NextYear().c_str(), "1", "guid1");
+  AddLocalCreditCard(personal_data_, "Flo Master", "5555555555554444", "11",
+                     test::LastYear().c_str(), "1", "guid2");
 
   // Set up our credit card form data.
   FormData credit_card_form;
@@ -407,7 +424,8 @@ TEST_F(LocalCardMigrationManagerTest,
 // is off, will not trigger migration.
 TEST_F(LocalCardMigrationManagerTest, MigrateCreditCard_FeatureNotEnabled) {
   // Turn off the experiment flag.
-  DisableAutofillCreditCardLocalCardMigrationExperiment();
+  scoped_feature_list_.InitAndDisableFeature(
+      features::kAutofillCreditCardLocalCardMigration);
 
   // Set the billing_customer_number Priority Preference to designate
   // existence of a Payments account.
@@ -415,11 +433,11 @@ TEST_F(LocalCardMigrationManagerTest, MigrateCreditCard_FeatureNotEnabled) {
                                          12345);
   // Add a local credit card whose |TypeAndLastFourDigits| matches what we will
   // enter below.
-  AddLocalCrediCard(personal_data_, "Flo Master", "4111111111111111", "11",
-                    test::NextYear().c_str(), "1");
+  AddLocalCreditCard(personal_data_, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "1", "guid1");
   // Add another local credit card.
-  AddLocalCrediCard(personal_data_, "Flo Master", "5555555555554444", "11",
-                    test::NextYear().c_str(), "1");
+  AddLocalCreditCard(personal_data_, "Flo Master", "5555555555554444", "11",
+                     test::NextYear().c_str(), "1", "guid2");
 
   // Set up our credit card form data.
   FormData credit_card_form;
@@ -433,18 +451,96 @@ TEST_F(LocalCardMigrationManagerTest, MigrateCreditCard_FeatureNotEnabled) {
   EXPECT_FALSE(local_card_migration_manager_->LocalCardMigrationWasTriggered());
 }
 
-// Use one local card with more valid local cards available but billing customer
-// number is blank, will not trigger migration.
-TEST_F(LocalCardMigrationManagerTest, MigrateCreditCard_NoPaymentsAccount) {
-  EnableAutofillCreditCardLocalCardMigrationExperiment();
+// Do not trigger migration if user only signs in.
+TEST_F(LocalCardMigrationManagerTest, MigrateCreditCard_SignInOnlyWhenExpOff) {
+  scoped_feature_list_.InitWithFeatures(
+      // Enabled
+      {features::kAutofillCreditCardLocalCardMigration,
+       features::kAutofillEnableAccountWalletStorage},
+      // Disabled
+      {features::kAutofillEnableLocalCardMigrationForNonSyncUser});
+
+  // Set the billing_customer_number Priority Preference to designate
+  // existence of a Payments account.
+  autofill_client_.GetPrefs()->SetDouble(prefs::kAutofillBillingCustomerNumber,
+                                         12345);
+
+  // Mock Chrome Sync is disabled.
+  local_card_migration_manager_->ResetSyncState(
+      AutofillSyncSigninState::kSignedInAndWalletSyncTransportEnabled);
 
   // Add a local credit card whose |TypeAndLastFourDigits| matches what we will
   // enter below.
-  AddLocalCrediCard(personal_data_, "Flo Master", "4111111111111111", "11",
-                    test::NextYear().c_str(), "1");
+  AddLocalCreditCard(personal_data_, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "1", "guid1");
   // Add another local credit card.
-  AddLocalCrediCard(personal_data_, "Flo Master", "5555555555554444", "11",
-                    test::NextYear().c_str(), "1");
+  AddLocalCreditCard(personal_data_, "Flo Master", "5555555555554444", "11",
+                     test::NextYear().c_str(), "1", "guid2");
+
+  // Set up our credit card form data.
+  FormData credit_card_form;
+  test::CreateTestCreditCardFormData(&credit_card_form, true, false);
+  FormsSeen(std::vector<FormData>(1, credit_card_form));
+
+  // Edit the data, and submit.
+  EditCreditCardFrom(credit_card_form, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "123");
+  FormSubmitted(credit_card_form);
+  EXPECT_FALSE(local_card_migration_manager_->LocalCardMigrationWasTriggered());
+}
+
+// Trigger migration if user only signs in and if experiment is enabled.
+TEST_F(LocalCardMigrationManagerTest, MigrateCreditCard_SignInOnlyWhenExpOn) {
+  scoped_feature_list_.InitWithFeatures(
+      // Enabled
+      {features::kAutofillCreditCardLocalCardMigration,
+       features::kAutofillEnableLocalCardMigrationForNonSyncUser,
+       features::kAutofillEnableAccountWalletStorage},
+      // Disabled
+      {});
+
+  // Set the billing_customer_number Priority Preference to designate
+  // existence of a Payments account.
+  autofill_client_.GetPrefs()->SetDouble(prefs::kAutofillBillingCustomerNumber,
+                                         12345);
+
+  // Mock Chrome Sync is disabled.
+  local_card_migration_manager_->ResetSyncState(
+      AutofillSyncSigninState::kSignedInAndWalletSyncTransportEnabled);
+
+  // Add a local credit card whose |TypeAndLastFourDigits| matches what we will
+  // enter below.
+  AddLocalCreditCard(personal_data_, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "1", "guid1");
+  // Add another local credit card.
+  AddLocalCreditCard(personal_data_, "Flo Master", "5555555555554444", "11",
+                     test::NextYear().c_str(), "1", "guid2");
+
+  // Set up our credit card form data.
+  FormData credit_card_form;
+  test::CreateTestCreditCardFormData(&credit_card_form, true, false);
+  FormsSeen(std::vector<FormData>(1, credit_card_form));
+
+  // Edit the data, and submit.
+  EditCreditCardFrom(credit_card_form, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "123");
+  FormSubmitted(credit_card_form);
+  EXPECT_TRUE(local_card_migration_manager_->LocalCardMigrationWasTriggered());
+}
+
+// Use one local card with more valid local cards available but billing customer
+// number is blank, will not trigger migration.
+TEST_F(LocalCardMigrationManagerTest, MigrateCreditCard_NoPaymentsAccount) {
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillCreditCardLocalCardMigration);
+
+  // Add a local credit card whose |TypeAndLastFourDigits| matches what we will
+  // enter below.
+  AddLocalCreditCard(personal_data_, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "1", "guid1");
+  // Add another local credit card.
+  AddLocalCreditCard(personal_data_, "Flo Master", "5555555555554444", "11",
+                     test::NextYear().c_str(), "1", "guid2");
 
   // Set up our credit card form data.
   FormData credit_card_form;
@@ -462,7 +558,8 @@ TEST_F(LocalCardMigrationManagerTest, MigrateCreditCard_NoPaymentsAccount) {
 // migratable.
 TEST_F(LocalCardMigrationManagerTest,
        MigrateCreditCard_LocalCardMatchMaskedServerCard) {
-  EnableAutofillCreditCardLocalCardMigrationExperiment();
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillCreditCardLocalCardMigration);
 
   // Set the billing_customer_number Priority Preference to designate
   // existence of a Payments account.
@@ -477,11 +574,11 @@ TEST_F(LocalCardMigrationManagerTest,
   personal_data_.AddServerCreditCard(server_card);
   // Add a local card whose |TypeAndLastFourDigits| matches a masked server
   // card.
-  AddLocalCrediCard(personal_data_, "Flo Master", "4111111111111111", "11",
-                    test::NextYear().c_str(), "1");
+  AddLocalCreditCard(personal_data_, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "1", "guid1");
   // Add another local credit card
-  AddLocalCrediCard(personal_data_, "Flo Master", "5555555555554444", "11",
-                    test::NextYear().c_str(), "1");
+  AddLocalCreditCard(personal_data_, "Flo Master", "5555555555554444", "11",
+                     test::NextYear().c_str(), "1", "guid2");
 
   // Set up our credit card form data.
   FormData credit_card_form;
@@ -499,7 +596,8 @@ TEST_F(LocalCardMigrationManagerTest,
 // migratable.
 TEST_F(LocalCardMigrationManagerTest,
        MigrateCreditCard_LocalCardMatchFullServerCard) {
-  EnableAutofillCreditCardLocalCardMigrationExperiment();
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillCreditCardLocalCardMigration);
 
   // Set the billing_customer_number Priority Preference to designate
   // existence of a Payments account.
@@ -511,11 +609,11 @@ TEST_F(LocalCardMigrationManagerTest,
                           test::NextYear().c_str(), "1");
   personal_data_.AddServerCreditCard(server_card);
   // Add a local credit card whose number matches a full server card.
-  AddLocalCrediCard(personal_data_, "Flo Master", "4111111111111111", "11",
-                    test::NextYear().c_str(), "1");
+  AddLocalCreditCard(personal_data_, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "1", "guid1");
   // Add another local credit card
-  AddLocalCrediCard(personal_data_, "Flo Master", "5555555555554444", "11",
-                    test::NextYear().c_str(), "1");
+  AddLocalCreditCard(personal_data_, "Flo Master", "5555555555554444", "11",
+                     test::NextYear().c_str(), "1", "guid2");
 
   // Set up our credit card form data.
   FormData credit_card_form;
@@ -531,7 +629,8 @@ TEST_F(LocalCardMigrationManagerTest,
 
 // GetDetectedValues() should includes cardholder name if all cards have it.
 TEST_F(LocalCardMigrationManagerTest, GetDetectedValues_AllWithCardHolderName) {
-  EnableAutofillCreditCardLocalCardMigrationExperiment();
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillCreditCardLocalCardMigration);
 
   // Set the billing_customer_number Priority Preference to designate
   // existence of a Payments account.
@@ -539,11 +638,11 @@ TEST_F(LocalCardMigrationManagerTest, GetDetectedValues_AllWithCardHolderName) {
                                          12345);
   // Add a local credit card whose |TypeAndLastFourDigits| matches what we will
   // enter below.
-  AddLocalCrediCard(personal_data_, "Flo Master", "4111111111111111", "11",
-                    test::NextYear().c_str(), "1");
+  AddLocalCreditCard(personal_data_, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "1", "guid1");
   // Add another local credit card with a different cardholder name.
-  AddLocalCrediCard(personal_data_, "John Smith", "5555555555554444", "11",
-                    test::NextYear().c_str(), "1");
+  AddLocalCreditCard(personal_data_, "John Smith", "5555555555554444", "11",
+                     test::NextYear().c_str(), "1", "guid2");
 
   // Set up our credit card form data.
   FormData credit_card_form;
@@ -563,7 +662,8 @@ TEST_F(LocalCardMigrationManagerTest, GetDetectedValues_AllWithCardHolderName) {
 // a cardholder name.
 TEST_F(LocalCardMigrationManagerTest,
        GetDetectedValues_OneCardWithoutCardHolderName) {
-  EnableAutofillCreditCardLocalCardMigrationExperiment();
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillCreditCardLocalCardMigration);
 
   // Set the billing_customer_number Priority Preference to designate
   // existence of a Payments account.
@@ -571,11 +671,11 @@ TEST_F(LocalCardMigrationManagerTest,
                                          12345);
   // Add a local credit card whose |TypeAndLastFourDigits| matches what we will
   // enter below.
-  AddLocalCrediCard(personal_data_, "Flo Master", "4111111111111111", "11",
-                    test::NextYear().c_str(), "1");
+  AddLocalCreditCard(personal_data_, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "1", "guid1");
   // Add another local credit card without card holder name.
-  AddLocalCrediCard(personal_data_, "", "5555555555554444", "11",
-                    test::NextYear().c_str(), "1");
+  AddLocalCreditCard(personal_data_, "", "5555555555554444", "11",
+                     test::NextYear().c_str(), "1", "guid2");
   // Set up our credit card form data.
   FormData credit_card_form;
   test::CreateTestCreditCardFormData(&credit_card_form, true, false);
@@ -594,7 +694,8 @@ TEST_F(LocalCardMigrationManagerTest,
 // account.
 TEST_F(LocalCardMigrationManagerTest,
        GetDetectedValues_IncludeGooglePaymentsAccount) {
-  EnableAutofillCreditCardLocalCardMigrationExperiment();
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillCreditCardLocalCardMigration);
 
   // Set the billing_customer_number Priority Preference to designate
   // existence of a Payments account.
@@ -602,11 +703,11 @@ TEST_F(LocalCardMigrationManagerTest,
                                          12345);
   // Add a local credit card whose |TypeAndLastFourDigits| matches what we will
   // enter below.
-  AddLocalCrediCard(personal_data_, "Flo Master", "4111111111111111", "11",
-                    test::NextYear().c_str(), "1");
+  AddLocalCreditCard(personal_data_, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "1", "guid1");
   // Add another local credit card
-  AddLocalCrediCard(personal_data_, "Flo Master", "5555555555554444", "11",
-                    test::NextYear().c_str(), "1");
+  AddLocalCreditCard(personal_data_, "Flo Master", "5555555555554444", "11",
+                     test::NextYear().c_str(), "1", "guid2");
 
   // Set up our credit card form data.
   FormData credit_card_form;
@@ -623,11 +724,78 @@ TEST_F(LocalCardMigrationManagerTest,
       CreditCardSaveManager::DetectedValue::HAS_GOOGLE_PAYMENTS_ACCOUNT);
 }
 
-// Verify that when triggering from settings page, intermediate prompt will not
-// be triggered.
 TEST_F(LocalCardMigrationManagerTest,
-       MigrateCreditCard_TriggerFromSettingsPage) {
-  EnableAutofillCreditCardLocalCardMigrationExperiment();
+       MigrateCreditCard_ShouldAddMigrateCardsBillableServiceNumberInRequest) {
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillCreditCardLocalCardMigration);
+
+  // Set the billing_customer_number Priority Preference to designate
+  // existence of a Payments account.
+  autofill_client_.GetPrefs()->SetDouble(prefs::kAutofillBillingCustomerNumber,
+                                         12345);
+  // Add a local credit card whose |TypeAndLastFourDigits| matches what we will
+  // enter below.
+  AddLocalCreditCard(personal_data_, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "1", "guid1");
+  // Add another local credit card
+  AddLocalCreditCard(personal_data_, "Flo Master", "5555555555554444", "11",
+                     test::NextYear().c_str(), "1", "guid2");
+
+  // Set up our credit card form data.
+  FormData credit_card_form;
+  test::CreateTestCreditCardFormData(&credit_card_form, true, false);
+  FormsSeen(std::vector<FormData>(1, credit_card_form));
+
+  // Edit the data, and submit.
+  EditCreditCardFrom(credit_card_form, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "123");
+  FormSubmitted(credit_card_form);
+  EXPECT_TRUE(local_card_migration_manager_->LocalCardMigrationWasTriggered());
+
+  // Confirm that the preflight request contained
+  // kMigrateCardsBillableServiceNumber in the request.
+  EXPECT_EQ(payments::kMigrateCardsBillableServiceNumber,
+            payments_client_->billable_service_number_in_request());
+}
+
+TEST_F(LocalCardMigrationManagerTest,
+       MigrateCreditCard_ShouldAddUploadCardSourceInRequest_CheckoutFlow) {
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillCreditCardLocalCardMigration);
+
+  // Set the billing_customer_number Priority Preference to designate
+  // existence of a Payments account.
+  autofill_client_.GetPrefs()->SetDouble(prefs::kAutofillBillingCustomerNumber,
+                                         12345);
+  // Add a local credit card whose |TypeAndLastFourDigits| matches what we will
+  // enter below.
+  AddLocalCreditCard(personal_data_, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "1", "guid1");
+  // Add another local credit card
+  AddLocalCreditCard(personal_data_, "Flo Master", "5555555555554444", "11",
+                     test::NextYear().c_str(), "1", "guid2");
+
+  // Set up our credit card form data.
+  FormData credit_card_form;
+  test::CreateTestCreditCardFormData(&credit_card_form, true, false);
+  FormsSeen(std::vector<FormData>(1, credit_card_form));
+
+  // Edit the data, and submit.
+  EditCreditCardFrom(credit_card_form, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "123");
+  FormSubmitted(credit_card_form);
+  EXPECT_TRUE(local_card_migration_manager_->LocalCardMigrationWasTriggered());
+
+  // Confirm that the preflight request contained the correct UploadCardSource.
+  EXPECT_EQ(payments::PaymentsClient::UploadCardSource::
+                LOCAL_CARD_MIGRATION_CHECKOUT_FLOW,
+            payments_client_->upload_card_source_in_request());
+}
+
+TEST_F(LocalCardMigrationManagerTest,
+       MigrateCreditCard_ShouldAddUploadCardSourceInRequest_SettingsPage) {
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillCreditCardLocalCardMigration);
 
   // Set the billing_customer_number Priority Preference to designate
   // existence of a Payments account.
@@ -635,8 +803,38 @@ TEST_F(LocalCardMigrationManagerTest,
                                          12345);
   // Add a local credit card. One migratable credit card will still trigger
   // migration on settings page.
-  AddLocalCrediCard(personal_data_, "Flo Master", "4111111111111111", "11",
-                    test::NextYear().c_str(), "1");
+  AddLocalCreditCard(personal_data_, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "1", "guid1");
+
+  base::HistogramTester histogram_tester;
+  // Do the same operation as we bridge back from the settings page.
+  local_card_migration_manager_->GetMigratableCreditCards();
+  local_card_migration_manager_->AttemptToOfferLocalCardMigration(true);
+
+  EXPECT_FALSE(local_card_migration_manager_->IntermediatePromptWasShown());
+  EXPECT_TRUE(local_card_migration_manager_->MainPromptWasShown());
+
+  // Confirm that the preflight request contained the correct UploadCardSource.
+  EXPECT_EQ(payments::PaymentsClient::UploadCardSource::
+                LOCAL_CARD_MIGRATION_SETTINGS_PAGE,
+            payments_client_->upload_card_source_in_request());
+}
+
+// Verify that when triggering from settings page, intermediate prompt will not
+// be triggered.
+TEST_F(LocalCardMigrationManagerTest,
+       MigrateCreditCard_TriggerFromSettingsPage) {
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillCreditCardLocalCardMigration);
+
+  // Set the billing_customer_number Priority Preference to designate
+  // existence of a Payments account.
+  autofill_client_.GetPrefs()->SetDouble(prefs::kAutofillBillingCustomerNumber,
+                                         12345);
+  // Add a local credit card. One migratable credit card will still trigger
+  // migration on settings page.
+  AddLocalCreditCard(personal_data_, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "1", "guid1");
 
   base::HistogramTester histogram_tester;
   // Do the same operation as we bridge back from the settings page.
@@ -666,7 +864,8 @@ TEST_F(LocalCardMigrationManagerTest,
 // prompt are both triggered.
 TEST_F(LocalCardMigrationManagerTest,
        MigrateCreditCard_TriggerFromSubmittedForm) {
-  EnableAutofillCreditCardLocalCardMigrationExperiment();
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillCreditCardLocalCardMigration);
 
   // Set the billing_customer_number Priority Preference to designate
   // existence of a Payments account.
@@ -674,11 +873,11 @@ TEST_F(LocalCardMigrationManagerTest,
                                          12345);
   // Add a local credit card whose |TypeAndLastFourDigits| matches what we will
   // enter below.
-  AddLocalCrediCard(personal_data_, "Flo Master", "4111111111111111", "11",
-                    test::NextYear().c_str(), "1");
+  AddLocalCreditCard(personal_data_, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "1", "guid1");
   // Add another local credit card, so it will trigger migration.
-  AddLocalCrediCard(personal_data_, "Flo Master", "5555555555554444", "11",
-                    test::NextYear().c_str(), "1");
+  AddLocalCreditCard(personal_data_, "Flo Master", "5555555555554444", "11",
+                     test::NextYear().c_str(), "1", "guid2");
 
   // Set up our credit card form data.
   FormData credit_card_form;
@@ -693,18 +892,61 @@ TEST_F(LocalCardMigrationManagerTest,
   EXPECT_TRUE(local_card_migration_manager_->MainPromptWasShown());
 }
 
+// Verify that when triggering from submitted form, intermediate prompt and main
+// prompt are not triggered as user previously rejected the prompt.
+TEST_F(LocalCardMigrationManagerTest,
+       MigrateCreditCard_DontTriggerFromSubmittedForm) {
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillCreditCardLocalCardMigration);
+
+  // Set the billing_customer_number Priority Preference to designate
+  // existence of a Payments account.
+  autofill_client_.GetPrefs()->SetDouble(prefs::kAutofillBillingCustomerNumber,
+                                         12345);
+
+  // Set that previously user rejected this prompt.
+  prefs::SetLocalCardMigrationPromptPreviouslyCancelled(
+      autofill_client_.GetPrefs(), true);
+
+  // Add a local credit card whose |TypeAndLastFourDigits| matches what we will
+  // enter below.
+  AddLocalCreditCard(personal_data_, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "1", "guid1");
+  // Add another local credit card, so it will trigger migration.
+  AddLocalCreditCard(personal_data_, "Flo Master", "5555555555554444", "11",
+                     test::NextYear().c_str(), "1", "guid2");
+
+  // Set up our credit card form data.
+  FormData credit_card_form;
+  test::CreateTestCreditCardFormData(&credit_card_form, true, false);
+  FormsSeen(std::vector<FormData>(1, credit_card_form));
+
+  // Edit the data, and submit.
+  EditCreditCardFrom(credit_card_form, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "123");
+  // Migration should not be offered because user previously rejected
+  // migration prompt.
+  FormSubmitted(credit_card_form);
+  EXPECT_FALSE(local_card_migration_manager_->IntermediatePromptWasShown());
+  EXPECT_FALSE(local_card_migration_manager_->MainPromptWasShown());
+}
+
 // Verify that given the parsed response from the payments client, the migration
 // status is correctly set.
 TEST_F(LocalCardMigrationManagerTest, MigrateCreditCard_MigrationSuccess) {
-  EnableAutofillCreditCardLocalCardMigrationExperiment();
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillCreditCardLocalCardMigration);
 
   // Set the billing_customer_number Priority Preference to designate
   // existence of a Payments account.
   autofill_client_.GetPrefs()->SetDouble(prefs::kAutofillBillingCustomerNumber,
                                          12345);
   // Add a local credit card for migration.
-  AddLocalCrediCard(personal_data_, "Flo Master", "4111111111111111", "11",
-                    test::NextYear().c_str(), "1");
+  AddLocalCreditCard(personal_data_, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "1", "guid1");
+
+  // Verify that it exists in the local database.
+  EXPECT_TRUE(personal_data_.GetCreditCardByNumber("4111111111111111"));
 
   // Get the migratable credit cards.
   local_card_migration_manager_->GetMigratableCreditCards();
@@ -718,20 +960,24 @@ TEST_F(LocalCardMigrationManagerTest, MigrateCreditCard_MigrationSuccess) {
 
   EXPECT_EQ(local_card_migration_manager_->migratable_credit_cards_[0]
                 .migration_status(),
-            autofill::MigratableCreditCard::UNKNOWN);
+            autofill::MigratableCreditCard::MigrationStatus::UNKNOWN);
 
   local_card_migration_manager_->AttemptToOfferLocalCardMigration(true);
 
   EXPECT_EQ(local_card_migration_manager_->migratable_credit_cards_[0]
                 .migration_status(),
-            autofill::MigratableCreditCard::SUCCESS_ON_UPLOAD);
+            autofill::MigratableCreditCard::MigrationStatus::SUCCESS_ON_UPLOAD);
+
+  // Local card should *not* be present as it is migrated already.
+  EXPECT_FALSE(personal_data_.GetCreditCardByNumber("4111111111111111"));
 }
 
 // Verify that given the parsed response from the payments client, the migration
 // status is correctly set.
 TEST_F(LocalCardMigrationManagerTest,
        MigrateCreditCard_MigrationTemporaryFailure) {
-  EnableAutofillCreditCardLocalCardMigrationExperiment();
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillCreditCardLocalCardMigration);
 
   // Set the billing_customer_number Priority Preference to designate
   // existence of a Payments account.
@@ -739,8 +985,11 @@ TEST_F(LocalCardMigrationManagerTest,
                                          12345);
   // Add a local credit card. One migratable credit card will still trigger
   // migration on settings page.
-  AddLocalCrediCard(personal_data_, "Flo Master", "4111111111111111", "11",
-                    test::NextYear().c_str(), "1");
+  AddLocalCreditCard(personal_data_, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "1", "guid1");
+
+  // Verify that it exists in local database.
+  EXPECT_TRUE(personal_data_.GetCreditCardByNumber("4111111111111111"));
 
   // Get the migratable credit cards.
   local_card_migration_manager_->GetMigratableCreditCards();
@@ -754,21 +1003,25 @@ TEST_F(LocalCardMigrationManagerTest,
 
   EXPECT_EQ(local_card_migration_manager_->migratable_credit_cards_[0]
                 .migration_status(),
-            autofill::MigratableCreditCard::UNKNOWN);
+            autofill::MigratableCreditCard::MigrationStatus::UNKNOWN);
 
   // Start the migration.
   local_card_migration_manager_->AttemptToOfferLocalCardMigration(true);
 
   EXPECT_EQ(local_card_migration_manager_->migratable_credit_cards_[0]
                 .migration_status(),
-            autofill::MigratableCreditCard::FAILURE_ON_UPLOAD);
+            autofill::MigratableCreditCard::MigrationStatus::FAILURE_ON_UPLOAD);
+
+  // Local card should be present as it is not migrated.
+  EXPECT_TRUE(personal_data_.GetCreditCardByNumber("4111111111111111"));
 }
 
 // Verify that given the parsed response from the payments client, the migration
 // status is correctly set.
 TEST_F(LocalCardMigrationManagerTest,
        MigrateCreditCard_MigrationPermanentFailure) {
-  EnableAutofillCreditCardLocalCardMigrationExperiment();
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillCreditCardLocalCardMigration);
 
   // Set the billing_customer_number Priority Preference to designate
   // existence of a Payments account.
@@ -776,8 +1029,11 @@ TEST_F(LocalCardMigrationManagerTest,
                                          12345);
   // Add a local credit card. One migratable credit card will still trigger
   // migration on settings page.
-  AddLocalCrediCard(personal_data_, "Flo Master", "4111111111111111", "11",
-                    test::NextYear().c_str(), "1");
+  AddLocalCreditCard(personal_data_, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "1", "guid1");
+
+  // Verify that it exists in local database.
+  EXPECT_TRUE(personal_data_.GetCreditCardByNumber("4111111111111111"));
 
   // Get the migratable credit cards.
   local_card_migration_manager_->GetMigratableCreditCards();
@@ -791,14 +1047,228 @@ TEST_F(LocalCardMigrationManagerTest,
 
   EXPECT_EQ(local_card_migration_manager_->migratable_credit_cards_[0]
                 .migration_status(),
-            autofill::MigratableCreditCard::UNKNOWN);
+            autofill::MigratableCreditCard::MigrationStatus::UNKNOWN);
 
   // Start the migration.
   local_card_migration_manager_->AttemptToOfferLocalCardMigration(true);
 
   EXPECT_EQ(local_card_migration_manager_->migratable_credit_cards_[0]
                 .migration_status(),
-            autofill::MigratableCreditCard::FAILURE_ON_UPLOAD);
+            autofill::MigratableCreditCard::MigrationStatus::FAILURE_ON_UPLOAD);
+
+  // Local card should be present as it is not migrated.
+  EXPECT_TRUE(personal_data_.GetCreditCardByNumber("4111111111111111"));
+}
+
+// Verify selected cards are correctly passed to manager.
+TEST_F(LocalCardMigrationManagerTest, MigrateCreditCard_ToggleIsChosen) {
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillCreditCardLocalCardMigration);
+  AddLocalCreditCard(personal_data_, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "1", "guid1");
+  AddLocalCreditCard(personal_data_, "Flo Master", "5454545454545454", "11",
+                     test::NextYear().c_str(), "1", "guid2");
+  autofill_client_.GetPrefs()->SetDouble(prefs::kAutofillBillingCustomerNumber,
+                                         12345);
+  local_card_migration_manager_->GetMigratableCreditCards();
+
+  autofill_client_.set_migration_card_selections(
+      std::vector<std::string>{"guid1"});
+  local_card_migration_manager_->AttemptToOfferLocalCardMigration(true);
+
+  EXPECT_EQ(static_cast<int>(
+                local_card_migration_manager_->migratable_credit_cards_.size()),
+            1);
+  EXPECT_EQ(local_card_migration_manager_->migratable_credit_cards_[0]
+                .credit_card()
+                .guid(),
+            "guid1");
+}
+
+TEST_F(LocalCardMigrationManagerTest, DeleteLocalCardViaMigrationDialog) {
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillCreditCardLocalCardMigration);
+
+  AddLocalCreditCard(personal_data_, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "1", "guid1");
+
+  EXPECT_TRUE(personal_data_.GetCreditCardWithGUID("guid1"));
+
+  local_card_migration_manager_->OnUserDeletedLocalCardViaMigrationDialog(
+      "guid1");
+
+  EXPECT_FALSE(personal_data_.GetCreditCardWithGUID("guid1"));
+}
+
+// Use one local card with more valid local cards available, don't show prompt
+// if max strikes reached.
+TEST_F(LocalCardMigrationManagerTest,
+       MigrateLocalCreditCard_MaxStrikesReached) {
+  scoped_feature_list_.InitWithFeatures(
+      // Enabled
+      {features::kAutofillCreditCardLocalCardMigration,
+       features::kAutofillLocalCardMigrationUsesStrikeSystemV2},
+      // Disabled
+      {});
+
+  LocalCardMigrationStrikeDatabase local_card_migration_strike_database =
+      LocalCardMigrationStrikeDatabase(strike_database_);
+  local_card_migration_strike_database.AddStrikes(7);
+
+  EXPECT_EQ(local_card_migration_strike_database.GetStrikes(), 7);
+
+  // Set the billing_customer_number Priority Preference to designate
+  // existence of a Payments account.
+  autofill_client_.GetPrefs()->SetDouble(prefs::kAutofillBillingCustomerNumber,
+                                         12345);
+  // Add a local credit card whose |TypeAndLastFourDigits| matches what we will
+  // enter below.
+  AddLocalCreditCard(personal_data_, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "1", "guid1");
+  // Add another local credit card, so it will trigger migration.
+  AddLocalCreditCard(personal_data_, "Flo Master", "5555555555554444", "11",
+                     test::NextYear().c_str(), "1", "guid2");
+
+  // Set up our credit card form data.
+  FormData credit_card_form;
+  test::CreateTestCreditCardFormData(&credit_card_form, true, false);
+  FormsSeen(std::vector<FormData>(1, credit_card_form));
+
+  base::HistogramTester histogram_tester;
+  // Edit the data, and submit.
+  EditCreditCardFrom(credit_card_form, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "123");
+  FormSubmitted(credit_card_form);
+
+  // Local card migration not triggered since max strikes have been reached.
+  EXPECT_FALSE(local_card_migration_manager_->LocalCardMigrationWasTriggered());
+
+  // Verify that the correct histogram entry was logged.
+  histogram_tester.ExpectBucketCount(
+      "Autofill.StrikeDatabase.LocalCardMigrationNotOfferedDueToMaxStrikes",
+      AutofillMetrics::SaveTypeMetric::LOCAL, 1);
+}
+
+// Use one server card with more valid local cards available, don't show prompt
+// if max strikes reached.
+TEST_F(LocalCardMigrationManagerTest,
+       MigrateServerCreditCard_MaxStrikesReached) {
+  scoped_feature_list_.InitWithFeatures(
+      // Enabled
+      {features::kAutofillCreditCardLocalCardMigration,
+       features::kAutofillLocalCardMigrationUsesStrikeSystemV2},
+      // Disabled
+      {});
+
+  LocalCardMigrationStrikeDatabase local_card_migration_strike_database =
+      LocalCardMigrationStrikeDatabase(strike_database_);
+  local_card_migration_strike_database.AddStrikes(7);
+
+  EXPECT_EQ(local_card_migration_strike_database.GetStrikes(), 7);
+
+  // Set the billing_customer_number Priority Preference to designate
+  // existence of a Payments account.
+  autofill_client_.GetPrefs()->SetDouble(prefs::kAutofillBillingCustomerNumber,
+                                         12345);
+
+  // Add a masked server credit card whose |TypeAndLastFourDigits| matches what
+  // we will enter below.
+  CreditCard credit_card(CreditCard::MASKED_SERVER_CARD, "a123");
+  test::SetCreditCardInfo(&credit_card, "Flo Master", "1111", "11",
+                          test::NextYear().c_str(), "1");
+  credit_card.SetNetworkForMaskedCard(kVisaCard);
+  personal_data_.AddServerCreditCard(credit_card);
+  // Add one valid local credit card, so it will trigger migration
+  AddLocalCreditCard(personal_data_, "Flo Master", "5555555555554444", "11",
+                     test::NextYear().c_str(), "1", "guid1");
+
+  // Set up our credit card form data.
+  FormData credit_card_form;
+  test::CreateTestCreditCardFormData(&credit_card_form, true, false);
+  FormsSeen(std::vector<FormData>(1, credit_card_form));
+
+  base::HistogramTester histogram_tester;
+  // Edit the data, and submit.
+  EditCreditCardFrom(credit_card_form, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "123");
+  FormSubmitted(credit_card_form);
+
+  // Local card migration not triggered since max strikes have been reached.
+  EXPECT_FALSE(local_card_migration_manager_->LocalCardMigrationWasTriggered());
+
+  // Verify that the correct histogram entry was logged.
+  histogram_tester.ExpectBucketCount(
+      "Autofill.StrikeDatabase.LocalCardMigrationNotOfferedDueToMaxStrikes",
+      AutofillMetrics::SaveTypeMetric::SERVER, 1);
+}
+
+// When local card migration is attempted and some cards aren't selected,
+// 3 strikes should be added.
+TEST_F(LocalCardMigrationManagerTest,
+       MigrateCreditCard_StrikesAddedWhenSomeCardsNotSelected) {
+  scoped_feature_list_.InitWithFeatures(
+      // Enabled
+      {features::kAutofillCreditCardLocalCardMigration,
+       features::kAutofillLocalCardMigrationUsesStrikeSystemV2},
+      // Disabled
+      {});
+
+  LocalCardMigrationStrikeDatabase local_card_migration_strike_database =
+      LocalCardMigrationStrikeDatabase(strike_database_);
+  // LocalCardMigrationStrikeDatabase should initially have no strikes.
+  EXPECT_EQ(local_card_migration_strike_database.GetStrikes(), 0);
+
+  AddLocalCreditCard(personal_data_, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "1", "guid1");
+  AddLocalCreditCard(personal_data_, "Flo Master", "5454545454545454", "11",
+                     test::NextYear().c_str(), "1", "guid2");
+  autofill_client_.GetPrefs()->SetDouble(prefs::kAutofillBillingCustomerNumber,
+                                         12345);
+  local_card_migration_manager_->GetMigratableCreditCards();
+
+  // Only select one of the two cards.
+  autofill_client_.set_migration_card_selections(
+      std::vector<std::string>{"guid1"});
+  local_card_migration_manager_->AttemptToOfferLocalCardMigration(true);
+
+  EXPECT_EQ(local_card_migration_strike_database.GetStrikes(), 3);
+}
+
+// When local card migration is accepted, UMA metrics for LocalCardMigration
+// strike count is logged.
+TEST_F(LocalCardMigrationManagerTest, MigrateCreditCard_StrikeCountUMALogged) {
+  scoped_feature_list_.InitWithFeatures(
+      // Enabled
+      {features::kAutofillCreditCardLocalCardMigration,
+       features::kAutofillLocalCardMigrationUsesStrikeSystemV2},
+      // Disabled
+      {});
+
+  AddLocalCreditCard(personal_data_, "Flo Master", "4111111111111111", "11",
+                     test::NextYear().c_str(), "1", "guid1");
+  AddLocalCreditCard(personal_data_, "Flo Master", "5454545454545454", "11",
+                     test::NextYear().c_str(), "1", "guid2");
+  autofill_client_.GetPrefs()->SetDouble(prefs::kAutofillBillingCustomerNumber,
+                                         12345);
+  local_card_migration_manager_->GetMigratableCreditCards();
+
+  // Add 4 LocalCardMigration strikes.
+  LocalCardMigrationStrikeDatabase local_card_migration_strike_database =
+      LocalCardMigrationStrikeDatabase(strike_database_);
+  local_card_migration_strike_database.AddStrikes(4);
+  EXPECT_EQ(local_card_migration_strike_database.GetStrikes(), 4);
+
+  base::HistogramTester histogram_tester;
+
+  // Select the cards.
+  autofill_client_.set_migration_card_selections(
+      std::vector<std::string>{"guid1", "guid2"});
+  local_card_migration_manager_->AttemptToOfferLocalCardMigration(true);
+
+  // Verify that the strike count was logged when card migration accepted.
+  histogram_tester.ExpectBucketCount(
+      "Autofill.StrikeDatabase.StrikesPresentWhenLocalCardMigrationAccepted", 4,
+      1);
 }
 
 }  // namespace autofill

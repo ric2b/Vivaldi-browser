@@ -78,8 +78,8 @@ bool QuerySyncManager::Alloc(QuerySyncManager::QueryInfo* info) {
     bucket = buckets_.back().get();
   }
 
-  size_t index_in_bucket = 0;
-  for (size_t i = 0; i < kSyncsPerBucket; i++) {
+  uint32_t index_in_bucket = 0;
+  for (uint32_t i = 0; i < kSyncsPerBucket; i++) {
     if (!bucket->in_use_query_syncs[i]) {
       index_in_bucket = i;
       break;
@@ -203,8 +203,8 @@ void QueryTracker::Query::QueryCounter(QueryTrackerClient* client) {
   MarkAsPending(client->cmd_buffer_helper()->InsertToken(), submit_count);
 }
 
-bool QueryTracker::Query::CheckResultsAvailable(
-    CommandBufferHelper* helper) {
+bool QueryTracker::Query::CheckResultsAvailable(CommandBufferHelper* helper,
+                                                bool flush_if_pending) {
   if (Pending()) {
     bool processed_all = base::subtle::Acquire_Load(
                              &info_.sync->process_count) == submit_count();
@@ -236,7 +236,8 @@ bool QueryTracker::Query::CheckResultsAvailable(
       }
       state_ = kComplete;
     } else {
-      if ((helper->flush_generation() - flush_count_ - 1) >= 0x80000000) {
+      if (flush_if_pending &&
+          (helper->flush_generation() - flush_count_ - 1) >= 0x80000000) {
         helper->Flush();
       } else {
         // Insert no-ops so that eventually the GPU process will see more work.

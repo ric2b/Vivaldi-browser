@@ -13,9 +13,11 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task/post_task.h"
 #include "base/values.h"
 #include "components/cast_channel/cast_channel_enum.h"
 #include "components/cast_channel/cast_message_util.h"
@@ -24,6 +26,7 @@
 #include "components/cast_channel/keep_alive_delegate.h"
 #include "components/cast_channel/logger.h"
 #include "components/cast_channel/proto/cast_channel.pb.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/api/cast_channel/cast_channel_enum_util.h"
 #include "extensions/browser/api/cast_channel/cast_message_util.h"
@@ -237,7 +240,7 @@ void CastChannelAsyncApiFunction::SetResultFromSocket(
   FillChannelInfo(socket, &channel_info);
   api::cast_channel::ChannelError error = ToChannelError(socket.error_state());
   if (error != api::cast_channel::CHANNEL_ERROR_NONE) {
-    SetError("Channel socket error = " + base::IntToString(error));
+    SetError("Channel socket error = " + base::NumberToString(error));
   }
   SetResultFromChannelInfo(channel_info);
 }
@@ -254,7 +257,7 @@ void CastChannelAsyncApiFunction::SetResultFromError(
   channel_info.connect_info.auth =
       api::cast_channel::CHANNEL_AUTH_TYPE_SSL_VERIFIED;
   SetResultFromChannelInfo(channel_info);
-  SetError("Channel error = " + base::IntToString(error));
+  SetError("Channel error = " + base::NumberToString(error));
 }
 
 void CastChannelAsyncApiFunction::SetResultFromChannelInfo(
@@ -512,9 +515,8 @@ void CastChannelAPI::CastMessageHandler::OnError(
       OnError::Create(channel_info, error_info);
   std::unique_ptr<Event> event(new Event(
       events::CAST_CHANNEL_ON_ERROR, OnError::kEventName, std::move(results)));
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::Bind(ui_dispatch_cb_, base::Passed(std::move(event))));
+  base::PostTaskWithTraits(FROM_HERE, {BrowserThread::UI},
+                           base::BindOnce(ui_dispatch_cb_, std::move(event)));
 }
 
 void CastChannelAPI::CastMessageHandler::OnMessage(
@@ -534,9 +536,8 @@ void CastChannelAPI::CastMessageHandler::OnMessage(
   std::unique_ptr<Event> event(new Event(events::CAST_CHANNEL_ON_MESSAGE,
                                          OnMessage::kEventName,
                                          std::move(results)));
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::Bind(ui_dispatch_cb_, base::Passed(std::move(event))));
+  base::PostTaskWithTraits(FROM_HERE, {BrowserThread::UI},
+                           base::BindOnce(ui_dispatch_cb_, std::move(event)));
 }
 
 }  // namespace extensions

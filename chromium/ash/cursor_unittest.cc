@@ -26,16 +26,16 @@ TEST_F(CursorTest, TopLevel) {
 
   // Make sure the WindowTreeClient receives events.
   EXPECT_EQ(0U, GetTestWindowTreeClient()->input_events().size());
-  ui::test::EventGenerator generator(window.get());
+  ui::test::EventGenerator generator(window->GetRootWindow());
   generator.MoveMouseToInHost(50, 50);
   ASSERT_EQ(1U, GetTestWindowTreeClient()->input_events().size());
-  EXPECT_EQ(ui::EventType::ET_POINTER_MOVED,
+  EXPECT_EQ(ui::EventType::ET_MOUSE_MOVED,
             GetTestWindowTreeClient()->PopInputEvent().event->type());
 
   // Check that WindowTree actually sets the cursor.
   aura::client::CursorClient* cursor_client =
       aura::client::GetCursorClient(window->GetRootWindow());
-  const ui::CursorData help_cursor(ui::CursorType::kHelp);
+  const ui::Cursor help_cursor(ui::CursorType::kHelp);
   GetWindowTreeTestHelper()->SetCursor(window.get(), help_cursor);
   EXPECT_EQ(ui::CursorType::kHelp,
             window->delegate()->GetCursor({}).native_type());
@@ -44,7 +44,7 @@ TEST_F(CursorTest, TopLevel) {
   // If the mouse is not over the host, then SetCursor won't update the actual
   // cursor (i.e. the CursorClient).
   generator.MoveMouseToInHost(500, 500);
-  const ui::CursorData not_allowed_cursor(ui::CursorType::kNotAllowed);
+  const ui::Cursor not_allowed_cursor(ui::CursorType::kNotAllowed);
   GetWindowTreeTestHelper()->SetCursor(window.get(), not_allowed_cursor);
   EXPECT_EQ(ui::CursorType::kNotAllowed,
             window->delegate()->GetCursor({}).native_type());
@@ -57,7 +57,7 @@ TEST_F(CursorTest, Embedded) {
   aura::Window* embed_root = GetWindowTreeTestHelper()->NewWindow();
   ws::TestWindowTreeClient test_client;
   GetWindowTreeTestHelper()->Embed(embed_root, nullptr, &test_client, 0);
-  const ui::CursorData help_cursor(ui::CursorType::kHelp);
+  const ui::Cursor help_cursor(ui::CursorType::kHelp);
   GetWindowTreeTestHelper()->SetCursor(embed_root, help_cursor);
 
   // Since the window isn't visible, the actual cursor shouldn't have changed.
@@ -74,13 +74,13 @@ TEST_F(CursorTest, Embedded) {
   EXPECT_TRUE(embed_root->IsVisible());
 
   // Now put the cursor over it and the previously set cursor should be used.
-  ui::test::EventGenerator generator(toplevel.get());
+  ui::test::EventGenerator generator(toplevel->GetRootWindow());
   generator.MoveMouseToInHost(50, 50);
   EXPECT_EQ(ui::CursorType::kHelp,
             ash::Shell::Get()->cursor_manager()->GetCursor().native_type());
 
   // Setting to a new cursor should also immediately update the actual cursor.
-  const ui::CursorData not_allowed_cursor(ui::CursorType::kNotAllowed);
+  const ui::Cursor not_allowed_cursor(ui::CursorType::kNotAllowed);
   GetWindowTreeTestHelper()->SetCursor(embed_root, not_allowed_cursor);
   EXPECT_EQ(ui::CursorType::kNotAllowed,
             ash::Shell::Get()->cursor_manager()->GetCursor().native_type());
@@ -91,13 +91,15 @@ TEST_F(CursorTest, Custom) {
   std::unique_ptr<aura::Window> window =
       CreateTestWindow(gfx::Rect(0, 0, 100, 100));
   EXPECT_EQ(0U, GetTestWindowTreeClient()->input_events().size());
-  ui::test::EventGenerator generator(window.get());
+  ui::test::EventGenerator generator(window->GetRootWindow());
   generator.MoveMouseToInHost(50, 50);
 
   // Set a custom cursor.
   SkBitmap bitmap = gfx::test::CreateBitmap(10, 10);
-  const ui::CursorData image_cursor(gfx::Point(1, 4), {bitmap}, 1.f,
-                                    base::TimeDelta());
+  ui::Cursor image_cursor(ui::CursorType::kCustom);
+  image_cursor.set_custom_hotspot(gfx::Point(1, 4));
+  image_cursor.set_custom_bitmap(bitmap);
+  image_cursor.set_device_scale_factor(1.f);
   GetWindowTreeTestHelper()->SetCursor(window.get(), image_cursor);
 
   // Make sure it worked.

@@ -10,7 +10,6 @@
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_controlling.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_provider.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_consumer.h"
-#import "ios/chrome/browser/ui/toolbar/toolbar_owner.h"
 #import "ios/public/provider/chrome/browser/voice/logo_animation_controller.h"
 
 @protocol ApplicationCommands;
@@ -23,7 +22,6 @@
 @protocol OmniboxFocuser;
 @class PrimaryToolbarViewController;
 class ReadingListModel;
-@protocol UrlLoader;
 
 // Controller for the header containing the logo and the fake omnibox, handling
 // the interactions between the header and the collection, and the rest of the
@@ -32,7 +30,6 @@ class ReadingListModel;
     : UIViewController<ContentSuggestionsHeaderControlling,
                        ContentSuggestionsHeaderProvider,
                        NTPHomeConsumer,
-                       ToolbarOwner,
                        LogoAnimationControllerOwnerOwner>
 
 // Whether |voiceSearchIsEnabled|.
@@ -44,12 +41,9 @@ class ReadingListModel;
 - (instancetype)initWithCoder:(NSCoder*)aDecoder NS_UNAVAILABLE;
 - (instancetype)init NS_UNAVAILABLE;
 
-@property(nonatomic, weak) id<ApplicationCommands,
-                              BrowserCommands,
-                              OmniboxFocuser,
-                              FakeboxFocuser,
-                              UrlLoader>
-    dispatcher;
+@property(nonatomic, weak)
+    id<ApplicationCommands, BrowserCommands, OmniboxFocuser, FakeboxFocuser>
+        dispatcher;
 @property(nonatomic, weak) id<ContentSuggestionsHeaderViewControllerDelegate>
     delegate;
 @property(nonatomic, weak) id<ContentSuggestionsCommands> commandHandler;
@@ -61,10 +55,6 @@ class ReadingListModel;
 
 // |YES| if a what's new promo can be displayed.
 @property(nonatomic, assign) BOOL promoCanShow;
-
-// |YES| if its view is visible.  When set to |NO| various UI updates are
-// ignored.
-@property(nonatomic, assign) BOOL isShowing;
 
 // Return the toolbar view;
 - (UIView*)toolBarView;

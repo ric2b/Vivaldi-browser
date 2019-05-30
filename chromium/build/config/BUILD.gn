@@ -6,7 +6,6 @@ import("//build/config/allocator.gni")
 import("//build/config/c++/c++.gni")
 import("//build/config/chrome_build.gni")
 import("//build/config/chromecast_build.gni")
-import("//build/config/coverage/coverage.gni")
 import("//build/config/crypto.gni")
 import("//build/config/dcheck_always_on.gni")
 import("//build/config/features.gni")
@@ -15,8 +14,8 @@ import("//build/config/features.gni")
 # .gn config, but those arguments are only used on macOS. Including
 # mac_sdk_overrides.gni insures that this doesn't trigger an unused argument
 # warning.
-import("//build/config/mac/mac_sdk_overrides.gni")
 import("//build/config/ios/ios_sdk_overrides.gni")
+import("//build/config/mac/mac_sdk_overrides.gni")
 
 import("//build/config/pch.gni")
 import("//build/config/sanitizers/sanitizers.gni")
@@ -32,8 +31,11 @@ declare_args() {
   # Iterator debugging is generally useful for catching bugs. But it can
   # introduce extra locking to check the state of an iterator against the state
   # of the current object. For iterator- and thread-heavy code, this can
-  # significantly slow execution.
-  enable_iterator_debugging = true
+  # significantly slow execution - two orders of magnitude slowdown has been
+  # seen (crbug.com/903553) and iterator debugging also slows builds by making
+  # generation of snapshot_blob.bin take ~40-60 s longer. Therefore this
+  # defaults to off.
+  enable_iterator_debugging = false
 }
 
 # ==============================================
@@ -58,12 +60,11 @@ declare_args() {
 # flags. See //build/config/BUILDCONFIG.gn for advice on where to define
 # build flags.
 config("feature_flags") {
-  # Don't use deprecated V8 APIs anywhere.
-  defines = [ "V8_DEPRECATION_WARNINGS" ]
+  defines = []
   if (dcheck_always_on) {
     defines += [ "DCHECK_ALWAYS_ON=1" ]
     if (dcheck_is_configurable) {
-      defines += [ "DCHECK_IS_CONFIGURABLE=1" ]
+      defines += [ "DCHECK_IS_CONFIGURABLE" ]
     }
   }
   if (use_udev) {
@@ -94,7 +95,7 @@ config("feature_flags") {
   if (use_allocator != "tcmalloc") {
     defines += [ "NO_TCMALLOC" ]
   }
-  if (is_asan || is_lsan || is_tsan || is_msan) {
+  if (is_asan || is_hwasan || is_lsan || is_tsan || is_msan) {
     defines += [
       "MEMORY_TOOL_REPLACES_ALLOCATOR",
       "MEMORY_SANITIZER_INITIAL_SIZE",
@@ -119,9 +120,6 @@ config("feature_flags") {
   if (is_ubsan || is_ubsan_null || is_ubsan_vptr || is_ubsan_security) {
     defines += [ "UNDEFINED_SANITIZER" ]
   }
-  if (use_clang_coverage) {
-    defines += [ "CLANG_COVERAGE" ]
-  }
   if (safe_browsing_mode == 1) {
     defines += [ "FULL_SAFE_BROWSING" ]
     defines += [ "SAFE_BROWSING_CSD" ]
@@ -136,9 +134,6 @@ config("feature_flags") {
     defines += [ "GOOGLE_CHROME_BUILD" ]
   } else {
     defines += [ "CHROMIUM_BUILD" ]
-  }
-  if (!fieldtrial_testing_like_official_build && !is_chrome_branded) {
-    defines += [ "FIELDTRIAL_TESTING_ENABLED" ]
   }
 
   # ==============================================
@@ -218,7 +213,6 @@ config("default_libs") {
       "odbc32.lib",
       "odbccp32.lib",
       "oleaut32.lib",
-      "psapi.lib",
       "shell32.lib",
       "shlwapi.lib",
       "user32.lib",
@@ -299,6 +293,10 @@ group("common_deps") {
   if (is_win && generate_order_files && !is_nacl) {
     public_deps += [ "//tools/cygprofile_win" ]
   }
+
+  if (is_fuchsia) {
+    public_deps += [ "//third_party/fuchsia-sdk:runtime_library" ]
+  }
 }
 
 group("executable_deps") {
@@ -349,11 +347,11 @@ config("executable_config") {
       "//build/config/ios:ios_executable_flags",
     ]
   } else if (is_linux || is_android || current_os == "aix") {
-    configs += [ "//build/config/gcc:executable_ldconfig" ]
-    if (is_android) {
-      configs += [ "//build/config/android:executable_config" ]
-    } else if (is_chromecast) {
+    configs += [ "//build/config/gcc:executable_config" ]
+    if (is_chromecast) {
       configs += [ "//build/config/chromecast:executable_config" ]
+    } else if (is_fuchsia) {
+      configs += [ "//build/config/fuchsia:executable_config" ]
     }
   }
 
@@ -382,6 +380,8 @@ config("shared_library_config") {
     configs += [ "//build/config/ios:ios_dynamic_flags" ]
   } else if (is_chromecast) {
     configs += [ "//build/config/chromecast:shared_library_config" ]
+  } else if (is_linux || current_os == "aix") {
+    configs += [ "//build/config/gcc:shared_library_config" ]
   }
 
   # If we're using the prebuilt instrumented libraries with the sanitizers, we

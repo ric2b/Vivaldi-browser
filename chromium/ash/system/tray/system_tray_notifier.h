@@ -16,7 +16,6 @@
 
 namespace ash {
 
-class BluetoothObserver;
 class IMEObserver;
 class NetworkObserver;
 class ScreenCaptureObserver;
@@ -34,12 +33,6 @@ class ASH_EXPORT SystemTrayNotifier {
   SystemTrayNotifier();
   ~SystemTrayNotifier();
 
-  // Bluetooth.
-  void AddBluetoothObserver(BluetoothObserver* observer);
-  void RemoveBluetoothObserver(BluetoothObserver* observer);
-  void NotifyRefreshBluetooth();
-  void NotifyBluetoothDiscoveringChanged();
-
   // Input methods.
   void AddIMEObserver(IMEObserver* observer);
   void RemoveIMEObserver(IMEObserver* observer);
@@ -54,7 +47,8 @@ class ASH_EXPORT SystemTrayNotifier {
   // Screen capture.
   void AddScreenCaptureObserver(ScreenCaptureObserver* observer);
   void RemoveScreenCaptureObserver(ScreenCaptureObserver* observer);
-  void NotifyScreenCaptureStart(const base::Closure& stop_callback,
+  void NotifyScreenCaptureStart(base::RepeatingClosure stop_callback,
+                                base::RepeatingClosure source_callback,
                                 const base::string16& sharing_app_name);
   void NotifyScreenCaptureStop();
 
@@ -76,7 +70,6 @@ class ASH_EXPORT SystemTrayNotifier {
   void NotifyVirtualKeyboardSuppressionChanged(bool suppressed);
 
  private:
-  base::ObserverList<BluetoothObserver>::Unchecked bluetooth_observers_;
   base::ObserverList<IMEObserver>::Unchecked ime_observers_;
   base::ObserverList<NetworkObserver>::Unchecked network_observers_;
   base::ObserverList<ScreenCaptureObserver>::Unchecked

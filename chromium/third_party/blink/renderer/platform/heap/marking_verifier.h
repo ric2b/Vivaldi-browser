@@ -25,10 +25,10 @@ class MarkingVerifier final : public Visitor {
     const GCInfo* info =
         GCInfoTable::Get().GCInfoFromIndex(header->GcInfoIndex());
     const bool can_verify =
-        !info->HasVTable() || blink::VTableInitialized(header->Payload());
+        !info->has_v_table || blink::VTableInitialized(header->Payload());
     if (can_verify) {
       CHECK(header->IsValid());
-      info->trace_(this, header->Payload());
+      info->trace(this, header->Payload());
     }
   }
 
@@ -57,17 +57,22 @@ class MarkingVerifier final : public Visitor {
   }
   void RegisterWeakCallback(void*, WeakCallback) final {}
   void Visit(const TraceWrapperV8Reference<v8::Value>&) final {}
-  void Visit(DOMWrapperMap<ScriptWrappable>*,
-             const ScriptWrappable* key) final {}
   void VisitWithWrappers(void*, TraceDescriptor) final {}
 
  private:
   void VerifyChild(void* base_object_payload) {
+    // The following check ensures that an object is currently not under
+    // construction. All verifier runs are assumed to be run outside of mixin
+    // construction. Consequently, the following cases can lead to a failing
+    // check:
+    // 1. The garbage collector ignoring no-GC scopes for mixin construction.
+    // 2. Missing macro USING_GARBAGE_COLLECTED_MIXIN for users of
+    //    GarbageCollectedMixin.
     CHECK(base_object_payload);
     HeapObjectHeader* child_header =
         HeapObjectHeader::FromPayload(base_object_payload);
-    // This CHECKs ensure that any children reachable from marked parents are
-    // also marked. If you hit these CHECKs then marking is in an inconsistent
+    // These checks ensure that any children reachable from marked parents are
+    // also marked. If you hit these checks then marking is in an inconsistent
     // state meaning that there are unmarked objects reachable from marked
     // ones.
     CHECK(child_header);

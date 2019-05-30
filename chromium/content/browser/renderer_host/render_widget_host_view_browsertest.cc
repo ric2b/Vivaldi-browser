@@ -4,6 +4,7 @@
 
 #include <stdint.h>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/macros.h"
@@ -29,7 +30,7 @@
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
-#include "content/test/did_commit_provisional_load_interceptor.h"
+#include "content/test/did_commit_navigation_interceptor.h"
 #include "net/base/filename_util.h"
 #include "net/dns/mock_host_resolver.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -37,6 +38,11 @@
 #include "ui/base/layout.h"
 #include "ui/display/display_switches.h"
 #include "ui/gfx/geometry/size_conversions.h"
+
+#if defined(OS_ANDROID)
+#include "content/browser/renderer_host/render_widget_host_view_android.h"
+#include "ui/android/delegated_frame_host_android.h"
+#endif
 
 namespace content {
 
@@ -52,9 +58,9 @@ namespace {
     return;  \
   }
 
-// Common base class for browser tests.  This is subclassed twice: Once to test
-// the browser in forced-compositing mode, and once to test with compositing
-// mode disabled.
+// Common base class for browser tests.  This is subclassed three times: Once to
+// test the browser in forced-compositing mode; once to test with compositing
+// mode disabled; once with no surface creation for non-visual tests.
 class RenderWidgetHostViewBrowserTest : public ContentBrowserTest {
  public:
   RenderWidgetHostViewBrowserTest()
@@ -141,22 +147,22 @@ class RenderWidgetHostViewBrowserTest : public ContentBrowserTest {
 
 // Helps to ensure that a navigation is committed after a compositor frame was
 // submitted by the renderer, but before corresponding ACK is sent back.
-class CommitBeforeSwapAckSentHelper
-    : public DidCommitProvisionalLoadInterceptor {
+class CommitBeforeSwapAckSentHelper : public DidCommitNavigationInterceptor {
  public:
   explicit CommitBeforeSwapAckSentHelper(
       WebContents* web_contents,
       RenderFrameSubmissionObserver* frame_observer)
-      : DidCommitProvisionalLoadInterceptor(web_contents),
+      : DidCommitNavigationInterceptor(web_contents),
         frame_observer_(frame_observer) {}
 
  private:
-  // DidCommitProvisionalLoadInterceptor:
-  bool WillDispatchDidCommitProvisionalLoad(
+  // DidCommitNavigationInterceptor:
+  bool WillProcessDidCommitNavigation(
       RenderFrameHost* render_frame_host,
+      NavigationRequest* navigation_request,
       ::FrameHostMsg_DidCommitProvisionalLoad_Params* params,
-      service_manager::mojom::InterfaceProviderRequest*
-          interface_provider_request) override {
+      mojom::DidCommitProvisionalLoadInterfaceParamsPtr* interface_params)
+      override {
     base::MessageLoopCurrent::ScopedNestableTaskAllower allow;
     frame_observer_->WaitForAnyFrameSubmission();
     return true;
@@ -177,6 +183,118 @@ class RenderWidgetHostViewBrowserTestBase : public ContentBrowserTest {
     host_resolver()->AddRule("*", "127.0.0.1");
   }
 };
+
+// Base class for testing a RenderWidgetHostViewBase where visual output is not
+// relevant. This class does not setup surfaces for compositing.
+class NoCompositingRenderWidgetHostViewBrowserTest
+    : public RenderWidgetHostViewBrowserTest {
+ public:
+  NoCompositingRenderWidgetHostViewBrowserTest() {}
+  ~NoCompositingRenderWidgetHostViewBrowserTest() override {}
+
+  bool SetUpSourceSurface(const char* wait_message) override {
+    NOTIMPLEMENTED();
+    return true;
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(NoCompositingRenderWidgetHostViewBrowserTest);
+};
+
+// When creating the first RenderWidgetHostViewBase, the CompositorFrameSink can
+// change. When this occurs we need to evict the current frame, and recreate
+// surfaces. This tests that when frame eviction occurs while the
+// RenderWidgetHostViewBase is visible, that we generate a new LocalSurfaceId.
+// Simply invalidating can lead to displaying blank screens.
+// (https://crbug.com/909903)
+IN_PROC_BROWSER_TEST_F(NoCompositingRenderWidgetHostViewBrowserTest,
+                       ValidLocalSurfaceIdAllocationAfterInitialNavigation) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  // Creates the initial RenderWidgetHostViewBase, and connects to a
+  // CompositorFrameSink. This will trigger frame eviction.
+  NavigateToURL(shell(),
+                embedded_test_server()->GetURL("/page_with_animation.html"));
+  RenderWidgetHostViewBase* rwhvb = GetRenderWidgetHostView();
+  // Eviction normally invalidates the LocalSurfaceId, however if the
+  // RenderWidgetHostViewBase is visible, a new id must be allocated. Otherwise
+  // blank content is shown.
+  EXPECT_TRUE(rwhvb);
+  // Mac does not initialize RenderWidgetHostViewBase as visible.
+#if !defined(OS_MACOSX)
+  EXPECT_TRUE(rwhvb->IsShowing());
+#endif
+  EXPECT_TRUE(rwhvb->GetLocalSurfaceIdAllocation().IsValid());
+  // TODO(jonross): Unify FrameEvictor into RenderWidgetHostViewBase so that we
+  // can generically test all eviction paths. However this should only be for
+  // top level renderers. Currently the FrameEvict implementations are platform
+  // dependent so we can't have a single generic test.
+}
+
+// TODO(jonross): Update Mac to also invalidate its viz::LocalSurfaceIds when
+// performing navigations while hidden. https://crbug.com/935364
+#if !defined(OS_MACOSX)
+// When a navigation occurs while the RenderWidgetHostViewBase is hidden, it
+// should invalidate it's viz::LocalSurfaceId. When subsequently being shown,
+// a new surface should be generated with a new viz::LocalSurfaceId
+IN_PROC_BROWSER_TEST_F(NoCompositingRenderWidgetHostViewBrowserTest,
+                       ValidLocalSurfaceIdAllocationAfterHiddenNavigation) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  // Creates the initial RenderWidgetHostViewBase, and connects to a
+  // CompositorFrameSink.
+  NavigateToURL(shell(),
+                embedded_test_server()->GetURL("/page_with_animation.html"));
+  RenderWidgetHostViewBase* rwhvb = GetRenderWidgetHostView();
+  EXPECT_TRUE(rwhvb);
+  viz::LocalSurfaceId rwhvb_local_surface_id =
+      rwhvb->GetLocalSurfaceIdAllocation().local_surface_id();
+  EXPECT_TRUE(rwhvb_local_surface_id.is_valid());
+
+  // Hide the view before performing the next navigation.
+  shell()->web_contents()->WasHidden();
+#if defined(OS_ANDROID)
+  // On Android we want to ensure that we maintain the currently embedded
+  // surface. So that there is something to display when returning to the tab.
+  RenderWidgetHostViewAndroid* rwhva =
+      static_cast<RenderWidgetHostViewAndroid*>(rwhvb);
+  ui::DelegatedFrameHostAndroid* dfh =
+      rwhva->delegated_frame_host_for_testing();
+  EXPECT_TRUE(dfh->HasPrimarySurface());
+  EXPECT_FALSE(dfh->IsPrimarySurfaceEvicted());
+  viz::LocalSurfaceId initial_local_surface_id =
+      dfh->SurfaceId().local_surface_id();
+  EXPECT_TRUE(initial_local_surface_id.is_valid());
+#endif
+
+  // Perform a navigation to the same content source. This will reuse the
+  // existing RenderWidgetHostViewBase.
+  NavigateToURL(shell(),
+                embedded_test_server()->GetURL("/page_with_animation.html"));
+  EXPECT_FALSE(rwhvb->GetLocalSurfaceIdAllocation().IsValid());
+
+#if defined(OS_ANDROID)
+  // Navigating while hidden should not generate a new surface. As the old one
+  // is maintained as the fallback.
+  EXPECT_TRUE(dfh->HasPrimarySurface());
+  EXPECT_FALSE(dfh->IsPrimarySurfaceEvicted());
+  EXPECT_EQ(initial_local_surface_id, dfh->SurfaceId().local_surface_id());
+#endif
+
+  // Showing the view should lead to a new surface being embedded.
+  shell()->web_contents()->WasShown();
+  viz::LocalSurfaceId new_rwhvb_local_surface_id =
+      rwhvb->GetLocalSurfaceIdAllocation().local_surface_id();
+  EXPECT_TRUE(new_rwhvb_local_surface_id.is_valid());
+  EXPECT_NE(rwhvb_local_surface_id, new_rwhvb_local_surface_id);
+#if defined(OS_ANDROID)
+  EXPECT_TRUE(dfh->HasPrimarySurface());
+  EXPECT_FALSE(dfh->IsPrimarySurfaceEvicted());
+  viz::LocalSurfaceId new_local_surface_id =
+      dfh->SurfaceId().local_surface_id();
+  EXPECT_TRUE(new_local_surface_id.is_valid());
+  EXPECT_NE(initial_local_surface_id, new_local_surface_id);
+#endif
+}
+#endif  // !defined(OS_MACOSX)
 
 IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewBrowserTestBase,
                        CompositorWorksWhenReusingRenderer) {
@@ -385,8 +503,10 @@ class CompositingRenderWidgetHostViewBrowserTestTabCapture
     }
     EXPECT_EQ(expected_bitmap.colorType(), bitmap.colorType());
     int fails = 0;
-    for (int i = 0; i < bitmap.width() && fails < 10; ++i) {
-      for (int j = 0; j < bitmap.height() && fails < 10; ++j) {
+    // Note: The outermost 2 pixels are ignored because the scaling tests pick
+    // up a little bleed-in from the surrounding content.
+    for (int i = 2; i < bitmap.width() - 4 && fails < 10; ++i) {
+      for (int j = 2; j < bitmap.height() - 4 && fails < 10; ++j) {
         if (!exclude_rect_.IsEmpty() && exclude_rect_.Contains(i, j))
           continue;
 
@@ -504,9 +624,9 @@ class CompositingRenderWidgetHostViewBrowserTestTabCapture
       // Request readback.  The callbacks will examine the pixels in the
       // SkBitmap result if readback was successful.
       readback_result_ = READBACK_NO_RESPONSE;
-      // Skia rendering can cause color differences, particularly in the
-      // middle two columns.
       SetAllowableError(2);
+      // Scaling can cause blur/fuzz between color boundaries, particularly in
+      // the middle columns for these tests.
       SetExcludeRect(
           gfx::Rect(output_size.width() / 2 - 1, 0, 2, output_size.height()));
 
@@ -779,19 +899,19 @@ static const auto kTestCompositingModes =
     testing::Values(GL_COMPOSITING, SOFTWARE_COMPOSITING);
 #endif
 
-INSTANTIATE_TEST_CASE_P(GLAndSoftwareCompositing,
-                        CompositingRenderWidgetHostViewBrowserTest,
-                        kTestCompositingModes);
-INSTANTIATE_TEST_CASE_P(GLAndSoftwareCompositing,
-                        CompositingRenderWidgetHostViewBrowserTestTabCapture,
-                        kTestCompositingModes);
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(GLAndSoftwareCompositing,
+                         CompositingRenderWidgetHostViewBrowserTest,
+                         kTestCompositingModes);
+INSTANTIATE_TEST_SUITE_P(GLAndSoftwareCompositing,
+                         CompositingRenderWidgetHostViewBrowserTestTabCapture,
+                         kTestCompositingModes);
+INSTANTIATE_TEST_SUITE_P(
     GLAndSoftwareCompositing,
     CompositingRenderWidgetHostViewBrowserTestTabCaptureHighDPI,
     kTestCompositingModes);
-INSTANTIATE_TEST_CASE_P(GLAndSoftwareCompositing,
-                        CompositingRenderWidgetHostViewBrowserTestHiDPI,
-                        kTestCompositingModes);
+INSTANTIATE_TEST_SUITE_P(GLAndSoftwareCompositing,
+                         CompositingRenderWidgetHostViewBrowserTestHiDPI,
+                         kTestCompositingModes);
 
 #endif  // !defined(OS_ANDROID)
 

@@ -67,6 +67,11 @@ class DownloadDriver : public MemoryTracker {
 
     // Returns whether the client is tracking the download with |guid|.
     virtual bool IsTrackingDownload(const std::string& guid) const = 0;
+
+    // Called when progress has been made in uploading the body for the download
+    // with |guid|.
+    virtual void OnUploadProgress(const std::string& guid,
+                                  uint64_t bytes_uploaded) const = 0;
   };
 
   ~DownloadDriver() override = default;
@@ -92,8 +97,10 @@ class DownloadDriver : public MemoryTracker {
       const net::NetworkTrafficAnnotationTag& traffic_annotation) = 0;
 
   // Cancels an existing download, all data associated with this download should
-  // be removed.
-  virtual void Remove(const std::string& guid) = 0;
+  // be removed. If download is not completed, the temporary file will be
+  // deleted. If download is completed, the download file will be deleted when
+  // |remove_file| is true.
+  virtual void Remove(const std::string& guid, bool remove_file) = 0;
 
   // Pauses the download.
   virtual void Pause(const std::string& guid) = 0;

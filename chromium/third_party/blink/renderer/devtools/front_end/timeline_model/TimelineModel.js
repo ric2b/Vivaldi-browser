@@ -88,19 +88,19 @@ TimelineModel.TimelineModel = class {
    * @param {!SDK.TracingModel.Event} event
    * @return {boolean}
    */
-  static isMarkerEvent(event) {
+  isMarkerEvent(event) {
     const recordTypes = TimelineModel.TimelineModel.RecordType;
     switch (event.name) {
-      case recordTypes.FrameStartedLoading:
       case recordTypes.TimeStamp:
+        return true;
       case recordTypes.MarkFirstPaint:
       case recordTypes.MarkFCP:
       case recordTypes.MarkFMP:
-      case recordTypes.MarkFMPCandidate:
-        return true;
+        // TODO(alph): There are duplicate FMP events coming from the backend. Keep the one having 'data' property.
+        return this._mainFrame && event.args.frame === this._mainFrame.frameId && !!event.args.data;
       case recordTypes.MarkDOMContent:
       case recordTypes.MarkLoad:
-        return event.args['data']['isMainFrame'];
+        return !!event.args['data']['isMainFrame'];
       default:
         return false;
     }
@@ -420,25 +420,34 @@ TimelineModel.TimelineModel = class {
   _extractCpuProfile(tracingModel, thread) {
     const events = thread.events();
     let cpuProfile;
+    let target = null;
 
     // Check for legacy CpuProfile event format first.
     let cpuProfileEvent = events.peekLast();
     if (cpuProfileEvent && cpuProfileEvent.name === TimelineModel.TimelineModel.RecordType.CpuProfile) {
       const eventData = cpuProfileEvent.args['data'];
       cpuProfile = /** @type {?Protocol.Profiler.Profile} */ (eventData && eventData['cpuProfile']);
+      target = this.targetByEvent(cpuProfileEvent);
     }
 
     if (!cpuProfile) {
       cpuProfileEvent = events.find(e => e.name === TimelineModel.TimelineModel.RecordType.Profile);
       if (!cpuProfileEvent)
         return null;
+      target = this.targetByEvent(cpuProfileEvent);
       const profileGroup = tracingModel.profileGroup(cpuProfileEvent);
       if (!profileGroup) {
         Common.console.error('Invalid CPU profile format.');
         return null;
       }
-      cpuProfile = /** @type {!Protocol.Profiler.Profile} */ (
-          {startTime: cpuProfileEvent.args['data']['startTime'], endTime: 0, nodes: [], samples: [], timeDeltas: []});
+      cpuProfile = /** @type {!Protocol.Profiler.Profile} */ ({
+        startTime: cpuProfileEvent.args['data']['startTime'],
+        endTime: 0,
+        nodes: [],
+        samples: [],
+        timeDeltas: [],
+        lines: []
+      });
       for (const profileEvent of profileGroup.children) {
         const eventData = profileEvent.args['data'];
         if ('startTime' in eventData)
@@ -446,8 +455,11 @@ TimelineModel.TimelineModel = class {
         if ('endTime' in eventData)
           cpuProfile.endTime = eventData['endTime'];
         const nodesAndSamples = eventData['cpuProfile'] || {};
+        const samples = nodesAndSamples['samples'] || [];
+        const lines = eventData['lines'] || Array(samples.length).fill(0);
         cpuProfile.nodes.pushAll(nodesAndSamples['nodes'] || []);
-        cpuProfile.samples.pushAll(nodesAndSamples['samples'] || []);
+        cpuProfile.lines.pushAll(lines);
+        cpuProfile.samples.pushAll(samples);
         cpuProfile.timeDeltas.pushAll(eventData['timeDeltas'] || []);
         if (cpuProfile.samples.length !== cpuProfile.timeDeltas.length) {
           Common.console.error('Failed to parse CPU profile.');
@@ -459,7 +471,7 @@ TimelineModel.TimelineModel = class {
     }
 
     try {
-      const jsProfileModel = new SDK.CPUProfileDataModel(cpuProfile);
+      const jsProfileModel = new SDK.CPUProfileDataModel(cpuProfile, target);
       this._cpuProfiles.push(jsProfileModel);
       return jsProfileModel;
     } catch (e) {
@@ -541,7 +553,7 @@ TimelineModel.TimelineModel = class {
             track.tasks.push(event);
           eventStack.push(event);
         }
-        if (TimelineModel.TimelineModel.isMarkerEvent(event))
+        if (this.isMarkerEvent(event))
           this._timeMarkerEvents.push(event);
 
         track.events.push(event);
@@ -599,7 +611,7 @@ TimelineModel.TimelineModel = class {
         }
 
         if (asyncEvent.hasCategory(TimelineModel.TimelineModel.Category.UserTiming)) {
-          group(TimelineModel.TimelineModel.TrackType.UserTiming).push(asyncEvent);
+          group(TimelineModel.TimelineModel.TrackType.Timings).push(asyncEvent);
           continue;
         }
 
@@ -685,6 +697,10 @@ TimelineModel.TimelineModel = class {
       pageFrameId = TimelineModel.TimelineData.forEvent(eventStack.peekLast()).frameId;
     timelineData.frameId = pageFrameId || (this._mainFrame && this._mainFrame.frameId) || '';
     this._asyncEventTracker.processEvent(event);
+
+    if (this.isMarkerEvent(event))
+      this._ensureNamedTrack(TimelineModel.TimelineModel.TrackType.Timings);
+
     switch (event.name) {
       case recordTypes.ResourceSendRequest:
       case recordTypes.WebSocketCreate:
@@ -712,7 +728,6 @@ TimelineModel.TimelineModel = class {
       case recordTypes.LayoutInvalidationTracking:
       case recordTypes.LayerInvalidationTracking:
       case recordTypes.PaintInvalidationTracking:
-      case recordTypes.ScrollInvalidationTracking:
         this._invalidationTracker.addInvalidation(new TimelineModel.InvalidationTrackingEvent(event));
         break;
 
@@ -740,6 +755,11 @@ TimelineModel.TimelineModel = class {
           this._currentTaskLayoutAndRecalcEvents.push(event);
         break;
       }
+
+      case recordTypes.Task:
+        if (event.duration > TimelineModel.TimelineModel.Thresholds.LongTask)
+          timelineData.warning = TimelineModel.TimelineModel.WarningType.LongTask;
+        break;
 
       case recordTypes.EventDispatch:
         if (event.duration > TimelineModel.TimelineModel.Thresholds.RecurringHandler)
@@ -1157,7 +1177,7 @@ TimelineModel.TimelineModel = class {
  * @enum {string}
  */
 TimelineModel.TimelineModel.RecordType = {
-  Task: 'Task',
+  Task: 'RunTask',
   Program: 'Program',
   EventDispatch: 'EventDispatch',
 
@@ -1192,7 +1212,6 @@ TimelineModel.TimelineModel.RecordType = {
   LayoutInvalidationTracking: 'LayoutInvalidationTracking',
   LayerInvalidationTracking: 'LayerInvalidationTracking',
   PaintInvalidationTracking: 'PaintInvalidationTracking',
-  ScrollInvalidationTracking: 'ScrollInvalidationTracking',
 
   ParseHTML: 'ParseHTML',
   ParseAuthorStyleSheet: 'ParseAuthorStyleSheet',
@@ -1207,15 +1226,19 @@ TimelineModel.TimelineModel.RecordType = {
   EvaluateScript: 'EvaluateScript',
   CompileModule: 'v8.compileModule',
   EvaluateModule: 'v8.evaluateModule',
+  WasmStreamFromResponseCallback: 'v8.wasm.streamFromResponseCallback',
+  WasmCompiledModule: 'v8.wasm.compiledModule',
+  WasmCachedModule: 'v8.wasm.cachedModule',
+  WasmModuleCacheHit: 'v8.wasm.moduleCacheHit',
+  WasmModuleCacheInvalid: 'v8.wasm.moduleCacheInvalid',
 
   FrameStartedLoading: 'FrameStartedLoading',
   CommitLoad: 'CommitLoad',
   MarkLoad: 'MarkLoad',
   MarkDOMContent: 'MarkDOMContent',
-  MarkFirstPaint: 'MarkFirstPaint',
+  MarkFirstPaint: 'firstPaint',
   MarkFCP: 'firstContentfulPaint',
   MarkFMP: 'firstMeaningfulPaint',
-  MarkFMPCandidate: 'firstMeaningfulPaintCandidate',
 
   TimeStamp: 'TimeStamp',
   ConsoleTime: 'ConsoleTime',
@@ -1308,6 +1331,7 @@ TimelineModel.TimelineModel.Category = {
  * @enum {string}
  */
 TimelineModel.TimelineModel.WarningType = {
+  LongTask: 'LongTask',
   ForcedStyle: 'ForcedStyle',
   ForcedLayout: 'ForcedLayout',
   IdleDeadlineExceeded: 'IdleDeadlineExceeded',
@@ -1331,6 +1355,7 @@ TimelineModel.TimelineModel.DevToolsMetadataEvent = {
 };
 
 TimelineModel.TimelineModel.Thresholds = {
+  LongTask: 200,
   Handler: 150,
   RecurringHandler: 50,
   ForcedLayout: 30,
@@ -1396,7 +1421,7 @@ TimelineModel.TimelineModel.TrackType = {
   Worker: Symbol('Worker'),
   Input: Symbol('Input'),
   Animation: Symbol('Animation'),
-  UserTiming: Symbol('UserTiming'),
+  Timings: Symbol('Timings'),
   Console: Symbol('Console'),
   Raster: Symbol('Raster'),
   GPU: Symbol('GPU'),
@@ -1801,8 +1826,7 @@ TimelineModel.InvalidationTracker = class {
     const types = [
       TimelineModel.TimelineModel.RecordType.StyleRecalcInvalidationTracking,
       TimelineModel.TimelineModel.RecordType.LayoutInvalidationTracking,
-      TimelineModel.TimelineModel.RecordType.PaintInvalidationTracking,
-      TimelineModel.TimelineModel.RecordType.ScrollInvalidationTracking
+      TimelineModel.TimelineModel.RecordType.PaintInvalidationTracking
     ];
     for (const invalidation of this._invalidationsOfTypes(types)) {
       if (invalidation.paintId === effectivePaintId)

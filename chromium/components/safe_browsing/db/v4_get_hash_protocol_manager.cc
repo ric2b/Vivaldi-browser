@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/base64url.h"
+#include "base/bind.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
@@ -14,7 +15,7 @@
 #include "base/strings/string_split.h"
 #include "base/timer/timer.h"
 #include "base/trace_event/trace_event.h"
-#include "base/trace_event/trace_event_argument.h"
+#include "base/trace_event/traced_value.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/base/load_flags.h"
@@ -789,7 +790,7 @@ void V4GetHashProtocolManager::OnURLLoaderCompleteInternal(
     int net_error,
     int response_code,
     const std::string& data) {
-  PendingHashRequests::iterator it = pending_hash_requests_.find(url_loader);
+  auto it = pending_hash_requests_.find(url_loader);
   DCHECK(it != pending_hash_requests_.end()) << "Request not found";
   V4ProtocolManagerUtil::RecordHttpResponseOrErrorCode(
       "SafeBrowsing.V4GetHash.Network.Result", net_error, response_code);

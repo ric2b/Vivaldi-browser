@@ -8,13 +8,14 @@
 
 #include <map>
 
+#include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
+#include "base/test/scoped_task_environment.h"
 #include "build/build_config.h"
 #include "components/sync/base/node_ordinal.h"
 #include "components/sync/base/time.h"
@@ -38,7 +39,7 @@ void CatastrophicErrorHandler(bool* catastrophic_error_handler_was_called) {
 // Create a dirty EntryKernel with an ID derived from |id| + |id_suffix|.
 std::unique_ptr<EntryKernel> CreateEntry(int id, const std::string& id_suffix) {
   std::unique_ptr<EntryKernel> entry(new EntryKernel());
-  std::string id_string = base::Int64ToString(id) + id_suffix;
+  std::string id_string = base::NumberToString(id) + id_suffix;
   entry->put(ID, Id::CreateFromClientString(id_string));
   entry->put(META_HANDLE, id);
   entry->mark_dirty(nullptr);
@@ -46,9 +47,6 @@ std::unique_ptr<EntryKernel> CreateEntry(int id, const std::string& id_suffix) {
 }
 
 }  // namespace
-
-extern const int32_t kCurrentPageSizeKB;
-extern const int32_t kCurrentDBVersion;
 
 class MigrationTest : public testing::TestWithParam<int> {
  public:
@@ -68,8 +66,9 @@ class MigrationTest : public testing::TestWithParam<int> {
     JournalIndex delete_journals;
     MetahandleSet metahandles_to_purge;
     Directory::KernelLoadInfo kernel_load_info;
-    return dbs->Load(&tmp_handles_map, &delete_journals, &metahandles_to_purge,
-                     &kernel_load_info) == OPENED;
+    DirOpenResult result = dbs->Load(&tmp_handles_map, &delete_journals,
+                                     &metahandles_to_purge, &kernel_load_info);
+    return result == OPENED_NEW || result == OPENED_EXISTING;
   }
 
   void SetUpCorruptedRootDatabase(sql::Database* connection);
@@ -110,7 +109,7 @@ class MigrationTest : public testing::TestWithParam<int> {
   }
 
  private:
-  base::MessageLoop message_loop_;
+  base::test::ScopedTaskEnvironment task_environment_;
   base::ScopedTempDir temp_dir_;
 };
 
@@ -324,8 +323,7 @@ std::map<int64_t, base::Time> GetExpectedMetaTimes() {
   std::map<int64_t, base::Time> expected_meta_times;
   const std::map<int64_t, int64_t>& expected_meta_proto_times =
       GetExpectedMetaProtoTimes(INCLUDE_DELETED_ITEMS);
-  for (std::map<int64_t, int64_t>::const_iterator it =
-           expected_meta_proto_times.begin();
+  for (auto it = expected_meta_proto_times.begin();
        it != expected_meta_proto_times.end(); ++it) {
     expected_meta_times[it->first] = ProtoTimeToTime(it->second);
   }
@@ -390,12 +388,10 @@ void ExpectTime(const EntryKernel& entry_kernel,
 // the given map (from metahandle to expect time).
 void ExpectTimes(const Directory::MetahandlesMap& handles_map,
                  const std::map<int64_t, base::Time>& expected_times) {
-  for (Directory::MetahandlesMap::const_iterator it = handles_map.begin();
-       it != handles_map.end(); ++it) {
+  for (auto it = handles_map.begin(); it != handles_map.end(); ++it) {
     int64_t meta_handle = it->first;
     SCOPED_TRACE(meta_handle);
-    std::map<int64_t, base::Time>::const_iterator it2 =
-        expected_times.find(meta_handle);
+    auto it2 = expected_times.find(meta_handle);
     if (it2 == expected_times.end()) {
       ADD_FAILURE() << "Could not find expected time for " << meta_handle;
       continue;
@@ -3970,8 +3966,8 @@ TEST_P(MigrationTest, ToCurrentVersion) {
 
   {
     OnDiskDirectoryBackingStore dbs(GetUsername(), GetDatabasePath());
-    ASSERT_EQ(OPENED, dbs.Load(&handles_map, &delete_journals,
-                               &metahandles_to_purge, &dir_info));
+    ASSERT_EQ(OPENED_EXISTING, dbs.Load(&handles_map, &delete_journals,
+                                        &metahandles_to_purge, &dir_info));
     if (!metahandles_to_purge.empty())
       dbs.DeleteEntries(DirectoryBackingStore::METAS_TABLE,
                         metahandles_to_purge);
@@ -4077,7 +4073,7 @@ TEST_P(MigrationTest, ToCurrentVersion) {
             GetMetaProtoTimes(&connection));
   ExpectTimes(handles_map, GetExpectedMetaTimes());
 
-  Directory::MetahandlesMap::iterator it = handles_map.find(1);
+  auto it = handles_map.find(1);
   ASSERT_TRUE(it != handles_map.end());
   EXPECT_EQ(1, it->second->ref(META_HANDLE));
   EXPECT_TRUE(it->second->ref(ID).IsRoot());
@@ -4236,8 +4232,9 @@ TEST_P(MigrationTest, ToCurrentVersion) {
   }
 }
 
-INSTANTIATE_TEST_CASE_P(DirectoryBackingStore, MigrationTest,
-                        testing::Range(67, kCurrentDBVersion + 1));
+INSTANTIATE_TEST_SUITE_P(DirectoryBackingStore,
+                         MigrationTest,
+                         testing::Range(67, kCurrentDBVersion + 1));
 
 TEST_F(DirectoryBackingStoreTest, ModelTypeIds) {
   ModelTypeSet protocol_types = ProtocolTypes();
@@ -4366,8 +4363,7 @@ TEST_F(DirectoryBackingStoreTest, DeleteEntries) {
 
   EXPECT_EQ(initial_size - 1, handles_map.size());
   bool delete_failed = false;
-  for (Directory::MetahandlesMap::iterator it = handles_map.begin();
-       it != handles_map.end(); ++it) {
+  for (auto it = handles_map.begin(); it != handles_map.end(); ++it) {
     if (it->first == first_to_die) {
       delete_failed = true;
       break;
@@ -4376,8 +4372,7 @@ TEST_F(DirectoryBackingStoreTest, DeleteEntries) {
   EXPECT_FALSE(delete_failed);
 
   to_delete.clear();
-  for (Directory::MetahandlesMap::iterator it = handles_map.begin();
-       it != handles_map.end(); ++it) {
+  for (auto it = handles_map.begin(); it != handles_map.end(); ++it) {
     to_delete.insert(it->first);
   }
 
@@ -4412,7 +4407,7 @@ TEST_F(DirectoryBackingStoreTest, IncreaseDatabasePageSizeFrom4KTo32K) {
 
   DirOpenResult open_result = dbs.Load(
       &handles_map, &delete_journals, &metahandles_to_purge, &kernel_load_info);
-  EXPECT_EQ(open_result, OPENED);
+  EXPECT_EQ(open_result, OPENED_EXISTING);
 
   // Set up database's page size to 4096
   EXPECT_TRUE(dbs.db_->Execute("PRAGMA page_size=4096;"));

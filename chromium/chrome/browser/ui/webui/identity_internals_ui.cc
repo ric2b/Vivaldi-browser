@@ -24,7 +24,6 @@
 #include "content/public/browser/web_ui_message_handler.h"
 #include "extensions/browser/extension_registry.h"
 #include "google_apis/gaia/gaia_auth_fetcher.h"
-#include "google_apis/gaia/gaia_constants.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace {
@@ -184,8 +183,7 @@ const std::string IdentityInternalsUIMessageHandler::GetExtensionName(
 std::unique_ptr<base::ListValue> IdentityInternalsUIMessageHandler::GetScopes(
     const extensions::ExtensionTokenKey& token_cache_key) {
   auto scopes_value = std::make_unique<base::ListValue>();
-  for (std::set<std::string>::const_iterator
-           iter = token_cache_key.scopes.begin();
+  for (auto iter = token_cache_key.scopes.begin();
        iter != token_cache_key.scopes.end(); ++iter) {
     scopes_value->AppendString(*iter);
   }
@@ -276,9 +274,7 @@ IdentityInternalsTokenRevoker::IdentityInternalsTokenRevoker(
     const std::string& access_token,
     Profile* profile,
     IdentityInternalsUIMessageHandler* consumer)
-    : fetcher_(this,
-               GaiaConstants::kChromeSource,
-               profile->GetURLLoaderFactory()),
+    : fetcher_(this, gaia::GaiaSource::kChrome, profile->GetURLLoaderFactory()),
       extension_id_(extension_id),
       access_token_(access_token),
       consumer_(consumer) {

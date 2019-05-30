@@ -29,6 +29,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_node_input.h"
+#include "third_party/blink/renderer/modules/webaudio/audio_node_wiring.h"
 #include "third_party/blink/renderer/modules/webaudio/base_audio_context.h"
 #include "third_party/blink/renderer/platform/wtf/threading.h"
 
@@ -47,7 +48,7 @@ inline AudioNodeOutput::AudioNodeOutput(AudioHandler* handler,
   DCHECK_LE(number_of_channels, BaseAudioContext::MaxNumberOfChannels());
 
   internal_bus_ = AudioBus::Create(number_of_channels,
-                                   AudioUtilities::kRenderQuantumFrames);
+                                   audio_utilities::kRenderQuantumFrames);
 }
 
 std::unique_ptr<AudioNodeOutput> AudioNodeOutput::Create(
@@ -88,7 +89,7 @@ void AudioNodeOutput::UpdateInternalBus() {
     return;
 
   internal_bus_ = AudioBus::Create(NumberOfChannels(),
-                                   AudioUtilities::kRenderQuantumFrames);
+                                   audio_utilities::kRenderQuantumFrames);
 }
 
 void AudioNodeOutput::UpdateRenderingState() {
@@ -121,7 +122,7 @@ void AudioNodeOutput::PropagateChannelCount() {
 }
 
 AudioBus* AudioNodeOutput::Pull(AudioBus* in_place_bus,
-                                size_t frames_to_process) {
+                                uint32_t frames_to_process) {
   DCHECK(GetDeferredTaskHandler().IsAudioThread());
   DCHECK(rendering_fan_out_count_ > 0 || rendering_param_fan_out_count_ > 0);
 
@@ -162,54 +163,26 @@ unsigned AudioNodeOutput::RenderingFanOutCount() const {
   return rendering_fan_out_count_;
 }
 
-void AudioNodeOutput::AddInput(AudioNodeInput& input) {
-  GetDeferredTaskHandler().AssertGraphOwner();
-  inputs_.insert(&input);
-  input.Handler().MakeConnection();
-}
-
-void AudioNodeOutput::RemoveInput(AudioNodeInput& input) {
-  GetDeferredTaskHandler().AssertGraphOwner();
-  input.Handler().BreakConnectionWithLock();
-  inputs_.erase(&input);
-}
-
 void AudioNodeOutput::DisconnectAllInputs() {
   GetDeferredTaskHandler().AssertGraphOwner();
 
-  // AudioNodeInput::disconnect() changes m_inputs by calling removeInput().
-  while (!inputs_.IsEmpty())
-    (*inputs_.begin())->Disconnect(*this);
-}
-
-void AudioNodeOutput::DisconnectInput(AudioNodeInput& input) {
-  GetDeferredTaskHandler().AssertGraphOwner();
-  DCHECK(IsConnectedToInput(input));
-  input.Disconnect(*this);
-}
-
-void AudioNodeOutput::DisconnectAudioParam(AudioParamHandler& param) {
-  GetDeferredTaskHandler().AssertGraphOwner();
-  DCHECK(IsConnectedToAudioParam(param));
-  param.Disconnect(*this);
-}
-
-void AudioNodeOutput::AddParam(AudioParamHandler& param) {
-  GetDeferredTaskHandler().AssertGraphOwner();
-  params_.insert(&param);
-}
-
-void AudioNodeOutput::RemoveParam(AudioParamHandler& param) {
-  GetDeferredTaskHandler().AssertGraphOwner();
-  params_.erase(&param);
+  // Disconnect changes inputs_, so we can't iterate directly over the hash set.
+  Vector<AudioNodeInput*, 4> inputs;
+  CopyToVector(inputs_, inputs);
+  for (AudioNodeInput* input : inputs)
+    AudioNodeWiring::Disconnect(*this, *input);
+  DCHECK(inputs_.IsEmpty());
 }
 
 void AudioNodeOutput::DisconnectAllParams() {
   GetDeferredTaskHandler().AssertGraphOwner();
 
-  // AudioParam::disconnect() changes m_params by calling removeParam().
-  while (!params_.IsEmpty())
-    (*params_.begin())->Disconnect(*this);
+  // Disconnect changes params_, so we can't iterate directly over the hash set.
+  Vector<AudioParamHandler*, 4> params;
+  CopyToVector(params_, params);
+  for (AudioParamHandler* param : params)
+    AudioNodeWiring::Disconnect(*this, *param);
+  DCHECK(params_.IsEmpty());
 }
 
 void AudioNodeOutput::DisconnectAll() {
@@ -217,23 +190,13 @@ void AudioNodeOutput::DisconnectAll() {
   DisconnectAllParams();
 }
 
-bool AudioNodeOutput::IsConnectedToInput(AudioNodeInput& input) {
-  GetDeferredTaskHandler().AssertGraphOwner();
-  return inputs_.Contains(&input);
-}
-
-bool AudioNodeOutput::IsConnectedToAudioParam(AudioParamHandler& param) {
-  GetDeferredTaskHandler().AssertGraphOwner();
-  return params_.Contains(&param);
-}
-
 void AudioNodeOutput::Disable() {
   GetDeferredTaskHandler().AssertGraphOwner();
 
   if (is_enabled_) {
     is_enabled_ = false;
-    for (AudioNodeInput* i : inputs_)
-      i->Disable(*this);
+    for (AudioNodeInput* input : inputs_)
+      AudioNodeWiring::Disable(*this, *input);
   }
 }
 
@@ -242,8 +205,8 @@ void AudioNodeOutput::Enable() {
 
   if (!is_enabled_) {
     is_enabled_ = true;
-    for (AudioNodeInput* i : inputs_)
-      i->Enable(*this);
+    for (AudioNodeInput* input : inputs_)
+      AudioNodeWiring::Enable(*this, *input);
   }
 }
 

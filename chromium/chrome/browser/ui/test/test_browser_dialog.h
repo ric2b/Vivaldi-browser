@@ -20,6 +20,10 @@ class TestBrowserDialog : public TestBrowserUi {
   TestBrowserDialog();
   ~TestBrowserDialog() override;
 
+  void set_should_verify_dialog_bounds(bool value) {
+    should_verify_dialog_bounds_ = value;
+  }
+
   // TestBrowserUi:
   void PreShow() override;
   bool VerifyUi() override;
@@ -33,6 +37,10 @@ class TestBrowserDialog : public TestBrowserUi {
   // Widget::CanClose() and DialogDelegate::Close().
   virtual bool AlwaysCloseAsynchronously();
 
+  // Get the name of a non-dialog window that should be included in testing.
+  // VerifyUi() only considers dialog windows and windows with a matching name.
+  virtual std::string GetNonDialogName();
+
  private:
 #if defined(TOOLKIT_VIEWS)
   // Stores the current widgets in |widgets_|.
@@ -41,6 +49,12 @@ class TestBrowserDialog : public TestBrowserUi {
   // The widgets present before/after showing UI.
   views::Widget::Widgets widgets_;
 #endif  // defined(TOOLKIT_VIEWS)
+
+  // If set to true, the dialog bounds will be verified to fit inside the
+  // display's work area.
+  // This should always be true, but some dialogs don't yet size themselves
+  // properly. https://crbug.com/893292.
+  bool should_verify_dialog_bounds_ = true;
 
   DISALLOW_COPY_AND_ASSIGN(TestBrowserDialog);
 };

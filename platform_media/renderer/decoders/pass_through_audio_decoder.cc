@@ -21,7 +21,7 @@ void PassThroughAudioDecoder::Initialize(const AudioDecoderConfig& config,
                                          CdmContext* cdm_context,
                                          const InitCB& init_cb,
                                          const OutputCB& output_cb,
-                                         const WaitingForDecryptionKeyCB& waiting_for_decryption_key_cb) {
+                                         const WaitingCB& waiting_for_decryption_key_cb) {
   impl_.Initialize(config, init_cb, output_cb);
 }
 

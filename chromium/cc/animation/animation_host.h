@@ -11,6 +11,7 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "cc/animation/animation_export.h"
 #include "cc/animation/keyframe_model.h"
@@ -98,6 +99,7 @@ class CC_ANIMATION_EXPORT AnimationHost : public MutatorHost,
   void PushPropertiesTo(MutatorHost* host_impl) override;
 
   void SetSupportsScrollAnimations(bool supports_scroll_animations) override;
+  void SetScrollAnimationDurationForTesting(base::TimeDelta duration) override;
   bool NeedsTickAnimations() const override;
 
   bool ActivateAnimations() override;
@@ -106,6 +108,7 @@ class CC_ANIMATION_EXPORT AnimationHost : public MutatorHost,
                       bool is_active_tree) override;
   void TickScrollAnimations(base::TimeTicks monotonic_time,
                             const ScrollTree& scroll_tree) override;
+  void TickWorkletAnimations(base::TimeTicks monotonic_time) override;
   bool UpdateAnimationState(bool start_ready_animations,
                             MutatorEvents* events) override;
   void PromoteScrollTimelinesPendingToActive() override;
@@ -201,7 +204,7 @@ class CC_ANIMATION_EXPORT AnimationHost : public MutatorHost,
   void EraseTimeline(scoped_refptr<AnimationTimeline> timeline);
 
   // Return true if there are any animations that get mutated.
-  bool TickMutator(base::TimeTicks monotonic_time,
+  void TickMutator(base::TimeTicks monotonic_time,
                    const ScrollTree& scroll_tree,
                    bool is_active_tree);
 
@@ -234,6 +237,8 @@ class CC_ANIMATION_EXPORT AnimationHost : public MutatorHost,
   size_t main_thread_animations_count_ = 0;
   bool current_frame_had_raf_ = false;
   bool next_frame_has_pending_raf_ = false;
+
+  base::WeakPtrFactory<AnimationHost> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(AnimationHost);
 };

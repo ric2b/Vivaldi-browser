@@ -14,6 +14,7 @@
 #include "content/browser/service_worker/service_worker_write_to_cache_job.h"
 #include "content/browser/url_loader_factory_getter.h"
 #include "content/common/service_worker/service_worker_utils.h"
+#include "net/base/ip_endpoint.h"
 #include "net/cert/cert_status_flags.h"
 #include "services/network/public/cpp/resource_response.h"
 #include "third_party/blink/public/common/mime_util/mime_util.h"
@@ -25,10 +26,27 @@ using FinishedReason = ServiceWorkerInstalledScriptReader::FinishedReason;
 ServiceWorkerInstalledScriptLoader::ServiceWorkerInstalledScriptLoader(
     uint32_t options,
     network::mojom::URLLoaderClientPtr client,
-    std::unique_ptr<ServiceWorkerResponseReader> response_reader)
+    std::unique_ptr<ServiceWorkerResponseReader> response_reader,
+    scoped_refptr<ServiceWorkerVersion>
+        version_for_main_script_http_response_info,
+    const GURL& request_url)
     : options_(options),
       client_(std::move(client)),
       request_start_(base::TimeTicks::Now()) {
+  // Normally, the main script info is set by ServiceWorkerNewScriptLoader for
+  // new service workers and ServiceWorkerInstalledScriptsSender for installed
+  // service workes. But some embedders might preinstall scripts to the
+  // ServiceWorkerScriptCacheMap while not setting the ServiceWorkerVersion
+  // status to INSTALLED, so we can come to here instead of using
+  // SeviceWorkerInstalledScriptsSender.
+  // In this case, the main script info would not yet have been set, so set it
+  // here.
+  if (request_url == version_for_main_script_http_response_info->script_url() &&
+      !version_for_main_script_http_response_info
+           ->GetMainScriptHttpResponseInfo()) {
+    version_for_main_script_http_response_info_ =
+        std::move(version_for_main_script_http_response_info);
+  }
   reader_ = std::make_unique<ServiceWorkerInstalledScriptReader>(
       std::move(response_reader), this);
   reader_->Start();
@@ -61,6 +79,12 @@ void ServiceWorkerInstalledScriptLoader::OnStarted(
 void ServiceWorkerInstalledScriptLoader::OnHttpInfoRead(
     scoped_refptr<HttpResponseInfoIOBuffer> http_info) {
   net::HttpResponseInfo* info = http_info->http_info.get();
+  DCHECK(info);
+
+  if (version_for_main_script_http_response_info_) {
+    version_for_main_script_http_response_info_->SetMainScriptHttpResponseInfo(
+        *info);
+  }
 
   network::ResourceResponseHead head;
   head.request_start = request_start_;
@@ -75,7 +99,7 @@ void ServiceWorkerInstalledScriptLoader::OnHttpInfoRead(
   head.was_alpn_negotiated = info->was_alpn_negotiated;
   head.connection_info = info->connection_info;
   head.alpn_negotiated_protocol = info->alpn_negotiated_protocol;
-  head.socket_address = info->socket_address;
+  head.remote_endpoint = info->remote_endpoint;
   head.cert_status = info->ssl_info.cert_status;
 
   if (options_ & network::mojom::kURLLoadOptionSendSSLInfoWithResponse)
@@ -119,9 +143,9 @@ void ServiceWorkerInstalledScriptLoader::OnFinished(FinishedReason reason) {
 }
 
 void ServiceWorkerInstalledScriptLoader::FollowRedirect(
-    const base::Optional<std::vector<std::string>>&
-        to_be_removed_request_headers,
-    const base::Optional<net::HttpRequestHeaders>& modified_request_headers) {
+    const std::vector<std::string>& removed_headers,
+    const net::HttpRequestHeaders& modified_headers,
+    const base::Optional<GURL>& new_url) {
   // This class never returns a redirect response to its client, so should never
   // be asked to follow one.
   NOTREACHED();

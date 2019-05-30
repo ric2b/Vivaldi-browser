@@ -10,36 +10,36 @@
 #include <memory>
 #include <string>
 
+#include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "net/base/completion_callback.h"
 #include "net/base/completion_once_callback.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/load_timing_info.h"
+#include "net/base/proxy_server.h"
 #include "net/http/http_auth_controller.h"
 #include "net/http/proxy_client_socket.h"
 #include "net/log/net_log_with_source.h"
 #include "net/quic/quic_stream_factory.h"
+#include "net/socket/connect_job.h"
 #include "net/socket/next_proto.h"
 #include "net/socket/ssl_client_socket.h"
-#include "net/socket/ssl_client_socket_pool.h"
-#include "net/socket/transport_client_socket_pool.h"
 #include "net/spdy/spdy_session.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 
 namespace net {
 
-class ClientSocketHandle;
 class IOBuffer;
 class HttpAuthCache;
 class HttpResponseInfo;
-class HttpStream;
 class IOBuffer;
 class SpdySessionPool;
-class SSLClientSocketPool;
-class TransportClientSocketPool;
+class SSLSocketParams;
+class TransportSocketParams;
 
 // Class that establishes connections by calling into the lower layer socket
 // pools, creates a HttpProxyClientSocket, SpdyProxyClientSocket, or
@@ -53,17 +53,20 @@ class TransportClientSocketPool;
 // TODO(mmenke): Ideally, we'd have a central location store auth state across
 // multiple connections to the same server instead.
 class NET_EXPORT_PRIVATE HttpProxyClientSocketWrapper
-    : public ProxyClientSocket {
+    : public ProxyClientSocket,
+      public ConnectJob::Delegate {
  public:
+  using OnProxyAuthChallengeCallback = base::RepeatingCallback<void(
+      const HttpResponseInfo& response,
+      HttpAuthController* auth_controller,
+      base::OnceClosure restart_with_auth_callback)>;
+
   HttpProxyClientSocketWrapper(
-      const std::string& group_name,
+      const OnProxyAuthChallengeCallback& on_proxy_auth_callback,
       RequestPriority priority,
-      const SocketTag& socket_tag,
-      ClientSocketPool::RespectLimits respect_limits,
       base::TimeDelta connect_timeout_duration,
       base::TimeDelta proxy_negotiation_timeout_duration,
-      TransportClientSocketPool* transport_pool,
-      SSLClientSocketPool* ssl_pool,
+      const CommonConnectJobParams& common_connect_job_params,
       const scoped_refptr<TransportSocketParams>& transport_params,
       const scoped_refptr<SSLSocketParams>& ssl_params,
       quic::QuicTransportVersion quic_version,
@@ -87,9 +90,10 @@ class NET_EXPORT_PRIVATE HttpProxyClientSocketWrapper
 
   std::unique_ptr<HttpResponseInfo> GetAdditionalErrorState();
 
+  void SetPriority(RequestPriority priority);
+
   // ProxyClientSocket implementation.
   const HttpResponseInfo* GetConnectResponseInfo() const override;
-  std::unique_ptr<HttpStream> CreateConnectResponseStream() override;
   int RestartWithAuth(CompletionOnceCallback callback) override;
   const scoped_refptr<HttpAuthController>& GetAuthController() const override;
   bool IsUsingSpdy() const override;
@@ -128,6 +132,15 @@ class NET_EXPORT_PRIVATE HttpProxyClientSocketWrapper
   int GetPeerAddress(IPEndPoint* address) const override;
   int GetLocalAddress(IPEndPoint* address) const override;
 
+  // ConnectJob::Delegate implementation.
+  void OnConnectJobComplete(int result, ConnectJob* job) override;
+
+  bool HasEstablishedConnection();
+  void OnNeedsProxyAuth(const HttpResponseInfo& response,
+                        HttpAuthController* auth_controller,
+                        base::OnceClosure restart_with_auth_callback,
+                        ConnectJob* job) override;
+
   NetErrorDetails* quic_net_error_details() { return &quic_net_error_details_; }
 
  private:
@@ -149,7 +162,11 @@ class NET_EXPORT_PRIVATE HttpProxyClientSocketWrapper
     STATE_NONE,
   };
 
+  ProxyServer::Scheme GetProxyServerScheme() const;
+
   void OnIOComplete(int result);
+
+  void RestartWithAuthCredentials();
 
   // Runs the state transition loop.
   int DoLoop(int result);
@@ -179,19 +196,18 @@ class NET_EXPORT_PRIVATE HttpProxyClientSocketWrapper
   void SetConnectTimer(base::TimeDelta duration);
   void ConnectTimeout();
 
-  const HostResolver::RequestInfo& GetDestination();
+  void OnAuthChallenge();
+
+  const HostPortPair& GetDestination();
+
+  const OnProxyAuthChallengeCallback on_proxy_auth_callback_;
 
   State next_state_;
 
-  const std::string group_name_;
   RequestPriority priority_;
-  const SocketTag initial_socket_tag_;
-  ClientSocketPool::RespectLimits respect_limits_;
   const base::TimeDelta connect_timeout_duration_;
   const base::TimeDelta proxy_negotiation_timeout_duration_;
 
-  TransportClientSocketPool* const transport_pool_;
-  SSLClientSocketPool* const ssl_pool_;
   const scoped_refptr<TransportSocketParams> transport_params_;
   const scoped_refptr<SSLSocketParams> ssl_params_;
 
@@ -204,13 +220,19 @@ class NET_EXPORT_PRIVATE HttpProxyClientSocketWrapper
   bool has_restarted_;
   const bool tunnel_;
 
+  const CommonConnectJobParams common_connect_job_params_;
+
   bool using_spdy_;
   bool is_trusted_proxy_;
   NextProto negotiated_protocol_;
 
+  // Set to true once a connection has been successfully established. Remains
+  // true even if a new socket is being connected to retry with auth.
+  bool has_established_connection_;
+
   std::unique_ptr<HttpResponseInfo> error_response_info_;
 
-  std::unique_ptr<ClientSocketHandle> transport_socket_handle_;
+  std::unique_ptr<ConnectJob> nested_connect_job_;
   std::unique_ptr<ProxyClientSocket> transport_socket_;
 
   // Called when a connection is established. Also used when restarting with
@@ -218,9 +240,10 @@ class NET_EXPORT_PRIVATE HttpProxyClientSocketWrapper
   // if necessary.
   CompletionOnceCallback connect_callback_;
 
-  SpdyStreamRequest spdy_stream_request_;
+  std::unique_ptr<SpdyStreamRequest> spdy_stream_request_;
 
-  QuicStreamRequest quic_stream_request_;
+  QuicStreamFactory* const quic_stream_factory_;
+  std::unique_ptr<QuicStreamRequest> quic_stream_request_;
   std::unique_ptr<QuicChromiumClientSession::Handle> quic_session_;
 
   scoped_refptr<HttpAuthController> http_auth_controller_;
@@ -236,6 +259,8 @@ class NET_EXPORT_PRIVATE HttpProxyClientSocketWrapper
 
   // Time when the connection to the proxy was started.
   base::TimeTicks connect_start_time_;
+
+  base::WeakPtrFactory<HttpProxyClientSocketWrapper> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(HttpProxyClientSocketWrapper);
 };

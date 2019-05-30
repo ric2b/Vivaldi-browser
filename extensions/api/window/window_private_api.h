@@ -3,6 +3,8 @@
 #ifndef EXTENSIONS_API_WINDOW_WINDOW_PRIVATE_API_H_
 #define EXTENSIONS_API_WINDOW_WINDOW_PRIVATE_API_H_
 
+#include <vector>
+
 #include "base/lazy_instance.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/ui/browser_list_observer.h"
@@ -40,6 +42,12 @@ class VivaldiWindowsAPI : public BrowserListObserver,
   // AppModalDialogObserver implementation.
   void Notify(app_modal::JavaScriptAppModalDialog* dialog) override;
 
+  // Call when all windows for a given profile is being closed.
+  void WindowsForProfileClosing(Profile* profile);
+
+  // Is closing because a profile is closing or not?
+  bool IsWindowClosingBecauseProfileClose(Browser* browser);
+
  protected:
   // chrome::BrowserListObserver implementation
   void OnBrowserRemoved(Browser* browser) override;
@@ -52,6 +60,10 @@ class VivaldiWindowsAPI : public BrowserListObserver,
 
   content::NotificationRegistrar registrar_;
 
+  // Used to track windows being closed by profiles being closed, they should
+  // not have any confirmation dialogs.
+  std::vector<Browser *> closing_windows_;
+
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "WindowsAPI"; }
   static const bool kServiceIsNULLWhileTesting = true;
@@ -60,7 +72,7 @@ class VivaldiWindowsAPI : public BrowserListObserver,
 
 class WindowPrivateCreateFunction : public ChromeAsyncExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("windowPrivate.create", WINDOW_PRIVATE_CREATE);
+  DECLARE_EXTENSION_FUNCTION("windowPrivate.create", WINDOW_PRIVATE_CREATE)
 
   WindowPrivateCreateFunction() = default;
 
@@ -76,7 +88,7 @@ class WindowPrivateCreateFunction : public ChromeAsyncExtensionFunction {
 class WindowPrivateGetCurrentIdFunction : public ChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("windowPrivate.getCurrentId",
-                             WINDOW_PRIVATE_GET_CURRENT_ID);
+                             WINDOW_PRIVATE_GET_CURRENT_ID)
 
   WindowPrivateGetCurrentIdFunction() = default;
 
@@ -92,7 +104,7 @@ class WindowPrivateGetCurrentIdFunction : public ChromeAsyncExtensionFunction {
 class WindowPrivateSetStateFunction : public ChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("windowPrivate.setState",
-                             WINDOW_PRIVATE_SET_STATE);
+                             WINDOW_PRIVATE_SET_STATE)
 
   WindowPrivateSetStateFunction() = default;
 

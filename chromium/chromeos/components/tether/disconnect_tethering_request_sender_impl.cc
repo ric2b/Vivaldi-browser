@@ -6,9 +6,9 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/memory/ptr_util.h"
-#include "chromeos/components/proximity_auth/logging/logging.h"
-#include "chromeos/components/tether/ble_connection_manager.h"
+#include "chromeos/components/multidevice/logging/logging.h"
 #include "chromeos/components/tether/tether_host_fetcher.h"
 
 namespace chromeos {
@@ -24,14 +24,12 @@ std::unique_ptr<DisconnectTetheringRequestSender>
 DisconnectTetheringRequestSenderImpl::Factory::NewInstance(
     device_sync::DeviceSyncClient* device_sync_client,
     secure_channel::SecureChannelClient* secure_channel_client,
-    BleConnectionManager* ble_connection_manager,
     TetherHostFetcher* tether_host_fetcher) {
   if (!factory_instance_)
     factory_instance_ = new Factory();
 
   return factory_instance_->BuildInstance(
-      device_sync_client, secure_channel_client, ble_connection_manager,
-      tether_host_fetcher);
+      device_sync_client, secure_channel_client, tether_host_fetcher);
 }
 
 // static
@@ -44,21 +42,17 @@ std::unique_ptr<DisconnectTetheringRequestSender>
 DisconnectTetheringRequestSenderImpl::Factory::BuildInstance(
     device_sync::DeviceSyncClient* device_sync_client,
     secure_channel::SecureChannelClient* secure_channel_client,
-    BleConnectionManager* ble_connection_manager,
     TetherHostFetcher* tether_host_fetcher) {
   return base::WrapUnique(new DisconnectTetheringRequestSenderImpl(
-      device_sync_client, secure_channel_client, ble_connection_manager,
-      tether_host_fetcher));
+      device_sync_client, secure_channel_client, tether_host_fetcher));
 }
 
 DisconnectTetheringRequestSenderImpl::DisconnectTetheringRequestSenderImpl(
     device_sync::DeviceSyncClient* device_sync_client,
     secure_channel::SecureChannelClient* secure_channel_client,
-    BleConnectionManager* ble_connection_manager,
     TetherHostFetcher* tether_host_fetcher)
     : device_sync_client_(device_sync_client),
       secure_channel_client_(secure_channel_client),
-      ble_connection_manager_(ble_connection_manager),
       tether_host_fetcher_(tether_host_fetcher),
       weak_ptr_factory_(this) {}
 
@@ -85,27 +79,26 @@ bool DisconnectTetheringRequestSenderImpl::HasPendingRequests() {
 
 void DisconnectTetheringRequestSenderImpl::OnTetherHostFetched(
     const std::string& device_id,
-    base::Optional<cryptauth::RemoteDeviceRef> tether_host) {
+    base::Optional<multidevice::RemoteDeviceRef> tether_host) {
   num_pending_host_fetches_--;
   DCHECK(num_pending_host_fetches_ >= 0);
 
   if (!tether_host) {
     PA_LOG(ERROR) << "Could not fetch device with ID "
-                  << cryptauth::RemoteDeviceRef::TruncateDeviceIdForLogs(
+                  << multidevice::RemoteDeviceRef::TruncateDeviceIdForLogs(
                          device_id)
                   << ". Unable to send DisconnectTetheringRequest.";
     return;
   }
 
-  PA_LOG(INFO) << "Attempting to send DisconnectTetheringRequest to device "
-               << "with ID "
-               << cryptauth::RemoteDeviceRef::TruncateDeviceIdForLogs(
-                      device_id);
+  PA_LOG(VERBOSE) << "Attempting to send DisconnectTetheringRequest to device "
+                  << "with ID "
+                  << multidevice::RemoteDeviceRef::TruncateDeviceIdForLogs(
+                         device_id);
 
   std::unique_ptr<DisconnectTetheringOperation> disconnect_tethering_operation =
       DisconnectTetheringOperation::Factory::NewInstance(
-          *tether_host, device_sync_client_, secure_channel_client_,
-          ble_connection_manager_);
+          *tether_host, device_sync_client_, secure_channel_client_);
 
   // Add to the map.
   device_id_to_operation_map_.emplace(
@@ -120,14 +113,14 @@ void DisconnectTetheringRequestSenderImpl::OnOperationFinished(
     const std::string& device_id,
     bool success) {
   if (success) {
-    PA_LOG(INFO) << "Successfully sent DisconnectTetheringRequest to device "
-                 << "with ID "
-                 << cryptauth::RemoteDeviceRef::TruncateDeviceIdForLogs(
-                        device_id);
+    PA_LOG(VERBOSE) << "Successfully sent DisconnectTetheringRequest to device "
+                    << "with ID "
+                    << multidevice::RemoteDeviceRef::TruncateDeviceIdForLogs(
+                           device_id);
   } else {
     PA_LOG(ERROR) << "Failed to send DisconnectTetheringRequest to device "
                   << "with ID "
-                  << cryptauth::RemoteDeviceRef::TruncateDeviceIdForLogs(
+                  << multidevice::RemoteDeviceRef::TruncateDeviceIdForLogs(
                          device_id);
   }
 
@@ -141,7 +134,7 @@ void DisconnectTetheringRequestSenderImpl::OnOperationFinished(
   } else {
     PA_LOG(ERROR)
         << "Operation finished, but device with ID "
-        << cryptauth::RemoteDeviceRef::TruncateDeviceIdForLogs(device_id)
+        << multidevice::RemoteDeviceRef::TruncateDeviceIdForLogs(device_id)
         << " was not being tracked by DisconnectTetheringRequestSender.";
   }
 

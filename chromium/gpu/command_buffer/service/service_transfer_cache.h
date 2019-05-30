@@ -5,7 +5,10 @@
 #ifndef GPU_COMMAND_BUFFER_SERVICE_SERVICE_TRANSFER_CACHE_H_
 #define GPU_COMMAND_BUFFER_SERVICE_SERVICE_TRANSFER_CACHE_H_
 
-#include <vector>
+#include <stddef.h>
+#include <stdint.h>
+
+#include <memory>
 
 #include "base/containers/mru_cache.h"
 #include "base/containers/span.h"
@@ -14,12 +17,18 @@
 #include "gpu/command_buffer/common/discardable_handle.h"
 #include "gpu/command_buffer/service/context_group.h"
 #include "gpu/gpu_gles2_export.h"
+#include "third_party/skia/include/core/SkRefCnt.h"
+
+class GrContext;
+class SkColorSpace;
+struct SkImageInfo;
 
 namespace gpu {
 
-// ServiceTransferCache is a GPU process interface for retreiving cached entries
+// ServiceTransferCache is a GPU process interface for retrieving cached entries
 // from the transfer cache. These entries are populated by client calls to the
-// ClientTransferCache.
+// ClientTransferCache or by an image decode accelerator task in the GPU
+// process.
 //
 // In addition to access, the ServiceTransferCache is also responsible for
 // unlocking and deleting entries when no longer needed, as well as enforcing
@@ -49,6 +58,24 @@ class GPU_GLES2_EXPORT ServiceTransferCache
   bool UnlockEntry(const EntryKey& key);
   bool DeleteEntry(const EntryKey& key);
   cc::ServiceTransferCacheEntry* GetEntry(const EntryKey& key);
+  void DeleteAllEntriesForDecoder(int decoder_id);
+
+  // Creates an image transfer cache entry using the decoded data in
+  // |decoded_image|. The |context| will be used to upload the image (if it's
+  // determined to fit in the GPU). |row_bytes| is the stride, and |image_info|
+  // describes the decoded data. |decoder_id| and |entry_id| are used for
+  // creating the ServiceTransferCache::EntryKey (assuming
+  // cc::TransferCacheEntryType:kImage for the type). Returns true if the entry
+  // could be created and inserted; false otherwise.
+  bool CreateLockedImageEntry(int decoder_id,
+                              uint32_t entry_id,
+                              ServiceDiscardableHandle handle,
+                              GrContext* context,
+                              base::span<const uint8_t> decoded_image,
+                              size_t row_bytes,
+                              const SkImageInfo& image_info,
+                              bool needs_mips,
+                              sk_sp<SkColorSpace> target_color_space);
 
   void PurgeMemory(
       base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level);
@@ -67,10 +94,9 @@ class GPU_GLES2_EXPORT ServiceTransferCache
     EnforceLimits();
   }
   size_t cache_size_for_testing() const { return total_size_; }
+  size_t entries_count_for_testing() const { return entries_.size(); }
 
  private:
-  void EnforceLimits();
-
   struct CacheEntryInternal {
     CacheEntryInternal(base::Optional<ServiceDiscardableHandle> handle,
                        std::unique_ptr<cc::ServiceTransferCacheEntry> entry);
@@ -92,6 +118,12 @@ class GPU_GLES2_EXPORT ServiceTransferCache
   };
 
   using EntryCache = base::MRUCache<EntryKey, CacheEntryInternal, EntryKeyComp>;
+
+  void EnforceLimits();
+
+  template <typename Iterator>
+  Iterator ForceDeleteEntry(Iterator it);
+
   EntryCache entries_;
 
   // Total size of all |entries_|. The same as summing

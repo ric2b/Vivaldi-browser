@@ -6,25 +6,47 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "components/autofill_assistant/browser/actions/action_delegate.h"
 
 namespace autofill_assistant {
 
-ClickAction::ClickAction(const ActionProto& proto) : Action(proto) {
+ClickAction::ClickAction(const ActionProto& proto)
+    : Action(proto), weak_ptr_factory_(this) {
   DCHECK(proto_.has_click());
 }
 
 ClickAction::~ClickAction() {}
 
-void ClickAction::ProcessAction(ActionDelegate* delegate,
-                                ProcessActionCallback callback) {
-  std::vector<std::string> selectors;
-  for (const auto& selector : proto_.click().element_to_click().selectors()) {
-    selectors.emplace_back(selector);
-  }
-  DCHECK(!selectors.empty());
-  delegate->ClickElement(selectors, std::move(callback));
+void ClickAction::InternalProcessAction(ActionDelegate* delegate,
+                                        ProcessActionCallback callback) {
+  DCHECK_GT(proto_.click().element_to_click().selectors_size(), 0);
+  delegate->ShortWaitForElementExist(
+      Selector(proto_.click().element_to_click()),
+      base::BindOnce(&ClickAction::OnWaitForElement,
+                     weak_ptr_factory_.GetWeakPtr(), base::Unretained(delegate),
+                     std::move(callback)));
 }
 
-}  // namespace autofill_assistant.
+void ClickAction::OnWaitForElement(ActionDelegate* delegate,
+                                   ProcessActionCallback callback,
+                                   bool element_found) {
+  if (!element_found) {
+    UpdateProcessedAction(ELEMENT_RESOLUTION_FAILED);
+    std::move(callback).Run(std::move(processed_action_proto_));
+    return;
+  }
+
+  delegate->ClickOrTapElement(
+      Selector(proto_.click().element_to_click()),
+      base::BindOnce(&::autofill_assistant::ClickAction::OnClick,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+}
+
+void ClickAction::OnClick(ProcessActionCallback callback, bool status) {
+  UpdateProcessedAction(status ? ACTION_APPLIED : OTHER_ACTION_STATUS);
+  std::move(callback).Run(std::move(processed_action_proto_));
+}
+
+}  // namespace autofill_assistant

@@ -4,8 +4,10 @@
 
 #include "services/device/generic_sensor/platform_sensor_reader_linux.h"
 
+#include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/single_thread_task_runner.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_restrictions.h"
@@ -97,7 +99,7 @@ void PollingSensorReader::PollForData() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   SensorReading readings;
-  DCHECK_LE(sensor_file_paths_.size(), arraysize(readings.raw.values));
+  DCHECK_LE(sensor_file_paths_.size(), base::size(readings.raw.values));
   int i = 0;
   for (const auto& path : sensor_file_paths_) {
     std::string new_read_value;
@@ -121,8 +123,9 @@ void PollingSensorReader::PollForData() {
 
   if (is_reading_active_) {
     task_runner_->PostTask(
-        FROM_HERE, base::Bind(&PlatformSensorLinux::UpdatePlatformSensorReading,
-                              sensor_, readings));
+        FROM_HERE,
+        base::BindOnce(&PlatformSensorLinux::UpdatePlatformSensorReading,
+                       sensor_, readings));
   }
 }
 
@@ -131,7 +134,6 @@ std::unique_ptr<SensorReader> SensorReader::Create(
     const SensorInfoLinux* sensor_device,
     base::WeakPtr<PlatformSensorLinux> sensor,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
-  base::AssertBlockingAllowed();
   // TODO(maksims): implement triggered reading. At the moment,
   // only polling read is supported.
   return std::make_unique<PollingSensorReader>(sensor_device, sensor,
@@ -156,7 +158,8 @@ void SensorReader::NotifyReadError() {
   if (is_reading_active_) {
     task_runner_->PostTask(
         FROM_HERE,
-        base::Bind(&PlatformSensorLinux::NotifyPlatformSensorError, sensor_));
+        base::BindOnce(&PlatformSensorLinux::NotifyPlatformSensorError,
+                       sensor_));
   }
 }
 

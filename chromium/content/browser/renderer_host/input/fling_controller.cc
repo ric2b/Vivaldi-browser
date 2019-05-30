@@ -4,6 +4,7 @@
 
 #include "content/browser/renderer_host/input/fling_controller.h"
 
+#include "base/time/default_tick_clock.h"
 #include "base/trace_event/trace_event.h"
 #include "content/browser/renderer_host/input/gesture_event_queue.h"
 #include "content/public/browser/content_browser_client.h"
@@ -42,20 +43,18 @@ namespace content {
 FlingController::Config::Config() {}
 
 FlingController::FlingController(
-    GestureEventQueue* gesture_event_queue,
     FlingControllerEventSenderClient* event_sender_client,
     FlingControllerSchedulerClient* scheduler_client,
     const Config& config)
-    : gesture_event_queue_(gesture_event_queue),
-      event_sender_client_(event_sender_client),
+    : event_sender_client_(event_sender_client),
       scheduler_client_(scheduler_client),
       touchpad_tap_suppression_controller_(
           config.touchpad_tap_suppression_config),
       touchscreen_tap_suppression_controller_(
           config.touchscreen_tap_suppression_config),
       fling_in_progress_(false),
+      clock_(base::DefaultTickClock::GetInstance()),
       weak_ptr_factory_(this) {
-  DCHECK(gesture_event_queue);
   DCHECK(event_sender_client);
   DCHECK(scheduler_client);
 }
@@ -154,25 +153,6 @@ bool FlingController::FilterGestureEvent(
          FilterGestureEventForFlingBoosting(gesture_event);
 }
 
-void FlingController::OnGestureEventAck(
-    const GestureEventWithLatencyInfo& acked_event,
-    InputEventAckState ack_result) {
-  bool processed = (INPUT_EVENT_ACK_STATE_CONSUMED == ack_result);
-  switch (acked_event.event.GetType()) {
-    case WebInputEvent::kGestureScrollUpdate:
-      if (acked_event.event.data.scroll_update.inertial_phase ==
-              WebGestureEvent::kMomentumPhase &&
-          fling_curve_ && !processed &&
-          current_fling_parameters_.source_device !=
-              blink::kWebGestureDeviceSyntheticAutoscroll) {
-        CancelCurrentFling();
-      }
-      break;
-    default:
-      break;
-  }
-}
-
 void FlingController::ProcessGestureFlingStart(
     const GestureEventWithLatencyInfo& gesture_event) {
   const float vx = gesture_event.event.data.fling_start.velocity_x;
@@ -183,19 +163,19 @@ void FlingController::ProcessGestureFlingStart(
   TRACE_EVENT_ASYNC_BEGIN2("input", kFlingTraceName, this, "vx", vx, "vy", vy);
 
   has_fling_animation_started_ = false;
+  last_progress_time_ = base::TimeTicks();
   fling_in_progress_ = true;
   fling_booster_ = std::make_unique<ui::FlingBooster>(
       current_fling_parameters_.velocity,
       current_fling_parameters_.source_device,
       current_fling_parameters_.modifiers);
-
   // Wait for BeginFrame to call ProgressFling when
   // SetNeedsBeginFrameForFlingProgress is used to progress flings instead of
   // compositor animation observer (happens on Android WebView).
   if (scheduler_client_->NeedsBeginFrameForFlingProgress())
     ScheduleFlingProgress();
   else
-    ProgressFling(base::TimeTicks::Now());
+    ProgressFling(clock_->NowTicks());
 }
 
 void FlingController::ScheduleFlingProgress() {
@@ -248,8 +228,9 @@ void FlingController::ProgressFling(base::TimeTicks current_time) {
   // the first OnAnimationStep call has the time of the last frame before
   // AddAnimationObserver call rather than time of the first frame after
   // AddAnimationObserver call. Do not advance the fling when current_time is
-  // less than the GFS event timestamp.
-  if (current_time <= current_fling_parameters_.start_time) {
+  // less than last fling progress time or less than the GFS event timestamp.
+  if (current_time < last_progress_time_ ||
+      current_time <= current_fling_parameters_.start_time) {
     ScheduleFlingProgress();
     return;
   }
@@ -263,6 +244,7 @@ void FlingController::ProgressFling(base::TimeTicks current_time) {
         std::abs(delta_to_scroll.y()) > kMinInertialScrollDelta) {
       GenerateAndSendFlingProgressEvents(delta_to_scroll);
       has_fling_animation_started_ = true;
+      last_progress_time_ = current_time;
     }
     // As long as the fling curve is active, the fling progress must get
     // scheduled even when the last delta to scroll was zero.
@@ -288,7 +270,7 @@ void FlingController::GenerateAndSendWheelEvents(
     blink::WebMouseWheelEvent::Phase phase) {
   MouseWheelEventWithLatencyInfo synthetic_wheel(
       WebInputEvent::kMouseWheel, current_fling_parameters_.modifiers,
-      base::TimeTicks::Now(), ui::LatencyInfo(ui::SourceEventType::WHEEL));
+      clock_->NowTicks(), ui::LatencyInfo(ui::SourceEventType::WHEEL));
   synthetic_wheel.event.delta_x = delta.x();
   synthetic_wheel.event.delta_y = delta.y();
   synthetic_wheel.event.has_precise_scrolling_deltas = true;
@@ -307,7 +289,7 @@ void FlingController::GenerateAndSendGestureScrollEvents(
     WebInputEvent::Type type,
     const gfx::Vector2dF& delta /* = gfx::Vector2dF() */) {
   GestureEventWithLatencyInfo synthetic_gesture(
-      type, current_fling_parameters_.modifiers, base::TimeTicks::Now(),
+      type, current_fling_parameters_.modifiers, clock_->NowTicks(),
       ui::LatencyInfo(ui::SourceEventType::INERTIAL));
   synthetic_gesture.event.SetPositionInWidget(current_fling_parameters_.point);
   synthetic_gesture.event.SetPositionInScreen(
@@ -325,6 +307,8 @@ void FlingController::GenerateAndSendGestureScrollEvents(
     DCHECK_EQ(WebInputEvent::kGestureScrollEnd, type);
     synthetic_gesture.event.data.scroll_end.inertial_phase =
         WebGestureEvent::kMomentumPhase;
+    synthetic_gesture.event.data.scroll_end.generated_by_fling_controller =
+        true;
   }
   event_sender_client_->SendGeneratedGestureScrollEvents(synthetic_gesture);
 }
@@ -373,8 +357,8 @@ void FlingController::CancelCurrentFling() {
   bool had_active_fling = !!fling_curve_;
   fling_curve_.reset();
   has_fling_animation_started_ = false;
+  last_progress_time_ = base::TimeTicks();
   fling_in_progress_ = false;
-  gesture_event_queue_->FlingHasBeenHalted();
 
   // Extract the last event filtered by the fling booster if it exists.
   bool fling_cancellation_is_deferred =
@@ -435,6 +419,7 @@ bool FlingController::UpdateCurrentFlingState(
   current_fling_parameters_.global_point = fling_start_event.PositionInScreen();
   current_fling_parameters_.modifiers = fling_start_event.GetModifiers();
   current_fling_parameters_.source_device = fling_start_event.SourceDevice();
+  // NOTE: This time may be more than a frame in the past.
   current_fling_parameters_.start_time = fling_start_event.TimeStamp();
 
   if (velocity.IsZero() && fling_start_event.SourceDevice() !=

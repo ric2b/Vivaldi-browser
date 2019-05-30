@@ -11,7 +11,6 @@
 #include "base/optional.h"
 #include "media/base/decrypt_config.h"
 #include "media/base/encryption_pattern.h"
-#include "media/base/encryption_scheme.h"
 #include "media/base/media_util.h"
 #include "media/base/stream_parser_buffer.h"
 #include "media/base/timestamp_constants.h"
@@ -203,7 +202,7 @@ EsParserH264::EsParserH264(const NewVideoConfigCB& new_video_config_cb,
       next_access_unit_pos_(0),
       use_hls_sample_aes_(use_hls_sample_aes),
       get_decrypt_config_cb_(get_decrypt_config_cb) {
-  DCHECK_EQ(!get_decrypt_config_cb_.is_null(), use_hls_sample_aes_);
+  DCHECK_EQ(!!get_decrypt_config_cb_, use_hls_sample_aes_);
 }
 #endif
 
@@ -442,7 +441,7 @@ bool EsParserH264::EmitFrame(int64_t access_unit_pos,
 #if BUILDFLAG(ENABLE_HLS_SAMPLE_AES)
   const DecryptConfig* base_decrypt_config = nullptr;
   if (use_hls_sample_aes_) {
-    DCHECK(!get_decrypt_config_cb_.is_null());
+    DCHECK(get_decrypt_config_cb_);
     base_decrypt_config = get_decrypt_config_cb_.Run();
   }
 
@@ -485,10 +484,8 @@ bool EsParserH264::EmitFrame(int64_t access_unit_pos,
             DecryptConfig::CreateCbcsConfig(
                 base_decrypt_config->key_id(), base_decrypt_config->iv(),
                 subsamples,
-                base_decrypt_config->HasPattern()
-                    ? base_decrypt_config->encryption_pattern()
-                    : EncryptionPattern(kSampleAESEncryptBlocks,
-                                        kSampleAESSkipBlocks)));
+                EncryptionPattern(kSampleAESEncryptBlocks,
+                                  kSampleAESSkipBlocks)));
         break;
     }
   }
@@ -529,7 +526,7 @@ bool EsParserH264::UpdateVideoDecoderConfig(const H264SPS* sps,
   }
 
   VideoDecoderConfig video_decoder_config(
-      kCodecH264, profile, PIXEL_FORMAT_I420, COLOR_SPACE_HD_REC709,
+      kCodecH264, profile, PIXEL_FORMAT_I420, VideoColorSpace::REC709(),
       VIDEO_ROTATION_0, coded_size.value(), visible_rect.value(), natural_size,
       EmptyExtraData(), scheme);
 

@@ -22,6 +22,7 @@ Polymer({
 
     /**
      * The current sync status, supplied by SyncBrowserProxy.
+     * TODO(dpapad): make |syncStatus| private.
      * @type {?settings.SyncStatus}
      */
     syncStatus: Object,
@@ -207,8 +208,9 @@ Polymer({
     // on-select-item-changed gets called with undefined during a tab change.
     // https://github.com/PolymerElements/iron-selector/issues/95
     const tab = this.$.tabs.selectedItem;
-    if (!tab)
+    if (!tab) {
       return;
+    }
     this.clearButtonDisabled_ = this.getSelectedDataTypes_(tab).length == 0;
   },
 
@@ -258,7 +260,7 @@ Polymer({
       historySummarySignedIn, historySummarySynced) {
     if (isSyncingHistory && !hasSyncError) {
       return historySummarySynced;
-    } else if (isSignedIn) {
+    } else if (isSignedIn && !this.isSyncPaused_) {
       return historySummarySignedIn;
     }
     return historySummary;
@@ -317,8 +319,9 @@ Polymer({
     const checkboxes = tab.querySelectorAll('settings-checkbox');
     const dataTypes = [];
     checkboxes.forEach((checkbox) => {
-      if (checkbox.checked && !checkbox.hidden)
+      if (checkbox.checked && !checkbox.hidden) {
         dataTypes.push(checkbox.pref.key);
+      }
     });
     return dataTypes;
   },
@@ -346,8 +349,9 @@ Polymer({
           chrome.metricsPrivate.recordMediumTime(
               'History.ClearBrowsingData.TimeSpentInDialog',
               Date.now() - this.dialogOpenedTime_);
-          if (!shouldShowNotice)
+          if (!shouldShowNotice) {
             this.$.clearBrowsingDataDialog.close();
+          }
         });
   },
 
@@ -389,13 +393,19 @@ Polymer({
     if (e.target.tagName === 'A') {
       e.preventDefault();
       if (!this.syncStatus.hasError) {
+        chrome.metricsPrivate.recordUserAction('ClearBrowsingData_Sync_Pause');
         this.syncBrowserProxy_.pauseSync();
-        return;
-      }
-
-      if (this.isSyncPaused_) {
+      } else if (this.isSyncPaused_) {
+        chrome.metricsPrivate.recordUserAction('ClearBrowsingData_Sync_SignIn');
         this.syncBrowserProxy_.startSignIn();
       } else {
+        if (this.hasPassphraseError_) {
+          chrome.metricsPrivate.recordUserAction(
+              'ClearBrowsingData_Sync_NavigateToPassphrase');
+        } else {
+          chrome.metricsPrivate.recordUserAction(
+              'ClearBrowsingData_Sync_NavigateToError');
+        }
         // In any other error case, navigate to the sync page.
         settings.navigateTo(settings.routes.SYNC);
       }
@@ -425,8 +435,8 @@ Polymer({
    * @private
    */
   computeHasOtherError_: function() {
-    return !!this.syncStatus.hasError && !this.isSyncPaused_ &&
-        !this.hasPassphraseError_;
+    return this.syncStatus !== undefined && !!this.syncStatus.hasError &&
+        !this.isSyncPaused_ && !this.hasPassphraseError_;
   },
 
   /**
@@ -434,6 +444,6 @@ Polymer({
    * @private
    */
   shouldShowFooter_: function() {
-    return this.diceEnabled_ && !!this.syncStatus.signedIn;
+    return this.diceEnabled_ && !!this.syncStatus && !!this.syncStatus.signedIn;
   },
 });

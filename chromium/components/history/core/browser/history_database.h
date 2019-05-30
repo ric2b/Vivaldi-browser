@@ -13,7 +13,7 @@
 #include "build/build_config.h"
 #include "components/history/core/browser/download_database.h"
 #include "components/history/core/browser/history_types.h"
-#include "components/history/core/browser/typed_url_sync_metadata_database.h"
+#include "components/history/core/browser/sync/typed_url_sync_metadata_database.h"
 #include "components/history/core/browser/url_database.h"
 #include "components/history/core/browser/visit_database.h"
 #include "components/history/core/browser/visitsegment_database.h"
@@ -90,9 +90,8 @@ class HistoryDatabase : public DownloadDatabase,
   // called once and only upon successful Init.
   void ComputeDatabaseMetrics(const base::FilePath& filename);
 
-  // Computes the |num_hosts| most-visited hostnames in the past 30 days. See
-  // history_service.h for details.
-  TopHostsList TopHosts(size_t num_hosts);
+  // Counts the number of unique Hosts visited in the last month.
+  int CountUniqueHostsVisitedLastMonth();
 
   // Call to set the mode on the database to exclusive. The default locking mode
   // is "normal" but we want to run in exclusive mode for slightly better
@@ -141,9 +140,8 @@ class HistoryDatabase : public DownloadDatabase,
   // unused space in the file. It can be VERY SLOW.
   void Vacuum();
 
-  // Try to trim the cache memory used by the database.  If |aggressively| is
-  // true try to trim all unused cache, otherwise trim by half.
-  void TrimMemory(bool aggressively);
+  // Release all non-essential memory associated with this database connection.
+  void TrimMemory();
 
   // Razes the database. Returns true if successful.
   bool Raze();

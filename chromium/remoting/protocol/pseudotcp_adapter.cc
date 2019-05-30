@@ -8,6 +8,7 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -338,7 +339,8 @@ cricket::IPseudoTcpNotify::WriteResult PseudoTcpAdapter::Core::TcpWritePacket(
   if (socket_write_pending_)
     return IPseudoTcpNotify::WR_SUCCESS;
 
-  scoped_refptr<net::IOBuffer> write_buffer = new net::IOBuffer(len);
+  scoped_refptr<net::IOBuffer> write_buffer =
+      base::MakeRefCounted<net::IOBuffer>(len);
   memcpy(write_buffer->data(), buffer, len);
 
   // Our underlying socket is datagram-oriented, which means it should either
@@ -365,7 +367,7 @@ cricket::IPseudoTcpNotify::WriteResult PseudoTcpAdapter::Core::TcpWritePacket(
 
 void PseudoTcpAdapter::Core::DoReadFromSocket() {
   if (!socket_read_buffer_.get())
-    socket_read_buffer_ = new net::IOBuffer(kReadBufferSize);
+    socket_read_buffer_ = base::MakeRefCounted<net::IOBuffer>(kReadBufferSize);
 
   int result = 1;
   while (socket_ && result > 0) {

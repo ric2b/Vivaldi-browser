@@ -11,12 +11,17 @@
 
 #include "chrome/notification_helper/com_server_module.h"
 
+#include <type_traits>
+
 #include <wrl/module.h>
 
 #include "base/metrics/histogram_macros.h"
+#include "base/stl_util.h"
 #include "chrome/install_static/install_util.h"
 #include "chrome/notification_helper/notification_activator.h"
 #include "chrome/notification_helper/trace_util.h"
+
+namespace mswr = Microsoft::WRL;
 
 namespace {
 
@@ -64,9 +69,8 @@ HRESULT ComServerModule::Run() {
 HRESULT ComServerModule::RegisterClassObjects() {
   // Create an out-of-proc COM module with caching disabled. The supplied
   // method is invoked when the last instance object of the module is released.
-  auto& module =
-      Microsoft::WRL::Module<Microsoft::WRL::OutOfProcDisableCaching>::Create(
-          this, &ComServerModule::SignalObjectCountZero);
+  auto& module = mswr::Module<mswr::OutOfProcDisableCaching>::Create(
+      this, &ComServerModule::SignalObjectCountZero);
 
   // Usually COM module classes statically define their CLSID at compile time
   // through the use of various macros, and WRL::Module internals takes care of
@@ -74,11 +78,11 @@ HRESULT ComServerModule::RegisterClassObjects() {
   // register the same object with different CLSIDs depending on a runtime
   // setting, so we handle that logic here.
 
-  Microsoft::WRL::ComPtr<IUnknown> factory;
-  unsigned int flags = Microsoft::WRL::ModuleType::OutOfProcDisableCaching;
+  mswr::ComPtr<IUnknown> factory;
+  unsigned int flags = mswr::ModuleType::OutOfProcDisableCaching;
 
-  HRESULT hr = Microsoft::WRL::Details::CreateClassFactory<
-      Microsoft::WRL::SimpleClassFactory<NotificationActivator>>(
+  HRESULT hr = mswr::Details::CreateClassFactory<
+      mswr::SimpleClassFactory<NotificationActivator>>(
       &flags, nullptr, __uuidof(IClassFactory), &factory);
   if (FAILED(hr)) {
     LogComServerModuleHistogram(ComServerModuleStatus::FACTORY_CREATION_FAILED);
@@ -86,7 +90,7 @@ HRESULT ComServerModule::RegisterClassObjects() {
     return hr;
   }
 
-  Microsoft::WRL::ComPtr<IClassFactory> class_factory;
+  mswr::ComPtr<IClassFactory> class_factory;
   hr = factory.As(&class_factory);
   if (FAILED(hr)) {
     LogComServerModuleHistogram(
@@ -98,15 +102,16 @@ HRESULT ComServerModule::RegisterClassObjects() {
 
   // All pointers in this array are unowned. Do not release them.
   IClassFactory* class_factories[] = {class_factory.Get()};
-  static_assert(arraysize(cookies_) == arraysize(class_factories),
-                "Arrays cookies_ and class_factories must be the same size.");
+  static_assert(
+      std::extent<decltype(cookies_)>() == base::size(class_factories),
+      "Arrays cookies_ and class_factories must be the same size.");
 
   IID class_ids[] = {install_static::GetToastActivatorClsid()};
-  static_assert(arraysize(cookies_) == arraysize(class_ids),
+  static_assert(std::extent<decltype(cookies_)>() == base::size(class_ids),
                 "Arrays cookies_ and class_ids must be the same size.");
 
   hr = module.RegisterCOMObject(nullptr, class_ids, class_factories, cookies_,
-                                arraysize(cookies_));
+                                std::extent<decltype(cookies_)>());
   if (FAILED(hr)) {
     LogComServerModuleHistogram(ComServerModuleStatus::REGISTRATION_FAILED);
     Trace(L"%hs(NotificationActivator registration failed; hr: 0x%08X)\n",
@@ -117,10 +122,9 @@ HRESULT ComServerModule::RegisterClassObjects() {
 }
 
 HRESULT ComServerModule::UnregisterClassObjects() {
-  auto& module = Microsoft::WRL::Module<
-      Microsoft::WRL::OutOfProcDisableCaching>::GetModule();
-  HRESULT hr =
-      module.UnregisterCOMObject(nullptr, cookies_, arraysize(cookies_));
+  auto& module = mswr::Module<mswr::OutOfProcDisableCaching>::GetModule();
+  HRESULT hr = module.UnregisterCOMObject(nullptr, cookies_,
+                                          std::extent<decltype(cookies_)>());
   if (FAILED(hr)) {
     LogComServerModuleHistogram(ComServerModuleStatus::UNREGISTRATION_FAILED);
     Trace(L"%hs(NotificationActivator unregistration failed; hr: 0x%08X)\n",

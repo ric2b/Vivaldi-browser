@@ -70,9 +70,15 @@ class MEDIA_EXPORT DecryptConfig {
   const EncryptionMode& encryption_mode() const { return encryption_mode_; }
   const base::Optional<EncryptionPattern>& encryption_pattern() const {
     return encryption_pattern_;
-  };
+  }
 
   std::unique_ptr<DecryptConfig> Clone() const;
+
+  // Makes a new config which has the same configuration options (mode, pattern)
+  // while providing a new vector of subsamples and initialization vector.
+  std::unique_ptr<DecryptConfig> CopyNewSubsamplesIV(
+      const std::vector<SubsampleEntry>& subsamples,
+      const std::string& iv);
 
   // Returns whether this config has EncryptionPattern set or not.
   bool HasPattern() const;

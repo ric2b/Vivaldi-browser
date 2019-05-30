@@ -13,7 +13,6 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "base/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "components/domain_reliability/beacon.h"
 #include "components/domain_reliability/clear_mode.h"
@@ -51,40 +50,22 @@ class DOMAIN_RELIABILITY_EXPORT DomainReliabilityMonitor
     : public net::NetworkChangeNotifier::NetworkChangeObserver,
       DomainReliabilityContext::Factory {
  public:
-  // Creates a Monitor. |local_state_pref_service| must live on |pref_thread|
-  // (which should be the current thread); |network_thread| is the thread
-  // on which requests will actually be monitored and reported.
+  // Creates a Monitor.
   DomainReliabilityMonitor(
       const std::string& upload_reporter_string,
       const DomainReliabilityContext::UploadAllowedCallback&
-          upload_allowed_callback,
-      const scoped_refptr<base::SingleThreadTaskRunner>& pref_thread,
-      const scoped_refptr<base::SingleThreadTaskRunner>& network_thread);
+          upload_allowed_callback);
 
   // Same, but specifies a mock interface for time functions for testing.
   DomainReliabilityMonitor(
       const std::string& upload_reporter_string,
       const DomainReliabilityContext::UploadAllowedCallback&
           upload_allowed_callback,
-      const scoped_refptr<base::SingleThreadTaskRunner>& pref_thread,
-      const scoped_refptr<base::SingleThreadTaskRunner>& network_thread,
       std::unique_ptr<MockableTime> time);
 
-  // Must be called from the pref thread if |MoveToNetworkThread| was not
-  // called, or from the network thread if it was called.
   ~DomainReliabilityMonitor() override;
 
-  // Must be called before |InitURLRequestContext| on the same thread on which
-  // the Monitor was constructed. Moves (most of) the Monitor to the network
-  // thread passed in the constructor.
-  void MoveToNetworkThread();
-
-  // All public methods below this point must be called on the network thread
-  // after |MoveToNetworkThread| is called on the pref thread.
-
   // Initializes the Monitor's URLRequestContextGetter.
-  //
-  // Must be called on the network thread, after |MoveToNetworkThread|.
   void InitURLRequestContext(net::URLRequestContext* url_request_context);
 
   // Same, but for unittests where the Getter is readily available.
@@ -177,13 +158,6 @@ class DOMAIN_RELIABILITY_EXPORT DomainReliabilityMonitor
 
   void MaybeHandleHeader(const RequestInfo& info);
 
-  bool OnPrefThread() const {
-    return pref_task_runner_->BelongsToCurrentThread();
-  }
-  bool OnNetworkThread() const {
-    return network_task_runner_->BelongsToCurrentThread();
-  }
-
   base::WeakPtr<DomainReliabilityMonitor> MakeWeakPtr();
 
   std::unique_ptr<MockableTime> time_;
@@ -195,10 +169,6 @@ class DOMAIN_RELIABILITY_EXPORT DomainReliabilityMonitor
   std::unique_ptr<DomainReliabilityUploader> uploader_;
   DomainReliabilityContextManager context_manager_;
 
-  scoped_refptr<base::SingleThreadTaskRunner> pref_task_runner_;
-  scoped_refptr<base::SingleThreadTaskRunner> network_task_runner_;
-
-  bool moved_to_network_thread_;
   bool discard_uploads_set_;
 
   base::WeakPtrFactory<DomainReliabilityMonitor> weak_factory_;

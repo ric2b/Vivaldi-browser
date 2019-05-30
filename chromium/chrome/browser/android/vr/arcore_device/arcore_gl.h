@@ -14,8 +14,8 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
-#include "chrome/browser/vr/fps_meter.h"
 #include "device/vr/public/mojom/vr_service.mojom.h"
+#include "device/vr/util/fps_meter.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "ui/display/display.h"
 #include "ui/gfx/geometry/quaternion.h"
@@ -29,23 +29,26 @@ class GLSurface;
 }  // namespace gl
 
 namespace vr {
-class MailboxToSurfaceBridge;
+class ArCoreInstallUtils;
 }  // namespace vr
 
 namespace device {
 
-class ARCore;
-struct ARCoreHitTestRequest;
-class ARImageTransport;
+class ArCore;
+class ArCoreFactory;
+struct ArCoreHitTestRequest;
+class ArImageTransport;
 
 // All of this class's methods must be called on the same valid GL thread with
 // the exception of GetGlThreadTaskRunner() and GetWeakPtr().
-class ARCoreGl {
+class ArCoreGl {
  public:
-  explicit ARCoreGl(std::unique_ptr<vr::MailboxToSurfaceBridge> mailbox_bridge);
-  ~ARCoreGl();
+  explicit ArCoreGl(std::unique_ptr<ArImageTransport> ar_image_transport);
+  ~ArCoreGl();
 
-  void Initialize(base::OnceCallback<void(bool)> callback);
+  void Initialize(vr::ArCoreInstallUtils* install_utils,
+                  ArCoreFactory* arcore_factory,
+                  base::OnceCallback<void(bool)> callback);
 
   void ProduceFrame(const gfx::Size& frame_size,
                     display::Display::Rotation display_rotation,
@@ -61,12 +64,10 @@ class ARCoreGl {
       mojom::XRRayPtr,
       mojom::XREnvironmentIntegrationProvider::RequestHitTestCallback);
 
-  base::WeakPtr<ARCoreGl> GetWeakPtr();
+  base::WeakPtr<ArCoreGl> GetWeakPtr();
 
  private:
-  // TODO(https://crbug/835948): remove frame_size.
   void ProcessFrame(mojom::XRFrameDataPtr frame_data,
-                    const gfx::Size& frame_size,
                     mojom::XRFrameDataProvider::GetFrameDataCallback callback);
 
   bool InitializeGl();
@@ -77,8 +78,8 @@ class ARCoreGl {
   scoped_refptr<base::SingleThreadTaskRunner> gl_thread_task_runner_;
 
   // Created on GL thread and should only be accessed on that thread.
-  std::unique_ptr<ARCore> arcore_;
-  std::unique_ptr<ARImageTransport> ar_image_transport_;
+  std::unique_ptr<ArCore> arcore_;
+  std::unique_ptr<ArImageTransport> ar_image_transport_;
 
   // Default dummy values to ensure consistent behaviour.
   gfx::Size transfer_size_ = gfx::Size(0, 0);
@@ -87,18 +88,18 @@ class ARCoreGl {
   gfx::Transform uv_transform_;
   gfx::Transform projection_;
   // The first run of ProduceFrame should set uv_transform_ and projection_
-  // using the default settings in ARCore.
+  // using the default settings in ArCore.
   bool should_recalculate_uvs_ = true;
 
   bool is_initialized_ = false;
 
-  vr::FPSMeter fps_meter_;
+  FPSMeter fps_meter_;
 
-  std::vector<std::unique_ptr<ARCoreHitTestRequest>> hit_test_requests_;
+  std::vector<std::unique_ptr<ArCoreHitTestRequest>> hit_test_requests_;
 
   // Must be last.
-  base::WeakPtrFactory<ARCoreGl> weak_ptr_factory_;
-  DISALLOW_COPY_AND_ASSIGN(ARCoreGl);
+  base::WeakPtrFactory<ArCoreGl> weak_ptr_factory_;
+  DISALLOW_COPY_AND_ASSIGN(ArCoreGl);
 };
 
 }  // namespace device

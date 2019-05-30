@@ -10,6 +10,9 @@ package org.chromium.support_lib_boundary.util;
  * Chromium can share its definition.
  */
 public class Features {
+    // Features suffixed with DEV will only be visible on debug devices.
+    public static final String DEV_SUFFIX = ":dev";
+
     // This class just contains constants representing features.
     private Features() {}
 
@@ -125,13 +128,32 @@ public class Features {
     // WebViewCompat.getWebChromeClient
     public static final String GET_WEB_CHROME_CLIENT = "GET_WEB_CHROME_CLIENT";
 
-    // WebViewCompat.setProxyOverride
-    // WebViewCompat.clearProxyOverride
-    public static final String PROXY_OVERRIDE = "PROXY_OVERRIDE";
+    // ProxyController.setProxyOverride
+    // ProxyController.clearProxyOverride
+    public static final String PROXY_OVERRIDE = "PROXY_OVERRIDE:3";
+
+    // WebSettingsCompat.setWillSuppressErrorPage
+    // WebSettingsCompat.getWillSuppressErrorPage
+    public static final String SUPPRESS_ERROR_PAGE = "SUPPRESS_ERROR_PAGE";
 
     // WebViewCompat.getWebViewRenderer
     public static final String GET_WEB_VIEW_RENDERER = "GET_WEB_VIEW_RENDERER";
 
     // WebViewRenderer.terminate
     public static final String WEB_VIEW_RENDERER_TERMINATE = "WEB_VIEW_RENDERER_TERMINATE";
+
+    // TracingController.getInstance
+    // TracingController.isTracing
+    // TracingController.start
+    // TracingController.stop
+    public static final String TRACING_CONTROLLER_BASIC_USAGE = "TRACING_CONTROLLER_BASIC_USAGE";
+
+    // Renderer client set/getter and callbacks:
+    //
+    // WebView.getWebViewRendererClient
+    // WebView.setWebViewRendererClient
+    // WebViewRendererClient.onRendererUnresponsive()
+    // WebViewRendererClient.onRendererResponsive()
+    public static final String WEB_VIEW_RENDERER_CLIENT_BASIC_USAGE =
+            "WEB_VIEW_RENDERER_CLIENT_BASIC_USAGE";
 }

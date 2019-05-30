@@ -20,7 +20,7 @@
       h2 {
         align-items: center;
         align-self: flex-start;
-        color: var(--google-grey-refresh-700);
+        color: var(--cr-secondary-text-color);
         display: flex;
         font-size: inherit;
         font-weight: 500;
@@ -64,11 +64,6 @@
         margin-inline-start: var(--cr-icon-ripple-margin);
       }
 
-      neon-animatable {
-        display: flex;
-        flex-direction: column;
-      }
-
       /* For "Advanced" toggle button. */
       paper-button[toggles][active] {
         background-color: var(--paper-grey-300);
@@ -80,8 +75,11 @@
       }
 
       /* Space out multiple buttons in the same row. */
-      .settings-box paper-button + paper-button {
-        margin-inline-start: 16px;
+      .settings-box paper-button + paper-button,
+      .settings-box paper-button + controlled-button,
+      .settings-box controlled-button + controlled-button,
+      .settings-box controlled-button + paper-button {
+        margin-inline-start: 8px;
       }
 
       span ~ a {
@@ -89,7 +87,7 @@
       }
 
       a[href] {
-        color: var(--google-blue-700);
+        color: var(--cr-link-color);
         text-decoration: none;
       }
 
@@ -112,11 +110,11 @@
         min-height: var(--settings-row-min-height);
       }
 
-      paper-radio-group {
+      cr-radio-group {
         width: 100%;
       }
 
-      paper-radio-group:focus {
+      cr-radio-group:focus {
         background-color: var(--google-grey-300);
         outline: none;
       }
@@ -214,6 +212,12 @@
 
       .settings-box.three-line {
         min-height: var(--settings-row-three-line-min-height);
+      }
+
+      .settings-box-text {
+        box-sizing: border-box;
+        padding-bottom: var(--cr-section-vertical-padding);
+        padding-top: var(--cr-section-vertical-padding);
       }
 
       /* We use an explicit tag to remove the top border, rather than a
@@ -323,15 +327,8 @@
         margin: 0 16px;
       }
 
-      .favicon-image {
-        background-repeat: no-repeat;
-        background-size: contain;
-        height: 16px;
-        width: 16px;
-      }
-
       .column-header {
-        color: var(--google-grey-refresh-700);
+        color: var(--cr-secondary-text-color);
         font-size: inherit;
         font-weight: 400;
       }

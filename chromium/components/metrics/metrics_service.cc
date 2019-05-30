@@ -182,7 +182,6 @@ const int kUpdateAliveTimestampSeconds = 15 * 60;
 void MarkAppCleanShutdownAndCommit(CleanExitBeacon* clean_exit_beacon,
                                    PrefService* local_state) {
   clean_exit_beacon->WriteBeaconValue(true);
-  ExecutionPhaseManager(local_state).OnAppEnterBackground();
   // Start writing right away (write happens on a different thread).
   local_state->CommitPendingWrite();
 }
@@ -200,7 +199,6 @@ void MetricsService::RegisterPrefs(PrefRegistrySimple* registry) {
   MetricsStateManager::RegisterPrefs(registry);
   MetricsLog::RegisterPrefs(registry);
   StabilityMetricsProvider::RegisterPrefs(registry);
-  ExecutionPhaseManager::RegisterPrefs(registry);
   MetricsReportingService::RegisterPrefs(registry);
 
   registry->RegisterIntegerPref(prefs::kMetricsSessionID, -1);
@@ -418,7 +416,6 @@ void MetricsService::OnAppEnterBackground() {
 
 void MetricsService::OnAppEnterForeground() {
   state_manager_->clean_exit_beacon()->WriteBeaconValue(false);
-  ExecutionPhaseManager(local_state_).OnAppEnterForeground();
   StartSchedulerIfNecessary();
 }
 #else
@@ -428,12 +425,6 @@ void MetricsService::LogNeedForCleanShutdown() {
   clean_shutdown_status_ = NEED_TO_SHUTDOWN;
 }
 #endif  // defined(OS_ANDROID) || defined(OS_IOS)
-
-// static
-void MetricsService::SetExecutionPhase(ExecutionPhase execution_phase,
-                                       PrefService* local_state) {
-  ExecutionPhaseManager(local_state).SetExecutionPhase(execution_phase);
-}
 
 void MetricsService::RecordBreakpadRegistration(bool success) {
   StabilityMetricsProvider(local_state_).RecordBreakpadRegistration(success);
@@ -450,14 +441,6 @@ void MetricsService::ClearSavedStabilityMetrics() {
 
 void MetricsService::PushExternalLog(const std::string& log) {
   log_store()->StoreLog(log, MetricsLog::ONGOING_LOG);
-}
-
-void MetricsService::UpdateMetricsUsagePrefs(const std::string& service_name,
-                                             int message_size,
-                                             bool is_cellular) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  reporting_service_.UpdateMetricsUsagePrefs(service_name, message_size,
-                                             is_cellular);
 }
 
 //------------------------------------------------------------------------------
@@ -490,10 +473,6 @@ void MetricsService::InitializeMetricsState() {
     // Reset flag, and wait until we call LogNeedForCleanShutdown() before
     // monitoring.
     state_manager_->clean_exit_beacon()->WriteBeaconValue(true);
-    ExecutionPhaseManager manager(local_state_);
-    base::UmaHistogramSparse("Chrome.Browser.CrashedExecutionPhase",
-                             static_cast<int>(manager.GetExecutionPhase()));
-    manager.SetExecutionPhase(ExecutionPhase::UNINITIALIZED_PHASE);
   }
 
   // HasPreviousSessionData is called first to ensure it is never bypassed.
@@ -539,7 +518,6 @@ void MetricsService::InitializeMetricsState() {
 
   // Notify stability metrics providers about the launch.
   provider.LogLaunch();
-  SetExecutionPhase(ExecutionPhase::START_METRICS_RECORDING, local_state_);
   provider.CheckLastSessionEndCompleted();
 
   // Call GetUptimes() for the first time, thus allowing all later calls
@@ -869,22 +847,62 @@ void MetricsService::RecordCurrentStabilityHistograms() {
       &histogram_snapshot_manager_);
 }
 
+void MetricsService::PrepareProviderMetricsLogDone(
+    std::unique_ptr<MetricsLog::IndependentMetricsLoader> loader,
+    bool success) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(independent_loader_active_);
+  DCHECK(loader);
+
+  if (success) {
+    log_manager_.PauseCurrentLog();
+    log_manager_.BeginLoggingWithLog(loader->ReleaseLog());
+    log_manager_.FinishCurrentLog(log_store());
+    log_manager_.ResumePausedLog();
+  }
+
+  independent_loader_active_ = false;
+}
+
 bool MetricsService::PrepareProviderMetricsLog() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  // Create a new log. This will have some defaut values injected in it but
-  // those will be overwritten when an embedded profile is extracted.
-  std::unique_ptr<MetricsLog> log = CreateLog(MetricsLog::INDEPENDENT_LOG);
+  // If something is still pending, stop now and indicate that there is
+  // still work to do.
+  if (independent_loader_active_)
+    return true;
 
+  // Check each provider in turn for data.
   for (auto& provider : delegating_provider_.GetProviders()) {
-    if (log->LoadIndependentMetrics(provider.get())) {
-      log_manager_.PauseCurrentLog();
-      log_manager_.BeginLoggingWithLog(std::move(log));
-      log_manager_.FinishCurrentLog(log_store());
-      log_manager_.ResumePausedLog();
+    if (provider->HasIndependentMetrics()) {
+      // Create a new log. This will have some default values injected in it
+      // but those will be overwritten when an embedded profile is extracted.
+      std::unique_ptr<MetricsLog> log = CreateLog(MetricsLog::INDEPENDENT_LOG);
+
+      // Note that something is happening. This must be set before the
+      // operation is requested in case the loader decides to do everything
+      // immediately rather than as a background task.
+      independent_loader_active_ = true;
+
+      // Give the new log to a loader for management and then run it on the
+      // provider that has something to give. A copy of the pointer is needed
+      // because the unique_ptr may get moved before the value can be used
+      // to call Run().
+      std::unique_ptr<MetricsLog::IndependentMetricsLoader> loader =
+          std::make_unique<MetricsLog::IndependentMetricsLoader>(
+              std::move(log));
+      MetricsLog::IndependentMetricsLoader* loader_ptr = loader.get();
+      loader_ptr->Run(
+          base::BindOnce(&MetricsService::PrepareProviderMetricsLogDone,
+                         self_ptr_factory_.GetWeakPtr(), std::move(loader)),
+          provider.get());
+
+      // Something was found so there may still be more work to do.
       return true;
     }
   }
+
+  // Nothing was found so indicate there is no more work to do.
   return false;
 }
 
@@ -907,7 +925,6 @@ void MetricsService::LogCleanShutdown(bool end_completed) {
   clean_shutdown_status_ = CLEANLY_SHUTDOWN;
   client_->OnLogCleanShutdown();
   state_manager_->clean_exit_beacon()->WriteBeaconValue(true);
-  SetExecutionPhase(ExecutionPhase::SHUTDOWN_COMPLETE, local_state_);
   StabilityMetricsProvider(local_state_).MarkSessionEndCompleted(end_completed);
 }
 

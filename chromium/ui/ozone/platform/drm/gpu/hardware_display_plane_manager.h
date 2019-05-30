@@ -56,12 +56,12 @@ struct HardwareDisplayPlaneList {
 
 class HardwareDisplayPlaneManager {
  public:
-  HardwareDisplayPlaneManager();
+  HardwareDisplayPlaneManager(DrmDevice* drm);
   virtual ~HardwareDisplayPlaneManager();
 
   // This parses information from the drm driver, adding any new planes
   // or crtcs found.
-  bool Initialize(DrmDevice* drm);
+  bool Initialize();
 
   // Clears old frame state out. Must be called before any AssignOverlayPlanes
   // calls.
@@ -70,6 +70,9 @@ class HardwareDisplayPlaneManager {
   // Sets the color transform matrix (a 3x3 matrix represented in vector form)
   // on the CRTC with ID |crtc_id|.
   bool SetColorMatrix(uint32_t crtc_id, const std::vector<float>& color_matrix);
+
+  // Sets the background color on the CRTC object with ID |crtc_id|.
+  void SetBackgroundColor(uint32_t crtc_id, const uint64_t background_color);
 
   // Sets the degamma/gamma luts on the CRTC object with ID |crtc_id|.
   bool SetGammaCorrection(
@@ -141,6 +144,7 @@ class HardwareDisplayPlaneManager {
     DrmDevice::Property degamma_lut;
     DrmDevice::Property degamma_lut_size;
     DrmDevice::Property out_fence_ptr;
+    DrmDevice::Property background_color;
   };
 
   struct CrtcState {
@@ -159,9 +163,9 @@ class HardwareDisplayPlaneManager {
     DISALLOW_COPY_AND_ASSIGN(CrtcState);
   };
 
-  bool InitializeCrtcState(DrmDevice* drm);
+  bool InitializeCrtcState();
 
-  virtual bool InitializePlanes(DrmDevice* drm) = 0;
+  virtual bool InitializePlanes() = 0;
 
   virtual bool SetPlaneData(HardwareDisplayPlaneList* plane_list,
                             HardwareDisplayPlane* hw_plane,
@@ -199,7 +203,7 @@ class HardwareDisplayPlaneManager {
 
   // Object containing the connection to the graphics device and wraps the API
   // calls to control it. Not owned.
-  DrmDevice* drm_;
+  DrmDevice* const drm_;
 
   bool has_universal_planes_ = false;
 

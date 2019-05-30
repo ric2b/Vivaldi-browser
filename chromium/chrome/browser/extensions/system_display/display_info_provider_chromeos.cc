@@ -9,9 +9,11 @@
 
 #include "ash/public/interfaces/constants.mojom.h"
 #include "ash/public/interfaces/cros_display_config.mojom.h"
+#include "base/bind.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "chrome/browser/ui/ash/tablet_mode_client.h"
 #include "content/public/common/service_manager_connection.h"
 #include "extensions/common/api/system_display.h"
 #include "services/service_manager/public/cpp/connector.h"
@@ -132,6 +134,7 @@ system_display::DisplayMode GetDisplayModeFromMojo(
   result.device_scale_factor = mode.device_scale_factor;
   result.refresh_rate = mode.refresh_rate;
   result.is_native = mode.is_native;
+  result.is_interlaced = std::make_unique<bool>(mode.is_interlaced);
   return result;
 }
 
@@ -274,7 +277,7 @@ DisplayInfoProviderChromeOS::DisplayInfoProviderChromeOS(
   connector->BindInterface(ash::mojom::kServiceName, &cros_display_config_);
 }
 
-DisplayInfoProviderChromeOS::~DisplayInfoProviderChromeOS() {}
+DisplayInfoProviderChromeOS::~DisplayInfoProviderChromeOS() = default;
 
 void DisplayInfoProviderChromeOS::SetDisplayProperties(
     const std::string& display_id_str,
@@ -366,6 +369,8 @@ void DisplayInfoProviderChromeOS::SetDisplayProperties(
         api_display_mode.device_scale_factor;
     mojo_display_mode->refresh_rate = api_display_mode.refresh_rate;
     mojo_display_mode->is_native = api_display_mode.is_native;
+    mojo_display_mode->is_interlaced =
+        api_display_mode.is_interlaced && *(api_display_mode.is_interlaced);
     config_properties->display_mode = std::move(mojo_display_mode);
   }
 
@@ -593,6 +598,26 @@ void DisplayInfoProviderChromeOS::SetMirrorMode(
             std::move(callback).Run(GetStringResult(result));
           },
           std::move(callback)));
+}
+
+void DisplayInfoProviderChromeOS::StartObserving() {
+  DisplayInfoProvider::StartObserving();
+
+  TabletModeClient* client = TabletModeClient::Get();
+  if (client)
+    client->AddObserver(this);
+}
+
+void DisplayInfoProviderChromeOS::StopObserving() {
+  DisplayInfoProvider::StopObserving();
+
+  TabletModeClient* client = TabletModeClient::Get();
+  if (client)
+    client->RemoveObserver(this);
+}
+
+void DisplayInfoProviderChromeOS::OnTabletModeToggled(bool enabled) {
+  DispatchOnDisplayChangedEvent();
 }
 
 // static

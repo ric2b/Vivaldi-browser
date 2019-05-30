@@ -24,16 +24,13 @@ const char* const kSupportedSandboxTokens[] = {
     "allow-same-origin",
     "allow-scripts",
     "allow-top-navigation",
-    "allow-top-navigation-by-user-activation"};
+    "allow-top-navigation-by-user-activation",
+    "allow-downloads-without-user-activation"};
 
 bool IsTokenSupported(const AtomicString& token) {
   for (const char* supported_token : kSupportedSandboxTokens) {
     if (token == supported_token)
       return true;
-  }
-  if (token == "allow-downloads" &&
-      RuntimeEnabledFeatures::BlockingDownloadsInSandboxEnabled()) {
-    return true;
   }
   return false;
 }
@@ -41,7 +38,7 @@ bool IsTokenSupported(const AtomicString& token) {
 }  // namespace
 
 HTMLIFrameElementSandbox::HTMLIFrameElementSandbox(HTMLIFrameElement* element)
-    : DOMTokenList(*element, HTMLNames::sandboxAttr) {}
+    : DOMTokenList(*element, html_names::kSandboxAttr) {}
 
 bool HTMLIFrameElementSandbox::ValidateTokenValue(
     const AtomicString& token_value,

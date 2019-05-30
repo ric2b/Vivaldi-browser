@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "net/base/net_errors.h"
 #include "storage/browser/fileapi/file_stream_reader.h"
@@ -20,7 +21,7 @@ const int kMd5DigestBufferSize = 512 * 1024;  // 512 kB.
 }  // namespace
 
 FileStreamMd5Digester::FileStreamMd5Digester()
-    : buffer_(new net::IOBuffer(kMd5DigestBufferSize)) {}
+    : buffer_(base::MakeRefCounted<net::IOBuffer>(kMd5DigestBufferSize)) {}
 
 FileStreamMd5Digester::~FileStreamMd5Digester() = default;
 
@@ -37,8 +38,8 @@ void FileStreamMd5Digester::GetMd5Digest(
 void FileStreamMd5Digester::ReadNextChunk(const ResultCallback& callback) {
   const int result =
       reader_->Read(buffer_.get(), kMd5DigestBufferSize,
-                    base::Bind(&FileStreamMd5Digester::OnChunkRead,
-                               base::Unretained(this), callback));
+                    base::BindOnce(&FileStreamMd5Digester::OnChunkRead,
+                                   base::Unretained(this), callback));
   if (result != net::ERR_IO_PENDING)
     OnChunkRead(callback, result);
 }

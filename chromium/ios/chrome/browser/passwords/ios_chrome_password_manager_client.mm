@@ -7,23 +7,28 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
+#include "base/no_destructor.h"
 #include "components/autofill/core/common/password_form.h"
-#include "components/browser_sync/profile_sync_service.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/password_manager/core/browser/log_manager.h"
 #include "components/password_manager/core/browser/password_form_manager_for_ui.h"
 #include "components/password_manager/core/browser/password_manager.h"
 #include "components/password_manager/core/browser/password_manager_internals_service.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
+#include "components/password_manager/core/browser/store_metrics_reporter.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
-#include "components/signin/core/browser/signin_manager_base.h"
+#include "components/sync/driver/sync_service.h"
+#include "components/translate/core/browser/translate_manager.h"
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#include "ios/chrome/browser/experimental_flags.h"
+#include "ios/chrome/browser/passwords/credential_manager_util.h"
 #include "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
 #include "ios/chrome/browser/passwords/password_manager_internals_service_factory.h"
-#include "ios/chrome/browser/signin/signin_manager_factory.h"
+#include "ios/chrome/browser/signin/identity_manager_factory.h"
 #include "ios/chrome/browser/sync/profile_sync_service_factory.h"
+#include "ios/chrome/browser/system_flags.h"
+#include "ios/chrome/browser/translate/chrome_ios_translate_client.h"
 #include "net/cert/cert_status_flags.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "url/gurl.h"
@@ -44,9 +49,9 @@ const syncer::SyncService* GetSyncService(
   return ProfileSyncServiceFactory::GetForBrowserStateIfExists(browser_state);
 }
 
-const SigninManagerBase* GetSigninManager(
+const identity::IdentityManager* GetIdentityManager(
     ios::ChromeBrowserState* browser_state) {
-  return ios::SigninManagerFactory::GetForBrowserState(browser_state);
+  return IdentityManagerFactory::GetForBrowserState(browser_state);
 }
 
 }  // namespace
@@ -56,12 +61,14 @@ IOSChromePasswordManagerClient::IOSChromePasswordManagerClient(
     : delegate_(delegate),
       credentials_filter_(
           this,
-          base::Bind(&GetSyncService, delegate_.browserState),
-          base::Bind(&GetSigninManager, delegate_.browserState)),
-      ukm_source_id_(0),
+          base::BindRepeating(&GetSyncService, delegate_.browserState),
+          base::BindRepeating(&GetIdentityManager, delegate_.browserState)),
       helper_(this) {
   saving_passwords_enabled_.Init(
       password_manager::prefs::kCredentialsEnableService, GetPrefs());
+  static base::NoDestructor<password_manager::StoreMetricsReporter> reporter(
+      *saving_passwords_enabled_, this, GetSyncService(delegate_.browserState),
+      GetIdentityManager(delegate_.browserState), GetPrefs());
   log_manager_ = password_manager::LogManager::Create(
       ios::PasswordManagerInternalsServiceFactory::GetForBrowserState(
           delegate_.browserState),
@@ -71,15 +78,9 @@ IOSChromePasswordManagerClient::IOSChromePasswordManagerClient(
 IOSChromePasswordManagerClient::~IOSChromePasswordManagerClient() = default;
 
 SyncState IOSChromePasswordManagerClient::GetPasswordSyncState() const {
-  browser_sync::ProfileSyncService* sync_service =
+  syncer::SyncService* sync_service =
       ProfileSyncServiceFactory::GetForBrowserState(delegate_.browserState);
   return password_manager_util::GetPasswordSyncState(sync_service);
-}
-
-SyncState IOSChromePasswordManagerClient::GetHistorySyncState() const {
-  browser_sync::ProfileSyncService* sync_service =
-      ProfileSyncServiceFactory::GetForBrowserState(delegate_.browserState);
-  return password_manager_util::GetHistorySyncState(sync_service);
 }
 
 bool IOSChromePasswordManagerClient::PromptUserToChooseCredentials(
@@ -130,6 +131,10 @@ IOSChromePasswordManagerClient::GetPasswordManager() const {
   return delegate_.passwordManager;
 }
 
+bool IOSChromePasswordManagerClient::IsMainFrameSecure() const {
+  return WebStateContentIsSecureHtml(delegate_.webState);
+}
+
 PrefService* IOSChromePasswordManagerClient::GetPrefs() const {
   return (delegate_.browserState)->GetPrefs();
 }
@@ -162,15 +167,21 @@ void IOSChromePasswordManagerClient::NotifyStorePasswordCalled() {
   helper_.NotifyStorePasswordCalled();
 }
 
-bool IOSChromePasswordManagerClient::IsSavingAndFillingEnabledForCurrentPage()
-    const {
+bool IOSChromePasswordManagerClient::IsSavingAndFillingEnabled(
+    const GURL& url) const {
   return *saving_passwords_enabled_ && !IsIncognito() &&
          !net::IsCertStatusError(GetMainFrameCertStatus()) &&
-         IsFillingEnabledForCurrentPage();
+         IsFillingEnabled(url);
 }
 
 const GURL& IOSChromePasswordManagerClient::GetLastCommittedEntryURL() const {
   return delegate_.lastCommittedURL;
+}
+
+std::string IOSChromePasswordManagerClient::GetPageLanguage() const {
+  // TODO(crbug.com/912597): Add WebState to the IOSChromePasswordManagerClient
+  // to be able to get the pages LanguageState from the TranslateManager.
+  return std::string();
 }
 
 const password_manager::CredentialsFilter*
@@ -184,24 +195,13 @@ IOSChromePasswordManagerClient::GetLogManager() const {
 }
 
 ukm::SourceId IOSChromePasswordManagerClient::GetUkmSourceId() {
-  // TODO(crbug.com/792662): Update this to get a shared UKM SourceId (e.g.
-  // from web state), once the UKM framework provides a mechanism for that.
-  if (ukm_source_url_ != delegate_.lastCommittedURL) {
-    metrics_recorder_.reset();
-    ukm_source_url_ = delegate_.lastCommittedURL;
-    ukm_source_id_ = ukm::UkmRecorder::GetNewSourceID();
-    ukm::UkmRecorder::Get()->UpdateSourceURL(ukm_source_id_, ukm_source_url_);
-  }
-  return ukm_source_id_;
+  return delegate_.ukmSourceId;
 }
 
 PasswordManagerMetricsRecorder*
 IOSChromePasswordManagerClient::GetMetricsRecorder() {
   if (!metrics_recorder_) {
-    // Query source_id first, because that has the side effect of initializing
-    // |ukm_source_url_|.
-    ukm::SourceId source_id = GetUkmSourceId();
-    metrics_recorder_.emplace(source_id, ukm_source_url_);
+    metrics_recorder_.emplace(GetUkmSourceId(), delegate_.lastCommittedURL);
   }
   return base::OptionalOrNullptr(metrics_recorder_);
 }

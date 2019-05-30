@@ -24,6 +24,10 @@ ModelTypeSyncBridge::~ModelTypeSyncBridge() {}
 void ModelTypeSyncBridge::OnSyncStarting(
     const DataTypeActivationRequest& request) {}
 
+bool ModelTypeSyncBridge::SupportsGetClientTag() const {
+  return true;
+}
+
 bool ModelTypeSyncBridge::SupportsGetStorageKey() const {
   return true;
 }
@@ -42,17 +46,24 @@ ConflictResolution ModelTypeSyncBridge::ResolveConflict(
   return ConflictResolution::UseRemote();
 }
 
-ModelTypeSyncBridge::StopSyncResponse ModelTypeSyncBridge::ApplyStopSyncChanges(
+void ModelTypeSyncBridge::ApplyStopSyncChanges(
     std::unique_ptr<MetadataChangeList> delete_metadata_change_list) {
   if (delete_metadata_change_list) {
     // Nothing to do if this fails, so just ignore the error it might return.
     ApplySyncChanges(std::move(delete_metadata_change_list),
                      EntityChangeList());
   }
-  return StopSyncResponse::kModelStillReadyToSync;
+}
+
+size_t ModelTypeSyncBridge::EstimateSyncOverheadMemoryUsage() const {
+  return 0U;
 }
 
 ModelTypeChangeProcessor* ModelTypeSyncBridge::change_processor() {
+  return change_processor_.get();
+}
+
+const ModelTypeChangeProcessor* ModelTypeSyncBridge::change_processor() const {
   return change_processor_.get();
 }
 

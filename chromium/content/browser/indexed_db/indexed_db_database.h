@@ -25,11 +25,12 @@
 #include "content/browser/indexed_db/indexed_db_callbacks.h"
 #include "content/browser/indexed_db/indexed_db_observer.h"
 #include "content/browser/indexed_db/indexed_db_pending_connection.h"
-#include "content/browser/indexed_db/indexed_db_transaction_coordinator.h"
 #include "content/browser/indexed_db/list_set.h"
+#include "content/browser/indexed_db/scopes/scopes_lock_manager.h"
 #include "content/common/content_export.h"
 #include "third_party/blink/public/common/indexeddb/indexeddb_key.h"
 #include "third_party/blink/public/common/indexeddb/web_idb_types.h"
+#include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom.h"
 
 namespace blink {
 class IndexedDBKeyPath;
@@ -66,7 +67,8 @@ class CONTENT_EXPORT IndexedDBDatabase
       scoped_refptr<IndexedDBBackingStore> backing_store,
       scoped_refptr<IndexedDBFactory> factory,
       std::unique_ptr<IndexedDBMetadataCoding> metadata_coding,
-      const Identifier& unique_identifier);
+      const Identifier& unique_identifier,
+      ScopesLockManager* lock_manager);
 
   const Identifier& identifier() const { return identifier_; }
   IndexedDBBackingStore* backing_store() { return backing_store_.get(); }
@@ -101,13 +103,9 @@ class CONTENT_EXPORT IndexedDBDatabase
                          int64_t object_store_id,
                          const base::string16& new_name);
 
-  // Returns a pointer to a newly created transaction. The object is owned
-  // by |transaction_coordinator_|.
-  IndexedDBTransaction* CreateTransaction(
-      int64_t transaction_id,
-      IndexedDBConnection* connection,
-      const std::vector<int64_t>& object_store_ids,
-      blink::WebIDBTransactionMode mode);
+  // TODO(dmurph): Remove this method and have transactions be directly
+  // scheduled using the lock manager.
+  void RegisterAndScheduleTransaction(IndexedDBTransaction* transaction);
   void Close(IndexedDBConnection* connection, bool forced);
   void ForceClose();
 
@@ -133,15 +131,14 @@ class CONTENT_EXPORT IndexedDBDatabase
                    int64_t index_id,
                    const base::string16& new_name);
 
-  IndexedDBTransactionCoordinator& transaction_coordinator() {
-    return transaction_coordinator_;
-  }
-  const IndexedDBTransactionCoordinator& transaction_coordinator() const {
-    return transaction_coordinator_;
+  ScopesLockManager* transaction_lock_manager() { return lock_manager_; }
+  const ScopesLockManager* transaction_lock_manager() const {
+    return lock_manager_;
   }
 
-  void TransactionCreated(IndexedDBTransaction* transaction);
-  void TransactionFinished(IndexedDBTransaction* transaction, bool committed);
+  void TransactionCreated();
+  void TransactionFinished(blink::mojom::IDBTransactionMode mode,
+                           bool committed);
 
   void AbortAllTransactionsForConnections();
 
@@ -152,7 +149,7 @@ class CONTENT_EXPORT IndexedDBDatabase
   // |value| can be null for delete and clear operations.
   void FilterObservation(IndexedDBTransaction*,
                          int64_t object_store_id,
-                         blink::WebIDBOperationType type,
+                         blink::mojom::IDBOperationType type,
                          const blink::IndexedDBKeyRange& key_range,
                          const IndexedDBValue* value);
   void SendObservations(
@@ -175,7 +172,7 @@ class CONTENT_EXPORT IndexedDBDatabase
            int64_t object_store_id,
            IndexedDBValue* value,
            std::unique_ptr<blink::IndexedDBKey> key,
-           blink::WebIDBPutMode mode,
+           blink::mojom::IDBPutMode mode,
            scoped_refptr<IndexedDBCallbacks> callbacks,
            const std::vector<blink::IndexedDBIndexKeys>& index_keys);
   void SetIndexKeys(IndexedDBTransaction* transaction,
@@ -189,9 +186,9 @@ class CONTENT_EXPORT IndexedDBDatabase
                   int64_t object_store_id,
                   int64_t index_id,
                   std::unique_ptr<blink::IndexedDBKeyRange> key_range,
-                  blink::WebIDBCursorDirection,
+                  blink::mojom::IDBCursorDirection,
                   bool key_only,
-                  blink::WebIDBTaskType task_type,
+                  blink::mojom::IDBTaskType task_type,
                   scoped_refptr<IndexedDBCallbacks> callbacks);
   void Count(IndexedDBTransaction* transaction,
              int64_t object_store_id,
@@ -202,6 +199,10 @@ class CONTENT_EXPORT IndexedDBDatabase
                    int64_t object_store_id,
                    std::unique_ptr<blink::IndexedDBKeyRange> key_range,
                    scoped_refptr<IndexedDBCallbacks> callbacks);
+  void GetKeyGeneratorCurrentNumber(
+      IndexedDBTransaction* transaction,
+      int64_t object_store_id,
+      scoped_refptr<IndexedDBCallbacks> callbacks);
   void Clear(IndexedDBTransaction* transaction,
              int64_t object_store_id,
              scoped_refptr<IndexedDBCallbacks> callbacks);
@@ -273,6 +274,10 @@ class CONTENT_EXPORT IndexedDBDatabase
       std::unique_ptr<blink::IndexedDBKeyRange> key_range,
       scoped_refptr<IndexedDBCallbacks> callbacks,
       IndexedDBTransaction* transaction);
+  leveldb::Status GetKeyGeneratorCurrentNumberOperation(
+      int64_t object_store_id,
+      scoped_refptr<IndexedDBCallbacks> callbacks,
+      IndexedDBTransaction* transaction);
   leveldb::Status ClearOperation(int64_t object_store_id,
                                  scoped_refptr<IndexedDBCallbacks> callbacks,
                                  IndexedDBTransaction* transaction);
@@ -285,6 +290,10 @@ class CONTENT_EXPORT IndexedDBDatabase
 
   IndexedDBFactory* factory() const { return factory_.get(); }
 
+  const list_set<IndexedDBConnection*>& connections() const {
+    return connections_;
+  }
+
  protected:
   friend class IndexedDBTransaction;
 
@@ -292,11 +301,19 @@ class CONTENT_EXPORT IndexedDBDatabase
                     scoped_refptr<IndexedDBBackingStore> backing_store,
                     scoped_refptr<IndexedDBFactory> factory,
                     std::unique_ptr<IndexedDBMetadataCoding> metadata_coding,
-                    const Identifier& unique_identifier);
+                    const Identifier& unique_identifier,
+                    ScopesLockManager* transaction_lock_manager);
   virtual ~IndexedDBDatabase();
 
   // May be overridden in tests.
   virtual size_t GetUsableMessageSizeInBytes() const;
+
+  static IndexedDBDatabaseError CreateError(uint16_t code,
+                                            const char* message,
+                                            IndexedDBTransaction* transaction);
+  static IndexedDBDatabaseError CreateError(uint16_t code,
+                                            const base::string16& message,
+                                            IndexedDBTransaction* transaction);
 
  private:
   friend class base::RefCounted<IndexedDBDatabase>;
@@ -343,7 +360,7 @@ class CONTENT_EXPORT IndexedDBDatabase
   scoped_refptr<IndexedDBFactory> factory_;
   std::unique_ptr<IndexedDBMetadataCoding> metadata_coding_;
 
-  IndexedDBTransactionCoordinator transaction_coordinator_;
+  ScopesLockManager* lock_manager_;
   int64_t transaction_count_ = 0;
 
   list_set<IndexedDBConnection*> connections_;

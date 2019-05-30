@@ -40,14 +40,13 @@
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/resource_request_blocked_reason.h"
 #include "third_party/blink/public/platform/task_type.h"
-#include "third_party/blink/public/platform/web_cors.h"
 #include "third_party/blink/public/platform/web_http_header_visitor.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_url_error.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/public/web/web_associated_url_loader_client.h"
-#include "third_party/blink/renderer/core/dom/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/loader/threadable_loader.h"
 #include "third_party/blink/renderer/core/loader/threadable_loader_client.h"
 #include "third_party/blink/renderer/platform/exported/wrapped_resource_request.h"
@@ -84,7 +83,7 @@ class HTTPRequestHeaderValidator : public WebHTTPHeaderVisitor {
 void HTTPRequestHeaderValidator::VisitHeader(const WebString& name,
                                              const WebString& value) {
   is_safe_ = is_safe_ && IsValidHTTPToken(name) &&
-             !CORS::IsForbiddenHeaderName(name) &&
+             !cors::IsForbiddenHeaderName(name) &&
              IsValidHTTPHeaderValue(value);
 }
 
@@ -95,23 +94,23 @@ void HTTPRequestHeaderValidator::VisitHeader(const WebString& name,
 // It forwards its ThreadableLoaderClient notifications to a
 // WebAssociatedURLLoaderClient.
 class WebAssociatedURLLoaderImpl::ClientAdapter final
-    : public ThreadableLoaderClient {
+    : public GarbageCollectedFinalized<ClientAdapter>,
+      public ThreadableLoaderClient {
+  USING_GARBAGE_COLLECTED_MIXIN(ClientAdapter);
+
  public:
-  static std::unique_ptr<ClientAdapter> Create(
-      WebAssociatedURLLoaderImpl*,
-      WebAssociatedURLLoaderClient*,
-      const WebAssociatedURLLoaderOptions&,
-      network::mojom::FetchRequestMode,
-      network::mojom::FetchCredentialsMode,
-      scoped_refptr<base::SingleThreadTaskRunner>);
+  ClientAdapter(WebAssociatedURLLoaderImpl*,
+                WebAssociatedURLLoaderClient*,
+                const WebAssociatedURLLoaderOptions&,
+                network::mojom::FetchRequestMode,
+                network::mojom::FetchCredentialsMode,
+                scoped_refptr<base::SingleThreadTaskRunner>);
 
   // ThreadableLoaderClient
-  void DidSendData(unsigned long long /*bytesSent*/,
-                   unsigned long long /*totalBytesToBeSent*/) override;
-  void DidReceiveResponse(unsigned long,
-                          const ResourceResponse&,
-                          std::unique_ptr<WebDataConsumerHandle>) override;
-  void DidDownloadData(int /*dataLength*/) override;
+  void DidSendData(uint64_t /*bytesSent*/,
+                   uint64_t /*totalBytesToBeSent*/) override;
+  void DidReceiveResponse(unsigned long, const ResourceResponse&) override;
+  void DidDownloadData(uint64_t /*dataLength*/) override;
   void DidReceiveData(const char*, unsigned /*dataLength*/) override;
   void DidReceiveCachedMetadata(const char*, int /*dataLength*/) override;
   void DidFinishLoading(unsigned long /*identifier*/) override;
@@ -141,13 +140,6 @@ class WebAssociatedURLLoaderImpl::ClientAdapter final
   }
 
  private:
-  ClientAdapter(WebAssociatedURLLoaderImpl*,
-                WebAssociatedURLLoaderClient*,
-                const WebAssociatedURLLoaderOptions&,
-                network::mojom::FetchRequestMode,
-                network::mojom::FetchCredentialsMode,
-                scoped_refptr<base::SingleThreadTaskRunner>);
-
   void NotifyError(TimerBase*);
 
   WebAssociatedURLLoaderImpl* loader_;
@@ -163,19 +155,6 @@ class WebAssociatedURLLoaderImpl::ClientAdapter final
 
   DISALLOW_COPY_AND_ASSIGN(ClientAdapter);
 };
-
-std::unique_ptr<WebAssociatedURLLoaderImpl::ClientAdapter>
-WebAssociatedURLLoaderImpl::ClientAdapter::Create(
-    WebAssociatedURLLoaderImpl* loader,
-    WebAssociatedURLLoaderClient* client,
-    const WebAssociatedURLLoaderOptions& options,
-    network::mojom::FetchRequestMode fetch_request_mode,
-    network::mojom::FetchCredentialsMode credentials_mode,
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
-  return base::WrapUnique(new ClientAdapter(loader, client, options,
-                                            fetch_request_mode,
-                                            credentials_mode, task_runner));
-}
 
 WebAssociatedURLLoaderImpl::ClientAdapter::ClientAdapter(
     WebAssociatedURLLoaderImpl* loader,
@@ -209,8 +188,8 @@ bool WebAssociatedURLLoaderImpl::ClientAdapter::WillFollowRedirect(
 }
 
 void WebAssociatedURLLoaderImpl::ClientAdapter::DidSendData(
-    unsigned long long bytes_sent,
-    unsigned long long total_bytes_to_be_sent) {
+    uint64_t bytes_sent,
+    uint64_t total_bytes_to_be_sent) {
   if (!client_)
     return;
 
@@ -219,28 +198,25 @@ void WebAssociatedURLLoaderImpl::ClientAdapter::DidSendData(
 
 void WebAssociatedURLLoaderImpl::ClientAdapter::DidReceiveResponse(
     unsigned long,
-    const ResourceResponse& response,
-    std::unique_ptr<WebDataConsumerHandle> handle) {
-  ALLOW_UNUSED_LOCAL(handle);
-  DCHECK(!handle);
+    const ResourceResponse& response) {
   if (!client_)
     return;
 
   if (options_.expose_all_response_headers ||
-      (fetch_request_mode_ != network::mojom::FetchRequestMode::kCORS &&
+      (fetch_request_mode_ != network::mojom::FetchRequestMode::kCors &&
        fetch_request_mode_ !=
-           network::mojom::FetchRequestMode::kCORSWithForcedPreflight)) {
+           network::mojom::FetchRequestMode::kCorsWithForcedPreflight)) {
     // Use the original ResourceResponse.
     client_->DidReceiveResponse(WrappedResourceResponse(response));
     return;
   }
 
-  WebHTTPHeaderSet exposed_headers = WebCORS::ExtractCorsExposedHeaderNamesList(
-      credentials_mode_, WrappedResourceResponse(response));
+  WebHTTPHeaderSet exposed_headers =
+      cors::ExtractCorsExposedHeaderNamesList(credentials_mode_, response);
   WebHTTPHeaderSet blocked_headers;
   for (const auto& header : response.HttpHeaderFields()) {
     if (FetchUtils::IsForbiddenResponseHeaderName(header.key) ||
-        (!WebCORS::IsOnAccessControlResponseHeaderWhitelist(header.key) &&
+        (!cors::IsOnAccessControlResponseHeaderWhitelist(header.key) &&
          exposed_headers.find(header.key.Ascii().data()) ==
              exposed_headers.end()))
       blocked_headers.insert(header.key.Ascii().data());
@@ -260,7 +236,7 @@ void WebAssociatedURLLoaderImpl::ClientAdapter::DidReceiveResponse(
 }
 
 void WebAssociatedURLLoaderImpl::ClientAdapter::DidDownloadData(
-    int data_length) {
+    uint64_t data_length) {
   if (!client_)
     return;
 
@@ -365,7 +341,7 @@ WebAssociatedURLLoaderImpl::WebAssociatedURLLoaderImpl(
     const WebAssociatedURLLoaderOptions& options)
     : client_(nullptr),
       options_(options),
-      observer_(new Observer(this, document)) {}
+      observer_(MakeGarbageCollected<Observer>(this, document)) {}
 
 WebAssociatedURLLoaderImpl::~WebAssociatedURLLoaderImpl() {
   Cancel();
@@ -393,18 +369,21 @@ void WebAssociatedURLLoaderImpl::LoadAsynchronously(
       allow_load = validator.IsSafe();
     }
   }
-  new_request.ToMutableResourceRequest().SetCORSPreflightPolicy(
+  new_request.ToMutableResourceRequest().SetCorsPreflightPolicy(
       options_.preflight_policy);
 
   scoped_refptr<base::SingleThreadTaskRunner> task_runner;
+  // |observer_| can be null if Cancel, DocumentDestroyed or
+  // ClientAdapterDone gets called between creating the loader and
+  // calling LoadAsynchronously.
   if (observer_) {
-    task_runner = ToDocument(observer_->LifecycleContext())
+    task_runner = To<Document>(observer_->LifecycleContext())
                       ->GetTaskRunner(TaskType::kInternalLoading);
   } else {
-    task_runner = Platform::Current()->CurrentThread()->GetTaskRunner();
+    task_runner = Thread::Current()->GetTaskRunner();
   }
   client_ = client;
-  client_adapter_ = ClientAdapter::Create(
+  client_adapter_ = MakeGarbageCollected<ClientAdapter>(
       this, client, options_, request.GetFetchRequestMode(),
       request.GetFetchCredentialsMode(), std::move(task_runner));
 
@@ -414,35 +393,38 @@ void WebAssociatedURLLoaderImpl::LoadAsynchronously(
 
     if (options_.grant_universal_access) {
       const auto mode = new_request.GetFetchRequestMode();
-      DCHECK(mode == network::mojom::FetchRequestMode::kNoCORS ||
+      DCHECK(mode == network::mojom::FetchRequestMode::kNoCors ||
              mode == network::mojom::FetchRequestMode::kNavigate);
-      scoped_refptr<SecurityOrigin> origin =
-          SecurityOrigin::CreateUniqueOpaque();
+      // Some callers, notablly flash, with |grant_universal_access| want to
+      // have an origin matching with referrer.
+      KURL referrer(request.HttpHeaderField(http_names::kReferer));
+      scoped_refptr<SecurityOrigin> origin = SecurityOrigin::Create(referrer);
       origin->GrantUniversalAccess();
-      resource_loader_options.security_origin = std::move(origin);
+      new_request.ToMutableResourceRequest().SetRequestorOrigin(origin);
     }
 
     const ResourceRequest& webcore_request = new_request.ToResourceRequest();
-    WebURLRequest::RequestContext context = webcore_request.GetRequestContext();
-    if (context == WebURLRequest::kRequestContextUnspecified) {
+    mojom::RequestContextType context = webcore_request.GetRequestContext();
+    if (context == mojom::RequestContextType::UNSPECIFIED) {
       // TODO(yoav): We load URLs without setting a TargetType (and therefore a
       // request context) in several places in content/
       // (P2PPortAllocatorSession::AllocateLegacyRelaySession, for example).
       // Remove this once those places are patched up.
-      new_request.SetRequestContext(WebURLRequest::kRequestContextInternal);
-    } else if (context == WebURLRequest::kRequestContextVideo) {
+      new_request.SetRequestContext(mojom::RequestContextType::INTERNAL);
+    } else if (context == mojom::RequestContextType::VIDEO) {
       resource_loader_options.initiator_info.name =
-          FetchInitiatorTypeNames::video;
-    } else if (context == WebURLRequest::kRequestContextAudio) {
+          fetch_initiator_type_names::kVideo;
+    } else if (context == mojom::RequestContextType::AUDIO) {
       resource_loader_options.initiator_info.name =
-          FetchInitiatorTypeNames::audio;
+          fetch_initiator_type_names::kAudio;
     }
 
-    Document* document = ToDocument(observer_->LifecycleContext());
-    DCHECK(document);
-    loader_ = new ThreadableLoader(*document, client_adapter_.get(),
-                                   resource_loader_options);
-    loader_->Start(webcore_request);
+    if (observer_) {
+      Document& document = To<Document>(*observer_->LifecycleContext());
+      loader_ = MakeGarbageCollected<ThreadableLoader>(
+          document, client_adapter_, resource_loader_options);
+      loader_->Start(webcore_request);
+    }
   }
 
   if (!loader_) {
@@ -474,7 +456,7 @@ void WebAssociatedURLLoaderImpl::CancelLoader() {
     loader_->Cancel();
     loader_ = nullptr;
   }
-  client_adapter_.reset();
+  client_adapter_ = nullptr;
 }
 
 void WebAssociatedURLLoaderImpl::SetDefersLoading(bool defers_loading) {

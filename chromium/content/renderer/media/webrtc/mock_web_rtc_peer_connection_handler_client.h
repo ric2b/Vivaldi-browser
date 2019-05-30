@@ -5,7 +5,9 @@
 #ifndef CONTENT_RENDERER_MEDIA_WEBRTC_MOCK_WEB_RTC_PEER_CONNECTION_HANDLER_CLIENT_H_
 #define CONTENT_RENDERER_MEDIA_WEBRTC_MOCK_WEB_RTC_PEER_CONNECTION_HANDLER_CLIENT_H_
 
+#include <memory>
 #include <string>
+#include <vector>
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
@@ -30,8 +32,10 @@ class MockWebRTCPeerConnectionHandlerClient
                void(scoped_refptr<blink::WebRTCICECandidate> candidate));
   MOCK_METHOD1(DidChangeSignalingState,
                void(webrtc::PeerConnectionInterface::SignalingState state));
-  MOCK_METHOD1(DidChangeICEGatheringState, void(ICEGatheringState state));
-  MOCK_METHOD1(DidChangeICEConnectionState, void(ICEConnectionState state));
+  MOCK_METHOD1(DidChangeIceGatheringState,
+               void(webrtc::PeerConnectionInterface::IceGatheringState state));
+  MOCK_METHOD1(DidChangeIceConnectionState,
+               void(webrtc::PeerConnectionInterface::IceConnectionState state));
   void DidAddReceiverPlanB(
       std::unique_ptr<blink::WebRTCRtpReceiver> web_rtp_receiver) override {
     DidAddReceiverPlanBForMock(&web_rtp_receiver);
@@ -46,7 +50,8 @@ class MockWebRTCPeerConnectionHandlerClient
       bool is_remote_description) override {
     DidModifyTransceiversForMock(&web_transceivers, is_remote_description);
   }
-  MOCK_METHOD1(DidAddRemoteDataChannel, void(blink::WebRTCDataChannelHandler*));
+  MOCK_METHOD1(DidAddRemoteDataChannel,
+               void(scoped_refptr<webrtc::DataChannelInterface>));
   MOCK_METHOD1(DidNoteInterestingUsage, void(int));
   MOCK_METHOD0(ReleasePeerConnectionHandler, void());
 

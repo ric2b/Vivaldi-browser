@@ -4,6 +4,7 @@
 
 #include "ios/chrome/browser/translate/translate_service_ios.h"
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "components/translate/core/browser/translate_download_manager.h"
 #include "components/translate/core/browser/translate_manager.h"
@@ -19,8 +20,10 @@ TranslateServiceIOS* g_translate_service = nullptr;
 TranslateServiceIOS::TranslateServiceIOS()
     : resource_request_allowed_notifier_(
           GetApplicationContext()->GetLocalState(),
-          nullptr) {
-  resource_request_allowed_notifier_.Init(this);
+          nullptr,
+          base::BindOnce(&ApplicationContext::GetNetworkConnectionTracker,
+                         base::Unretained(GetApplicationContext()))) {
+  resource_request_allowed_notifier_.Init(this, true /* leaky */);
 }
 
 TranslateServiceIOS::~TranslateServiceIOS() {

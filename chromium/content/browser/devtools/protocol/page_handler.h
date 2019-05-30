@@ -58,7 +58,7 @@ class PageHandler : public DevToolsDomainHandler,
                     public Page::Backend,
                     public RenderWidgetHostObserver {
  public:
-  explicit PageHandler(EmulationHandler* handler);
+  PageHandler(EmulationHandler* handler, bool allow_set_download_behavior);
   ~PageHandler() override;
 
   static std::vector<PageHandler*> EnabledForWebContents(
@@ -86,6 +86,7 @@ class PageHandler : public DevToolsDomainHandler,
                                  JavaScriptDialogCallback callback);
   void DidCloseJavaScriptDialog(bool success, const base::string16& user_input);
   void NavigationReset(NavigationRequest* navigation_request);
+  WebContentsImpl* GetWebContents();
 
   Response Enable() override;
   Response Disable() override;
@@ -107,6 +108,7 @@ class PageHandler : public DevToolsDomainHandler,
       int* current_index,
       std::unique_ptr<NavigationEntries>* entries) override;
   Response NavigateToHistoryEntry(int entry_id) override;
+  Response ResetNavigationHistory() override;
 
   void CaptureScreenshot(
       Maybe<std::string> format,
@@ -114,6 +116,9 @@ class PageHandler : public DevToolsDomainHandler,
       Maybe<Page::Viewport> clip,
       Maybe<bool> from_surface,
       std::unique_ptr<CaptureScreenshotCallback> callback) override;
+  void CaptureSnapshot(
+      Maybe<std::string> format,
+      std::unique_ptr<CaptureSnapshotCallback> callback) override;
   void PrintToPDF(Maybe<bool> landscape,
                   Maybe<bool> display_header_footer,
                   Maybe<bool> print_background,
@@ -141,8 +146,6 @@ class PageHandler : public DevToolsDomainHandler,
   Response HandleJavaScriptDialog(bool accept,
                                   Maybe<std::string> prompt_text) override;
 
-  Response RequestAppBanner() override;
-
   Response BringToFront() override;
 
   Response SetDownloadBehavior(const std::string& behavior,
@@ -156,7 +159,6 @@ class PageHandler : public DevToolsDomainHandler,
  private:
   enum EncodingFormat { PNG, JPEG };
 
-  WebContentsImpl* GetWebContents();
   void NotifyScreencastVisibility(bool visible);
   void InnerSwapCompositorFrame();
   void OnFrameFromVideoConsumer(scoped_refptr<media::VideoFrame> frame);
@@ -165,7 +167,7 @@ class PageHandler : public DevToolsDomainHandler,
       const SkBitmap& bitmap);
   void ScreencastFrameEncoded(
       std::unique_ptr<Page::ScreencastFrameMetadata> metadata,
-      const std::string& data);
+      const protocol::Binary& data);
 
   void ScreenshotCaptured(
       std::unique_ptr<CaptureScreenshotCallback> callback,
@@ -212,12 +214,14 @@ class PageHandler : public DevToolsDomainHandler,
 
   RenderFrameHostImpl* host_;
   EmulationHandler* emulation_handler_;
+  bool allow_set_download_behavior_;
   std::unique_ptr<Page::Frontend> frontend_;
   ScopedObserver<RenderWidgetHost, RenderWidgetHostObserver> observer_;
   JavaScriptDialogCallback pending_dialog_;
   scoped_refptr<DevToolsDownloadManagerDelegate> download_manager_delegate_;
   base::flat_map<base::UnguessableToken, std::unique_ptr<NavigateCallback>>
       navigate_callbacks_;
+
   base::WeakPtrFactory<PageHandler> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(PageHandler);

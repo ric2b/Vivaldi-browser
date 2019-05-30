@@ -25,6 +25,8 @@
 
 #include "third_party/blink/renderer/core/css/css_font_face_src_value.h"
 
+#include "base/feature_list.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/renderer/core/css/css_markup.h"
 #include "third_party/blink/renderer/core/css/style_sheet_contents.h"
@@ -32,9 +34,9 @@
 #include "third_party/blink/renderer/core/dom/node.h"
 #include "third_party/blink/renderer/core/loader/resource/font_resource.h"
 #include "third_party/blink/renderer/core/workers/worker_global_scope.h"
-#include "third_party/blink/renderer/platform/cross_origin_attribute_value.h"
 #include "third_party/blink/renderer/platform/fonts/font_cache.h"
 #include "third_party/blink/renderer/platform/fonts/font_custom_platform_data.h"
+#include "third_party/blink/renderer/platform/loader/fetch/cross_origin_attribute_value.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_initiator_type_names.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_parameters.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
@@ -86,10 +88,12 @@ FontResource& CSSFontFaceSrcValue::Fetch(ExecutionContext* context,
     resource_request.SetHTTPReferrer(SecurityPolicy::GenerateReferrer(
         referrer_.referrer_policy, resource_request.Url(), referrer_.referrer));
     ResourceLoaderOptions options;
-    options.initiator_info.name = FetchInitiatorTypeNames::css;
+    options.initiator_info.name = fetch_initiator_type_names::kCSS;
     FetchParameters params(resource_request, options);
-    if (RuntimeEnabledFeatures::WebFontsCacheAwareTimeoutAdaptationEnabled())
+    if (base::FeatureList::IsEnabled(
+            features::kWebFontsCacheAwareTimeoutAdaption)) {
       params.SetCacheAwareLoadingEnabled(kIsCacheAwareLoadingEnabled);
+    }
     params.SetContentSecurityCheck(should_check_content_security_policy_);
     const SecurityOrigin* security_origin = context->GetSecurityOrigin();
 
@@ -101,8 +105,8 @@ FontResource& CSSFontFaceSrcValue::Fetch(ExecutionContext* context,
     }
     // For Workers, Fetcher is lazily loaded, so we must ensure it's available
     // here.
-    if (context->IsWorkerGlobalScope()) {
-      ToWorkerGlobalScope(context)->EnsureFetcher();
+    if (auto* scope = DynamicTo<WorkerGlobalScope>(context)) {
+      scope->EnsureFetcher();
     }
     fetched_ = FontResourceHelper::Create(
         FontResource::Fetch(params, context->Fetcher(), client),
@@ -131,7 +135,7 @@ void CSSFontFaceSrcValue::RestoreCachedResourceIfNeeded(
             fetched_->GetResource()->Options().content_security_policy_option);
   context->Fetcher()->EmulateLoadStartedForInspector(
       fetched_->GetResource(), KURL(resource_url),
-      WebURLRequest::kRequestContextFont, FetchInitiatorTypeNames::css);
+      mojom::RequestContextType::FONT, fetch_initiator_type_names::kCSS);
 }
 
 bool CSSFontFaceSrcValue::Equals(const CSSFontFaceSrcValue& other) const {

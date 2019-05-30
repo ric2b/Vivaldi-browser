@@ -9,8 +9,8 @@
 #include "ash/app_list/app_list_metrics.h"
 #include "ash/app_list/app_list_view_delegate.h"
 #include "ash/app_list/model/search/search_result.h"
-#include "ash/public/cpp/app_list/app_list_constants.h"
 #include "ash/public/cpp/app_list/internal_app_id_constants.h"
+#include "ash/public/interfaces/app_list.mojom.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
@@ -38,23 +38,21 @@ void LogAppLaunch(int index_in_suggestion_chip_container) {
 
 SearchResultSuggestionChipView::SearchResultSuggestionChipView(
     AppListViewDelegate* view_delegate)
-    : view_delegate_(view_delegate), weak_ptr_factory_(this) {}
-
-SearchResultSuggestionChipView::~SearchResultSuggestionChipView() {
-  SetSearchResult(nullptr);
+    : view_delegate_(view_delegate), weak_ptr_factory_(this) {
+  // Make it unfocusable to avoid violating accessibiliy rule since its child
+  // view |suggestion_chip_view_| is focusable.
+  SetFocusBehavior(FocusBehavior::NEVER);
+  suggestion_chip_view_ = new SuggestionChipView(
+      app_list::SuggestionChipView::Params(), /* listener */ this);
+  AddChildView(suggestion_chip_view_);
 }
 
-void SearchResultSuggestionChipView::SetSearchResult(SearchResult* item) {
-  if (item == item_)
-    return;
+SearchResultSuggestionChipView::~SearchResultSuggestionChipView() {
+  ClearResult();
+}
 
-  // Replace old item with new item.
-  if (item_)
-    item_->RemoveObserver(this);
-  item_ = item;
-  if (item_)
-    item_->AddObserver(this);
-
+void SearchResultSuggestionChipView::OnResultChanged() {
+  SetVisible(!!result());
   UpdateSuggestionChipView();
 }
 
@@ -67,22 +65,22 @@ void SearchResultSuggestionChipView::OnMetadataChanged() {
   UpdateSuggestionChipView();
 }
 
-void SearchResultSuggestionChipView::OnResultDestroying() {
-  SetSearchResult(nullptr);
-}
-
 void SearchResultSuggestionChipView::ButtonPressed(views::Button* sender,
                                                    const ui::Event& event) {
-  DCHECK(item_);
+  DCHECK(result());
   LogAppLaunch(index_in_suggestion_chip_container_);
-  RecordSearchResultOpenSource(item_, view_delegate_->GetModel(),
+  RecordSearchResultOpenSource(result(), view_delegate_->GetModel(),
                                view_delegate_->GetSearchModel());
-  view_delegate_->OpenSearchResult(item_->id(), event.flags());
+  view_delegate_->OpenSearchResult(
+      result()->id(), event.flags(),
+      ash::mojom::AppListLaunchedFrom::kLaunchedFromSuggestionChip,
+      ash::mojom::AppListLaunchType::kAppSearchResult,
+      index_in_suggestion_chip_container_);
 }
 
 void SearchResultSuggestionChipView::Layout() {
   gfx::Rect rect(GetContentsBounds());
-  if (rect.IsEmpty() || !item_)
+  if (rect.IsEmpty() || !result())
     return;
 
   suggestion_chip_view_->SetBoundsRect(rect);
@@ -104,23 +102,25 @@ void SearchResultSuggestionChipView::GetAccessibleNodeData(
   node_data->role = ax::mojom::Role::kGenericContainer;
 }
 
-void SearchResultSuggestionChipView::UpdateSuggestionChipView() {
-  if (!item_)
-    return;
+bool SearchResultSuggestionChipView::OnKeyPressed(const ui::KeyEvent& event) {
+  if (event.key_code() == ui::VKEY_SPACE)
+    return false;
+  return Button::OnKeyPressed(event);
+}
 
-  if (suggestion_chip_view_) {
-    suggestion_chip_view_->SetIcon(item_->icon());
-    suggestion_chip_view_->SetText(item_->title());
-  } else {
-    app_list::SuggestionChipView::Params params;
-    params.text = item_->title();
-    params.icon = item_->icon();
-    suggestion_chip_view_ = new SuggestionChipView(params, /* listener */ this);
-    AddChildView(suggestion_chip_view_);
+void SearchResultSuggestionChipView::UpdateSuggestionChipView() {
+  if (!result()) {
+    suggestion_chip_view_->SetIcon(gfx::ImageSkia());
+    suggestion_chip_view_->SetText(base::string16());
+    suggestion_chip_view_->SetAccessibleName(base::string16());
+    return;
   }
 
-  base::string16 accessible_name = item_->title();
-  if (item_->id() == app_list::kInternalAppIdContinueReading) {
+  suggestion_chip_view_->SetIcon(result()->chip_icon());
+  suggestion_chip_view_->SetText(result()->title());
+
+  base::string16 accessible_name = result()->title();
+  if (result()->id() == app_list::kInternalAppIdContinueReading) {
     accessible_name = l10n_util::GetStringFUTF16(
         IDS_APP_LIST_CONTINUE_READING_ACCESSIBILE_NAME, accessible_name);
   }

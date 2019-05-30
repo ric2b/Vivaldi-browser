@@ -408,9 +408,9 @@ class BlockTabUnderIncognitoTest : public BlockTabUnderTest,
   DISALLOW_COPY_AND_ASSIGN(BlockTabUnderIncognitoTest);
 };
 
-INSTANTIATE_TEST_CASE_P(,
-                        BlockTabUnderIncognitoTest,
-                        testing::Values(true, false));
+INSTANTIATE_TEST_SUITE_P(,
+                         BlockTabUnderIncognitoTest,
+                         testing::Values(true, false));
 
 TEST_F(BlockTabUnderTest, SimpleTabUnder_IsBlocked) {
   EXPECT_TRUE(NavigateAndCommitWithoutGesture(GURL("https://first.test/")));
@@ -515,13 +515,7 @@ TEST_F(BlockTabUnderTest, TabUnderWithSubsequentGesture_IsNotBlocked) {
   // A subsequent navigation should be allowed, even if it is classified as a
   // suspicious redirect.
   EXPECT_TRUE(NavigateAndCommitWithoutGesture(GURL("https://example.test2/")));
-#if defined(OS_ANDROID)
   ExpectUIShown(false);
-#else
-  EXPECT_EQ(1u, FramebustBlockTabHelper::FromWebContents(web_contents())
-                    ->blocked_urls()
-                    .size());
-#endif
 }
 
 TEST_F(BlockTabUnderTest, MultipleRedirectAttempts_AreBlocked) {
@@ -614,7 +608,7 @@ TEST_P(BlockTabUnderIncognitoTest, DisableFeature_LogsDidTabUnder) {
 }
 
 TEST_F(BlockTabUnderTest, LogsUkm) {
-  using UkmEntry = ukm::builders::AbusiveExperienceHeuristic;
+  using UkmEntry = ukm::builders::AbusiveExperienceHeuristic_TabUnder;
 
   ukm::InitializeSourceUrlRecorderForWebContents(web_contents());
   ukm::TestAutoSetUkmRecorder test_ukm_recorder;

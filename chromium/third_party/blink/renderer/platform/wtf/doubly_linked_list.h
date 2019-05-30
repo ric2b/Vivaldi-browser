@@ -98,10 +98,6 @@ class DoublyLinkedList {
     explicit operator bool() const { return is_new_entry; }
   };
 
-  // This function should return -1 if the first argument is strictly
-  // less than the second, 0 if they are equal or 1 otherwise.
-  using CompareFunc = std::function<int(T*, T*)>;
-
   // The following two functions can be used to implement a sorted
   // version of the doubly linked list. It's guaranteed that the list
   // will be sorted by only using Insert(). However the caller is the
@@ -109,8 +105,14 @@ class DoublyLinkedList {
   // InsertAfter() is used. The main use case of the latter is to
   // cheaply insert several consecutive items without having to
   // traverse the whole list.
+  //
+  // CompareFunc should return -1 if the first argument is strictly
+  // less than the second, 0 if they are equal or 1 otherwise.
+  template <typename CompareFunc>
   AddResult Insert(std::unique_ptr<T>, const CompareFunc&);
   AddResult InsertAfter(std::unique_ptr<T> node, T* insertion_point);
+
+  template <typename CompareFunc>
   AddResult Insert(T*, const CompareFunc&);
   AddResult InsertAfter(T* node, T* insertion_point);
 
@@ -224,6 +226,7 @@ inline T* DoublyLinkedList<T, PointerType>::RemoveHead() {
 }
 
 template <typename T, typename PointerType>
+template <typename CompareFunc>
 inline typename DoublyLinkedList<T, PointerType>::AddResult
 DoublyLinkedList<T, PointerType>::Insert(std::unique_ptr<T> node,
                                          const CompareFunc& compare_func) {
@@ -235,6 +238,7 @@ DoublyLinkedList<T, PointerType>::Insert(std::unique_ptr<T> node,
 }
 
 template <typename T, typename PointerType>
+template <typename CompareFunc>
 inline typename DoublyLinkedList<T, PointerType>::AddResult
 DoublyLinkedList<T, PointerType>::Insert(T* node,
                                          const CompareFunc& compare_func) {

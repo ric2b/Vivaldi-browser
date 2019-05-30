@@ -7,11 +7,13 @@
 #include <utility>
 
 #include "base/run_loop.h"
+#include "build/build_config.h"
 #include "content/public/browser/context_factory.h"
 #include "content/shell/browser/shell_browser_context.h"
 #include "ui/base/ime/input_method_initializer.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/views/test/desktop_test_views_delegate.h"
+#include "ui/views_content_client/views_content_client.h"
 
 namespace ui {
 
@@ -24,6 +26,10 @@ ViewsContentClientMainParts::ViewsContentClientMainParts(
 ViewsContentClientMainParts::~ViewsContentClientMainParts() {
 }
 
+#if !defined(OS_MACOSX)
+void ViewsContentClientMainParts::PreCreateMainMessageLoop() {}
+#endif
+
 void ViewsContentClientMainParts::PreMainMessageLoopRun() {
   ui::MaterialDesignController::Initialize();
   ui::InitializeInputMethodForTesting();
@@ -35,6 +41,8 @@ void ViewsContentClientMainParts::PreMainMessageLoopRun() {
   test_views_delegate->set_context_factory_private(
       content::GetContextFactoryPrivate());
   views_delegate_ = std::move(test_views_delegate);
+  run_loop_ = std::make_unique<base::RunLoop>();
+  views_content_client()->set_quit_closure(run_loop_->QuitClosure());
 }
 
 void ViewsContentClientMainParts::PostMainMessageLoopRun() {
@@ -43,8 +51,7 @@ void ViewsContentClientMainParts::PostMainMessageLoopRun() {
 }
 
 bool ViewsContentClientMainParts::MainMessageLoopRun(int* result_code) {
-  base::RunLoop run_loop;
-  run_loop.Run();
+  run_loop_->Run();
   return true;
 }
 

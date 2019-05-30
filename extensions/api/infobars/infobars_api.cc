@@ -3,6 +3,7 @@
 #include "extensions/api/infobars/infobars_api.h"
 
 #include "chrome/browser/infobars/infobar_service.h"
+#include "chrome/browser/profiles/profile.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
 #include "components/infobars/core/infobar.h"
 #include "extensions/tools/vivaldi_tools.h"

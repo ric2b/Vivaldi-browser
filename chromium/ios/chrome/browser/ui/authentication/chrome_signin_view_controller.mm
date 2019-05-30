@@ -18,18 +18,17 @@
 #import "base/strings/sys_string_conversions.h"
 #include "base/timer/elapsed_timer.h"
 #include "components/consent_auditor/consent_auditor.h"
-#include "components/signin/core/browser/account_tracker_service.h"
-#include "components/signin/core/browser/profile_management_switches.h"
+#include "components/signin/core/browser/account_consistency_method.h"
 #include "components/signin/core/browser/signin_metrics.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/unified_consent/feature.h"
 #include "components/unified_consent/unified_consent_service.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
-#include "ios/chrome/browser/signin/account_tracker_service_factory.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/chrome_identity_service_observer_bridge.h"
+#include "ios/chrome/browser/signin/identity_manager_factory.h"
 #include "ios/chrome/browser/signin/signin_util.h"
 #include "ios/chrome/browser/sync/consent_auditor_factory.h"
 #import "ios/chrome/browser/sync/sync_setup_service.h"
@@ -42,10 +41,10 @@
 #include "ios/chrome/browser/ui/authentication/unified_consent/unified_consent_coordinator.h"
 #import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
-#import "ios/chrome/browser/ui/rtl_geometry.h"
-#import "ios/chrome/browser/ui/ui_util.h"
-#import "ios/chrome/browser/ui/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/util/label_link_controller.h"
+#import "ios/chrome/browser/ui/util/rtl_geometry.h"
+#import "ios/chrome/browser/ui/util/ui_util.h"
+#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #include "ios/chrome/browser/unified_consent/unified_consent_service_factory.h"
 #include "ios/chrome/common/string_util.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
@@ -68,11 +67,6 @@ namespace {
 
 // Default animation duration.
 const CGFloat kAnimationDuration = 0.5f;
-
-enum LayoutType {
-  LAYOUT_REGULAR,
-  LAYOUT_COMPACT,
-};
 
 // Minimum duration of the pending state in milliseconds.
 const int64_t kMinimunPendingStateDurationMs = 300;
@@ -258,6 +252,13 @@ enum AuthenticationState {
 
 - (void)acceptSignInAndShowAccountsSettings:(BOOL)showAccountsSettings {
   signin_metrics::LogSigninAccessPointCompleted(_accessPoint, _promoAction);
+  if (showAccountsSettings) {
+    base::RecordAction(
+        base::UserMetricsAction("Signin_Signin_WithAdvancedSyncSettings"));
+  } else {
+    base::RecordAction(
+        base::UserMetricsAction("Signin_Signin_WithDefaultSyncSettings"));
+  }
   std::vector<int> consent_text_ids;
   int openSettingsStringId = -1;
   if (_unifiedConsentEnabled) {
@@ -275,8 +276,8 @@ enum AuthenticationState {
                                     ? openSettingsStringId
                                     : [self acceptSigninButtonStringId];
   std::string account_id =
-      ios::AccountTrackerServiceFactory::GetForBrowserState(_browserState)
-          ->PickAccountIdForAccount(
+      IdentityManagerFactory::GetForBrowserState(_browserState)
+          ->LegacyPickAccountIdForAccount(
               base::SysNSStringToUTF8([_selectedIdentity gaiaID]),
               base::SysNSStringToUTF8([_selectedIdentity userEmail]));
 
@@ -294,22 +295,34 @@ enum AuthenticationState {
     _didFinishSignIn = YES;
     [_delegate didAcceptSignIn:self showAccountsSettings:showAccountsSettings];
   }
+  _unifiedConsentCoordinator.delegate = nil;
+  _unifiedConsentCoordinator = nil;
+}
+
+// Starts the sync engine only if the user tapped on "YES, I'm in", and closes
+// the sign-in view.
+- (void)signinCompletedWithUnity {
+  DCHECK(_didSignIn);
+  DCHECK(_unifiedConsentEnabled);
+  // The consent has to be given as soon as the user is signed in. Even when
+  // they open the settings through the link.
+  unified_consent::UnifiedConsentService* unifiedConsentService =
+      UnifiedConsentServiceFactory::GetForBrowserState(_browserState);
+  // |unifiedConsentService| may be null in unit tests.
+  if (unifiedConsentService)
+    unifiedConsentService->SetUrlKeyedAnonymizedDataCollectionEnabled(true);
+  if (!_unifiedConsentCoordinator.settingsLinkWasTapped) {
+    SyncSetupServiceFactory::GetForBrowserState(_browserState)->CommitChanges();
+  }
+  [self acceptSignInAndShowAccountsSettings:_unifiedConsentCoordinator
+                                                .settingsLinkWasTapped];
 }
 
 - (void)acceptSignInAndCommitSyncChanges {
   DCHECK(_didSignIn);
-  if (_unifiedConsentEnabled) {
-    // The consent has to be given as soon as the user is signed in. Even when
-    // they open the settings through the link.
-    unified_consent::UnifiedConsentService* unifiedConsentService =
-        UnifiedConsentServiceFactory::GetForBrowserState(_browserState);
-    // |unifiedConsentService| may be null in unit tests.
-    if (unifiedConsentService)
-      unifiedConsentService->SetUnifiedConsentGiven(true);
-  }
+  DCHECK(!_unifiedConsentEnabled);
   SyncSetupServiceFactory::GetForBrowserState(_browserState)->CommitChanges();
-  [self acceptSignInAndShowAccountsSettings:_unifiedConsentCoordinator
-                                                .settingsLinkWasTapped];
+  [self acceptSignInAndShowAccountsSettings:NO];
 }
 
 - (void)setPrimaryButtonStyling:(MDCButton*)button {
@@ -379,6 +392,38 @@ enum AuthenticationState {
   [_embeddedView removeFromSuperview];
   [viewController removeFromParentViewController];
   _embeddedView = nil;
+}
+
+- (void)updateLayout {
+  AuthenticationViewConstants constants;
+  if ([self.traitCollection horizontalSizeClass] ==
+      UIUserInterfaceSizeClassRegular) {
+    constants = kRegularConstants;
+  } else {
+    constants = kCompactConstants;
+  }
+
+  [self layoutButtons:constants];
+
+  CGSize viewSize = self.view.bounds.size;
+  CGFloat collectionViewHeight =
+      _primaryButton.frame.origin.y - constants.ButtonTopPadding;
+  CGRect collectionViewFrame =
+      CGRectMake(0, 0, viewSize.width, collectionViewHeight);
+  [_embeddedView setFrame:collectionViewFrame];
+
+  // Layout the gradient view right above the buttons.
+  CGFloat gradientOriginY = _primaryButton.frame.origin.y -
+                            constants.ButtonTopPadding -
+                            constants.GradientHeight;
+  [_gradientView setFrame:CGRectMake(0, gradientOriginY, viewSize.width,
+                                     constants.GradientHeight)];
+  [_gradientLayer setFrame:[_gradientView bounds]];
+
+  // Layout the activity indicator in the center of the view.
+  CGRect bounds = self.view.bounds;
+  [_activityIndicator
+      setCenter:CGPointMake(CGRectGetMidX(bounds), CGRectGetMidY(bounds))];
 }
 
 #pragma mark - Accessibility
@@ -508,7 +553,7 @@ enum AuthenticationState {
     _didSignIn = YES;
     [_delegate didSignIn:self];
     if (_unifiedConsentEnabled) {
-      [self acceptSignInAndCommitSyncChanges];
+      [self signinCompletedWithUnity];
     } else {
       [self changeToState:IDENTITY_SELECTED_STATE];
     }
@@ -627,13 +672,19 @@ enum AuthenticationState {
 - (void)enterIdentityPickerState {
   // Add the account selector view controller.
   if (_unifiedConsentEnabled) {
-    _unifiedConsentCoordinator = [[UnifiedConsentCoordinator alloc] init];
-    _unifiedConsentCoordinator.interactable = YES;
-    _unifiedConsentCoordinator.delegate = self;
-    if (_selectedIdentity)
-      _unifiedConsentCoordinator.selectedIdentity = _selectedIdentity;
-    [_unifiedConsentCoordinator start];
-    [self showEmbeddedViewController:_unifiedConsentCoordinator.viewController];
+    if (!_unifiedConsentCoordinator) {
+      // The user can refuse to sign-in into a managed account, so the state
+      // returns to "IdentityPicker". In that case, there is no need to create a
+      // new UnifiedConsentCoordinator. The current one should be used.
+      _unifiedConsentCoordinator = [[UnifiedConsentCoordinator alloc] init];
+      _unifiedConsentCoordinator.delegate = self;
+      if (_selectedIdentity)
+        _unifiedConsentCoordinator.selectedIdentity = _selectedIdentity;
+      [_unifiedConsentCoordinator start];
+      [self
+          showEmbeddedViewController:_unifiedConsentCoordinator.viewController];
+    }
+    DCHECK_EQ(_embeddedView, _unifiedConsentCoordinator.viewController.view);
   } else {
     // Reset the selected identity.
     [self setSelectedIdentity:nil];
@@ -883,6 +934,11 @@ enum AuthenticationState {
   }
 }
 
+- (void)viewSafeAreaInsetsDidChange {
+  [super viewSafeAreaInsetsDidChange];
+  [self updateLayout];
+}
+
 #pragma mark - Events
 
 - (void)onPrimaryButtonPressed:(id)sender {
@@ -942,6 +998,9 @@ enum AuthenticationState {
       return;
     case IDENTITY_PICKER_STATE:
       if (!_didFinishSignIn) {
+        if (_unifiedConsentEnabled) {
+          base::RecordAction(base::UserMetricsAction("Signin_Undo_Signin"));
+        }
         _didFinishSignIn = YES;
         [_delegate didSkipSignIn:self];
       }
@@ -990,38 +1049,7 @@ enum AuthenticationState {
 
 - (void)viewDidLayoutSubviews {
   [super viewDidLayoutSubviews];
-
-  AuthenticationViewConstants constants;
-  if ([self.traitCollection horizontalSizeClass] ==
-      UIUserInterfaceSizeClassRegular) {
-    constants = kRegularConstants;
-  } else {
-    constants = kCompactConstants;
-  }
-
-  [self layoutButtons:constants];
-
-  CGSize viewSize = self.view.bounds.size;
-  CGFloat collectionViewHeight =
-      viewSize.height - _primaryButton.frame.size.height -
-      constants.ButtonBottomPadding - constants.ButtonTopPadding;
-  CGRect collectionViewFrame =
-      CGRectMake(0, 0, viewSize.width, collectionViewHeight);
-  [_embeddedView setFrame:collectionViewFrame];
-
-  // Layout the gradient view right above the buttons.
-  CGFloat gradientOriginY = CGRectGetHeight(self.view.bounds) -
-                            constants.ButtonBottomPadding -
-                            constants.ButtonTopPadding -
-                            constants.ButtonHeight - constants.GradientHeight;
-  [_gradientView setFrame:CGRectMake(0, gradientOriginY, viewSize.width,
-                                     constants.GradientHeight)];
-  [_gradientLayer setFrame:[_gradientView bounds]];
-
-  // Layout the activity indicator in the center of the view.
-  CGRect bounds = self.view.bounds;
-  [_activityIndicator
-      setCenter:CGPointMake(CGRectGetMidX(bounds), CGRectGetMidY(bounds))];
+  [self updateLayout];
 }
 
 - (void)layoutButtons:(const AuthenticationViewConstants&)constants {
@@ -1040,6 +1068,7 @@ enum AuthenticationState {
   primaryButtonLayout.position.originY = CGRectGetHeight(self.view.bounds) -
                                          constants.ButtonBottomPadding -
                                          constants.ButtonHeight;
+  primaryButtonLayout.position.originY -= self.view.safeAreaInsets.bottom;
   primaryButtonLayout.size.height = constants.ButtonHeight;
   [_primaryButton setFrame:LayoutRectGetRect(primaryButtonLayout)];
 

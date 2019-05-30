@@ -62,7 +62,10 @@ void IPCDemuxerStream::Read(const ReadCB& read_cb) {
   if (!is_enabled_) {
     VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
             << " Read from disabled stream, returning EOS";
-    base::ResetAndReturn(&read_cb_).Run(kOk, DecoderBuffer::CreateEOSBuffer());
+    // Callback can be unset, see VB-51064.
+    if (!read_cb_.is_null()) {
+      base::ResetAndReturn(&read_cb_).Run(kOk, DecoderBuffer::CreateEOSBuffer());
+    }
     return;
   }
 
@@ -133,24 +136,26 @@ VideoDecoderConfig IPCDemuxerStream::video_decoder_config() {
   // decoded data.  To fit into existing media pipeline we hard code some
   // information, which is normally read from the data stream.
   VideoDecoderConfig video_config;
-  video_config.Initialize(VideoCodec::kCodecH264,
-                          VideoCodecProfile::H264PROFILE_MAIN,
-                          VideoPixelFormat::PIXEL_FORMAT_YV12,
-                          ColorSpace::COLOR_SPACE_UNSPECIFIED,
-                          platform_video_config.rotation,
-                          platform_video_config.coded_size,
-                          platform_video_config.visible_rect,
-                          platform_video_config.natural_size,
+  video_config.Initialize(
+      VideoCodec::kCodecH264, VideoCodecProfile::H264PROFILE_MAIN,
+      VideoPixelFormat::PIXEL_FORMAT_YV12,
+      VideoColorSpace(VideoColorSpace::PrimaryID::UNSPECIFIED,
+                      VideoColorSpace::TransferID::UNSPECIFIED,
+                      VideoColorSpace::MatrixID::UNSPECIFIED,
+                      gfx::ColorSpace::RangeID::DERIVED),
+      platform_video_config.rotation, platform_video_config.coded_size,
+      platform_video_config.visible_rect, platform_video_config.natural_size,
       std::vector<uint8_t>(
           reinterpret_cast<const uint8_t*>(&platform_video_config.planes),
-          reinterpret_cast<const uint8_t*>(&platform_video_config.planes)
-              + sizeof(platform_video_config.planes)),
+          reinterpret_cast<const uint8_t*>(&platform_video_config.planes) +
+              sizeof(platform_video_config.planes)),
       Unencrypted());
 
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
           << " VideoCodecProfile : " << GetProfileName(video_config.profile())
-          << " VideoPixelFormat : " << VideoPixelFormatToString(video_config.format())
-          << " ColorSpace : " << video_config.color_space();
+          << " VideoPixelFormat : "
+          << VideoPixelFormatToString(video_config.format());
+       // << " ColorSpace : " << video_config.color_space();
 
   return video_config;
 }

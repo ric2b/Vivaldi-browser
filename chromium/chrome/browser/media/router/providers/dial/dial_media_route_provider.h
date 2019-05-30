@@ -45,7 +45,8 @@ class DataDecoder;
 //    DialMediaRouteProvider will initiate the app launch on the device.
 // 4) Once the app is launched, the workflow is complete. The webpage will then
 //    communicate with the app on the device via its own mechanism.
-class DialMediaRouteProvider : public mojom::MediaRouteProvider {
+class DialMediaRouteProvider : public mojom::MediaRouteProvider,
+                               public MediaSinkServiceBase::Observer {
  public:
   // |request|: Request to bind to |this|.
   // |media_router|: Pointer to MediaRouter.
@@ -89,11 +90,9 @@ class DialMediaRouteProvider : public mojom::MediaRouteProvider {
   void TerminateRoute(const std::string& route_id,
                       TerminateRouteCallback callback) override;
   void SendRouteMessage(const std::string& media_route_id,
-                        const std::string& message,
-                        SendRouteMessageCallback callback) override;
+                        const std::string& message) override;
   void SendRouteBinaryMessage(const std::string& media_route_id,
-                              const std::vector<uint8_t>& data,
-                              SendRouteBinaryMessageCallback callback) override;
+                              const std::vector<uint8_t>& data) override;
   void StartObservingMediaSinks(const std::string& media_source) override;
   void StopObservingMediaSinks(const std::string& media_source) override;
   void StartObservingMediaRoutes(const std::string& media_source) override;
@@ -139,6 +138,9 @@ class DialMediaRouteProvider : public mojom::MediaRouteProvider {
 
     DISALLOW_COPY_AND_ASSIGN(MediaSinkQuery);
   };
+
+  // MediaSinkServiceBase::Observer:
+  void OnSinksDiscovered(const std::vector<MediaSinkInternal>& sinks) override;
 
   // Binds the message pipes |request| and |media_router| to |this|.
   void Init(mojom::MediaRouteProviderRequest request,

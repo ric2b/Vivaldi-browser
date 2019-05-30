@@ -11,7 +11,6 @@
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/common/draggable_region.h"
 #include "third_party/skia/include/core/SkRegion.h"
-#include "ui/gfx/path.h"
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/non_client_view.h"
@@ -385,10 +384,10 @@ void NativeAppWindowViews::UpdateShape(std::unique_ptr<ShapeRects> rects) {
   // Stub implementation. See also ChromeNativeAppWindowViews.
 }
 
-void NativeAppWindowViews::HandleKeyboardEvent(
+bool NativeAppWindowViews::HandleKeyboardEvent(
     const content::NativeWebKeyboardEvent& event) {
-  unhandled_keyboard_event_handler_.HandleKeyboardEvent(event,
-                                                        GetFocusManager());
+  return unhandled_keyboard_event_handler_.HandleKeyboardEvent(
+      event, GetFocusManager());
 }
 
 bool NativeAppWindowViews::IsFrameless() const {

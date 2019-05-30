@@ -38,10 +38,14 @@ void LoginPromptBrowserTestObserver::AddHandler(LoginHandler* handler) {
 }
 
 void LoginPromptBrowserTestObserver::RemoveHandler(LoginHandler* handler) {
-  std::list<LoginHandler*>::iterator i =
-      std::find(handlers_.begin(), handlers_.end(), handler);
+  auto i = std::find(handlers_.begin(), handlers_.end(), handler);
   // Cannot use ASSERT_NE, because gTest on Android confuses iterators with
   // containers.
+  //
+  // TODO(davidben): NOTIFICATION_AUTH_SUPPLIED and NOTIFICATION_AUTH_CANCELLED
+  // are not quite guaranteed to come after NOTIFICATION_AUTH_NEEDED. Either
+  // remove this assumption from the test class or fix things so this assumption
+  // holds.
   ASSERT_TRUE(i != handlers_.end());
   handlers_.erase(i);
 }

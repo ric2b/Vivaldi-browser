@@ -159,11 +159,11 @@ void PluginObserver::PluginCrashed(const base::FilePath& plugin_path,
   if (is_running) {
     infobar_text = l10n_util::GetStringFUTF16(IDS_PLUGIN_DISCONNECTED_PROMPT,
                                               plugin_name);
-    UMA_HISTOGRAM_COUNTS("Plugin.ShowDisconnectedInfobar", 1);
+    UMA_HISTOGRAM_COUNTS_1M("Plugin.ShowDisconnectedInfobar", 1);
   } else {
     infobar_text = l10n_util::GetStringFUTF16(IDS_PLUGIN_CRASHED_PROMPT,
                                               plugin_name);
-    UMA_HISTOGRAM_COUNTS("Plugin.ShowCrashedInfobar", 1);
+    UMA_HISTOGRAM_COUNTS_1M("Plugin.ShowCrashedInfobar", 1);
   }
 #else
   // Calling the POSIX version of base::GetTerminationStatus() may affect other
@@ -172,7 +172,7 @@ void PluginObserver::PluginCrashed(const base::FilePath& plugin_path,
   // disconnections from crashes.
   infobar_text = l10n_util::GetStringFUTF16(IDS_PLUGIN_CRASHED_PROMPT,
                                             plugin_name);
-  UMA_HISTOGRAM_COUNTS("Plugin.ShowCrashedInfobar", 1);
+  UMA_HISTOGRAM_COUNTS_1M("Plugin.ShowCrashedInfobar", 1);
 #endif
 
   ReloadPluginInfoBarDelegate::Create(
@@ -252,3 +252,5 @@ void PluginObserver::CouldNotLoadPlugin(const base::FilePath& plugin_path) {
   CreatePluginObserverInfoBar(InfoBarService::FromWebContents(web_contents()),
                               plugin_name);
 }
+
+WEB_CONTENTS_USER_DATA_KEY_IMPL(PluginObserver)

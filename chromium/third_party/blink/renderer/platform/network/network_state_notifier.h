@@ -28,6 +28,7 @@
 
 #include <memory>
 
+#include "base/macros.h"
 #include "base/optional.h"
 #include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
@@ -37,7 +38,6 @@
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/wtf/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
-#include "third_party/blink/renderer/platform/wtf/noncopyable.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/threading_primitives.h"
 #include "third_party/blink/renderer/platform/wtf/time.h"
@@ -46,7 +46,6 @@
 namespace blink {
 
 class PLATFORM_EXPORT NetworkStateNotifier {
-  WTF_MAKE_NONCOPYABLE(NetworkStateNotifier);
   USING_FAST_MALLOC(NetworkStateNotifier);
 
  public:
@@ -63,6 +62,12 @@ class PLATFORM_EXPORT NetworkStateNotifier {
     base::Optional<TimeDelta> transport_rtt;
     base::Optional<double> downlink_throughput_mbps;
     bool save_data = false;
+
+    // If set, then network quality corresponding to
+    // |network_quality_web_holdback| should be returned to the web consumers.
+    // Consumers within Blink should still receive the actual network quality
+    // values.
+    base::Optional<WebEffectiveConnectionType> network_quality_web_holdback;
   };
 
   class NetworkStateObserver {
@@ -212,11 +217,12 @@ class PLATFORM_EXPORT NetworkStateNotifier {
                          TimeDelta http_rtt,
                          TimeDelta transport_rtt,
                          int downlink_throughput_kbps);
+  void SetNetworkQualityWebHoldback(WebEffectiveConnectionType);
   void SetSaveDataEnabled(bool enabled);
 
   // When called, successive setWebConnectionType/setOnLine calls are stored,
   // and supplied overridden values are used instead until clearOverride() is
-  // called.  This is used for layout tests (see crbug.com/377736) and inspector
+  // called.  This is used for web tests (see crbug.com/377736) and inspector
   // emulation.
   // If |effective_type| is null, its value is computed using |http_rtt_msec|.
   // |max_bandwidth_mbps| is used to override both the |max_bandwidth_mbps| and
@@ -228,7 +234,7 @@ class PLATFORM_EXPORT NetworkStateNotifier {
       bool on_line,
       WebConnectionType,
       base::Optional<WebEffectiveConnectionType> effective_type,
-      unsigned long http_rtt_msec,
+      int64_t http_rtt_msec,
       double max_bandwidth_mbps);
   void SetSaveDataEnabledOverride(bool enabled);
   void ClearOverride();
@@ -263,6 +269,35 @@ class PLATFORM_EXPORT NetworkStateNotifier {
   // amount of noise for a given origin.
   uint8_t RandomizationSalt() const { return randomization_salt_; }
 
+  // Returns the overriding effective connection type that should be returned to
+  // the web consumers. If the returned value is null, then the actual network
+  // quality value should be returned to the web consumers.
+  // Consumers within Blink should not call this API.
+  base::Optional<WebEffectiveConnectionType> GetWebHoldbackEffectiveType()
+      const;
+
+  // Returns the overriding HTTP RTT estimate that should be returned to
+  // the web consumers. If the returned value is null, then the actual network
+  // quality value should be returned to the web consumers.
+  // Consumers within Blink should not call this API.
+  base::Optional<TimeDelta> GetWebHoldbackHttpRtt() const;
+
+  // Returns the overriding HTTP RTT estimate that should be returned to
+  // the web consumers. If the returned value is null, then the actual network
+  // quality value should be returned to the web consumers.
+  // Consumers within Blink should not call this API.
+  base::Optional<double> GetWebHoldbackDownlinkThroughputMbps() const;
+
+  // Sets the metrics of all the values while taking into account any network
+  // quality web holdbacks in place. The caller must guarantee that all pointers
+  // are non-null.
+  void GetMetricsWithWebHoldback(WebConnectionType* type,
+                                 double* downlink_max_mbps,
+                                 WebEffectiveConnectionType* effective_type,
+                                 base::Optional<TimeDelta>* http_rtt,
+                                 base::Optional<double>* downlink_mbps,
+                                 bool* save_data) const;
+
  private:
   friend class NetworkStateObserverHandle;
 
@@ -270,7 +305,7 @@ class PLATFORM_EXPORT NetworkStateNotifier {
     ObserverList() : iterating(false) {}
     bool iterating;
     Vector<NetworkStateObserver*> observers;
-    Vector<size_t> zeroed_observers;  // Indices in observers that are 0.
+    Vector<wtf_size_t> zeroed_observers;  // Indices in observers that are 0.
   };
 
   // This helper scope issues required notifications when mutating the state if
@@ -278,6 +313,8 @@ class PLATFORM_EXPORT NetworkStateNotifier {
   // thread.  Note that ScopedNotifier must be destroyed when not holding a lock
   // so that onLine notifications can be dispatched without a deadlock.
   class ScopedNotifier {
+    STACK_ALLOCATED();
+
    public:
     explicit ScopedNotifier(NetworkStateNotifier&);
     ~ScopedNotifier();
@@ -333,6 +370,8 @@ class PLATFORM_EXPORT NetworkStateNotifier {
   ObserverListMap on_line_state_observers_;
 
   const uint8_t randomization_salt_ = base::RandInt(1, 20);
+
+  DISALLOW_COPY_AND_ASSIGN(NetworkStateNotifier);
 };
 
 PLATFORM_EXPORT NetworkStateNotifier& GetNetworkStateNotifier();

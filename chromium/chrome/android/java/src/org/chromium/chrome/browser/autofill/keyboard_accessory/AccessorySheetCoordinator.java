@@ -4,17 +4,26 @@
 
 package org.chromium.chrome.browser.autofill.keyboard_accessory;
 
+import static org.chromium.chrome.browser.autofill.keyboard_accessory.AccessorySheetProperties.ACTIVE_TAB_INDEX;
+import static org.chromium.chrome.browser.autofill.keyboard_accessory.AccessorySheetProperties.HEIGHT;
+import static org.chromium.chrome.browser.autofill.keyboard_accessory.AccessorySheetProperties.NO_ACTIVE_TAB;
+import static org.chromium.chrome.browser.autofill.keyboard_accessory.AccessorySheetProperties.PAGE_CHANGE_LISTENER;
+import static org.chromium.chrome.browser.autofill.keyboard_accessory.AccessorySheetProperties.TABS;
+import static org.chromium.chrome.browser.autofill.keyboard_accessory.AccessorySheetProperties.TOP_SHADOW_VISIBLE;
+import static org.chromium.chrome.browser.autofill.keyboard_accessory.AccessorySheetProperties.VISIBLE;
+
 import android.support.annotation.Nullable;
 import android.support.annotation.Px;
 import android.support.v4.view.PagerAdapter;
 import android.support.v4.view.ViewPager;
-import android.view.ViewStub;
+import android.support.v7.widget.RecyclerView;
 
-import org.chromium.base.Supplier;
 import org.chromium.base.VisibleForTesting;
-import org.chromium.chrome.browser.modelutil.LazyViewBinderAdapter;
-import org.chromium.chrome.browser.modelutil.ListModelChangeProcessor;
-import org.chromium.chrome.browser.modelutil.PropertyModelChangeProcessor;
+import org.chromium.ui.ViewProvider;
+import org.chromium.ui.modelutil.LazyConstructionPropertyMcp;
+import org.chromium.ui.modelutil.ListModel;
+import org.chromium.ui.modelutil.ListModelChangeProcessor;
+import org.chromium.ui.modelutil.PropertyModel;
 
 /**
  * Creates and owns all elements which are part of the accessory sheet component.
@@ -24,54 +33,46 @@ import org.chromium.chrome.browser.modelutil.PropertyModelChangeProcessor;
  */
 public class AccessorySheetCoordinator {
     private final AccessorySheetMediator mMediator;
-    private final Supplier<ViewPager.OnPageChangeListener> mProvider;
 
     /**
      * Creates the sheet component by instantiating Model, View and Controller before wiring these
      * parts up.
-     * @param viewStub The view stub that can be inflated into the accessory layout.
-     * @param provider The provider of a {@link ViewPager.OnPageChangeListener} used for navigation.
+     * @param viewProvider A provider for the accessory layout.
      */
-    public AccessorySheetCoordinator(
-            ViewStub viewStub, Supplier<ViewPager.OnPageChangeListener> provider) {
-        mProvider = provider;
-        LazyViewBinderAdapter.StubHolder<ViewPager> stubHolder =
-                new LazyViewBinderAdapter.StubHolder<>(viewStub);
-        AccessorySheetModel model = new AccessorySheetModel();
-        model.addObserver(new PropertyModelChangeProcessor<>(model, stubHolder,
-                new LazyViewBinderAdapter<>(
-                        new AccessorySheetViewBinder(), this::onViewInflated)));
-        KeyboardAccessoryMetricsRecorder.registerMetricsObserver(model);
+    public AccessorySheetCoordinator(ViewProvider<AccessorySheetView> viewProvider) {
+        PropertyModel model = new PropertyModel
+                                      .Builder(TABS, ACTIVE_TAB_INDEX, VISIBLE, HEIGHT,
+                                              TOP_SHADOW_VISIBLE, PAGE_CHANGE_LISTENER)
+                                      .with(TABS, new ListModel<>())
+                                      .with(ACTIVE_TAB_INDEX, NO_ACTIVE_TAB)
+                                      .with(VISIBLE, false)
+                                      .with(TOP_SHADOW_VISIBLE, false)
+                                      .build();
+
+        LazyConstructionPropertyMcp.create(
+                model, VISIBLE, viewProvider, AccessorySheetViewBinder::bind);
+
+        KeyboardAccessoryMetricsRecorder.registerAccessorySheetModelMetricsObserver(model);
         mMediator = new AccessorySheetMediator(model);
     }
 
     /**
      * Creates the {@link PagerAdapter} for the newly inflated {@link ViewPager}.
      * The created adapter observes the given model for item changes and updates the view pager.
-     * @param model The model containing the list of tabs to be displayed.
+     * @param tabList The list of tabs to be displayed.
+     * @param viewPager The newly inflated {@link ViewPager}.
      * @return A fully initialized {@link PagerAdapter}.
      */
-    static PagerAdapter createTabViewAdapter(AccessorySheetModel model, ViewPager inflatedView) {
-        AccessoryPagerAdapter adapter = new AccessoryPagerAdapter(model.getTabList());
-        model.getTabList().addObserver(
-                new ListModelChangeProcessor<>(model.getTabList(), inflatedView, adapter));
+    static PagerAdapter createTabViewAdapter(
+            ListModel<KeyboardAccessoryData.Tab> tabList, ViewPager viewPager) {
+        AccessoryPagerAdapter adapter = new AccessoryPagerAdapter(tabList);
+        tabList.addObserver(new ListModelChangeProcessor<>(tabList, viewPager, adapter));
         return adapter;
-    }
-
-    /**
-     * Called by the {@link LazyViewBinderAdapter} as soon as the view is inflated so it can be
-     * initialized. This call happens before the {@link AccessorySheetViewBinder} is called for the
-     * first time.
-     */
-    private void onViewInflated(ViewPager view) {
-        view.addOnPageChangeListener(mProvider.get());
     }
 
     /**
      * Adds the contents of a given {@link KeyboardAccessoryData.Tab} to the accessory sheet. If it
      * is the first Tab, it automatically becomes the active Tab.
-     * Careful, if you want to show this tab as icon in the KeyboardAccessory, use the method
-     * {@link ManualFillingCoordinator#addTab(KeyboardAccessoryData.Tab)} instead.
      * @param tab The tab which should be added to the AccessorySheet.
      */
     void addTab(KeyboardAccessoryData.Tab tab) {
@@ -84,6 +85,10 @@ public class AccessorySheetCoordinator {
 
     void setTabs(KeyboardAccessoryData.Tab[] tabs) {
         mMediator.setTabs(tabs);
+    }
+
+    RecyclerView.OnScrollListener getScrollListener() {
+        return mMediator.getScrollListener();
     }
 
     /**
@@ -144,5 +149,9 @@ public class AccessorySheetCoordinator {
      */
     public void setActiveTab(int position) {
         mMediator.setActiveTab(position);
+    }
+
+    void setOnPageChangeListener(ViewPager.OnPageChangeListener onPageChangeListener) {
+        mMediator.setOnPageChangeListener(onPageChangeListener);
     }
 }

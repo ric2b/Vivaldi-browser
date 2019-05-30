@@ -21,7 +21,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "base/task/post_task.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
@@ -36,6 +36,7 @@
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/notification_service.h"
@@ -182,7 +183,7 @@ BootTimesRecorder::Stats BootTimesRecorder::Stats::DeserializeFromString(
   if (source.empty())
     return Stats();
 
-  std::unique_ptr<base::Value> value = base::JSONReader::Read(source);
+  std::unique_ptr<base::Value> value = base::JSONReader::ReadDeprecated(source);
   base::DictionaryValue* dictionary;
   if (!value || !value->GetAsDictionary(&dictionary)) {
     LOG(ERROR) << "BootTimesRecorder::Stats::DeserializeFromString(): not a "
@@ -219,8 +220,8 @@ bool BootTimesRecorder::Stats::UptimeDouble(double* result) const {
 void BootTimesRecorder::Stats::RecordStats(const std::string& name) const {
   base::PostTaskWithTraits(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
-      base::Bind(&BootTimesRecorder::Stats::RecordStatsAsync,
-                 base::Owned(new Stats(*this)), name));
+      base::BindOnce(&BootTimesRecorder::Stats::RecordStatsAsync,
+                     base::Owned(new Stats(*this)), name));
 }
 
 void BootTimesRecorder::Stats::RecordStatsWithCallback(
@@ -470,11 +471,9 @@ void BootTimesRecorder::AddMarker(std::vector<TimeMarker>* vector,
     // Add the marker on the UI thread.
     // Note that it's safe to use an unretained pointer to the vector because
     // BootTimesRecorder's lifetime exceeds that of the UI thread message loop.
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
-        base::Bind(&BootTimesRecorder::AddMarker,
-                   base::Unretained(vector),
-                   marker));
+    base::PostTaskWithTraits(FROM_HERE, {BrowserThread::UI},
+                             base::BindOnce(&BootTimesRecorder::AddMarker,
+                                            base::Unretained(vector), marker));
   }
 }
 

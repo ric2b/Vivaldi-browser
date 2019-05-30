@@ -18,20 +18,28 @@
 #include "content/public/common/simple_connection_filter.h"
 #include "content/public/test/test_service.h"
 #include "content/public/test/test_service.mojom.h"
+#include "content/public/utility/utility_thread.h"
 #include "content/shell/common/power_monitor_test_impl.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "mojo/public/cpp/system/buffer.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/test/echo/echo_service.h"
 
+#if defined(OS_CHROMEOS)
+// TODO(https://crbug.com/784179): Remove nogncheck.
+#include "services/ws/test_ws/test_window_service_factory.h"  // nogncheck
+#include "services/ws/test_ws/test_ws.mojom.h"                // nogncheck
+#include "ui/base/ui_base_features.h"
+#endif
+
 namespace content {
 
 namespace {
 
-class TestServiceImpl : public mojom::TestService {
+class TestUtilityServiceImpl : public mojom::TestService {
  public:
   static void Create(mojom::TestServiceRequest request) {
-    mojo::MakeStrongBinding(base::WrapUnique(new TestServiceImpl),
+    mojo::MakeStrongBinding(base::WrapUnique(new TestUtilityServiceImpl),
                             std::move(request));
   }
 
@@ -73,14 +81,10 @@ class TestServiceImpl : public mojom::TestService {
   }
 
  private:
-  explicit TestServiceImpl() {}
+  explicit TestUtilityServiceImpl() {}
 
-  DISALLOW_COPY_AND_ASSIGN(TestServiceImpl);
+  DISALLOW_COPY_AND_ASSIGN(TestUtilityServiceImpl);
 };
-
-std::unique_ptr<service_manager::Service> CreateTestService() {
-  return std::unique_ptr<service_manager::Service>(new TestService);
-}
 
 }  // namespace
 
@@ -98,7 +102,7 @@ ShellContentUtilityClient::~ShellContentUtilityClient() {
 
 void ShellContentUtilityClient::UtilityThreadStarted() {
   auto registry = std::make_unique<service_manager::BinderRegistry>();
-  registry->AddInterface(base::BindRepeating(&TestServiceImpl::Create),
+  registry->AddInterface(base::BindRepeating(&TestUtilityServiceImpl::Create),
                          base::ThreadTaskRunnerHandle::Get());
   registry->AddInterface<mojom::PowerMonitorTest>(
       base::BindRepeating(
@@ -111,18 +115,31 @@ void ShellContentUtilityClient::UtilityThreadStarted() {
           std::make_unique<SimpleConnectionFilter>(std::move(registry)));
 }
 
-void ShellContentUtilityClient::RegisterServices(StaticServiceMap* services) {
-  {
-    service_manager::EmbeddedServiceInfo info;
-    info.factory = base::BindRepeating(&CreateTestService);
-    services->insert(std::make_pair(kTestServiceUrl, info));
+bool ShellContentUtilityClient::HandleServiceRequest(
+    const std::string& service_name,
+    service_manager::mojom::ServiceRequest request) {
+  std::unique_ptr<service_manager::Service> service;
+  if (service_name == echo::mojom::kServiceName) {
+    service = std::make_unique<echo::EchoService>(std::move(request));
+  } else if (service_name == kTestServiceUrl) {
+    service = std::make_unique<TestService>(std::move(request));
+  }
+#if defined(OS_CHROMEOS)
+  else if (features::IsMultiProcessMash() &&
+           service_name == test_ws::mojom::kServiceName) {
+    service = ws::test::CreateOutOfProcessWindowService(std::move(request));
+  }
+#endif
+
+  if (service) {
+    service_manager::Service::RunAsyncUntilTermination(
+        std::move(service), base::BindOnce([] {
+          content::UtilityThread::Get()->ReleaseProcess();
+        }));
+    return true;
   }
 
-  {
-    service_manager::EmbeddedServiceInfo info;
-    info.factory = base::BindRepeating(&echo::CreateEchoService);
-    services->insert(std::make_pair(echo::mojom::kServiceName, info));
-  }
+  return false;
 }
 
 void ShellContentUtilityClient::RegisterNetworkBinders(

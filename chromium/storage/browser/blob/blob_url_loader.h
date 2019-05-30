@@ -5,13 +5,13 @@
 #ifndef STORAGE_BROWSER_BLOB_BLOB_URL_LOADER_H_
 #define STORAGE_BROWSER_BLOB_BLOB_URL_LOADER_H_
 
+#include "base/component_export.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "net/http/http_status_code.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
 #include "storage/browser/blob/mojo_blob_reader.h"
-#include "storage/browser/storage_browser_export.h"
 
 namespace storage {
 class BlobDataHandle;
@@ -20,8 +20,9 @@ class BlobDataHandle;
 // or after passing ownership to MojoBlobReader at the end of the Start
 // method) when it has finished responding.
 // Note: some of this code is duplicated from BlobURLRequestJob.
-class STORAGE_EXPORT BlobURLLoader : public storage::MojoBlobReader::Delegate,
-                                     public network::mojom::URLLoader {
+class COMPONENT_EXPORT(STORAGE_BROWSER) BlobURLLoader
+    : public storage::MojoBlobReader::Delegate,
+      public network::mojom::URLLoader {
  public:
   static void CreateAndStart(
       network::mojom::URLLoaderRequest url_loader_request,
@@ -39,10 +40,9 @@ class STORAGE_EXPORT BlobURLLoader : public storage::MojoBlobReader::Delegate,
   void Start(const network::ResourceRequest& request);
 
   // network::mojom::URLLoader implementation:
-  void FollowRedirect(const base::Optional<std::vector<std::string>>&
-                          to_be_removed_request_headers,
-                      const base::Optional<net::HttpRequestHeaders>&
-                          modified_request_headers) override;
+  void FollowRedirect(const std::vector<std::string>& removed_headers,
+                      const net::HttpRequestHeaders& modified_request_headers,
+                      const base::Optional<GURL>& new_url) override;
   void ProceedWithResponse() override {}
   void SetPriority(net::RequestPriority priority,
                    int32_t intra_priority_value) override {}
@@ -50,11 +50,9 @@ class STORAGE_EXPORT BlobURLLoader : public storage::MojoBlobReader::Delegate,
   void ResumeReadingBodyFromNet() override {}
 
   // storage::MojoBlobReader::Delegate implementation:
-  mojo::ScopedDataPipeProducerHandle PassDataPipe() override;
   RequestSideData DidCalculateSize(uint64_t total_size,
                                    uint64_t content_size) override;
   void DidReadSideData(net::IOBufferWithSize* data) override;
-  void DidRead(int num_bytes) override;
   void OnComplete(net::Error error_code, uint64_t total_written_bytes) override;
 
   void HeadersCompleted(net::HttpStatusCode status_code,

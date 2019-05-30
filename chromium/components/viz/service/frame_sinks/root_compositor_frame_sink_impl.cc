@@ -52,12 +52,21 @@ RootCompositorFrameSinkImpl::Create(
   } else {
 #if defined(OS_ANDROID)
     external_begin_frame_source =
-        std::make_unique<ExternalBeginFrameSourceAndroid>(restart_id);
+        std::make_unique<ExternalBeginFrameSourceAndroid>(restart_id,
+                                                          params->refresh_rate);
 #else
-    synthetic_begin_frame_source = std::make_unique<DelayBasedBeginFrameSource>(
-        std::make_unique<DelayBasedTimeSource>(
-            base::ThreadTaskRunnerHandle::Get().get()),
-        restart_id);
+    if (params->disable_frame_rate_limit) {
+      synthetic_begin_frame_source =
+          std::make_unique<BackToBackBeginFrameSource>(
+              std::make_unique<DelayBasedTimeSource>(
+                  base::ThreadTaskRunnerHandle::Get().get()));
+    } else {
+      synthetic_begin_frame_source =
+          std::make_unique<DelayBasedBeginFrameSource>(
+              std::make_unique<DelayBasedTimeSource>(
+                  base::ThreadTaskRunnerHandle::Get().get()),
+              restart_id);
+    }
 #endif
   }
 
@@ -127,12 +136,6 @@ void RootCompositorFrameSinkImpl::SetOutputIsSecure(bool secure) {
   display_->SetOutputIsSecure(secure);
 }
 
-void RootCompositorFrameSinkImpl::SetAuthoritativeVSyncInterval(
-    base::TimeDelta interval) {
-  if (synthetic_begin_frame_source_)
-    synthetic_begin_frame_source_->SetAuthoritativeVSyncInterval(interval);
-}
-
 void RootCompositorFrameSinkImpl::SetDisplayVSyncParameters(
     base::TimeTicks timebase,
     base::TimeDelta interval) {
@@ -148,6 +151,11 @@ void RootCompositorFrameSinkImpl::ForceImmediateDrawAndSwapIfPossible() {
 void RootCompositorFrameSinkImpl::SetVSyncPaused(bool paused) {
   if (external_begin_frame_source_)
     external_begin_frame_source_->OnSetBeginFrameSourcePaused(paused);
+}
+
+void RootCompositorFrameSinkImpl::UpdateRefreshRate(float refresh_rate) {
+  if (external_begin_frame_source_)
+    external_begin_frame_source_->UpdateRefreshRate(refresh_rate);
 }
 #endif  // defined(OS_ANDROID)
 
@@ -255,9 +263,10 @@ void RootCompositorFrameSinkImpl::DisplayOutputSurfaceLost() {
 
 void RootCompositorFrameSinkImpl::DisplayWillDrawAndSwap(
     bool will_draw_and_swap,
-    const RenderPassList& render_pass) {
+    RenderPassList* render_passes) {
   DCHECK(support_->GetHitTestAggregator());
-  support_->GetHitTestAggregator()->Aggregate(display_->CurrentSurfaceId());
+  support_->GetHitTestAggregator()->Aggregate(display_->CurrentSurfaceId(),
+                                              render_passes);
 }
 
 void RootCompositorFrameSinkImpl::DisplayDidReceiveCALayerParams(

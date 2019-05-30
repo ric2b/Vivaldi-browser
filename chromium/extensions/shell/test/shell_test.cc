@@ -5,6 +5,7 @@
 #include "extensions/shell/test/shell_test.h"
 
 #include "base/command_line.h"
+#include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -13,16 +14,26 @@
 #include "extensions/shell/browser/desktop_controller.h"
 #include "extensions/shell/browser/shell_content_browser_client.h"
 #include "extensions/shell/browser/shell_extension_system.h"
+#include "ui/base/ui_base_features.h"
+
+#if defined(OS_CHROMEOS)
+#include "content/public/test/network_connection_change_simulator.h"
+#endif
 
 namespace extensions {
 
 AppShellTest::AppShellTest()
     : browser_context_(nullptr),
       extension_system_(nullptr) {
+  // Disable mash until app_shell test infra is updated to use Window Service.
+  scoped_feature_list_.InitWithFeatures(
+      {} /* enabled */,
+      {features::kMash, features::kSingleProcessMash} /* disabled */);
+
+  CreateTestServer(base::FilePath(FILE_PATH_LITERAL("extensions/test/data")));
 }
 
-AppShellTest::~AppShellTest() {
-}
+AppShellTest::~AppShellTest() = default;
 
 void AppShellTest::SetUp() {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
@@ -32,12 +43,17 @@ void AppShellTest::SetUp() {
 }
 
 void AppShellTest::PreRunTestOnMainThread() {
+#if defined(OS_CHROMEOS)
+  content::NetworkConnectionChangeSimulator network_change_simulator;
+  network_change_simulator.InitializeChromeosConnectionType();
+#endif
+
   browser_context_ = ShellContentBrowserClient::Get()->GetBrowserContext();
 
   extension_system_ = static_cast<ShellExtensionSystem*>(
       ExtensionSystem::Get(browser_context_));
   extension_system_->FinishInitialization();
-  DCHECK(base::MessageLoopForUI::IsCurrent());
+  DCHECK(base::MessageLoopCurrentForUI::IsSet());
   base::RunLoop().RunUntilIdle();
 }
 

@@ -26,12 +26,12 @@ PipelineController::PipelineController(
       error_cb_(error_cb),
       weak_factory_(this) {
   DCHECK(pipeline_);
-  DCHECK(!renderer_factory_cb_.is_null());
-  DCHECK(!seeked_cb_.is_null());
-  DCHECK(!suspended_cb_.is_null());
-  DCHECK(!before_resume_cb_.is_null());
-  DCHECK(!resumed_cb_.is_null());
-  DCHECK(!error_cb_.is_null());
+  DCHECK(renderer_factory_cb_);
+  DCHECK(seeked_cb_);
+  DCHECK(suspended_cb_);
+  DCHECK(before_resume_cb_);
+  DCHECK(resumed_cb_);
+  DCHECK(error_cb_);
 }
 
 PipelineController::~PipelineController() {
@@ -105,6 +105,38 @@ void PipelineController::Resume() {
     pending_resume_ = true;
     Dispatch();
   }
+}
+
+void PipelineController::OnDecoderStateLost() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  // Note: |time_updated| and |pending_seeked_cb_| are both false.
+  pending_seek_except_start_ = true;
+
+  // If we are already seeking or resuming, or if there's already a seek
+  // pending,elide the seek. This is okay for decoder state lost since it just
+  // needs one seek to recover (the decoder is reset and the next decode starts
+  // from a key frame).
+  //
+  // Note on potential race condition: When the seek is elided, it's possible
+  // that the decoder state loss happens before or after the previous seek
+  // (decoder Reset()):
+  // 1. Decoder state loss happens before Decoder::Reset() during the previous
+  // seek. In this case we are fine since we just need a Reset().
+  // 2. Decoder state loss happens after Decoder::Reset() during a previous
+  // seek:
+  // 2.1 If state loss happens before any Decode() we are still fine, since the
+  // decoder is in a clean state.
+  // 2.2 If state loss happens after a Decode(), then here we should not be in
+  // the SEEKING state.
+  if (state_ == State::SEEKING || state_ == State::RESUMING || pending_seek_)
+    return;
+
+  // Force a seek to the current time.
+  pending_seek_time_ = pipeline_->GetMediaTime();
+  pending_seek_ = true;
+
+  Dispatch();
 }
 
 bool PipelineController::IsStable() {

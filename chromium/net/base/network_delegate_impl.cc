@@ -72,14 +72,16 @@ NetworkDelegate::AuthRequiredResponse NetworkDelegateImpl::OnAuthRequired(
 }
 
 bool NetworkDelegateImpl::OnCanGetCookies(const URLRequest& request,
-                                          const CookieList& cookie_list) {
-  return true;
+                                          const CookieList& cookie_list,
+                                          bool allowed_from_caller) {
+  return allowed_from_caller;
 }
 
 bool NetworkDelegateImpl::OnCanSetCookie(const URLRequest& request,
                                          const net::CanonicalCookie& cookie,
-                                         CookieOptions* options) {
-  return true;
+                                         CookieOptions* options,
+                                         bool allowed_from_caller) {
+  return allowed_from_caller;
 }
 
 bool NetworkDelegateImpl::OnCanAccessFile(
@@ -89,13 +91,9 @@ bool NetworkDelegateImpl::OnCanAccessFile(
   return false;
 }
 
-bool NetworkDelegateImpl::OnCanEnablePrivacyMode(
+bool NetworkDelegateImpl::OnForcePrivacyMode(
     const GURL& url,
     const GURL& site_for_cookies) const {
-  return false;
-}
-
-bool NetworkDelegateImpl::OnAreExperimentalCookieFeaturesEnabled() const {
   return false;
 }
 

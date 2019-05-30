@@ -4,10 +4,14 @@
 
 #include "ui/android/delegated_frame_host_android.h"
 #include "base/android/build_info.h"
+#include "base/bind_helpers.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/solid_color_layer.h"
 #include "cc/layers/surface_layer.h"
+#include "cc/trees/layer_tree_host.h"
+#include "components/viz/common/features.h"
 #include "components/viz/common/hit_test/hit_test_region_list.h"
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "components/viz/host/host_frame_sink_manager.h"
@@ -36,9 +40,11 @@ class MockDelegatedFrameHostAndroidClient
                void(const std::vector<viz::ReturnedResource>&));
   MOCK_METHOD1(ReclaimResources,
                void(const std::vector<viz::ReturnedResource>&));
-  MOCK_METHOD2(DidPresentCompositorFrame,
-               void(uint32_t, const gfx::PresentationFeedback&));
+  MOCK_METHOD1(
+      DidPresentCompositorFrames,
+      void(const base::flat_map<uint32_t, gfx::PresentationFeedback>&));
   MOCK_METHOD1(OnFrameTokenChanged, void(uint32_t));
+  MOCK_METHOD0(WasEvicted, void());
 };
 
 class MockWindowAndroidCompositor : public WindowAndroidCompositor {
@@ -54,6 +60,7 @@ class MockWindowAndroidCompositor : public WindowAndroidCompositor {
                CompositorLock*(CompositorLockClient*, base::TimeDelta));
   MOCK_CONST_METHOD0(IsDrawingFirstVisibleFrame, bool());
   MOCK_METHOD1(SetVSyncPaused, void(bool));
+  MOCK_METHOD1(OnUpdateRefreshRate, void(float));
 
   // Helpers for move-only types:
   void RequestCopyOfOutputOnRootLayer(
@@ -69,18 +76,13 @@ class MockWindowAndroidCompositor : public WindowAndroidCompositor {
   }
 };
 
-class MockCompositorLockManagerClient : public ui::CompositorLockManagerClient {
- public:
-  MOCK_METHOD1(OnCompositorLockStateChanged, void(bool));
-};
-
 class DelegatedFrameHostAndroidTest : public testing::Test {
  public:
   DelegatedFrameHostAndroidTest()
       : frame_sink_manager_impl_(&shared_bitmap_manager_),
         frame_sink_id_(1, 1),
         task_runner_(new base::TestMockTimeTaskRunner()),
-        lock_manager_(task_runner_, &lock_manager_client_) {
+        lock_manager_(task_runner_) {
     host_frame_sink_manager_.SetLocalManager(&frame_sink_manager_impl_);
     frame_sink_manager_impl_.SetLocalClient(&host_frame_sink_manager_);
   }
@@ -89,25 +91,28 @@ class DelegatedFrameHostAndroidTest : public testing::Test {
     view_.SetLayer(cc::SolidColorLayer::Create());
     frame_host_ = std::make_unique<DelegatedFrameHostAndroid>(
         &view_, &host_frame_sink_manager_, &client_, frame_sink_id_,
-        ShouldEnableSurfaceSynchronization());
+        features::IsSurfaceSynchronizationEnabled());
   }
 
   void TearDown() override { frame_host_.reset(); }
 
-  virtual bool ShouldEnableSurfaceSynchronization() const { return false; }
-
   ui::CompositorLock* GetLock(CompositorLockClient* client,
                               base::TimeDelta time_delta) {
-    return lock_manager_.GetCompositorLock(client, time_delta).release();
+    return lock_manager_.GetCompositorLock(client, time_delta, nullptr)
+        .release();
   }
+
+  bool IsLocked() const { return lock_manager_.IsLocked(); }
 
   void SubmitCompositorFrame(const gfx::Size& frame_size = gfx::Size(10, 10)) {
     viz::CompositorFrame frame =
         viz::CompositorFrameBuilder()
             .AddRenderPass(gfx::Rect(frame_size), gfx::Rect(frame_size))
             .Build();
-    frame_host_->SubmitCompositorFrame(allocator_.GenerateId(),
-                                       std::move(frame), base::nullopt);
+    allocator_.GenerateId();
+    frame_host_->SubmitCompositorFrame(
+        allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id(),
+        std::move(frame), base::nullopt);
   }
 
   void SetUpValidFrame(const gfx::Size& frame_size) {
@@ -115,13 +120,11 @@ class DelegatedFrameHostAndroidTest : public testing::Test {
         .WillOnce(Return(true));
     EXPECT_CALL(compositor_, DoGetCompositorLock(frame_host_.get(), _))
         .WillOnce(Invoke(this, &DelegatedFrameHostAndroidTest::GetLock));
-    EXPECT_CALL(lock_manager_client_, OnCompositorLockStateChanged(true))
-        .Times(1);
     frame_host_->AttachToCompositor(&compositor_);
+    EXPECT_TRUE(IsLocked());
 
-    EXPECT_CALL(lock_manager_client_, OnCompositorLockStateChanged(false))
-        .Times(1);
     SubmitCompositorFrame(frame_size);
+    EXPECT_FALSE(IsLocked());
   }
 
  protected:
@@ -134,18 +137,67 @@ class DelegatedFrameHostAndroidTest : public testing::Test {
   viz::FrameSinkId frame_sink_id_;
   viz::ParentLocalSurfaceIdAllocator allocator_;
   std::unique_ptr<DelegatedFrameHostAndroid> frame_host_;
-  MockCompositorLockManagerClient lock_manager_client_;
   scoped_refptr<base::TestMockTimeTaskRunner> task_runner_;
   CompositorLockManager lock_manager_;
 };
 
-class DelegatedFrameHostAndroidSurfaceSynchronizationTest
+class DelegatedFrameHostAndroidVizTest : public DelegatedFrameHostAndroidTest {
+ public:
+  DelegatedFrameHostAndroidVizTest() = default;
+  ~DelegatedFrameHostAndroidVizTest() override = default;
+
+  void SetUp() override {
+    // Enable both Viz and SurfaceSync.
+    scoped_feature_list_.InitWithFeatures(
+        {features::kVizDisplayCompositor,
+         features::kEnableSurfaceSynchronization},
+        {});
+
+    DelegatedFrameHostAndroidTest::SetUp();
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+// TODO(ericrk): Remove these tests once Viz OOP-D has launched.
+class DelegatedFrameHostAndroidSurfaceSynchronizationOnlyTest
     : public DelegatedFrameHostAndroidTest {
  public:
-  DelegatedFrameHostAndroidSurfaceSynchronizationTest() = default;
-  ~DelegatedFrameHostAndroidSurfaceSynchronizationTest() override = default;
+  DelegatedFrameHostAndroidSurfaceSynchronizationOnlyTest() = default;
+  ~DelegatedFrameHostAndroidSurfaceSynchronizationOnlyTest() override = default;
 
-  bool ShouldEnableSurfaceSynchronization() const override { return true; }
+  void SetUp() override {
+    // Enable SurfaceSync without Viz.
+    scoped_feature_list_.InitWithFeatures(
+        {features::kEnableSurfaceSynchronization},
+        {features::kVizDisplayCompositor});
+
+    DelegatedFrameHostAndroidTest::SetUp();
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+// TODO(ericrk): Remove these tests once Viz OOP-D has launched.
+class DelegatedFrameHostAndroidLegacyNonVizTest
+    : public DelegatedFrameHostAndroidTest {
+ public:
+  DelegatedFrameHostAndroidLegacyNonVizTest() = default;
+  ~DelegatedFrameHostAndroidLegacyNonVizTest() override = default;
+
+  void SetUp() override {
+    // Disable both Viz and SurfaceSync.
+    scoped_feature_list_.InitWithFeatures(
+        {}, {features::kVizDisplayCompositor,
+             features::kEnableSurfaceSynchronization});
+
+    DelegatedFrameHostAndroidTest::SetUp();
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 // Resize lock is only enabled on O+.
@@ -154,10 +206,9 @@ static bool IsResizeLockEnabled() {
          base::android::SDK_VERSION_OREO;
 }
 
-// If surface synchronization is enabled then we should not be acquiring a
-// compositor lock on attach.
-TEST_F(DelegatedFrameHostAndroidSurfaceSynchronizationTest,
-       NoCompositorLockOnAttach) {
+// If OOP-D is enabled then we should not be acquiring a compositor lock on
+// attach.
+TEST_F(DelegatedFrameHostAndroidVizTest, NoCompositorLockOnAttach) {
   EXPECT_CALL(compositor_, IsDrawingFirstVisibleFrame()).Times(0);
   EXPECT_CALL(compositor_, DoGetCompositorLock(_, _)).Times(0);
   frame_host_->AttachToCompositor(&compositor_);
@@ -166,7 +217,8 @@ TEST_F(DelegatedFrameHostAndroidSurfaceSynchronizationTest,
 // If surface synchronization is off, and we are doing a cross-process
 // navigation, then both the primary and fallback surface IDs need to be
 // updated together.
-TEST_F(DelegatedFrameHostAndroidTest, TakeFallbackContentFromUpdatesPrimary) {
+TEST_F(DelegatedFrameHostAndroidLegacyNonVizTest,
+       TakeFallbackContentFromUpdatesPrimary) {
   EXPECT_FALSE(frame_host_->SurfaceId().is_valid());
   // Submit a compositor frame to ensure we have delegated content.
   SubmitCompositorFrame();
@@ -175,34 +227,34 @@ TEST_F(DelegatedFrameHostAndroidTest, TakeFallbackContentFromUpdatesPrimary) {
   std::unique_ptr<DelegatedFrameHostAndroid> other_frame_host =
       std::make_unique<DelegatedFrameHostAndroid>(
           &view_, &host_frame_sink_manager_, &client_, viz::FrameSinkId(2, 2),
-          ShouldEnableSurfaceSynchronization());
+          features::IsSurfaceSynchronizationEnabled());
 
   EXPECT_FALSE(other_frame_host->SurfaceId().is_valid());
 
   other_frame_host->TakeFallbackContentFrom(frame_host_.get());
 
   EXPECT_TRUE(other_frame_host->SurfaceId().is_valid());
-  EXPECT_EQ(
-      other_frame_host->content_layer_for_testing()->primary_surface_id(),
-      other_frame_host->content_layer_for_testing()->fallback_surface_id());
+  EXPECT_EQ(other_frame_host->content_layer_for_testing()->surface_id(),
+            other_frame_host->content_layer_for_testing()
+                ->oldest_acceptable_fallback());
 }
 
-TEST_F(DelegatedFrameHostAndroidTest, CompositorLockDuringFirstFrame) {
+TEST_F(DelegatedFrameHostAndroidLegacyNonVizTest,
+       CompositorLockDuringFirstFrame) {
   // Attach during the first frame, lock will be taken.
   EXPECT_CALL(compositor_, IsDrawingFirstVisibleFrame()).WillOnce(Return(true));
   EXPECT_CALL(compositor_, DoGetCompositorLock(frame_host_.get(), _))
       .WillOnce(Invoke(this, &DelegatedFrameHostAndroidTest::GetLock));
-  EXPECT_CALL(lock_manager_client_, OnCompositorLockStateChanged(true))
-      .Times(1);
   frame_host_->AttachToCompositor(&compositor_);
+  EXPECT_TRUE(IsLocked());
 
   // Lock should be released when we submit a compositor frame.
-  EXPECT_CALL(lock_manager_client_, OnCompositorLockStateChanged(false))
-      .Times(1);
   SubmitCompositorFrame();
+  EXPECT_FALSE(IsLocked());
 }
 
-TEST_F(DelegatedFrameHostAndroidTest, CompositorLockDuringLaterFrame) {
+TEST_F(DelegatedFrameHostAndroidLegacyNonVizTest,
+       CompositorLockDuringLaterFrame) {
   // Attach after the first frame, lock will not be taken.
   EXPECT_CALL(compositor_, IsDrawingFirstVisibleFrame())
       .WillOnce(Return(false));
@@ -210,7 +262,8 @@ TEST_F(DelegatedFrameHostAndroidTest, CompositorLockDuringLaterFrame) {
   frame_host_->AttachToCompositor(&compositor_);
 }
 
-TEST_F(DelegatedFrameHostAndroidTest, CompositorLockWithDelegatedContent) {
+TEST_F(DelegatedFrameHostAndroidLegacyNonVizTest,
+       CompositorLockWithDelegatedContent) {
   // Submit a compositor frame to ensure we have delegated content.
   SubmitCompositorFrame();
 
@@ -221,22 +274,21 @@ TEST_F(DelegatedFrameHostAndroidTest, CompositorLockWithDelegatedContent) {
   frame_host_->AttachToCompositor(&compositor_);
 }
 
-TEST_F(DelegatedFrameHostAndroidTest, CompositorLockReleasedWithDetach) {
+TEST_F(DelegatedFrameHostAndroidLegacyNonVizTest,
+       CompositorLockReleasedWithDetach) {
   // Attach during the first frame, lock will be taken.
   EXPECT_CALL(compositor_, IsDrawingFirstVisibleFrame()).WillOnce(Return(true));
   EXPECT_CALL(compositor_, DoGetCompositorLock(frame_host_.get(), _))
       .WillOnce(Invoke(this, &DelegatedFrameHostAndroidTest::GetLock));
-  EXPECT_CALL(lock_manager_client_, OnCompositorLockStateChanged(true))
-      .Times(1);
   frame_host_->AttachToCompositor(&compositor_);
+  EXPECT_TRUE(IsLocked());
 
   // Lock should be released when we detach.
-  EXPECT_CALL(lock_manager_client_, OnCompositorLockStateChanged(false))
-      .Times(1);
   frame_host_->DetachFromCompositor();
+  EXPECT_FALSE(IsLocked());
 }
 
-TEST_F(DelegatedFrameHostAndroidTest, ResizeLockBasic) {
+TEST_F(DelegatedFrameHostAndroidLegacyNonVizTest, ResizeLockBasic) {
   // Resize lock is only enabled on O+.
   if (!IsResizeLockEnabled())
     return;
@@ -246,22 +298,20 @@ TEST_F(DelegatedFrameHostAndroidTest, ResizeLockBasic) {
   // Tell the frame host to resize, it should take a lock.
   EXPECT_CALL(compositor_, DoGetCompositorLock(frame_host_.get(), _))
       .WillOnce(Invoke(this, &DelegatedFrameHostAndroidTest::GetLock));
-  EXPECT_CALL(lock_manager_client_, OnCompositorLockStateChanged(true))
-      .Times(1);
   frame_host_->PixelSizeWillChange(gfx::Size(50, 50));
+  EXPECT_TRUE(IsLocked());
 
   // Submit a frame of the wrong size, nothing should change.
-  EXPECT_CALL(lock_manager_client_, OnCompositorLockStateChanged(false))
-      .Times(0);
   SubmitCompositorFrame(gfx::Size(20, 20));
+  EXPECT_TRUE(IsLocked());
 
   // Submit a frame with the right size, the lock should release.
-  EXPECT_CALL(lock_manager_client_, OnCompositorLockStateChanged(false))
-      .Times(1);
   SubmitCompositorFrame(gfx::Size(50, 50));
+  EXPECT_FALSE(IsLocked());
 }
 
-TEST_F(DelegatedFrameHostAndroidTest, ResizeLockNotTakenIfNoSizeChange) {
+TEST_F(DelegatedFrameHostAndroidLegacyNonVizTest,
+       ResizeLockNotTakenIfNoSizeChange) {
   // Resize lock is only enabled on O+.
   if (!IsResizeLockEnabled())
     return;
@@ -269,12 +319,12 @@ TEST_F(DelegatedFrameHostAndroidTest, ResizeLockNotTakenIfNoSizeChange) {
   SetUpValidFrame(gfx::Size(10, 10));
 
   // Tell the frame host to resize to the existing size, nothing should happen.
-  EXPECT_CALL(lock_manager_client_, OnCompositorLockStateChanged(true))
-      .Times(0);
   frame_host_->PixelSizeWillChange(gfx::Size(10, 10));
+  EXPECT_FALSE(IsLocked());
 }
 
-TEST_F(DelegatedFrameHostAndroidTest, ResizeLockReleasedWithDetach) {
+TEST_F(DelegatedFrameHostAndroidLegacyNonVizTest,
+       ResizeLockReleasedWithDetach) {
   // Resize lock is only enabled on O+.
   if (!IsResizeLockEnabled())
     return;
@@ -284,17 +334,15 @@ TEST_F(DelegatedFrameHostAndroidTest, ResizeLockReleasedWithDetach) {
   // Tell the frame host to resize, it should take a lock.
   EXPECT_CALL(compositor_, DoGetCompositorLock(frame_host_.get(), _))
       .WillOnce(Invoke(this, &DelegatedFrameHostAndroidTest::GetLock));
-  EXPECT_CALL(lock_manager_client_, OnCompositorLockStateChanged(true))
-      .Times(1);
   frame_host_->PixelSizeWillChange(gfx::Size(50, 50));
+  EXPECT_TRUE(IsLocked());
 
   // Lock should be released when we detach.
-  EXPECT_CALL(lock_manager_client_, OnCompositorLockStateChanged(false))
-      .Times(1);
   frame_host_->DetachFromCompositor();
+  EXPECT_FALSE(IsLocked());
 }
 
-TEST_F(DelegatedFrameHostAndroidTest, TestBothCompositorLocks) {
+TEST_F(DelegatedFrameHostAndroidLegacyNonVizTest, TestBothCompositorLocks) {
   // Resize lock is only enabled on O+.
   if (!IsResizeLockEnabled())
     return;
@@ -303,21 +351,64 @@ TEST_F(DelegatedFrameHostAndroidTest, TestBothCompositorLocks) {
   EXPECT_CALL(compositor_, IsDrawingFirstVisibleFrame()).WillOnce(Return(true));
   EXPECT_CALL(compositor_, DoGetCompositorLock(frame_host_.get(), _))
       .WillOnce(Invoke(this, &DelegatedFrameHostAndroidTest::GetLock));
-  EXPECT_CALL(lock_manager_client_, OnCompositorLockStateChanged(true))
-      .Times(1);
   frame_host_->AttachToCompositor(&compositor_);
+  EXPECT_TRUE(IsLocked());
 
   // Tell the frame host to resize, it should take a second lock.
   EXPECT_CALL(compositor_, DoGetCompositorLock(frame_host_.get(), _))
       .WillOnce(Invoke(this, &DelegatedFrameHostAndroidTest::GetLock));
-  EXPECT_CALL(lock_manager_client_, OnCompositorLockStateChanged(true))
-      .Times(0);
   frame_host_->PixelSizeWillChange(gfx::Size(50, 50));
+  EXPECT_TRUE(IsLocked());
 
   // Submit a compositor frame of the right size, both locks should release.
-  EXPECT_CALL(lock_manager_client_, OnCompositorLockStateChanged(false))
-      .Times(1);
   SubmitCompositorFrame(gfx::Size(50, 50));
+  EXPECT_FALSE(IsLocked());
+}
+
+// Make sure frame evictor is notified of the newly embedded surface after
+// WasShown.
+TEST_F(DelegatedFrameHostAndroidVizTest, EmbedWhileHidden) {
+  // Ensure there is currently no frame.
+  frame_host_->WasHidden();
+  frame_host_->EvictDelegatedFrame();
+  EXPECT_FALSE(frame_host_->HasSavedFrame());
+
+  allocator_.GenerateId();
+  viz::LocalSurfaceId id =
+      allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id();
+  gfx::Size size(100, 100);
+  frame_host_->EmbedSurface(id, size, cc::DeadlinePolicy::UseDefaultDeadline());
+  EXPECT_FALSE(frame_host_->HasSavedFrame());
+  frame_host_->WasShown(id, size);
+  EXPECT_TRUE(frame_host_->HasSavedFrame());
+}
+
+// Verify that when a source rect or output size is not provided to
+// CopyFromCompositingSurface, the corresponding values in CopyOutputRequest
+// are also not initialized.
+TEST_F(DelegatedFrameHostAndroidSurfaceSynchronizationOnlyTest,
+       FullSurfaceCapture) {
+  // First embed a surface to make sure we have something to copy from.
+  allocator_.GenerateId();
+  viz::LocalSurfaceId id =
+      allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id();
+  gfx::Size size(100, 100);
+  frame_host_->EmbedSurface(id, size, cc::DeadlinePolicy::UseDefaultDeadline());
+
+  // Request readback without source rect or output size specified.
+  frame_host_->CopyFromCompositingSurface(gfx::Rect(), gfx::Size(),
+                                          base::DoNothing());
+
+  // Make sure the resulting CopyOutputRequest does not have its area or result
+  // selection set.
+  const std::vector<
+      std::pair<viz::LocalSurfaceId, std::unique_ptr<viz::CopyOutputRequest>>>&
+      requests = frame_sink_manager_impl_.GetFrameSinkForId(frame_sink_id_)
+                     ->copy_output_requests_for_testing();
+  ASSERT_EQ(1u, requests.size());
+  viz::CopyOutputRequest* request = requests[0].second.get();
+  EXPECT_FALSE(request->has_area());
+  EXPECT_FALSE(request->has_result_selection());
 }
 
 }  // namespace

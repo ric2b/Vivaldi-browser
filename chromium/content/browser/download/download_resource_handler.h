@@ -100,8 +100,6 @@ class CONTENT_EXPORT DownloadResourceHandler
 
   std::string DebugString() const;
 
-  void SetOpenFlags(bool open_when_done, bool ask_for_target) override;
-
  private:
   ~DownloadResourceHandler() override;
 

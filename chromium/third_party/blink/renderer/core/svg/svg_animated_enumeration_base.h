@@ -46,7 +46,7 @@ class SVGAnimatedEnumerationBase
  public:
   ~SVGAnimatedEnumerationBase() override;
 
-  void setBaseVal(unsigned short, ExceptionState&);
+  void setBaseVal(uint16_t, ExceptionState&);
 
   void Trace(blink::Visitor* visitor) override {
     SVGAnimatedProperty<SVGEnumerationBase>::Trace(visitor);
@@ -56,10 +56,13 @@ class SVGAnimatedEnumerationBase
  protected:
   SVGAnimatedEnumerationBase(SVGElement* context_element,
                              const QualifiedName& attribute_name,
-                             SVGEnumerationBase* initial_value)
+                             SVGEnumerationBase* initial_value,
+                             unsigned initial_enum_value)
       : SVGAnimatedProperty<SVGEnumerationBase>(context_element,
                                                 attribute_name,
-                                                initial_value) {}
+                                                initial_value,
+                                                CSSPropertyInvalid,
+                                                initial_enum_value) {}
 };
 
 }  // namespace blink

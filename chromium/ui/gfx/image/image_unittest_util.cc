@@ -19,11 +19,9 @@
 #include "ui/gfx/image/image_skia.h"
 
 #if defined(OS_IOS)
-#include "base/mac/foundation_util.h"
 #include "base/mac/scoped_cftyperef.h"
 #include "skia/ext/skia_utils_ios.h"
 #elif defined(OS_MACOSX)
-#include "base/mac/foundation_util.h"
 #include "base/mac/mac_util.h"
 #include "skia/ext/skia_utils_mac.h"
 #endif
@@ -112,7 +110,7 @@ bool AreImagesClose(const gfx::Image& img1,
     float scale = img1_reps[i].scale();
     const gfx::ImageSkiaRep& image_rep2 = image_skia2.GetRepresentation(scale);
     if (image_rep2.scale() != scale ||
-        !AreBitmapsClose(img1_reps[i].sk_bitmap(), image_rep2.sk_bitmap(),
+        !AreBitmapsClose(img1_reps[i].GetBitmap(), image_rep2.GetBitmap(),
                          max_deviation)) {
       return false;
     }
@@ -222,12 +220,10 @@ PlatformImage CreatePlatformImage() {
       CGColorSpaceCreateDeviceRGB());
   UIImage* image =
       skia::SkBitmapToUIImageWithColorSpace(bitmap, scale, color_space);
-  base::mac::NSObjectRetain(image);
   return image;
 #elif defined(OS_MACOSX)
   NSImage* image = skia::SkBitmapToNSImageWithColorSpace(
       bitmap, base::mac::GetGenericRGBColorSpace());
-  base::mac::NSObjectRetain(image);
   return image;
 #else
   return gfx::ImageSkia::CreateFrom1xBitmap(bitmap);
@@ -258,7 +254,7 @@ gfx::Image CopyViaPlatformType(const gfx::Image& image) {
 #if defined(OS_IOS)
   return gfx::Image(image.ToUIImage());
 #elif defined(OS_MACOSX)
-  return gfx::Image(image.CopyNSImage());
+  return gfx::Image(image.ToNSImage());
 #else
   return gfx::Image(image.AsImageSkia());
 #endif

@@ -227,7 +227,7 @@ ChromeContentRulesRegistry::GetMatchingRules(content::WebContents* tab) const {
 
 std::string ChromeContentRulesRegistry::AddRulesImpl(
     const std::string& extension_id,
-    const std::vector<linked_ptr<api::events::Rule>>& api_rules) {
+    const std::vector<const api::events::Rule*>& api_rules) {
   EvaluationScope evaluation_scope(this);
   const Extension* extension = ExtensionRegistry::Get(browser_context())
       ->GetInstalledExtension(extension_id);
@@ -246,7 +246,7 @@ std::string ChromeContentRulesRegistry::AddRulesImpl(
         evaluator.get();
   }
 
-  for (const linked_ptr<api::events::Rule>& api_rule : api_rules) {
+  for (auto* api_rule : api_rules) {
     ExtensionIdRuleIdPair rule_id(extension_id, *api_rule->id);
     DCHECK(content_rules_.find(rule_id) == content_rules_.end());
 
@@ -280,7 +280,7 @@ std::string ChromeContentRulesRegistry::AddRulesImpl(
       }
     }
 
-    new_rules[rule_id] = make_linked_ptr(rule.release());
+    new_rules[rule_id] = std::move(rule);
   }
 
   // Notify the evaluators about their new predicates.
@@ -289,7 +289,8 @@ std::string ChromeContentRulesRegistry::AddRulesImpl(
     evaluator->TrackPredicates(new_predicates[evaluator.get()]);
 
   // Wohoo, everything worked fine.
-  content_rules_.insert(new_rules.begin(), new_rules.end());
+  content_rules_.insert(std::make_move_iterator(new_rules.begin()),
+                        std::make_move_iterator(new_rules.end()));
 
   // Request evaluation for all WebContents, under the assumption that a
   // non-empty condition has been added.
@@ -311,7 +312,7 @@ std::string ChromeContentRulesRegistry::RemoveRulesImpl(
   std::vector<const void*> predicate_groups_to_stop_tracking;
   for (const std::string& id : rule_identifiers) {
     // Skip unknown rules.
-    RulesMap::iterator content_rules_entry =
+    auto content_rules_entry =
         content_rules_.find(std::make_pair(extension_id, id));
     if (content_rules_entry == content_rules_.end())
       continue;
@@ -340,7 +341,7 @@ std::string ChromeContentRulesRegistry::RemoveRulesImpl(
     evaluator->StopTrackingPredicates(predicate_groups_to_stop_tracking);
 
   // Remove the rules.
-  for (RulesMap::iterator it : rules_to_erase)
+  for (auto it : rules_to_erase)
     content_rules_.erase(it);
 
   return std::string();

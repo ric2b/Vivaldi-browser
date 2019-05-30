@@ -9,8 +9,10 @@
 #include <vector>
 
 #include "ash/public/cpp/app_menu_constants.h"
+#include "base/bind.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_feature_list.h"
@@ -49,8 +51,8 @@ class FakeAppContextMenuDelegate : public app_list::AppContextMenuDelegate {
   DISALLOW_COPY_AND_ASSIGN(FakeAppContextMenuDelegate);
 };
 
-class FakeAppListControllerDelegate :
-    public test::TestAppListControllerDelegate {
+class FakeAppListControllerDelegate
+    : public test::TestAppListControllerDelegate {
  public:
   FakeAppListControllerDelegate() = default;
   ~FakeAppListControllerDelegate() override = default;
@@ -95,7 +97,7 @@ class FakeAppListControllerDelegate :
 std::unique_ptr<KeyedService> MenuManagerFactory(
     content::BrowserContext* context) {
   return extensions::MenuManagerFactory::BuildServiceInstanceForTesting(
-              context);
+      context);
 }
 
 std::unique_ptr<ui::MenuModel> GetContextMenuModel(ChromeAppListItem* item) {
@@ -125,8 +127,7 @@ std::unique_ptr<ui::MenuModel> GetMenuModel(
 
 }  // namespace
 
-class AppContextMenuTest : public AppListTestBase,
-                           public testing::WithParamInterface<bool> {
+class AppContextMenuTest : public AppListTestBase {
  public:
   AppContextMenuTest() = default;
   ~AppContextMenuTest() override {
@@ -136,14 +137,8 @@ class AppContextMenuTest : public AppListTestBase,
 
   void SetUp() override {
     AppListTestBase::SetUp();
-    if (testing::UnitTest::GetInstance()->current_test_info()->value_param() &&
-        GetParam()) {
-      scoped_feature_list_.InitAndEnableFeature(
-          features::kTouchableAppContextMenu);
-      arc::IconDecodeRequest::DisableSafeDecodingForTesting();
-    }
     extensions::MenuManagerFactory::GetInstance()->SetTestingFactory(
-        profile(), MenuManagerFactory);
+        profile(), base::BindRepeating(&MenuManagerFactory));
     controller_ = std::make_unique<FakeAppListControllerDelegate>();
     menu_delegate_ = std::make_unique<FakeAppContextMenuDelegate>();
     model_updater_ = std::make_unique<FakeAppListModelUpdater>();
@@ -160,21 +155,14 @@ class AppContextMenuTest : public AppListTestBase,
  protected:
   struct MenuState {
     // Defines separator.
-    MenuState() : command_id(-1), is_enabled(true), is_checked(false) {
-    }
+    MenuState() : command_id(-1), is_enabled(true), is_checked(false) {}
 
     // Defines enabled unchecked command.
     explicit MenuState(int command_id)
-        : command_id(command_id),
-          is_enabled(true),
-          is_checked(false) {
-    }
+        : command_id(command_id), is_enabled(true), is_checked(false) {}
 
     MenuState(int command_id, bool enabled, bool checked)
-        : command_id(command_id),
-          is_enabled(enabled),
-          is_checked(checked) {
-    }
+        : command_id(command_id), is_enabled(enabled), is_checked(checked) {}
 
     int command_id;
     bool is_enabled;
@@ -186,7 +174,7 @@ class AppContextMenuTest : public AppListTestBase,
                          const MenuState& state) {
     EXPECT_EQ(state.command_id, menu_model->GetCommandIdAt(index));
     if (state.command_id == -1)
-      return;   // Don't check separator.
+      return;  // Don't check separator.
     EXPECT_EQ(state.is_enabled, menu_model->IsEnabledAt(index));
     EXPECT_EQ(state.is_checked, menu_model->IsItemCheckedAt(index));
   }
@@ -202,38 +190,19 @@ class AppContextMenuTest : public AppListTestBase,
     EXPECT_EQ(state_index, states.size());
   }
 
-  FakeAppListControllerDelegate* controller() {
-    return controller_.get();
-  }
+  FakeAppListControllerDelegate* controller() { return controller_.get(); }
 
-  FakeAppContextMenuDelegate* menu_delegate() {
-    return menu_delegate_.get();
-  }
+  FakeAppContextMenuDelegate* menu_delegate() { return menu_delegate_.get(); }
 
-  Profile* profile() {
-    return profile_.get();
-  }
-
-  void AddSeparator(std::vector<MenuState>* states) {
-    // TODO(newcomer): Remove this function when touchable app context menus are
-    // enabled by default.
-    if (features::IsTouchableAppContextMenuEnabled())
-      return;
-
-    if (states->empty() || states->back().command_id == -1)
-      return;
-    states->push_back(MenuState());
-  }
+  Profile* profile() { return profile_.get(); }
 
   void AddToStates(const app_list::ExtensionAppContextMenu& menu,
                    MenuState state,
                    std::vector<MenuState>* states) {
-    // If the command is not enabled, it is not added to touchable app context
-    // menus, so do not add it to states.
-    if (features::IsTouchableAppContextMenuEnabled() &&
-        !menu.IsCommandIdEnabled(state.command_id)) {
+    // If the command is not enabled do not add it to states.
+    if (!menu.IsCommandIdEnabled(state.command_id))
       return;
-    }
+
     states->push_back(state);
   }
 
@@ -246,62 +215,22 @@ class AppContextMenuTest : public AppListTestBase,
     controller_->SetAppPinnable(app_id, pinnable);
     controller_->SetCanShowAppInfo(can_show_app_info);
     controller_->SetExtensionLaunchType(profile(), app_id, launch_type);
-    app_list::ExtensionAppContextMenu menu(menu_delegate(),
-                                           profile(),
-                                           app_id,
-                                           controller());
-    menu.set_is_platform_app(platform_app);
+    app_list::ExtensionAppContextMenu menu(menu_delegate(), profile(), app_id,
+                                           controller(), platform_app);
     std::unique_ptr<ui::MenuModel> menu_model = GetMenuModel(&menu);
     ASSERT_NE(nullptr, menu_model);
 
     std::vector<MenuState> states;
-    if (!platform_app) {
+    if (!platform_app)
       AddToStates(menu, MenuState(ash::LAUNCH_NEW), &states);
-      if (!features::IsTouchableAppContextMenuEnabled()) {
-        AddSeparator(&states);
 
-        if (extensions::util::CanHostedAppsOpenInWindows() &&
-            extensions::util::IsNewBookmarkAppsEnabled()) {
-          bool checked = launch_type == extensions::LAUNCH_TYPE_WINDOW ||
-                         launch_type == extensions::LAUNCH_TYPE_FULLSCREEN;
-          AddToStates(menu,
-                      MenuState(ash::USE_LAUNCH_TYPE_WINDOW, true, checked),
-                      &states);
-        } else if (!extensions::util::IsNewBookmarkAppsEnabled()) {
-          bool regular_checked = launch_type == extensions::LAUNCH_TYPE_REGULAR;
-
-          AddToStates(
-              menu,
-              MenuState(ash::USE_LAUNCH_TYPE_REGULAR, true, regular_checked),
-              &states);
-          AddToStates(menu,
-                      MenuState(ash::USE_LAUNCH_TYPE_PINNED, true,
-                                launch_type == extensions::LAUNCH_TYPE_PINNED),
-                      &states);
-          if (extensions::util::CanHostedAppsOpenInWindows()) {
-            AddToStates(
-                menu,
-                MenuState(ash::USE_LAUNCH_TYPE_WINDOW, true,
-                          launch_type == extensions::LAUNCH_TYPE_WINDOW),
-                &states);
-          }
-          AddToStates(
-              menu,
-              MenuState(ash::USE_LAUNCH_TYPE_FULLSCREEN, true,
-                        launch_type == extensions::LAUNCH_TYPE_FULLSCREEN),
-              &states);
-        }
-      }
-    }
     if (pinnable != AppListControllerDelegate::NO_PIN) {
-      AddSeparator(&states);
       AddToStates(
           menu,
           MenuState(ash::TOGGLE_PIN,
                     pinnable != AppListControllerDelegate::PIN_FIXED, false),
           &states);
     }
-    AddSeparator(&states);
     if (!platform_app)
       AddToStates(menu, MenuState(ash::OPTIONS, false, false), &states);
     AddToStates(menu, MenuState(ash::UNINSTALL), &states);
@@ -314,10 +243,9 @@ class AppContextMenuTest : public AppListTestBase,
   void TestChromeApp(bool can_show_app_info) {
     controller_ = std::make_unique<FakeAppListControllerDelegate>();
     controller_->SetCanShowAppInfo(can_show_app_info);
-    app_list::ExtensionAppContextMenu menu(menu_delegate(),
-                                           profile(),
-                                           extension_misc::kChromeAppId,
-                                           controller());
+    app_list::ExtensionAppContextMenu menu(
+        menu_delegate(), profile(), extension_misc::kChromeAppId, controller(),
+        false /* is_platform_app */);
     std::unique_ptr<ui::MenuModel> menu_model = GetMenuModel(&menu);
     ASSERT_NE(nullptr, menu_model);
 
@@ -341,59 +269,50 @@ class AppContextMenuTest : public AppListTestBase,
   DISALLOW_COPY_AND_ASSIGN(AppContextMenuTest);
 };
 
-INSTANTIATE_TEST_CASE_P(, AppContextMenuTest, testing::Bool());
-
-TEST_P(AppContextMenuTest, ExtensionApp) {
+TEST_F(AppContextMenuTest, ExtensionApp) {
   app_list::ExtensionAppContextMenu::DisableInstalledExtensionCheckForTesting(
       false);
   for (extensions::LaunchType launch_type = extensions::LAUNCH_TYPE_FIRST;
-      launch_type < extensions::NUM_LAUNCH_TYPES;
-      launch_type = static_cast<extensions::LaunchType>(launch_type+1)) {
+       launch_type < extensions::NUM_LAUNCH_TYPES;
+       launch_type = static_cast<extensions::LaunchType>(launch_type + 1)) {
     AppListControllerDelegate::Pinnable pinnable;
     for (pinnable = AppListControllerDelegate::NO_PIN;
-        pinnable <= AppListControllerDelegate::PIN_FIXED;
-        pinnable =
-            static_cast<AppListControllerDelegate::Pinnable>(pinnable+1)) {
+         pinnable <= AppListControllerDelegate::PIN_FIXED;
+         pinnable =
+             static_cast<AppListControllerDelegate::Pinnable>(pinnable + 1)) {
       for (size_t combinations = 0; combinations < (1 << 2); ++combinations) {
         TestExtensionApp(AppListTestBase::kHostedAppId,
                          (combinations & (1 << 0)) != 0,
-                         (combinations & (1 << 1)) != 0,
-                         pinnable,
-                         launch_type);
+                         (combinations & (1 << 1)) != 0, pinnable, launch_type);
         TestExtensionApp(AppListTestBase::kPackagedApp1Id,
                          (combinations & (1 << 0)) != 0,
-                         (combinations & (1 << 1)) != 0,
-                         pinnable,
-                         launch_type);
+                         (combinations & (1 << 1)) != 0, pinnable, launch_type);
         TestExtensionApp(AppListTestBase::kPackagedApp2Id,
                          (combinations & (1 << 0)) != 0,
-                         (combinations & (1 << 1)) != 0,
-                         pinnable,
-                         launch_type);
+                         (combinations & (1 << 1)) != 0, pinnable, launch_type);
       }
     }
   }
 }
 
-TEST_P(AppContextMenuTest, ChromeApp) {
+TEST_F(AppContextMenuTest, ChromeApp) {
   app_list::ExtensionAppContextMenu::DisableInstalledExtensionCheckForTesting(
       true);
   for (bool can_show_app_info : {true, false})
     TestChromeApp(can_show_app_info);
 }
 
-TEST_P(AppContextMenuTest, NonExistingExtensionApp) {
+TEST_F(AppContextMenuTest, NonExistingExtensionApp) {
   app_list::ExtensionAppContextMenu::DisableInstalledExtensionCheckForTesting(
       false);
-  app_list::ExtensionAppContextMenu menu(menu_delegate(),
-                                         profile(),
-                                         "some_non_existing_extension_app",
-                                         controller());
+  app_list::ExtensionAppContextMenu menu(
+      menu_delegate(), profile(), "some_non_existing_extension_app",
+      controller(), false /* is_platform_app */);
   std::unique_ptr<ui::MenuModel> menu_model = GetMenuModel(&menu);
   EXPECT_EQ(nullptr, menu_model);
 }
 
-TEST_P(AppContextMenuTest, ArcMenu) {
+TEST_F(AppContextMenuTest, ArcMenu) {
   ArcAppTest arc_test;
   arc_test.SetUp(profile());
 
@@ -412,17 +331,12 @@ TEST_P(AppContextMenuTest, ArcMenu) {
   // Separators are not added to touchable app context menus. For touchable app
   // context menus, arc app has double separator, three more app shortcuts
   // provided by arc::FakeAppInstance and two separators between shortcuts.
-  const int expected_items =
-      features::IsTouchableAppContextMenuEnabled() ? 10 : 6;
+  const int expected_items = 10;
 
   ASSERT_EQ(expected_items, menu->GetItemCount());
   int index = 0;
   ValidateItemState(menu.get(), index++, MenuState(ash::LAUNCH_NEW));
-  if (!features::IsTouchableAppContextMenuEnabled())
-    ValidateItemState(menu.get(), index++, MenuState());  // separator
   ValidateItemState(menu.get(), index++, MenuState(ash::TOGGLE_PIN));
-  if (!features::IsTouchableAppContextMenuEnabled())
-    ValidateItemState(menu.get(), index++, MenuState());  // separator
   ValidateItemState(menu.get(), index++, MenuState(ash::UNINSTALL));
   ValidateItemState(menu.get(), index++, MenuState(ash::SHOW_APP_INFO));
 
@@ -444,19 +358,15 @@ TEST_P(AppContextMenuTest, ArcMenu) {
   // Separators are not added to touchable app context menus except for arc app
   // shortcuts, which have double separator, three more app shortcuts provided
   // by arc::FakeAppInstance and two separators between shortcuts.
-  const int expected_items_app_open =
-      features::IsTouchableAppContextMenuEnabled() ? 9 : 4;
+  const int expected_items_app_open = 9;
   ASSERT_EQ(expected_items_app_open, menu->GetItemCount());
   index = 0;
   ValidateItemState(menu.get(), index++, MenuState(ash::TOGGLE_PIN));
-  if (!features::IsTouchableAppContextMenuEnabled())
-    ValidateItemState(menu.get(), index++, MenuState());  // separator
   ValidateItemState(menu.get(), index++, MenuState(ash::UNINSTALL));
   ValidateItemState(menu.get(), index++, MenuState(ash::SHOW_APP_INFO));
 
   // Test that arc app shortcuts provided by arc::FakeAppInstance have a
   // separator between each app shortcut.
-  if (features::IsTouchableAppContextMenuEnabled()) {
     EXPECT_EQ(ui::DOUBLE_SEPARATOR, menu->GetSeparatorTypeAt(index++));
     for (int shortcut_index = 0; index < menu->GetItemCount(); ++index) {
       EXPECT_EQ(base::StringPrintf("ShortLabel %d", shortcut_index++),
@@ -469,7 +379,6 @@ TEST_P(AppContextMenuTest, ArcMenu) {
     EXPECT_EQ(0, arc_test.app_instance()->launch_app_shortcut_item_count());
     menu->ActivatedAt(menu->GetItemCount() - 1);
     EXPECT_EQ(1, arc_test.app_instance()->launch_app_shortcut_item_count());
-  }
 
   // This makes all apps non-ready.
   controller()->SetAppOpen(app_id, false);
@@ -483,24 +392,14 @@ TEST_P(AppContextMenuTest, ArcMenu) {
   // menus. For touchable app context menus, arc app has double separator,
   // three more app shortcuts provided by arc::FakeAppInstance and two
   // separators between shortcuts.
-  const int expected_items_reopen =
-      features::IsTouchableAppContextMenuEnabled() ? 8 : 6;
+  const int expected_items_reopen = 8;
   ASSERT_EQ(expected_items_reopen, menu->GetItemCount());
   index = 0;
   ValidateItemState(menu.get(), index++, MenuState(ash::LAUNCH_NEW));
-  if (!features::IsTouchableAppContextMenuEnabled())
-    ValidateItemState(menu.get(), index++, MenuState());  // separator
   ValidateItemState(menu.get(), index++, MenuState(ash::TOGGLE_PIN));
-  if (!features::IsTouchableAppContextMenuEnabled()) {
-    ValidateItemState(menu.get(), index++, MenuState());  // separator
-    ValidateItemState(menu.get(), index++,
-                      MenuState(ash::UNINSTALL, false, false));
-    ValidateItemState(menu.get(), index++,
-                      MenuState(ash::SHOW_APP_INFO, false, false));
-  }
+
   // Test that arc app shortcuts provided by arc::FakeAppInstance have a
   // separator between each app shortcut.
-  if (features::IsTouchableAppContextMenuEnabled()) {
     EXPECT_EQ(ui::DOUBLE_SEPARATOR, menu->GetSeparatorTypeAt(index++));
     for (int shortcut_index = 0; index < menu->GetItemCount(); ++index) {
       EXPECT_EQ(base::StringPrintf("ShortLabel %d", shortcut_index++),
@@ -508,7 +407,6 @@ TEST_P(AppContextMenuTest, ArcMenu) {
       if (index < menu->GetItemCount())
         EXPECT_EQ(ui::PADDED_SEPARATOR, menu->GetSeparatorTypeAt(index));
     }
-  }
 
   // Uninstall all apps.
   arc_test.app_instance()->RefreshAppList();
@@ -521,7 +419,7 @@ TEST_P(AppContextMenuTest, ArcMenu) {
   EXPECT_EQ(0, menu->GetItemCount());
 }
 
-TEST_P(AppContextMenuTest, ArcMenuShortcut) {
+TEST_F(AppContextMenuTest, ArcMenuShortcut) {
   ArcAppTest arc_test;
   arc_test.SetUp(profile());
 
@@ -538,28 +436,21 @@ TEST_P(AppContextMenuTest, ArcMenuShortcut) {
   // Separators are not added to touchable app context menus. For touchable app
   // context menus, arc app has double separator, three more app shortcuts
   // provided by arc::FakeAppInstance and two separators between shortcuts.
-  const int expected_items =
-      features::IsTouchableAppContextMenuEnabled() ? 10 : 6;
+  const int expected_items = 10;
   int index = 0;
   ASSERT_EQ(expected_items, menu->GetItemCount());
   ValidateItemState(menu.get(), index++, MenuState(ash::LAUNCH_NEW));
-  if (!features::IsTouchableAppContextMenuEnabled())
-    ValidateItemState(menu.get(), index++, MenuState());  // separator
   ValidateItemState(menu.get(), index++, MenuState(ash::TOGGLE_PIN));
-  if (!features::IsTouchableAppContextMenuEnabled())
-    ValidateItemState(menu.get(), index++, MenuState());  // separator
   ValidateItemState(menu.get(), index++, MenuState(ash::UNINSTALL));
   ValidateItemState(menu.get(), index++, MenuState(ash::SHOW_APP_INFO));
   // Test that arc app shortcuts provided by arc::FakeAppInstance have a
   // separator between each app shortcut.
-  if (features::IsTouchableAppContextMenuEnabled()) {
     EXPECT_EQ(ui::DOUBLE_SEPARATOR, menu->GetSeparatorTypeAt(index++));
     for (int shortcut_index = 0; index < menu->GetItemCount(); ++index) {
       EXPECT_EQ(base::StringPrintf("ShortLabel %d", shortcut_index++),
                 base::UTF16ToUTF8(menu->GetLabelAt(index++)));
       if (index < menu->GetItemCount())
         EXPECT_EQ(ui::PADDED_SEPARATOR, menu->GetSeparatorTypeAt(index));
-    }
   }
 
   // This makes all apps non-ready. Shortcut is still uninstall-able.
@@ -572,24 +463,15 @@ TEST_P(AppContextMenuTest, ArcMenuShortcut) {
   // menus. For touchable app context menus, arc app has double separator,
   // three more app shortcuts provided by arc::FakeAppInstance and two
   // separators between shortcuts.
-  const int expected_items_non_ready =
-      features::IsTouchableAppContextMenuEnabled() ? 9 : 6;
+  const int expected_items_non_ready = 9;
   ASSERT_EQ(expected_items_non_ready, menu->GetItemCount());
   index = 0;
   ValidateItemState(menu.get(), index++, MenuState(ash::LAUNCH_NEW));
-  if (!features::IsTouchableAppContextMenuEnabled())
-    ValidateItemState(menu.get(), index++, MenuState());  // separator
   ValidateItemState(menu.get(), index++, MenuState(ash::TOGGLE_PIN));
-  if (!features::IsTouchableAppContextMenuEnabled())
-    ValidateItemState(menu.get(), index++, MenuState());  // separator
   ValidateItemState(menu.get(), index++, MenuState(ash::UNINSTALL));
-  if (!features::IsTouchableAppContextMenuEnabled()) {
-    ValidateItemState(menu.get(), index++,
-                      MenuState(ash::SHOW_APP_INFO, false, false));
-  }
+
   // Test that arc app shortcuts provided by arc::FakeAppInstance have a
   // separator between each app shortcut.
-  if (features::IsTouchableAppContextMenuEnabled()) {
     EXPECT_EQ(ui::DOUBLE_SEPARATOR, menu->GetSeparatorTypeAt(index++));
     for (int shortcut_index = 0; index < menu->GetItemCount(); ++index) {
       EXPECT_EQ(base::StringPrintf("ShortLabel %d", shortcut_index++),
@@ -597,10 +479,9 @@ TEST_P(AppContextMenuTest, ArcMenuShortcut) {
       if (index < menu->GetItemCount())
         EXPECT_EQ(ui::PADDED_SEPARATOR, menu->GetSeparatorTypeAt(index));
     }
-  }
 }
 
-TEST_P(AppContextMenuTest, ArcMenuStickyItem) {
+TEST_F(AppContextMenuTest, ArcMenuStickyItem) {
   ArcAppTest arc_test;
   arc_test.SetUp(profile());
 
@@ -620,33 +501,27 @@ TEST_P(AppContextMenuTest, ArcMenuStickyItem) {
     // Separators are not added to touchable app context menus. For touchable
     // app context menus, arc app has double separator, three more app shortcuts
     // provided by arc::FakeAppInstance and two separators between shortcuts.
-    int expected_items = features::IsTouchableAppContextMenuEnabled() ? 9 : 5;
+    int expected_items = 9;
     ASSERT_EQ(expected_items, menu->GetItemCount());
     int index = 0;
     ValidateItemState(menu.get(), index++, MenuState(ash::LAUNCH_NEW));
-    if (!features::IsTouchableAppContextMenuEnabled())
-      ValidateItemState(menu.get(), index++, MenuState());  // separator
     ValidateItemState(menu.get(), index++, MenuState(ash::TOGGLE_PIN));
-    if (!features::IsTouchableAppContextMenuEnabled())
-      ValidateItemState(menu.get(), index++, MenuState());  // separator
     ValidateItemState(menu.get(), index++, MenuState(ash::SHOW_APP_INFO));
 
     // Test that arc app shortcuts provided by arc::FakeAppInstance have a
     // separator between each app shortcut.
-    if (features::IsTouchableAppContextMenuEnabled()) {
       EXPECT_EQ(ui::DOUBLE_SEPARATOR, menu->GetSeparatorTypeAt(index++));
       for (int shortcut_index = 0; index < menu->GetItemCount(); ++index) {
         EXPECT_EQ(base::StringPrintf("ShortLabel %d", shortcut_index++),
                   base::UTF16ToUTF8(menu->GetLabelAt(index++)));
         if (index < menu->GetItemCount())
           EXPECT_EQ(ui::PADDED_SEPARATOR, menu->GetSeparatorTypeAt(index));
-      }
     }
   }
 }
 
 // In suspended state app does not have launch item.
-TEST_P(AppContextMenuTest, ArcMenuSuspendedItem) {
+TEST_F(AppContextMenuTest, ArcMenuSuspendedItem) {
   ArcAppTest arc_test;
   arc_test.SetUp(profile());
 
@@ -665,24 +540,20 @@ TEST_P(AppContextMenuTest, ArcMenuSuspendedItem) {
   // Separators are not added to touchable app context menus. For touchable
   // app context menus, arc app has double separator, three more app shortcuts
   // provided by arc::FakeAppInstance and two separators between shortcuts.
-  int expected_items = features::IsTouchableAppContextMenuEnabled() ? 8 : 3;
+  int expected_items = 8;
   ASSERT_EQ(expected_items, menu->GetItemCount());
   int index = 0;
   ValidateItemState(menu.get(), index++, MenuState(ash::TOGGLE_PIN));
-  if (!features::IsTouchableAppContextMenuEnabled())
-    ValidateItemState(menu.get(), index++, MenuState());  // separator
   ValidateItemState(menu.get(), index++, MenuState(ash::SHOW_APP_INFO));
 
   // Test that arc app shortcuts provided by arc::FakeAppInstance have a
   // separator between each app shortcut.
-  if (features::IsTouchableAppContextMenuEnabled()) {
     EXPECT_EQ(ui::DOUBLE_SEPARATOR, menu->GetSeparatorTypeAt(index++));
     for (int shortcut_index = 0; index < menu->GetItemCount(); ++index) {
       EXPECT_EQ(base::StringPrintf("ShortLabel %d", shortcut_index++),
                 base::UTF16ToUTF8(menu->GetLabelAt(index++)));
       if (index < menu->GetItemCount())
         EXPECT_EQ(ui::PADDED_SEPARATOR, menu->GetSeparatorTypeAt(index));
-    }
   }
 }
 
@@ -707,14 +578,15 @@ TEST_F(AppContextMenuTest, CommandIdsMatchEnumsForHistograms) {
 }
 
 // Tests that internal app's context menu is correct.
-TEST_P(AppContextMenuTest, InternalAppMenu) {
+TEST_F(AppContextMenuTest, InternalAppMenu) {
   for (const auto& internal_app : app_list::GetInternalAppList(profile())) {
     if (!internal_app.show_in_launcher)
       continue;
 
     controller()->SetAppPinnable(internal_app.app_id,
                                  AppListControllerDelegate::PIN_EDITABLE);
-    InternalAppItem item(profile(), nullptr, internal_app);
+    InternalAppItem item(profile(), nullptr /* model_updater */,
+                         nullptr /* sync_item */, internal_app);
     std::unique_ptr<ui::MenuModel> menu = GetContextMenuModel(&item);
     ASSERT_NE(nullptr, menu);
     EXPECT_EQ(1, menu->GetItemCount());

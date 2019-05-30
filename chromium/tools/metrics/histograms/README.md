@@ -16,7 +16,7 @@ etc., where each group organizes related histograms.
 ## Coding (Emitting to Histograms)
 
 Generally you'll be best served by using one of the macros in
-[https://cs.chromium.org/chromium/src/base/metrics/histogram_macros.h](histogram_macros.h)
+[histogram_macros.h](https://cs.chromium.org/chromium/src/base/metrics/histogram_macros.h)
 if possible.
 
 ### Don't Use the Same Histogram Logging Call in Multiple Places
@@ -32,9 +32,9 @@ not the other.)
 
 When using histogram macros (calls such as `UMA_HISTOGRAM_ENUMERATION`), you're
 not allow to construct your string dynamically so that it can vary at a
-callsite.  At a given callsite (preferably you have only one), the string should
-be the same every time the macro is called.  If you need to use dynamic names,
-use the functions in histogram_functions.h instead of the macros.
+callsite.  At a given callsite (preferably you have only one), the string
+should be the same every time the macro is called.  If you need to use dynamic
+names, use the functions in histogram_functions.h instead of the macros.
 
 ### Don't Use Same String in Multiple Places
 
@@ -212,7 +212,7 @@ friends, as well as helpers such as SCOPED_UMA_HISTOGRAM_TIMER. Many timing
 histograms are used for performance monitoring; if this is the case for you,
 please read [this document about how to structure timing histograms to make
 them more useful and
-actionable](https://chromium.googlesource.com/chromium/src/+/lkcr/docs/speed/diagnostic_metrics.md).
+actionable](https://chromium.googlesource.com/chromium/src/+/lkgr/docs/speed/diagnostic_metrics.md).
 
 ### Percentage or Ratio Histograms
 
@@ -281,6 +281,16 @@ codebase along with marking the histogram definition as obsolete. However, if
 histogram would remain useful, the expiration should be extended accordingly
 before it becomes expired. If histogram you care about already expired, see
 [Expired Histogram Whitelist](#Expired-histogram-whitelist).
+
+In **rare** cases, the expiry can be set to "never". This is used to denote
+metrics of critical importance that are, typically, used for other reports.
+For example, all metrics of the "[heartbeat](https://uma.googleplex.com/p/chrome/variations)"
+are set to never expire.  All metrics that never expire must have an XML
+comment describing why so that it can be audited in the future.
+
+```
+<!-- expires-never: "heartbeat" metric (internal: go/uma-heartbeats) -->
+```
 
 For all the new histograms the use of expiry attribute will be strongly
 encouraged and enforced by Chrome metrics team through reviews.
@@ -392,14 +402,27 @@ Histogram descriptions should clearly state when the histogram is emitted
 
 ### Owners
 
-Histograms need to be owned by a person or set of people. These indicate who
-the current experts on this metric are. Being the owner means you are
-responsible for answering questions about the metric, handling the maintenance
-if there are functional changes, and deprecating the metric if it outlives its
-usefulness. The owners should be added in the original histogram description.
-If you are using a metric heavily and understand it intimately, feel free to
-add yourself as an owner. @chromium.org email addresses are preferred.
+Histograms need to have owners, who are the current experts on the metric. The
+owners are the contact points for any questions or maintenance tasks. It's a
+best practice to list multiple owners, so that there's no single point of
+failure for such communication.
 
+Being an owner means you are responsible for answering questions about the
+metric, handling the maintenance if there are functional changes, and
+deprecating the metric if it outlives its usefulness. If you are using a metric
+heavily and understand it intimately, feel free to add yourself as an owner.
+@chromium.org email addresses are preferred.
+
+If an appropriate mailing list is available, it's a good idea to include the
+mailing list as a secondary owner. However, it's always a best practice to list
+an individual as the primary owner. Listing an individual owner makes it clearer
+who is ultimately most responsible for maintaining the metric, which makes it
+less likely that such maintenance tasks will slip through the cracks.
+
+Notably, owners are asked to evaluate whether histograms have outlived their
+usefulness. When a histogram is nearing expiry, a robot will file a reminder bug
+in Monorail. It's important that somebody familiar with the histogram notices
+and triages such bugs!
 
 ### Deleting Histogram Entries
 

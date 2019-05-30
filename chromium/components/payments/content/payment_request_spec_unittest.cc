@@ -343,8 +343,12 @@ TEST_F(PaymentRequestSpecTest, ShippingOptionsSelection_NoOptionsAtAll) {
   EXPECT_EQ(nullptr, spec()->selected_shipping_option());
   EXPECT_TRUE(spec()->selected_shipping_option_error().empty());
 
-  // Call updateWith with still no options.
-  spec()->UpdateWith(mojom::PaymentDetails::New());
+  // Call updateWith with empty options.
+  {
+    mojom::PaymentDetailsPtr details = mojom::PaymentDetails::New();
+    details->shipping_options = std::vector<mojom::PaymentShippingOptionPtr>();
+    spec()->UpdateWith(std::move(details));
+  }
 
   // Now it's more serious. No option selected, but there is a generic error.
   EXPECT_EQ(nullptr, spec()->selected_shipping_option());
@@ -352,15 +356,46 @@ TEST_F(PaymentRequestSpecTest, ShippingOptionsSelection_NoOptionsAtAll) {
       l10n_util::GetStringUTF16(IDS_PAYMENTS_UNSUPPORTED_SHIPPING_ADDRESS),
       spec()->selected_shipping_option_error());
 
-  // Call updateWith with still no options, but a customized error string.
-  mojom::PaymentDetailsPtr details = mojom::PaymentDetails::New();
-  details->error = "No can do shipping.";
-  spec()->UpdateWith(std::move(details));
+  {
+    // Call updateWith with still no options, but a customized error string.
+    mojom::PaymentDetailsPtr details = mojom::PaymentDetails::New();
+    details->error = "No can do shipping.";
+    spec()->UpdateWith(std::move(details));
+  }
 
   // No option selected, but there is an error provided by the mercahnt.
   EXPECT_EQ(nullptr, spec()->selected_shipping_option());
   EXPECT_EQ(base::ASCIIToUTF16("No can do shipping."),
             spec()->selected_shipping_option_error());
+}
+
+// Test that the last shipping option is selected, even in the case of
+// updateWith.
+TEST_F(PaymentRequestSpecTest, UpdateWithNoShippingOptions) {
+  std::vector<mojom::PaymentShippingOptionPtr> shipping_options;
+  mojom::PaymentShippingOptionPtr option = mojom::PaymentShippingOption::New();
+  option->id = "option:1";
+  option->selected = false;
+  shipping_options.push_back(std::move(option));
+  mojom::PaymentShippingOptionPtr option2 = mojom::PaymentShippingOption::New();
+  option2->id = "option:2";
+  option2->selected = true;
+  shipping_options.push_back(std::move(option2));
+  mojom::PaymentDetailsPtr details = mojom::PaymentDetails::New();
+  details->shipping_options = std::move(shipping_options);
+
+  mojom::PaymentOptionsPtr options = mojom::PaymentOptions::New();
+  options->request_shipping = true;
+  RecreateSpecWithOptionsAndDetails(std::move(options), std::move(details));
+
+  EXPECT_EQ("option:2", spec()->selected_shipping_option()->id);
+  EXPECT_TRUE(spec()->selected_shipping_option_error().empty());
+
+  // Call updateWith with no shipping options
+  spec()->UpdateWith(mojom::PaymentDetails::New());
+
+  EXPECT_EQ("option:2", spec()->selected_shipping_option()->id);
+  EXPECT_TRUE(spec()->selected_shipping_option_error().empty());
 }
 
 TEST_F(PaymentRequestSpecTest, SingleCurrencyWithoutDisplayItems) {
@@ -452,7 +487,7 @@ TEST_F(PaymentRequestSpecTest, MultipleCurrenciesWithTwoDisplayItem) {
   EXPECT_TRUE(spec()->IsMixedCurrency());
 }
 
-TEST_F(PaymentRequestSpecTest, ShippingAddressErrors) {
+TEST_F(PaymentRequestSpecTest, RetryWithShippingAddressErrors) {
   mojom::PaymentOptionsPtr options = mojom::PaymentOptions::New();
   options->request_shipping = true;
   RecreateSpecWithOptionsAndDetails(std::move(options),
@@ -463,7 +498,12 @@ TEST_F(PaymentRequestSpecTest, ShippingAddressErrors) {
   mojom::AddressErrorsPtr shipping_address_errors = mojom::AddressErrors::New();
   shipping_address_errors->address_line = "Invalid address line";
   shipping_address_errors->city = "Invalid city";
-  spec()->UpdateShippingAddressErrors(std::move(shipping_address_errors));
+
+  mojom::PaymentValidationErrorsPtr errors =
+      mojom::PaymentValidationErrors::New();
+  errors->shipping_address = std::move(shipping_address_errors);
+
+  spec()->Retry(std::move(errors));
 
   EXPECT_EQ(base::UTF8ToUTF16("Invalid city"),
             spec()->GetShippingAddressError(autofill::ADDRESS_HOME_CITY));
@@ -474,7 +514,7 @@ TEST_F(PaymentRequestSpecTest, ShippingAddressErrors) {
   EXPECT_TRUE(spec()->has_shipping_address_error());
 }
 
-TEST_F(PaymentRequestSpecTest, PayerErrors) {
+TEST_F(PaymentRequestSpecTest, RetryWithPayerErrors) {
   mojom::PaymentOptionsPtr options = mojom::PaymentOptions::New();
   options->request_payer_email = true;
   options->request_payer_name = true;
@@ -484,11 +524,16 @@ TEST_F(PaymentRequestSpecTest, PayerErrors) {
 
   EXPECT_FALSE(spec()->has_payer_error());
 
-  mojom::PayerErrorFieldsPtr payer_errors = mojom::PayerErrorFields::New();
+  mojom::PayerErrorsPtr payer_errors = mojom::PayerErrors::New();
   payer_errors->email = "Invalid email";
   payer_errors->name = "Invalid name";
   payer_errors->phone = "Invalid phone";
-  spec()->UpdatePayerErrors(std::move(payer_errors));
+
+  mojom::PaymentValidationErrorsPtr errors =
+      mojom::PaymentValidationErrors::New();
+  errors->payer = std::move(payer_errors);
+
+  spec()->Retry(std::move(errors));
 
   EXPECT_EQ(base::UTF8ToUTF16("Invalid email"),
             spec()->GetPayerError(autofill::EMAIL_ADDRESS));

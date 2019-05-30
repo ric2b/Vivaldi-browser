@@ -43,7 +43,6 @@
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/platform/animation/compositor_animation_timeline.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
-#include "third_party/blink/renderer/platform/wtf/time.h"
 
 namespace blink {
 
@@ -62,15 +61,15 @@ const double DocumentTimeline::kMinimumDelay = 0.04;
 DocumentTimeline* DocumentTimeline::Create(Document* document,
                                            TimeDelta origin_time,
                                            PlatformTiming* timing) {
-  return new DocumentTimeline(document, origin_time, timing);
+  return MakeGarbageCollected<DocumentTimeline>(document, origin_time, timing);
 }
 
 DocumentTimeline* DocumentTimeline::Create(
     ExecutionContext* execution_context,
-    const DocumentTimelineOptions& options) {
-  Document* document = ToDocument(execution_context);
-  return new DocumentTimeline(
-      document, TimeDelta::FromMillisecondsD(options.originTime()), nullptr);
+    const DocumentTimelineOptions* options) {
+  Document* document = To<Document>(execution_context);
+  return MakeGarbageCollected<DocumentTimeline>(
+      document, TimeDelta::FromMillisecondsD(options->originTime()), nullptr);
 }
 
 DocumentTimeline::DocumentTimeline(Document* document,
@@ -84,7 +83,7 @@ DocumentTimeline::DocumentTimeline(Document* document,
       playback_rate_(1),
       last_current_time_internal_(0) {
   if (!timing)
-    timing_ = new DocumentTimelineTiming(this);
+    timing_ = MakeGarbageCollected<DocumentTimelineTiming>(this);
   else
     timing_ = timing;
 
@@ -230,9 +229,9 @@ double DocumentTimeline::CurrentTimeInternal(bool& is_null) {
     return std::numeric_limits<double>::quiet_NaN();
   }
   double result = playback_rate_ == 0
-                      ? TimeTicksInSeconds(ZeroTime())
+                      ? ZeroTime().since_origin().InSecondsF()
                       : (GetDocument()->GetAnimationClock().CurrentTime() -
-                         TimeTicksInSeconds(ZeroTime())) *
+                         ZeroTime().since_origin().InSecondsF()) *
                             playback_rate_;
   is_null = std::isnan(result);
   // This looks like it could never be NaN here.
@@ -268,7 +267,7 @@ bool DocumentTimeline::NeedsAnimationTimingUpdate() {
       std::isnan(last_current_time_internal_))
     return false;
 
-  // We allow m_lastCurrentTimeInternal to advance here when there
+  // We allow |last_current_time_internal_| to advance here when there
   // are no animations to allow animations spawned during style
   // recalc to not invalidate this flag.
   if (animations_needing_update_.IsEmpty())
@@ -295,10 +294,12 @@ void DocumentTimeline::SetPlaybackRate(double playback_rate) {
     return;
   double current_time = CurrentTimeInternal();
   playback_rate_ = playback_rate;
-  zero_time_ = TimeTicksFromSeconds(
+  double zero_time_seconds =
       playback_rate == 0 ? current_time
                          : GetDocument()->GetAnimationClock().CurrentTime() -
-                               current_time / playback_rate);
+                               current_time / playback_rate;
+  zero_time_ =
+      base::TimeTicks() + base::TimeDelta::FromSecondsD(zero_time_seconds);
   zero_time_initialized_ = true;
 
   // Corresponding compositor animation may need to be restarted to pick up

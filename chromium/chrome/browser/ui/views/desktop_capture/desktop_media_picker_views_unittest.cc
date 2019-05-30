@@ -102,14 +102,7 @@ TEST_F(DesktopMediaPickerViewsTest, DoneCallbackCalledWhenWindowClosed) {
   base::RunLoop().RunUntilIdle();
 }
 
-// Flaky on Windows. https://crbug.com/644614
-#if defined(OS_WIN)
-#define MAYBE_DoneCallbackCalledOnOkButtonPressed DISABLED_DoneCallbackCalledOnOkButtonPressed
-#else
-#define MAYBE_DoneCallbackCalledOnOkButtonPressed DoneCallbackCalledOnOkButtonPressed
-#endif
-
-TEST_F(DesktopMediaPickerViewsTest, MAYBE_DoneCallbackCalledOnOkButtonPressed) {
+TEST_F(DesktopMediaPickerViewsTest, DoneCallbackCalledOnOkButtonPressed) {
   const DesktopMediaID kFakeId(DesktopMediaID::TYPE_WINDOW, 222);
   EXPECT_CALL(*this, OnPickerDone(kFakeId));
 
@@ -146,10 +139,8 @@ TEST_F(DesktopMediaPickerViewsTest, SelectMediaSourceViewOnSingleClick) {
     DesktopMediaSourceView* source_view_1 =
         GetPickerDialogView()->GetMediaSourceViewForTesting(1);
 
-    // By default, the first screen is selected, but not for other sharing
-    // types.
-    EXPECT_EQ(source_type == DesktopMediaID::TYPE_SCREEN,
-              source_view_0->is_selected());
+    // By default, nothing should be selected.
+    EXPECT_FALSE(source_view_0->is_selected());
     EXPECT_FALSE(source_view_1->is_selected());
 
     // Source view 0 is selected with mouse click.

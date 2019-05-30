@@ -10,12 +10,13 @@ import subprocess
 import sys
 
 
+_CLOUD_PROJECT_ID = 'test-results-hrd'
 QUERY_BY_BUILD_NUMBER = """
 SELECT
   run.name AS name,
   SUM(run.times) AS duration
 FROM
-  [test-results-hrd:events.test_results]
+  [%s:events.test_results]
 WHERE
   buildbot_info.builder_name IN ({})
   AND buildbot_info.build_number = {}
@@ -23,9 +24,7 @@ GROUP BY
   name
 ORDER BY
   name
-"""
-
-
+""" % _CLOUD_PROJECT_ID
 QUERY_STORY_AVG_RUNTIME = """
 SELECT
   name,
@@ -36,7 +35,7 @@ FROM (
     start_time,
     AVG(run.times) AS time
   FROM
-    [test-results-hrd:events.test_results]
+    [%s:events.test_results]
   WHERE
     buildbot_info.builder_name IN ({configuration_names})
     AND run.time IS NOT NULL
@@ -52,8 +51,7 @@ GROUP BY
   name
 ORDER BY
   name
-"""
-
+""" % _CLOUD_PROJECT_ID
 QUERY_STORY_TOTAL_RUNTIME = """
 SELECT
   name,
@@ -64,7 +62,7 @@ FROM (
     start_time,
     SUM(run.times) AS time
   FROM
-    [test-results-hrd:events.test_results]
+    [%s:events.test_results]
   WHERE
     buildbot_info.builder_name IN ({configuration_names})
     AND run.time IS NOT NULL
@@ -80,11 +78,33 @@ GROUP BY
   name
 ORDER BY
   name
+""" % _CLOUD_PROJECT_ID
+
+
+_BQ_SETUP_INSTRUCTION = """
+** NOTE: this script is only for Googlers to use. **
+
+bq script isn't found on your machine. To run this script, you need to be able
+to run bigquery in your terminal.
+If this is the first time you run the script, do the following steps:
+
+1) Follow the steps at https://cloud.google.com/sdk/docs/ to download and
+   unpack google-cloud-sdk in your home directory.
+2) Run `gcloud auth login`
+3) Run `gcloud config set project test-results-hrd`
+   3a) If 'test-results-hrd' does not show up, contact chops-data@
+       to be added as a user of the table
+4) Run this script!
 """
 
 
 def _run_query(query):
-  args = ["bq", "query", "--format=json", "--max_rows=100000", query]
+  try:
+    subprocess.check_call(['which', 'bq'])
+  except subprocess.CalledProcessError:
+    raise RuntimeError(_BQ_SETUP_INSTRUCTION)
+  args = ["bq", "query", "--project_id="+_CLOUD_PROJECT_ID, "--format=json",
+          "--max_rows=100000", query]
 
   p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   stdout, stderr = p.communicate()
@@ -97,13 +117,15 @@ def _run_query(query):
 
 
 def FetchStoryTimingDataForSingleBuild(configurations, build_number):
+  configurations_str = ','.join(repr(c) for c in configurations)
   return _run_query(QUERY_BY_BUILD_NUMBER.format(
-      configurations, build_number))
+      configurations_str, build_number))
 
 
 def FetchAverageStortyTimingData(configurations, num_last_days):
+  configurations_str = ','.join(repr(c) for c in configurations)
   return _run_query(QUERY_STORY_AVG_RUNTIME.format(
-      configuration_names=configurations, num_last_days=num_last_days))
+      configuration_names=configurations_str, num_last_days=num_last_days))
 
 
 def FetchBenchmarkRuntime(configurations, num_last_days):
@@ -137,18 +159,6 @@ _FETCH_BENCHMARK_RUNTIME = 'fetch-benchmark-runtime'
 _FETCH_STORY_RUNTIME = 'fetch-story-runtime'
 
 def main(args):
-  """
-    To run this script, you need to be able to run bigquery in your terminal.
-    If this is the first time you run the script, do the following steps:
-
-    1) Follow the steps at https://cloud.google.com/sdk/docs/ to download and
-       unpack google-cloud-sdk in your home directory.
-    2) Run `glcoud auth login`
-    3) Run `gcloud config set project test-results-hrd`
-       3a) If 'test-results-hrd' does not show up, contact seanmccullough@
-           to be added as a user of the table
-    4) Run this script!
-  """
   parser = argparse.ArgumentParser(
       description='Retrieve story timing from bigquery.')
   parser.add_argument('action',
@@ -164,16 +174,15 @@ def main(args):
       help='If specified, the build number to get timing data from.')
   opts = parser.parse_args(args)
 
-  configurations = str(opts.configurations).strip('[]')
 
   if opts.action == _FETCH_BENCHMARK_RUNTIME:
-    data = FetchBenchmarkRuntime(configurations, num_last_days=5)
+    data = FetchBenchmarkRuntime(opts.configurations, num_last_days=5)
   else:
     if opts.build_number:
-      data = FetchStoryTimingDataForSingleBuild(configurations,
+      data = FetchStoryTimingDataForSingleBuild(opts.configurations,
           opts.build_number)
     else:
-      data = FetchAverageStortyTimingData(configurations, num_last_days=5)
+      data = FetchAverageStortyTimingData(opts.configurations, num_last_days=5)
 
   with open(opts.output_file, 'w') as output_file:
     json.dump(data, output_file, indent = 4, separators=(',', ': '))

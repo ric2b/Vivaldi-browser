@@ -24,9 +24,9 @@ class CORE_EXPORT AbortSignal final : public EventTargetWithInlineData {
   explicit AbortSignal(ExecutionContext*);
   ~AbortSignal() override;
 
-  // AbortSignal.idl
+  // abort_signal.idl
   bool aborted() const { return aborted_flag_; }
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(abort);
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(abort, kAbort)
 
   const AtomicString& InterfaceName() const override;
   ExecutionContext* GetExecutionContext() const override;
@@ -62,8 +62,11 @@ class CORE_EXPORT AbortSignal final : public EventTargetWithInlineData {
   void Trace(Visitor*) override;
 
  private:
+  void AddSignalAbortAlgorithm(AbortSignal*);
+
   bool aborted_flag_ = false;
   Vector<base::OnceClosure> abort_algorithms_;
+  HeapVector<Member<AbortSignal>> dependent_signals_;
   Member<ExecutionContext> execution_context_;
 };
 

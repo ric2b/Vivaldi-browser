@@ -6,10 +6,11 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/bits.h"
 #include "base/logging.h"
 #include "base/memory/shared_memory.h"
-#include "base/sys_info.h"
+#include "base/system/sys_info.h"
 #include "components/arc/video_accelerator/protected_buffer_allocator.h"
 #include "mojo/public/cpp/system/buffer.h"
 #include "mojo/public/cpp/system/platform_handle.h"
@@ -23,7 +24,7 @@ namespace arc {
 
 namespace {
 // Size of the pixmap to be used as the dummy handle for protected buffers.
-constexpr gfx::Size kDummyBufferSize(16, 16);
+constexpr gfx::Size kDummyBufferSize(32, 32);
 
 // Maximum number of concurrent ProtectedBufferAllocatorImpl instances.
 // Currently we have no way to know the resources of ProtectedBufferAllocator.
@@ -245,7 +246,8 @@ void ProtectedBufferManager::ProtectedBufferAllocatorImpl::
                                                     std::move(dummy_fd));
 }
 
-ProtectedBufferManager::ProtectedBufferManager() {
+ProtectedBufferManager::ProtectedBufferManager()
+    : next_protected_buffer_allocator_id_(0) {
   VLOGF(2);
 }
 
@@ -463,8 +465,8 @@ scoped_refptr<gfx::NativePixmap> ProtectedBufferManager::ImportDummyFd(
   ui::SurfaceFactoryOzone* factory = platform->GetSurfaceFactoryOzone();
   scoped_refptr<gfx::NativePixmap> pixmap =
       factory->CreateNativePixmapForProtectedBufferHandle(
-          gfx::kNullAcceleratedWidget, kDummyBufferSize,
-          gfx::BufferFormat::RGBA_8888, pixmap_handle);
+          gfx::kNullAcceleratedWidget, kDummyBufferSize, gfx::BufferFormat::R_8,
+          pixmap_handle);
   if (!pixmap) {
     VLOGF(1) << "Failed importing dummy handle";
     return nullptr;
@@ -480,7 +482,6 @@ scoped_refptr<gfx::NativePixmap> ProtectedBufferManager::ImportDummyFd(
 }
 
 void ProtectedBufferManager::RemoveEntry(uint32_t id) {
-  buffer_map_lock_.AssertAcquired();
   VLOGF(2) << "id: " << id;
   auto num_erased = buffer_map_.erase(id);
   if (num_erased != 1)
@@ -489,7 +490,6 @@ void ProtectedBufferManager::RemoveEntry(uint32_t id) {
 
 bool ProtectedBufferManager::CanAllocateFor(uint64_t allocator_id,
                                             uint32_t id) {
-  buffer_map_lock_.AssertAcquired();
   if (buffer_map_.find(id) != buffer_map_.end()) {
     VLOGF(1) << "A protected buffer for this handle already exists";
     return false;

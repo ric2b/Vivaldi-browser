@@ -17,6 +17,7 @@
 #include <string>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/lazy_instance.h"
@@ -70,7 +71,7 @@ class OCSPIOLoop {
 
   void StartUsing() {
     base::AutoLock autolock(lock_);
-    DCHECK(base::MessageLoopForIO::IsCurrent());
+    DCHECK(base::MessageLoopCurrentForIO::IsSet());
     io_task_runner_ = base::ThreadTaskRunnerHandle::Get();
   }
 
@@ -352,7 +353,8 @@ class OCSPRequestSession
     lock_.AssertAcquired();
     if (io_task_runner_) {
       io_task_runner_->PostTask(
-          FROM_HERE, base::Bind(&OCSPRequestSession::CancelURLRequest, this));
+          FROM_HERE,
+          base::BindOnce(&OCSPRequestSession::CancelURLRequest, this));
     }
   }
 
@@ -370,7 +372,7 @@ class OCSPRequestSession
     {
       base::AutoLock autolock(lock_);
       DCHECK(!io_task_runner_);
-      DCHECK(base::MessageLoopForIO::IsCurrent());
+      DCHECK(base::MessageLoopCurrentForIO::IsSet());
       io_task_runner_ = base::ThreadTaskRunnerHandle::Get();
       g_ocsp_io_loop.Get().AddRequest(this);
     }

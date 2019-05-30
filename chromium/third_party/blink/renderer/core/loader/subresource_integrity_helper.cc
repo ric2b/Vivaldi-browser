@@ -56,8 +56,8 @@ void SubresourceIntegrityHelper::GetConsoleMessages(
     HeapVector<Member<ConsoleMessage>>* messages) {
   DCHECK(messages);
   for (const auto& message : report_info.ConsoleErrorMessages()) {
-    messages->push_back(ConsoleMessage::Create(kSecurityMessageSource,
-                                               kErrorMessageLevel, message));
+    messages->push_back(ConsoleMessage::Create(
+        kSecurityMessageSource, mojom::ConsoleMessageLevel::kError, message));
   }
 }
 
@@ -65,7 +65,7 @@ SubresourceIntegrity::IntegrityFeatures SubresourceIntegrityHelper::GetFeatures(
     ExecutionContext* execution_context) {
   bool allow_signatures =
       RuntimeEnabledFeatures::SignatureBasedIntegrityEnabledByRuntimeFlag() ||
-      OriginTrials::SignatureBasedIntegrityEnabled(execution_context);
+      origin_trials::SignatureBasedIntegrityEnabled(execution_context);
   return allow_signatures ? SubresourceIntegrity::IntegrityFeatures::kSignatures
                           : SubresourceIntegrity::IntegrityFeatures::kDefault;
 }

@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "ash/shell.h"
+#include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/singleton.h"
@@ -22,6 +23,7 @@
 #include "services/device/public/mojom/wake_lock.mojom.h"
 #include "services/device/public/mojom/wake_lock_provider.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
+#include "ui/display/manager/display_configurator.h"
 
 namespace arc {
 namespace {
@@ -125,8 +127,7 @@ ArcPowerBridge* ArcPowerBridge::GetForBrowserContext(
 
 ArcPowerBridge::ArcPowerBridge(content::BrowserContext* context,
                                ArcBridgeService* bridge_service)
-    : arc_bridge_service_(bridge_service),
-      weak_ptr_factory_(this) {
+    : arc_bridge_service_(bridge_service), weak_ptr_factory_(this) {
   arc_bridge_service_->power()->SetHost(this);
   arc_bridge_service_->power()->AddObserver(this);
 }
@@ -152,21 +153,17 @@ void ArcPowerBridge::OnConnectionReady() {
   // TODO(mash): Support this functionality without ash::Shell access in Chrome.
   if (ash::Shell::HasInstance())
     ash::Shell::Get()->display_configurator()->AddObserver(this);
-  chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->
-      AddObserver(this);
-  chromeos::DBusThreadManager::Get()
-      ->GetPowerManagerClient()
-      ->GetScreenBrightnessPercent(
-          base::BindOnce(&ArcPowerBridge::OnGetScreenBrightnessPercent,
-                         weak_ptr_factory_.GetWeakPtr()));
+  chromeos::PowerManagerClient::Get()->AddObserver(this);
+  chromeos::PowerManagerClient::Get()->GetScreenBrightnessPercent(
+      base::BindOnce(&ArcPowerBridge::OnGetScreenBrightnessPercent,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void ArcPowerBridge::OnConnectionClosed() {
   // TODO(mash): Support this functionality without ash::Shell access in Chrome.
   if (ash::Shell::HasInstance())
     ash::Shell::Get()->display_configurator()->RemoveObserver(this);
-  chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->
-      RemoveObserver(this);
+  chromeos::PowerManagerClient::Get()->RemoveObserver(this);
   wake_lock_requestors_.clear();
 }
 
@@ -177,9 +174,9 @@ void ArcPowerBridge::SuspendImminent(
   if (!power_instance)
     return;
 
-  power_instance->Suspend(chromeos::DBusThreadManager::Get()
-                              ->GetPowerManagerClient()
-                              ->GetSuspendReadinessCallback(FROM_HERE));
+  power_instance->Suspend(
+      chromeos::PowerManagerClient::Get()->GetSuspendReadinessCallback(
+          FROM_HERE));
 }
 
 void ArcPowerBridge::SuspendDone(const base::TimeDelta& sleep_duration) {
@@ -263,9 +260,13 @@ void ArcPowerBridge::IsDisplayOn(IsDisplayOnCallback callback) {
 }
 
 void ArcPowerBridge::OnScreenBrightnessUpdateRequest(double percent) {
-  chromeos::DBusThreadManager::Get()
-      ->GetPowerManagerClient()
-      ->SetScreenBrightnessPercent(percent, true);
+  power_manager::SetBacklightBrightnessRequest request;
+  request.set_percent(percent);
+  request.set_transition(
+      power_manager::SetBacklightBrightnessRequest_Transition_GRADUAL);
+  request.set_cause(
+      power_manager::SetBacklightBrightnessRequest_Cause_USER_REQUEST);
+  chromeos::PowerManagerClient::Get()->SetScreenBrightness(request);
 }
 
 ArcPowerBridge::WakeLockRequestor* ArcPowerBridge::GetWakeLockRequestor(

@@ -19,6 +19,9 @@ namespace display {
 namespace test {
 namespace {
 
+// Indicates the default maximum of displays that chrome device can support.
+constexpr size_t kDefaultMaxSupportDisplayTest = 10;
+
 DisplayInfoList CreateDisplayInfoListFromString(
     const std::string specs,
     DisplayManager* display_manager) {
@@ -51,11 +54,10 @@ bool GetDisplayModeForResolution(const ManagedDisplayInfo& info,
   const ManagedDisplayInfo::ManagedDisplayModeList& modes =
       info.display_modes();
   DCHECK_NE(0u, modes.size());
-  ManagedDisplayInfo::ManagedDisplayModeList::const_iterator iter =
-      std::find_if(modes.begin(), modes.end(),
-                   [resolution](const ManagedDisplayMode& mode) {
-                     return mode.size() == resolution;
-                   });
+  auto iter = std::find_if(modes.begin(), modes.end(),
+                           [resolution](const ManagedDisplayMode& mode) {
+                             return mode.size() == resolution;
+                           });
   if (iter == modes.end()) {
     DLOG(WARNING) << "Unsupported resolution was requested:"
                   << resolution.ToString();
@@ -67,6 +69,9 @@ bool GetDisplayModeForResolution(const ManagedDisplayInfo& info,
 
 }  // namespace
 
+size_t DisplayManagerTestApi::maximum_support_display_ =
+    kDefaultMaxSupportDisplayTest;
+
 DisplayManagerTestApi::DisplayManagerTestApi(DisplayManager* display_manager)
     : display_manager_(display_manager) {
   DCHECK(display_manager);
@@ -74,9 +79,22 @@ DisplayManagerTestApi::DisplayManagerTestApi(DisplayManager* display_manager)
 
 DisplayManagerTestApi::~DisplayManagerTestApi() {}
 
+void DisplayManagerTestApi::ResetMaximumDisplay() {
+  maximum_support_display_ = kDefaultMaxSupportDisplayTest;
+}
+
 void DisplayManagerTestApi::UpdateDisplay(const std::string& display_specs) {
   DisplayInfoList display_info_list =
       CreateDisplayInfoListFromString(display_specs, display_manager_);
+#if defined(OS_CHROMEOS)
+  if (display_info_list.size() > maximum_support_display_) {
+    display_manager_->configurator()->has_unassociated_display_ = true;
+    while (display_info_list.size() > maximum_support_display_)
+      display_info_list.pop_back();
+  } else {
+    display_manager_->configurator()->has_unassociated_display_ = false;
+  }
+#endif
   bool is_host_origin_set = false;
   for (size_t i = 0; i < display_info_list.size(); ++i) {
     const ManagedDisplayInfo& display_info = display_info_list[i];
@@ -94,8 +112,8 @@ void DisplayManagerTestApi::UpdateDisplay(const std::string& display_specs) {
     // Start from (1,1) so that windows won't overlap with native mouse cursor.
     // See |AshTestBase::SetUp()|.
     int next_y = 1;
-    for (DisplayInfoList::iterator iter = display_info_list.begin();
-         iter != display_info_list.end(); ++iter) {
+    for (auto iter = display_info_list.begin(); iter != display_info_list.end();
+         ++iter) {
       gfx::Rect bounds(iter->bounds_in_native().size());
       bounds.set_x(1);
       bounds.set_y(next_y);

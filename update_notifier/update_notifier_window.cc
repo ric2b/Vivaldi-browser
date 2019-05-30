@@ -14,6 +14,7 @@
 #include "app/vivaldi_resources.h"
 #include "base/bind.h"
 #include "base/lazy_instance.h"
+#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/current_module.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -134,7 +135,7 @@ void UpdateNotifierWindow::ShowNotification(const std::string& version) {
   notify_icon.uCallbackMessage = kNotificationCallbackMessage;
   LoadIconMetric(GetModuleHandle(NULL), MAKEINTRESOURCE(IDI_NOTIFIER_MAIN),
                  LIM_SMALL, &notify_icon.hIcon);
-  SetNotificationString(notify_icon.szTip, arraysize(notify_icon.szTip),
+  SetNotificationString(notify_icon.szTip, base::size(notify_icon.szTip),
       l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_TOOLTIP));
   notify_icon.dwInfoFlags = NIIF_USER;
 
@@ -147,12 +148,12 @@ void UpdateNotifierWindow::ShowNotification(const std::string& version) {
   notify_icon.uVersion = NOTIFYICON_VERSION_4;
   Shell_NotifyIcon(NIM_SETVERSION, &notify_icon);
 
-  SetNotificationString(notify_icon.szInfo, arraysize(notify_icon.szInfo),
+  SetNotificationString(notify_icon.szInfo, base::size(notify_icon.szInfo),
                         l10n_util::GetStringFUTF16(IDS_UPDATE_NOTIFICATION_TEXT,
                                                    base::UTF8ToUTF16(version)));
   notify_icon.uTimeout = 30000;
   SetNotificationString(
-      notify_icon.szInfoTitle, arraysize(notify_icon.szInfoTitle),
+      notify_icon.szInfoTitle, base::size(notify_icon.szInfoTitle),
       l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_TITLE));
   Shell_NotifyIcon(NIM_MODIFY, &notify_icon);
 }

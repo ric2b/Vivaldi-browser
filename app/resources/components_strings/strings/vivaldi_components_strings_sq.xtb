@@ -4,7 +4,6 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> e preu lidhjen papritur.</translation>
 <translation id="1375198122581997741">Për versionin</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> nuk dërgoi asnjë të dhënë.</translation>
-<translation id="1506687042165942984">Tregon një kopje të ruajtur (d.m.th. të vjetër) të kësaj faqes.</translation>
 <translation id="1559528461873125649">Nuk ekziston skedari apo katalogu</translation>
 <translation id="1710259589646384581">Sistemi operativ</translation>
 <translation id="194030505837763158">Shkoj te <ph name="LINK" /></translation>
@@ -13,9 +12,11 @@
 <translation id="2292556288342944218">Është bllokuar aksesi në internet</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> dërgoi një përgjigje të pavlefshme.</translation>
 <translation id="2609632851001447353">Variantet</translation>
+<translation id="2634124572758952069">Nuk gjendet adresa IP e serverit për <ph name="HOST_NAME" />.</translation>
 <translation id="2909946352844186028">U diktua një ndryshim në rrjet.</translation>
-<translation id="3005723025932146533">Tregoj kopjen e ruajtur</translation>
+<translation id="3005723025932146533">Tregoj kopjen e regjistruar</translation>
 <translation id="3109728660330352905">Nuk keni autorizim për ta hapur këtë faqen.</translation>
+<translation id="3226128629678568754">Shtypni butonin Freskoj për të parashtruar edhe një herë të dhënat që nevojiten për të hapur faqen.</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> nuk mund të arrihet për momentin.</translation>
 <translation id="3447661539832366887">Zotëruesi i këtij aparati e ka fikur lojën me dinozaur.</translation>
 <translation id="3586931643579894722">Fsheh detajet</translation>
@@ -24,6 +25,7 @@
 <translation id="4522570452068850558">Detaje</translation>
 <translation id="4708268264240856090">U ndërpre lidhja</translation>
 <translation id="5023310440958281426">Kontrolloni politikat e administratorit tuaj</translation>
+<translation id="5070335125961472645"><ph name="BEGIN_LINK" />Verifikohet adresa proxy<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bit)</translation>
 <translation id="5431657950005405462">Nuk gjendet skedari</translation>
 <translation id="5452270690849572955">Nuk gjendet kjo faqja <ph name="HOST_NAME" /></translation>

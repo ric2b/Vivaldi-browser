@@ -10,7 +10,7 @@
 
 #include "ash/display/mouse_cursor_event_filter.h"
 #include "ash/drag_drop/drag_drop_controller.h"
-#include "ash/public/cpp/config.h"
+#include "ash/drag_drop/drag_drop_controller_test_api.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
 #include "ash/scoped_root_window_for_new_windows.h"
@@ -27,7 +27,7 @@
 #include "ash/window_factory.h"
 #include "ash/wm/window_util.h"
 #include "base/command_line.h"
-#include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/account_id/account_id.h"
@@ -45,8 +45,8 @@
 #include "ui/events/test/test_event_handler.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/keyboard/keyboard_controller.h"
-#include "ui/keyboard/keyboard_switches.h"
 #include "ui/keyboard/keyboard_util.h"
+#include "ui/keyboard/public/keyboard_switches.h"
 #include "ui/views/controls/menu/menu_controller.h"
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/widget/widget.h"
@@ -72,7 +72,7 @@ aura::Window* GetAlwaysOnTopContainer() {
 // Expect ALL the containers!
 void ExpectAllContainers() {
   // Validate no duplicate container IDs.
-  const size_t all_shell_container_ids_size = arraysize(kAllShellContainerIds);
+  const size_t all_shell_container_ids_size = base::size(kAllShellContainerIds);
   std::set<int32_t> container_ids;
   for (size_t i = 0; i < all_shell_container_ids_size; ++i)
     EXPECT_TRUE(container_ids.insert(kAllShellContainerIds[i]).second);
@@ -555,18 +555,17 @@ TEST_F(ShellTest, EnvPreTargetHandler) {
 
 // Verifies keyboard is re-enabled on proper timing.
 TEST_F(ShellTest, KeyboardCreation) {
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      keyboard::switches::kEnableVirtualKeyboard);
+  keyboard::SetTouchKeyboardEnabled(true);
 
   ASSERT_TRUE(keyboard::IsKeyboardEnabled());
 
-  SessionObserver* shell = Shell::Get();
-  EXPECT_FALSE(keyboard::KeyboardController::Get()->enabled());
+  EXPECT_FALSE(keyboard::KeyboardController::Get()->IsEnabled());
 
-  shell->OnSessionStateChanged(
-      session_manager::SessionState::LOGGED_IN_NOT_ACTIVE);
+  mojom::SessionInfoPtr info = mojom::SessionInfo::New();
+  info->state = session_manager::SessionState::LOGGED_IN_NOT_ACTIVE;
+  ash::Shell::Get()->session_controller()->SetSessionInfo(std::move(info));
 
-  EXPECT_TRUE(keyboard::KeyboardController::Get()->enabled());
+  EXPECT_TRUE(keyboard::KeyboardController::Get()->IsEnabled());
 }
 
 // This verifies WindowObservers are removed when a window is destroyed after
@@ -675,6 +674,18 @@ TEST_F(ShellLocalStateTest, LocalState) {
   EXPECT_EQ(local_state_ptr, ash_test_helper()->GetLocalStatePrefService());
 
   Shell::Get()->RemoveShellObserver(&observer);
+}
+
+using ShellLoginTest = NoSessionAshTestBase;
+
+TEST_F(ShellLoginTest, DragAndDropDisabledBeforeLogin) {
+  DragDropController* drag_drop_controller =
+      ShellTestApi(Shell::Get()).drag_drop_controller();
+  DragDropControllerTestApi drag_drop_controller_test_api(drag_drop_controller);
+  EXPECT_FALSE(drag_drop_controller_test_api.enabled());
+
+  SimulateUserLogin("user1@test.com");
+  EXPECT_TRUE(drag_drop_controller_test_api.enabled());
 }
 
 }  // namespace ash
