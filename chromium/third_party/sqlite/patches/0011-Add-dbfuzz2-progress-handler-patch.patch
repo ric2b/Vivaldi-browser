@@ -17,7 +17,7 @@ index dd1ed061717b..6eca1f7f32ae 100644
 @@ -74,6 +74,10 @@ static int bVdbeDebug = 0;
  /* Maximum size of the in-memory database file */
  static sqlite3_int64 szMax = 104857600;
-
+ 
 +/* Progress handler callback data */
 +static int nCb = 0;                  /* Number of callbacks seen so far */
 +static int mxCb = 250000;            /* Maximum allowed callbacks */
@@ -28,7 +28,7 @@ index dd1ed061717b..6eca1f7f32ae 100644
 @@ -157,6 +161,21 @@ int sqlite3MemTraceDeactivate(void){
  }
  /***** End copy/paste from ext/misc/memtrace.c ***************************/
-
+ 
 +/*
 +** Progress handler callback
 +**
@@ -79,5 +79,6 @@ index dd1ed061717b..6eca1f7f32ae 100644
        if( strcmp(z,"memtrace")==0 ){
          sqlite3MemTraceActivate(stdout);
          continue;
---
+-- 
 2.21.0.392.gf8f6787159e-goog
+

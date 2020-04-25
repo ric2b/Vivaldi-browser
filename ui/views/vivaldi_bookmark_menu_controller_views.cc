@@ -10,6 +10,6 @@ void BookmarkMenuController::RunMenuAt(const views::View* parent,
                                        const gfx::Rect& rect) {
   menu_delegate_->GetBookmarkModel()->AddObserver(this);
   menu_runner_->RunMenuAt(menu_delegate_->parent(), nullptr, rect,
-                          views::MENU_ANCHOR_TOPLEFT,
+                          views::MenuAnchorPosition::kTopLeft,
                           ui::MENU_SOURCE_NONE);
 }

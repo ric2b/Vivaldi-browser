@@ -71,7 +71,6 @@
 #include "third_party/blink/renderer/core/layout/hit_test_canvas_result.h"
 #include "third_party/blink/renderer/core/layout/layout_html_canvas.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
-#include "third_party/blink/renderer/core/origin_trials/origin_trials.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/paint/compositing/paint_layer_compositor.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
@@ -148,15 +147,15 @@ intptr_t HTMLCanvasElement::global_gpu_memory_usage_ = 0;
 unsigned HTMLCanvasElement::global_accelerated_context_count_ = 0;
 
 HTMLCanvasElement::~HTMLCanvasElement() {
-  if (surface_layer_bridge_ && surface_layer_bridge_->GetCcLayer())
-    GraphicsLayer::UnregisterContentsLayer(surface_layer_bridge_->GetCcLayer());
   v8::Isolate::GetCurrent()->AdjustAmountOfExternalAllocatedMemory(
       -externally_allocated_memory_);
 }
 
 void HTMLCanvasElement::Dispose() {
-  if (PlaceholderFrame())
+  if (PlaceholderFrame()) {
     ReleasePlaceholderFrame();
+    UnregisterPlaceholder();
+  }
 
   // We need to drop frame dispatcher, to prevent mojo calls from completing.
   frame_dispatcher_ = nullptr;
@@ -176,6 +175,19 @@ void HTMLCanvasElement::Dispose() {
     global_accelerated_context_count_--;
   }
   global_gpu_memory_usage_ -= gpu_memory_usage_;
+
+  if (surface_layer_bridge_) {
+    if (surface_layer_bridge_->GetCcLayer()) {
+      GraphicsLayer::UnregisterContentsLayer(
+          surface_layer_bridge_->GetCcLayer());
+    }
+    // Observer has to be cleared out at this point. Otherwise the
+    // SurfaceLayerBridge may call back into the observer which is undefined
+    // behavior. In the worst case, the dead canvas element re-adds itself into
+    // a data structure which may crash at a later point in time. See
+    // https://crbug.com/976577.
+    surface_layer_bridge_->ClearObserver();
+  }
 }
 
 void HTMLCanvasElement::ParseAttribute(
@@ -185,12 +197,12 @@ void HTMLCanvasElement::ParseAttribute(
   HTMLElement::ParseAttribute(params);
 }
 
-LayoutObject* HTMLCanvasElement::CreateLayoutObject(
-    const ComputedStyle& style) {
+LayoutObject* HTMLCanvasElement::CreateLayoutObject(const ComputedStyle& style,
+                                                    LegacyLayout legacy) {
   LocalFrame* frame = GetDocument().GetFrame();
   if (frame && GetDocument().CanExecuteScripts(kNotAboutToExecuteScript))
     return new LayoutHTMLCanvas(this);
-  return HTMLElement::CreateLayoutObject(style);
+  return HTMLElement::CreateLayoutObject(style, legacy);
 }
 
 Node::InsertionNotificationRequest HTMLCanvasElement::InsertedInto(
@@ -273,7 +285,7 @@ CanvasRenderingContext* HTMLCanvasElement::GetCanvasRenderingContextInternal(
   // Unknown type.
   if (context_type == CanvasRenderingContext::kContextTypeUnknown ||
       (context_type == CanvasRenderingContext::kContextXRPresent &&
-       !origin_trials::WebXREnabled(&GetDocument()))) {
+       !RuntimeEnabledFeatures::WebXREnabled(&GetDocument()))) {
     return nullptr;
   }
 
@@ -321,8 +333,7 @@ CanvasRenderingContext* HTMLCanvasElement::GetCanvasRenderingContextInternal(
     DidDraw();
   }
 
-  if (context_->CreationAttributes().low_latency &&
-      origin_trials::LowLatencyCanvasEnabled(&GetDocument())) {
+  if (context_->CreationAttributes().desynchronized) {
     CreateLayer();
     SetNeedsUnbufferedInputEvents(true);
     frame_dispatcher_ = std::make_unique<CanvasResourceDispatcher>(
@@ -1403,7 +1414,7 @@ HitTestCanvasResult* HTMLCanvasElement::GetControlAndIdIfHitRegionExists(
     const LayoutPoint& location) {
   if (Is2d())
     return context_->GetControlAndIdIfHitRegionExists(location);
-  return HitTestCanvasResult::Create(String(), nullptr);
+  return MakeGarbageCollected<HitTestCanvasResult>(String(), nullptr);
 }
 
 String HTMLCanvasElement::GetIdFromControl(const Element* element) {

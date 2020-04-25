@@ -68,6 +68,10 @@
           "accountInfo": {
             "$ref": "AccountInfo"
           },
+          "hasSavedPassword": {
+            "type": "boolean",
+            "description": "Whether we found a password for this sync account in the password manager."
+          },
           "hasToken": {
             "type": "boolean",
             "description": "If we have a token, we are practically logged in (but we may still need to get the accountId to be fully operational)."

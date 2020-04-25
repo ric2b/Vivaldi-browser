@@ -54,7 +54,6 @@ const char* kSubstitutionNames[SUBSTITUTION_NUM_TYPES] = {
     "{{bundle_contents_dir}}",        // SUBSTITUTION_BUNDLE_CONTENTS_DIR
     "{{bundle_resources_dir}}",       // SUBSTITUTION_BUNDLE_RESOURCES_DIR
     "{{bundle_executable_dir}}",      // SUBSTITUTION_BUNDLE_EXECUTABLE_DIR
-    "{{bundle_plugins_dir}}",         // SUBSTITUTION_BUNDLE_PLUGINS_DIR
     "{{bundle_product_type}}",        // SUBSTITUTION_BUNDLE_PRODUCT_TYPE
     "{{bundle_partial_info_plist}}",  // SUBSTITUTION_BUNDLE_PARTIAL_INFO_PLIST,
 
@@ -109,7 +108,6 @@ const char* kSubstitutionNinjaNames[SUBSTITUTION_NUM_TYPES] = {
     "bundle_contents_dir",    // SUBSTITUTION_BUNDLE_CONTENTS_DIR
     "bundle_resources_dir",   // SUBSTITUTION_BUNDLE_RESOURCES_DIR
     "bundle_executable_dir",  // SUBSTITUTION_BUNDLE_EXECUTABLE_DIR
-    "bundle_plugins_dir",     // SUBSTITUTION_BUNDLE_PLUGINS_DIR
     "product_type",           // SUBSTITUTION_BUNDLE_PRODUCT_TYPE
     "partial_info_plist",     // SUBSTITUTION_BUNDLE_PARTIAL_INFO_PLIST
 
@@ -143,8 +141,7 @@ bool SubstitutionIsInBundleDir(SubstitutionType type) {
   return type == SUBSTITUTION_BUNDLE_ROOT_DIR ||
          type == SUBSTITUTION_BUNDLE_CONTENTS_DIR ||
          type == SUBSTITUTION_BUNDLE_RESOURCES_DIR ||
-         type == SUBSTITUTION_BUNDLE_EXECUTABLE_DIR ||
-         type == SUBSTITUTION_BUNDLE_PLUGINS_DIR;
+         type == SUBSTITUTION_BUNDLE_EXECUTABLE_DIR;
 }
 
 bool IsValidBundleDataSubstitution(SubstitutionType type) {
@@ -155,8 +152,7 @@ bool IsValidBundleDataSubstitution(SubstitutionType type) {
          type == SUBSTITUTION_BUNDLE_ROOT_DIR ||
          type == SUBSTITUTION_BUNDLE_CONTENTS_DIR ||
          type == SUBSTITUTION_BUNDLE_RESOURCES_DIR ||
-         type == SUBSTITUTION_BUNDLE_EXECUTABLE_DIR ||
-         type == SUBSTITUTION_BUNDLE_PLUGINS_DIR;
+         type == SUBSTITUTION_BUNDLE_EXECUTABLE_DIR;
 }
 
 bool IsValidSourceSubstitution(SubstitutionType type) {

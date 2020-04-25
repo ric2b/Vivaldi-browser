@@ -6,6 +6,8 @@ source_set("vivaldi_account") {
     "vivaldi_account_manager.h",
     "vivaldi_account_manager_request_handler.cc",
     "vivaldi_account_manager_request_handler.h",
+    "vivaldi_account_password_handler.cc",
+    "vivaldi_account_password_handler.h",
   ]
 
   deps = [

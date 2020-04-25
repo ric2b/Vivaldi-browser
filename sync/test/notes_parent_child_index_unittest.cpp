@@ -36,11 +36,11 @@ class NotesParentChildIndexTest : public testing::Test {
   }
 
   static syncable::Id GetNoteId(int n) {
-    return syncable::Id::CreateFromServerId("b" + base::IntToString(n));
+    return syncable::Id::CreateFromServerId("b" + base::NumberToString(n));
   }
 
   static syncable::Id GetClientUniqueId(int n) {
-    return syncable::Id::CreateFromServerId("c" + base::IntToString(n));
+    return syncable::Id::CreateFromServerId("c" + base::NumberToString(n));
   }
 
   EntryKernel* MakeRoot() {
@@ -102,7 +102,7 @@ class NotesParentChildIndexTest : public testing::Test {
     item->put(IS_DIR, false);
     item->put(ID, GetClientUniqueId(n));
     item->put(PARENT_ID, syncable::Id());
-    item->put(UNIQUE_CLIENT_TAG, base::IntToString(n));
+    item->put(UNIQUE_CLIENT_TAG, base::NumberToString(n));
 
     owned_entry_kernels_.push_back(base::WrapUnique(item));
     return item;

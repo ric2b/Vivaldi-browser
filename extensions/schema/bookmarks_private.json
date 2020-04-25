@@ -22,6 +22,82 @@
         }
       },
       {
+        "id": "BookmarkTreeNode",
+        "type": "object",
+        "description": "Copied from bookmarks.json",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minimum": 0,
+            "description": "The unique identifier for the node. IDs are unique within the current profile, and they remain valid even after the browser is restarted."
+          },
+          "parentId": {
+            "type": "string",
+            "minimum": 0,
+            "optional": true,
+            "description": "The <code>id</code> of the parent folder.  Omitted for the root node."
+          },
+          "index": {
+            "type": "integer",
+            "optional": true,
+            "description": "The 0-based position of this node within its parent folder."
+          },
+          "url": {
+            "type": "string",
+            "optional": true,
+            "description": "The URL navigated to when a user clicks the bookmark. Omitted for folders."
+          },
+          "title": {
+            "type": "string",
+            "description": "The text displayed for the node."
+          },
+          "nickname": {
+            "type": "string",
+            "description": "The nickname for the node. Vivaldi extended property"
+          },
+          "description": {
+            "type": "string",
+            "description": "The description text for the node. Vivaldi extended property"
+          },
+          "thumbnail": {
+            "type": "string",
+            "description": "chrome://thumb/<url> pointing to the stored url of the thumbnail"
+          },
+          "partner": {
+            "type": "string",
+            "description": "Partner id for the node. Vivaldi extended property"
+          },
+          "speeddial": {
+            "type": "boolean",
+            "description": "Boolean variable, stating if a folder is a speeddial folder"
+          },
+          "bookmarkbar": {
+            "type": "boolean",
+            "description": "Boolean variable, stating if a folder is a bookmark bar folder"
+          },
+          "trash": {
+            "type": "boolean",
+            "description": "true if this is the trash folder. Read only."
+          },
+          "dateAdded": {
+            "type": "number",
+            "optional": true,
+            "description": "When this node was created, in milliseconds since the epoch (<code>new Date(dateAdded)</code>)."
+          },
+          "dateGroupModified": {
+            "type": "number",
+            "optional": true,
+            "description": "When the contents of this folder last changed, in milliseconds since the epoch."
+          },
+          "children": {
+            "type": "array",
+            "optional": true,
+            "items": { "$ref": "BookmarkTreeNode" },
+            "description": "An ordered list of children of this node."
+          }
+        }
+      },
+      {
         "id": "MetaInfo",
         "type": "object",
         "description": "Meta for the bookmark",
@@ -85,6 +161,59 @@
                 "name": "success",
                 "type": "boolean",
                 "description": "true if the operation was successful, otherwise false."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "upgradePartner",
+        "type": "function",
+        "description": "Copy of update from bookmarks.json, but to be used during partner upgrade",
+        "parameters": [
+          {
+            "type": "string",
+            "serialized_type": "int64",
+            "name": "id"
+          },
+          {
+            "type": "object",
+            "name": "changes",
+            "properties": {
+              "title": {
+                "type": "string",
+                "optional": true
+              },
+              "url": {
+                "type": "string",
+                "optional": true
+              },
+              "nickname": {
+                "type": "string",
+                "optional": true
+              },
+              "description": {
+                "type": "string",
+                "optional": true
+              },
+              "thumbnail": {
+                "type": "string",
+                "optional": true
+              },
+              "speeddial": {
+                "type": "boolean",
+                "optional": true
+              }
+            }
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "result",
+                "$ref": "BookmarkTreeNode"
               }
             ]
           }

@@ -6,6 +6,7 @@
 #define TOOLS_GN_SUBSTITUTION_WRITER_H_
 
 #include <iosfwd>
+#include <string>
 #include <vector>
 
 #include "tools/gn/substitution_type.h"

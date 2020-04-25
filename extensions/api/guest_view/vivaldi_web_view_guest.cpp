@@ -14,6 +14,7 @@
 #include "chrome/browser/extensions/api/web_navigation/web_navigation_api.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "chrome/browser/tab_contents/tab_util.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -328,8 +329,6 @@ void WebViewGuest::ShowPageInfo(gfx::Point pos) {
   }
 
   const GURL url = controller.GetActiveEntry()->GetURL();
-  auto security_info = security_state::GetVisibleSecurityState(web_contents());
-  DCHECK(security_info);
   Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
   Profile* profile =
       Profile::FromBrowserContext(web_contents()->GetBrowserContext());
@@ -340,12 +339,12 @@ void WebViewGuest::ShowPageInfo(gfx::Point pos) {
   }
 
   if (browser->window()) {
-    security_state::SecurityInfo security_state;
-    security_state::GetSecurityInfo(std::move(security_info), false,
-                                    base::Bind(&content::IsOriginSecure),
-                                    &security_state);
-    browser->window()->VivaldiShowWebsiteSettingsAt(profile, web_contents(),
-                                                    url, security_state, pos);
+    SecurityStateTabHelper* helper =
+      SecurityStateTabHelper::FromWebContents(web_contents());
+    DCHECK(helper);
+    browser->window()->VivaldiShowWebsiteSettingsAt(
+        profile, web_contents(), url, helper->GetSecurityLevel(),
+        *helper->GetVisibleSecurityState(), pos);
   }
 }
 
@@ -374,19 +373,19 @@ void WebViewGuest::SetIsFullscreen(bool is_fullscreen, bool skip_window_state) {
 
 void WebViewGuest::VisibleSecurityStateChanged(WebContents* source) {
   std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
-  auto security_info = security_state::GetVisibleSecurityState(web_contents());
+  SecurityStateTabHelper* helper =
+      SecurityStateTabHelper::FromWebContents(web_contents());
+  if (!helper) {
+    return;
+  }
 
-  security_state::SecurityInfo security_state;
-  security_state::GetSecurityInfo(std::move(security_info), false,
-                                  base::Bind(&content::IsOriginSecure),
-                                  &security_state);
-  security_state::SecurityLevel current_level = security_state.security_level;
-  args->SetString("SSLState", SSLStateToString(current_level));
+  args->SetString("SSLState", SSLStateToString(helper->GetSecurityLevel()));
 
   content::NavigationController& controller = web_contents()->GetController();
   content::NavigationEntry* entry = controller.GetVisibleEntry();
   if (entry) {
-    scoped_refptr<net::X509Certificate> cert(security_state.certificate);
+    scoped_refptr<net::X509Certificate> cert(
+        helper->GetVisibleSecurityState()->certificate);
 
     // EV are required to have an organization name and country.
     if (cert.get() && (!cert.get()->subject().organization_names.empty() &&

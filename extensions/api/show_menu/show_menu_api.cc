@@ -48,7 +48,6 @@
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/devtools/devtools_connector.h"
 #include "ui/vivaldi_context_menu.h"
-#include "ui/vivaldi_main_menu.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 #define BOOKMARK_ID_BASE 100000
@@ -222,17 +221,6 @@ ui::Accelerator ParseShortcut(const std::string& accelerator,
 }
 
 }  // namespace
-
-// static
-void ShowMenuAPI::SendCommandExecuted(Profile* profile,
-                                      int window_id,
-                                      int command_id,
-                                      const std::string& parameter) {
-  ::vivaldi::BroadcastEvent(
-      show_menu::OnMainMenuCommand::kEventName,
-      show_menu::OnMainMenuCommand::Create(window_id, command_id, parameter),
-      profile);
-}
 
 // static
 void ShowMenuAPI::SendOpen(Profile* profile) {
@@ -519,17 +507,9 @@ void VivaldiMenuController::HandleDeveloperToolsCommand(int command_id) {
 
     case IDC_CONTENT_CONTEXT_RESTART_PACKAGED_APP:
       if (platform_app && platform_app->is_platform_app()) {
-        extensions::DevtoolsConnectorAPI* api =
-          extensions::DevtoolsConnectorAPI::GetFactoryInstance()->Get(
-            Profile::FromBrowserContext(profile_));
-        DCHECK(api);
-        api->CloseAllDevtools();
+        DevtoolsConnectorAPI::CloseAllDevtools(profile_);
 
-        extensions::VivaldiUtilitiesAPI* utils_api =
-            extensions::VivaldiUtilitiesAPI::GetFactoryInstance()->Get(
-                profile_);
-        DCHECK(utils_api);
-        utils_api->CloseAllThumbnailWindows();
+        VivaldiUtilitiesAPI::CloseAllThumbnailWindows(profile_);
 
         chrome::AttemptRestart();
       }
@@ -1032,24 +1012,6 @@ void ShowMenuShowContextMenuFunction::SendResult(int command_id,
   response.right = event_flags & ui::EF_RIGHT_MOUSE_BUTTON ? true : false;
   response.center = event_flags & ui::EF_MIDDLE_MOUSE_BUTTON ? true : false;
   Respond(ArgumentList(vivaldi::show_menu::ShowContextMenu::Results::Create(response)));
-}
-
-ExtensionFunction::ResponseAction ShowMenuSetupMainMenuFunction::Run() {
-  auto params = vivaldi::show_menu::SetupMainMenu::Params::Create(*args_);
-  EXTENSION_FUNCTION_VALIDATE(params.get());
-#if defined(OS_MACOSX)
-  if (params->mode == "menubar" || params->mode == "tabs" ||
-      params->mode == "update" || params->mode == "bookmarks") {
-    // Mac needs to update the menu even with no open windows. So we allow
-    // a nullptr profile when calling the api.
-    Profile* profile = Profile::FromBrowserContext(browser_context());
-    ::vivaldi::CreateVivaldiMainMenu(profile, &params->items, params->mode);
-    return RespondNow(NoArguments());
-  }
-  return RespondNow(Error("Invalid mode - " + params->mode));
-#else
-  return RespondNow(Error("NOT IMPLEMENTED"));
-#endif  // defined(OS_MACOSX)
 }
 
 }  // namespace extensions

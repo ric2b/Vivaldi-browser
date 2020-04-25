@@ -99,6 +99,21 @@
         }
       },
       {
+        "id": "SelectFileDialogType",
+        "type": "string",
+        "description": "The type of selectfile dialog to show.",
+        "enum": [
+          {
+            "name": "file",
+            "description": "This is a file select dialog."
+          },
+          {
+            "name": "folder",
+            "description": "This is a folder select dialog."
+          }
+        ]
+      },
+      {
         "id": "SharedDataValue",
         "type": "object",
         "description": "Data key+value pair.",
@@ -208,7 +223,7 @@
         "parameters": [
           {
             "name": "tabId",
-            "type": "string",
+            "type": "integer",
             "description": "The tab id to check if part of the session"
           },
           {
@@ -253,7 +268,7 @@
         "parameters": [
           {
             "name": "tabId",
-            "type": "string",
+            "type": "integer",
             "description": "The page to examine"
           },
           {
@@ -331,6 +346,11 @@
             "type": "string",
             "description": "Title of the file select dialog.",
             "optional": true
+          },
+          {
+            "name": "type",
+            "$ref": "SelectFileDialogType",
+            "description": "Type of file select dialog, defaults to 'file'."
           },
           {
             "type": "function",

@@ -8,94 +8,74 @@
 #include <vector>
 
 #include "base/memory/ref_counted.h"
-#include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/ui/passwords/settings/password_ui_view.h"
 #include "chrome/browser/ui/passwords/settings/password_manager_presenter.h"
 #include "chrome/browser/password_manager/reauth_purpose.h"
+#include "components/password_manager/core/browser/password_store.h"
 #include "content/public/browser/web_ui.h"
+#include "extensions/browser/extension_function.h"
 #include "extensions/schema/savedpasswords.h"
 
 namespace extensions {
 
-class SavedpasswordsGetListFunction : public ChromeAsyncExtensionFunction,
-                                      public PasswordUIView {
+class SavedpasswordsGetListFunction
+    : public UIThreadExtensionFunction,
+      public password_manager::PasswordStoreConsumer {
  public:
   DECLARE_EXTENSION_FUNCTION("savedpasswords.getList", SAVEDPASSWORDS_GETLIST)
-  SavedpasswordsGetListFunction();
+  SavedpasswordsGetListFunction() = default;
 
  private:
-  std::string languages_;
-
-  vivaldi::savedpasswords::SavedPasswordItem* GetSavedPasswordItem(
-      const std::unique_ptr<autofill::PasswordForm>& form,
-      int id);
-
-  ~SavedpasswordsGetListFunction() override;
-  virtual void SendAsyncResponse();
-  PasswordManagerPresenter password_manager_presenter_;
+  ~SavedpasswordsGetListFunction() override = default;
 
   // ExtensionFunction:
-  bool RunAsync() override;
-  virtual void SendResponseToCallback();
+  ResponseAction Run() override;
 
-  // PasswordUIView implementation.
-  Profile* GetProfile() override;
-  void SetPasswordList(
-      const std::vector<std::unique_ptr<autofill::PasswordForm>>& password_list)
-      override;
-  void SetPasswordExceptionList(
-      const std::vector<std::unique_ptr<autofill::PasswordForm>>&
-          password_exception_list) override;
+  // PasswordStoreConsumer
+  void OnGetPasswordStoreResults(
+      std::vector<std::unique_ptr<autofill::PasswordForm>> results) override;
 
   DISALLOW_COPY_AND_ASSIGN(SavedpasswordsGetListFunction);
 };
 
-class SavedpasswordsRemoveFunction : public ChromeAsyncExtensionFunction,
-                                     public PasswordUIView {
+class SavedpasswordsRemoveFunction
+    : public UIThreadExtensionFunction,
+      public password_manager::PasswordStoreConsumer {
  public:
   DECLARE_EXTENSION_FUNCTION("savedpasswords.remove", SAVEDPASSWORDS_REMOVE)
   SavedpasswordsRemoveFunction();
 
  private:
-  vivaldi::savedpasswords::SavedPasswordItem* GetSavedPasswordItem(
-      autofill::PasswordForm* form,
-      int id);
-  std::string languages_;
-  PasswordManagerPresenter password_manager_presenter_;
-  int64_t idToRemove;
-  void SendResponseToCallback();
-  void SendAsyncResponse();
-
   ~SavedpasswordsRemoveFunction() override;
-  // ExtensionFunction:
-  bool RunAsync() override;
 
-  // PasswordUIView implementation.
-  Profile* GetProfile() override;
-  void SetPasswordList(
-      const std::vector<std::unique_ptr<autofill::PasswordForm>>& password_list)
-      override;
-  void SetPasswordExceptionList(
-      const std::vector<std::unique_ptr<autofill::PasswordForm>>&
-          password_exception_list) override;
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  // PasswordStoreConsumer
+  void OnGetPasswordStoreResults(
+      std::vector<std::unique_ptr<autofill::PasswordForm>> results) override;
+
+  size_t id_to_remove_;
+  scoped_refptr<password_manager::PasswordStore> password_store_;
 
   DISALLOW_COPY_AND_ASSIGN(SavedpasswordsRemoveFunction);
 };
 
-class SavedpasswordsAddFunction : public ChromeAsyncExtensionFunction {
+class SavedpasswordsAddFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("savedpasswords.add", SAVEDPASSWORDS_ADD)
   SavedpasswordsAddFunction() = default;
 
  private:
   ~SavedpasswordsAddFunction() override = default;
-  bool RunAsync() override;
+
+  ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(SavedpasswordsAddFunction);
 };
 
 class SavedpasswordsGetFunction
-    : public ChromeAsyncExtensionFunction,
+    : public UIThreadExtensionFunction,
       public password_manager::PasswordStoreConsumer {
  public:
   DECLARE_EXTENSION_FUNCTION("savedpasswords.get", SAVEDPASSWORDS_GET)
@@ -103,7 +83,8 @@ class SavedpasswordsGetFunction
 
  private:
   ~SavedpasswordsGetFunction() override = default;
-  bool RunAsync() override;
+
+  ResponseAction Run() override;
 
   void OnGetPasswordStoreResults(
       std::vector<std::unique_ptr<autofill::PasswordForm>> results) override;
@@ -113,27 +94,29 @@ class SavedpasswordsGetFunction
   DISALLOW_COPY_AND_ASSIGN(SavedpasswordsGetFunction);
 };
 
-class SavedpasswordsDeleteFunction : public ChromeAsyncExtensionFunction {
+class SavedpasswordsDeleteFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("savedpasswords.delete", SAVEDPASSWORDS_DELETE)
   SavedpasswordsDeleteFunction() = default;
 
  private:
   ~SavedpasswordsDeleteFunction() override = default;
-  bool RunAsync() override;
+
+  ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(SavedpasswordsDeleteFunction);
 };
 
-class SavedpasswordsAuthenticateFunction : public ChromeAsyncExtensionFunction {
+class SavedpasswordsAuthenticateFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("savedpasswords.authenticate",
                              SAVEDPASSWORDS_AUTHENTICATE)
-  SavedpasswordsAuthenticateFunction();
+  SavedpasswordsAuthenticateFunction() = default;
 
  private:
-  ~SavedpasswordsAuthenticateFunction() override;
-  bool RunAsync() override;
+  ~SavedpasswordsAuthenticateFunction() override = default;
+
+  ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(SavedpasswordsAuthenticateFunction);
 };

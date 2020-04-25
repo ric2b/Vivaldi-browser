@@ -87,13 +87,18 @@ class VivaldiPrivateTabObserver
       public zoom::ZoomObserver,
       public content::WebContentsUserData<VivaldiPrivateTabObserver> {
  public:
-   explicit VivaldiPrivateTabObserver(content::WebContents* web_contents);
-   ~VivaldiPrivateTabObserver() override;
+  explicit VivaldiPrivateTabObserver(content::WebContents* web_contents);
+  ~VivaldiPrivateTabObserver() override;
+
+  static VivaldiPrivateTabObserver* FromTabId(
+      content::BrowserContext* browser_context,
+      int tab_id,
+      std::string* error);
 
   void BroadcastTabInfo();
 
   // content::WebContentsObserver implementation.
-  void DidChangeThemeColor(SkColor theme_color) override;
+  void DidChangeThemeColor(base::Optional<SkColor> theme_color) override;
   void RenderViewCreated(content::RenderViewHost* render_view_host) override;
   void RenderViewHostChanged(content::RenderViewHost* old_host,
                              content::RenderViewHost* new_host) override;
@@ -139,10 +144,9 @@ class VivaldiPrivateTabObserver
   void OnGetAccessKeysForPageResponse(
       std::vector<VivaldiViewMsg_AccessKeyDefinition> access_keys);
 
-  void GetAccessKeys(content::WebContents* tabstrip_contents,
-                     AccessKeysCallback callback);
+  void GetAccessKeys(AccessKeysCallback callback);
 
-  void AccessKeyAction(content::WebContents* tabstrip_contents, std::string);
+  void AccessKeyAction(std::string);
 
   // Returns true if a capture is already underway for this WebContents.
   bool IsCapturing();

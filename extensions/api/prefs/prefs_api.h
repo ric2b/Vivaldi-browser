@@ -12,7 +12,6 @@
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/prefs/pref_change_registrar.h"
-#include "extensions/schema/prefs.h"
 #include "prefs/vivaldi_browser_prefs.h"
 
 class Profile;

@@ -24,5 +24,6 @@ index 33d63d7b1ce2..c528bb1815fd 100644
        || rc!=SQLITE_OK
      );
      copyNodeContent(apNew[0], pParent, &rc);
---
+-- 
 2.21.0.392.gf8f6787159e-goog
+

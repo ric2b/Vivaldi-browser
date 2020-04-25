@@ -199,17 +199,21 @@ class DevtoolsConnectorAPI : public BrowserContextKeyedAPI {
   DevtoolsConnectorItem* GetOrCreateDevtoolsConnectorItem(int tab_id);
 
   void RemoveDevtoolsConnectorItem(int tab_id);
-  void CloseAllDevtools();
+  static void CloseAllDevtools(content::BrowserContext* browser_context);
 
   // Browser or nullptr to close all open devtools.
-  void CloseDevtoolsForBrowser(Browser* browser);
+  static void CloseDevtoolsForBrowser(content::BrowserContext* browser_context,
+                                      Browser* browser);
 
-  static void BroadcastEvent(const std::string& eventname,
-                             std::unique_ptr<base::ListValue> args,
-                             content::BrowserContext* context);
+  static void SendOnUndockedEvent(content::BrowserContext* context,
+                                  int tab_id,
+                                  bool show_window);
 
-  void SendOnUndockedEvent(content::BrowserContext* context,
-                           int tab_id, bool show_window);
+  static void SendDockingStateChanged(content::BrowserContext* browser_context,
+                                      int tab_id,
+                                      const std::string& docking_state);
+
+  static void SendClosed(content::BrowserContext* browser_context, int tab_id);
 
  private:
   friend class BrowserContextKeyedAPIFactory<DevtoolsConnectorAPI>;

@@ -16,7 +16,6 @@
 <translation id="1729533290416704613">சர்வபுலத்திலிருந்து தேடலை மேற்கொள்ளும்போது காண்பிக்கப்படும் பக்கத்தையும் இது கட்டுப்படுத்துகிறது.</translation>
 <translation id="1850508293116537636">&amp;வலஞ்சுழியாகச் சுற்று</translation>
 <translation id="1901303067676059328">அ&amp;னைத்தையும் தேர்ந்தெடு</translation>
-<translation id="1992397118740194946">அமைக்கப்படவில்லை</translation>
 <translation id="2087822576218954668">அச்சிடு: <ph name="PRINT_NAME" /></translation>
 <translation id="2177950615300672361">மறைநிலைத் தாவல்: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">இயல்பான கிளையண்ட் தொகுதிக்கூறு: <ph name="NEXE_NAME" /></translation>
@@ -33,7 +32,6 @@
 <translation id="2439110203301358333">உங்கள் கணினியில் உள்ள மற்றொரு நிரலானது, Vivaldi வேலைசெய்யும் வழியை மாற்றும் நீட்டிப்பைச் சேர்த்துள்ளது.</translation>
 <translation id="2445081178310039857">நீட்டிப்பு மூல கோப்பகம் தேவை.</translation>
 <translation id="2470702053775288986">ஆதரிக்கப்படாத நீட்டிப்புகள் முடக்கப்பட்டன</translation>
-<translation id="2501797496290880632">குறுக்குவழியைத் தட்டச்சு செய்க</translation>
 <translation id="2550212893339833758">ஸ்வாப்டு மெமரி</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">மீண்டும் இயக்கு</translation>
@@ -55,12 +53,9 @@
 <translation id="3347086966102161372">பட முகவரியை ந&amp;கலெடு</translation>
 <translation id="3378572629723696641">இந்த நீட்டிப்பு சேதமடைந்திருக்கலாம்.</translation>
 <translation id="345693547134384690">&amp;படத்தை புதிய தாவலில் திற</translation>
-<translation id="3467267818798281173">பரிந்துரைகளுக்கு Google ஐக் கேட்கவும்</translation>
 <translation id="3505030558724226696">சாதன அணுகலை ரத்துசெய்</translation>
 <translation id="3627588569887975815">மறை&amp;நிலை சாளரத்தில் இணைப்பைத்திற</translation>
 <translation id="3678156199662914018">நீட்டிப்பு: <ph name="EXTENSION_NAME" /></translation>
-<translation id="3798449238516105146">பதிப்பு</translation>
-<translation id="3866249974567520381">விவரம்</translation>
 <translation id="3905761538810670789">பயன்பாட்டை பழுதுநீக்கு</translation>
 <translation id="3908501907586732282">நீட்டிப்பை இயக்கு</translation>
 <translation id="3909791450649380159">வெட்&amp;டு</translation>
@@ -103,7 +98,6 @@
 <translation id="5483785310822538350">கோப்பு மற்றும் சாதன அணுகலை ரத்துசெய்</translation>
 <translation id="5485102783864353244">பயன்பாட்டைச் சேர்</translation>
 <translation id="5521078259930077036">இந்த முகப்புப் பக்கம் நீங்கள் எதிர்பார்த்தது போன்று உள்ளதா?</translation>
-<translation id="5532223876348815659">முழுமைக்கும்</translation>
 <translation id="5542132724887566711">சுயவிவரம்</translation>
 <translation id="5556459405103347317">மீண்டும் ஏற்று</translation>
 <translation id="5575473780076478375">மறைநிலை நீட்டிப்பு: <ph name="EXTENSION_NAME" /></translation>
@@ -117,7 +111,6 @@
 <translation id="5965661248935608907">முகப்புப் பொத்தானைக் கிளிக் செய்யும்போது அல்லது சர்வபுலத்திலிருந்து தேடலை மேற்கொள்ளும்போது காண்பிக்கப்படும் பக்கத்தையும் இது கட்டுப்படுத்துகிறது.</translation>
 <translation id="6101226222197207147">புதிய பயன்பாடு சேர்க்கப்பட்டது (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">உங்கள் இணைய இணைப்பு கட்டுப்படுத்தப்படுகிறது</translation>
-<translation id="6124650939968185064">பின்வரும் நீட்டிப்புகள் இந்த நீட்டிப்பைச் சார்ந்தவை:</translation>
 <translation id="6156863943908443225">ஸ்கிரிப்ட் தற்காலிக சேமிப்பு</translation>
 <translation id="6196854373336333322"><ph name="EXTENSION_NAME" /> நீட்டிப்பு உங்கள் ப்ராக்ஸி அமைப்புகளைக் கட்டுப்படுத்துகிறது, அதாவது நீங்கள் ஆன்லைனில் செய்யும் எல்லாவற்றையும் அதனால் மாற்ற முடியும், தடுக்க முடியும் அல்லது ஒட்டுக் கேட்க முடியும். இது ஏன் நடந்தது எனத் தெரியவில்லை எனில், உங்களுக்கு இது தேவைப்படாத ஒன்றாக இருக்கும்.</translation>
 <translation id="6239558157302047471">&amp;ஃபிரேமை மீண்டும் ஏற்று</translation>
@@ -134,8 +127,6 @@
 <translation id="6518014396551869914">படத்தை நகலெ&amp;டு</translation>
 <translation id="6639554308659482635">SQLite நினைவகம்</translation>
 <translation id="6691936601825168937">&amp;அடுத்த பக்கம்</translation>
-<translation id="6786747875388722282">நீட்டிப்புகள்</translation>
-<translation id="6787839852456839824">விசைப்பலகைக் குறுக்குவழிகள்</translation>
 <translation id="6798954102094737107">செருகுநிரல்: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">மாற்றங்களை வைத்திரு</translation>
 <translation id="6886871292305414135">இணைப்பை புதிய &amp;தாவலில் திற</translation>
@@ -167,7 +158,6 @@
 உங்கள் முக்கிய கோப்பை பாதுகாப்பான இடத்தில் வையுங்கள். உங்கள் நீட்டிப்பின் புதிய பதிப்புகளை நீங்கள் உருவாக்க வேண்டி ஏற்படும்.</translation>
 <translation id="8004582292198964060">உலாவி</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
-<translation id="8188120771410500975">&amp;உரைப் புலங்களில் எழுத்துப்பிழை உள்ளதா எனச் சரிபார்</translation>
 <translation id="8261378640211443080">இந்த நீட்டிப்பு <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> இல் பட்டியலிடப்படவில்லை, மேலும் அது உங்களுக்குத் தெரியாமல் சேர்க்கப்பட்டிருக்கலாம்.</translation>
 <translation id="8351419472474436977">உங்கள் ப்ராக்ஸி அமைப்புகளின் கட்டுப்பாட்டை இந்த நீட்டிப்பு கட்டுப்படுத்துகிறது, அதாவது நீங்கள் ஆன்லைனில் செய்யும் எல்லாவற்றையும் அதனால் மாற்றமுடியும், தடுக்க முடியும் அல்லது ஒட்டுக் கேட்க முடியும். இது ஏன் நடந்தது என்பது தெரியவில்லை எனில், உங்களுக்கு இது தேவைப்படாத ஒன்றாக இருக்கும்.</translation>
 <translation id="8546306075665861288">பட தற்காலிக சேமிப்பு</translation>

@@ -16,6 +16,7 @@
 #include "base/memory/singleton.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/path_service.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
@@ -26,14 +27,20 @@
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_window.h"
+#include "chrome/browser/profiles/profile_statistics.h"
+#include "chrome/browser/profiles/profile_statistics_factory.h"
+#include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/user_manager.h"
+#include "chrome/browser/ui/webui/profile_helper.h"
 #if defined(OS_MACOSX)
 #include "chrome/common/chrome_paths_internal.h"
+#include "chrome/common/chrome_paths.h"
 #endif  // defined(OS_MACOSX)
 #include "chrome/common/pref_names.h"
 #include "components/download/public/background_service/download_service.h"
+#include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/prefs/pref_filter.h"
@@ -44,6 +51,7 @@
 #include "extensions/schema/runtime_private.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "prefs/vivaldi_pref_names.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/devtools/devtools_connector.h"
 #include "ui/vivaldi_ui_utils.h"
@@ -92,8 +100,12 @@ void VivaldiRuntimeFeatures::LoadRuntimeFeatures() {
   base::FilePath path;
 
 #if defined(OS_MACOSX)
+#if !BUILDFLAG(NEW_MAC_BUNDLE_STRUCTURE)
   path = chrome::GetVersionedDirectory();
   if (!path.empty()) {
+#else
+  if(PathService::Get(chrome::DIR_RESOURCES, &path)) {
+#endif
 #else
   if (PathService::Get(base::DIR_MODULE, &path)) {
 #endif  // defined(OS_MACOSX)
@@ -322,17 +334,9 @@ void VivaldiRuntimeFeaturesFactory::OnProfileIsOmittedChanged(
 
 ExtensionFunction::ResponseAction RuntimePrivateExitFunction::Run() {
   // Free any open devtools if the user selects Exit from the menu.
-  extensions::DevtoolsConnectorAPI* api =
-      extensions::DevtoolsConnectorAPI::GetFactoryInstance()->Get(
-          browser_context());
-  DCHECK(api);
-  api->CloseAllDevtools();
+  DevtoolsConnectorAPI::CloseAllDevtools(browser_context());
 
-  extensions::VivaldiUtilitiesAPI* utils_api =
-      extensions::VivaldiUtilitiesAPI::GetFactoryInstance()->Get(
-          browser_context());
-  DCHECK(utils_api);
-  utils_api->CloseAllThumbnailWindows();
+  VivaldiUtilitiesAPI::CloseAllThumbnailWindows(browser_context());
 
   chrome::CloseAllBrowsersAndQuit();
 
@@ -495,41 +499,18 @@ ExtensionFunction::ResponseAction RuntimePrivateGetUserProfilesFunction::Run() {
       // Skip supervised accounts.
       continue;
     }
+    const size_t icon_index = entry->GetAvatarIconIndex();
+
     profile.active = (active_entry == entry);
     profile.guest = false;
     profile.name = base::UTF16ToUTF8(entry->GetUserName());
     if (profile.name.empty()) {
       profile.name = base::UTF16ToUTF8(entry->GetName());
     }
-    const size_t icon_index = entry->GetAvatarIconIndex();
-    const int resource_id =
-      profiles::GetDefaultAvatarIconResourceIDAtIndex(icon_index);
-    const gfx::Image& icon =
-        ui::ResourceBundle::GetSharedInstance().GetNativeImageNamed(
-            resource_id);
-    if (!icon.IsEmpty()) {
-      const SkBitmap* bitmap = icon.ToSkBitmap();
-      if (bitmap) {
-        std::vector<unsigned char> data;
-        std::string mime_type;
-        gfx::Size final_size(
-            params->avatar_width ? params->avatar_width : bitmap->width(),
-            params->avatar_height ? params->avatar_height : bitmap->height());
-        bool resize = params->avatar_width > 0 && params->avatar_height > 0;
-        bool encoded =
-            EncodeBitmap(*bitmap, &data, &mime_type,
-                         extensions::api::extension_types::IMAGE_FORMAT_PNG,
-                         final_size, 100, 100, resize);
-        if (encoded) {
-          std::string return_data;
-          std::string base64_input(reinterpret_cast<const char*>(&data[0]),
-            data.size());
-          base::Base64Encode(base64_input, &return_data);
-          return_data.insert(0, "data:image/png;base64,");
-          profile.image.swap(return_data);
-        }
-      }
-    }
+    profile.image = profiles::GetDefaultAvatarIconUrl(icon_index);
+    profile.image_index = icon_index;
+    profile.path = entry->GetPath().AsUTF8Unsafe();
+
     profiles.push_back(std::move(profile));
   }
   if (!active_entry) {
@@ -558,15 +539,13 @@ RuntimePrivateOpenNamedProfileFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   bool success = false;
-  const base::string16 profile_name = base::UTF8ToUTF16(params->profile_name);
   ProfileManager* manager = g_browser_process->profile_manager();
   ProfileAttributesStorage& storage = manager->GetProfileAttributesStorage();
   std::vector<ProfileAttributesEntry*> entries =
     storage.GetAllProfilesAttributes();
 
   for (auto* entry : entries) {
-    if (entry->GetName() == profile_name ||
-        entry->GetUserName() == profile_name) {
+    if (entry->GetPath().AsUTF8Unsafe() == params->profile_path) {
       profiles::SwitchToProfile(entry->GetPath(), false,
                                 ProfileManager::CreateCallback(),
                                 ProfileMetrics::SWITCH_PROFILE_ICON);
@@ -581,11 +560,254 @@ ExtensionFunction::ResponseAction
 RuntimePrivateCloseActiveProfileFunction::Run() {
   namespace Results = vivaldi::runtime_private::OpenNamedProfile::Results;
   Profile* profile = Profile::FromBrowserContext(browser_context());
-  VivaldiWindowsAPI* api =
-      extensions::VivaldiWindowsAPI::GetFactoryInstance()->Get(profile);
-  api->WindowsForProfileClosing(profile);
+  extensions::VivaldiWindowsAPI::WindowsForProfileClosing(profile);
 
   profiles::CloseProfileWindows(profile);
+
+  return RespondNow(ArgumentList(Results::Create(true)));
+}
+
+ExtensionFunction::ResponseAction
+RuntimePrivateGetUserProfileImagesFunction::Run() {
+  namespace Results = vivaldi::runtime_private::GetUserProfileImages::Results;
+  std::vector<vivaldi::runtime_private::UserProfileImage> images;
+  size_t placeholder_index = profiles::GetPlaceholderAvatarIndex();
+
+  for (size_t index = 0; index < profiles::GetDefaultAvatarIconCount(); index++) {
+    if (index == placeholder_index) {
+      // Placeholder, skip it.
+      continue;
+    }
+    vivaldi::runtime_private::UserProfileImage image;
+
+    image.name = l10n_util::GetStringUTF8(
+      profiles::GetDefaultAvatarLabelResourceIDAtIndex(index));
+    image.index = index;
+    // Avatar is served via a chrome://theme/ url.
+    image.image = profiles::GetDefaultAvatarIconUrl(index);
+    images.push_back(std::move(image));
+  }
+  return RespondNow(ArgumentList(Results::Create(images)));
+}
+
+ExtensionFunction::ResponseAction
+RuntimePrivateUpdateActiveProfileFunction::Run() {
+  using vivaldi::runtime_private::UpdateActiveProfile::Params;
+  namespace Results = vivaldi::runtime_private::UpdateActiveProfile::Results;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  base::string16 name = base::UTF8ToUTF16(params->name);
+  size_t index = params->avatar_index;
+  bool success = false;
+
+  if (index <= profiles::GetDefaultAvatarIconCount()) {
+    Profile* profile = Profile::FromBrowserContext(browser_context());
+    PrefService* pref_service = profile->GetPrefs();
+    pref_service->SetInteger(prefs::kProfileAvatarIndex, index);
+    pref_service->SetBoolean(prefs::kProfileUsingDefaultAvatar, false);
+    pref_service->SetBoolean(prefs::kProfileUsingGAIAAvatar, false);
+
+    base::TrimWhitespace(name, base::TRIM_ALL, &name);
+    if (!name.empty()) {
+      profiles::UpdateProfileName(profile, name);
+      success = true;
+    }
+  }
+  return RespondNow(ArgumentList(Results::Create(success)));
+}
+
+ExtensionFunction::ResponseAction
+RuntimePrivateGetProfileDefaultsFunction::Run() {
+  namespace Results = vivaldi::runtime_private::GetProfileDefaults::Results;
+
+  ProfileAttributesStorage& storage =
+      g_browser_process->profile_manager()->GetProfileAttributesStorage();
+  std::string name = base::UTF16ToUTF8(storage.ChooseNameForNewProfile(0));
+
+  return RespondNow(ArgumentList(Results::Create(name)));
+}
+
+ExtensionFunction::ResponseAction
+RuntimePrivateCreateProfileFunction::Run() {
+  using vivaldi::runtime_private::CreateProfile::Params;
+  namespace Results = vivaldi::runtime_private::CreateProfile::Results;
+
+  if (!profiles::IsMultipleProfilesEnabled()) {
+    return RespondNow(ArgumentList(Results::Create(false)));
+  }
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  base::string16 name = base::UTF8ToUTF16(params->name);
+  std::string avatar_url = params->avatar_url;
+  bool create_shortcut = params->create_desktop_icon;
+
+  ProfileManager::CreateMultiProfileAsync(
+      name, avatar_url,
+      base::BindRepeating(
+          &RuntimePrivateCreateProfileFunction::OnProfileCreated, this,
+          create_shortcut));
+  return RespondLater();
+}
+
+void RuntimePrivateCreateProfileFunction::OnProfileCreated(
+    bool create_shortcut,
+    Profile* profile,
+    Profile::CreateStatus status) {
+  namespace Results = vivaldi::runtime_private::CreateProfile::Results;
+
+  switch (status) {
+    case Profile::CREATE_STATUS_LOCAL_FAIL: {
+      Respond(ArgumentList(Results::Create(false)));
+      break;
+    }
+    case Profile::CREATE_STATUS_CREATED: {
+      // Do nothing for an intermediate status.
+      break;
+    }
+    case Profile::CREATE_STATUS_INITIALIZED: {
+      CreateShortcutAndShowSuccess(create_shortcut, profile);
+      break;
+    }
+    case Profile::CREATE_STATUS_CANCELED:
+    case Profile::CREATE_STATUS_REMOTE_FAIL:
+    case Profile::MAX_CREATE_STATUS: {
+      NOTREACHED();
+      Respond(ArgumentList(Results::Create(false)));
+      break;
+    }
+  }
+}
+
+void RuntimePrivateCreateProfileFunction::CreateShortcutAndShowSuccess(
+    bool create_shortcut,
+    Profile* profile) {
+  if (create_shortcut) {
+    DCHECK(ProfileShortcutManager::IsFeatureEnabled());
+    ProfileShortcutManager* shortcut_manager =
+        g_browser_process->profile_manager()->profile_shortcut_manager();
+    DCHECK(shortcut_manager);
+    if (shortcut_manager)
+      shortcut_manager->CreateProfileShortcut(profile->GetPath());
+  }
+  // Opening the new window must be the last action, after all callbacks
+  // have been run, to give them a chance to initialize the profile.
+  OpenNewWindowForProfile(profile, Profile::CREATE_STATUS_INITIALIZED);
+}
+
+void RuntimePrivateCreateProfileFunction::OpenNewWindowForProfile(
+    Profile* profile,
+    Profile::CreateStatus status) {
+  profiles::OpenBrowserWindowForProfile(
+      base::BindRepeating(
+          &RuntimePrivateCreateProfileFunction::OnBrowserReadyCallback, this),
+      false,  // Don't create a window if one already exists.
+      true,   // Create a first run window.
+      false,  // There is no need to unblock all extensions because we only open
+              // browser window if the Profile is not locked. Hence there is no
+              // extension blocked.
+      profile, status);
+}
+
+void RuntimePrivateCreateProfileFunction::OnBrowserReadyCallback(
+    Profile* profile,
+    Profile::CreateStatus profile_create_status) {
+  namespace Results = vivaldi::runtime_private::CreateProfile::Results;
+
+  if (!did_respond()) {
+    Respond(ArgumentList(Results::Create(true)));
+  }
+}
+
+RuntimePrivateGetProfileStatisticsFunction::
+    RuntimePrivateGetProfileStatisticsFunction() {}
+RuntimePrivateGetProfileStatisticsFunction::
+    ~RuntimePrivateGetProfileStatisticsFunction() {}
+
+ExtensionFunction::ResponseAction
+RuntimePrivateGetProfileStatisticsFunction::Run() {
+  using vivaldi::runtime_private::GetProfileStatistics::Params;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  base::FilePath profile_path =
+      base::FilePath::FromUTF8Unsafe(params->profile_path);
+
+  Profile* profile = g_browser_process->profile_manager()->
+    GetProfileByPath(profile_path);
+
+  if (profile) {
+    GatherStatistics(profile);
+  } else {
+    g_browser_process->profile_manager()->LoadProfileByPath(
+        profile_path, false,
+        base::Bind(
+            &RuntimePrivateGetProfileStatisticsFunction::GatherStatistics,
+            this));
+  }
+  return RespondLater();
+}
+
+void RuntimePrivateGetProfileStatisticsFunction::GatherStatistics(
+    Profile* profile) {
+  if (profile) {
+    ProfileStatisticsFactory::GetForProfile(profile)->GatherStatistics(
+        base::BindRepeating(&RuntimePrivateGetProfileStatisticsFunction::
+                                GetProfileStatsCallback,
+                            this, profile->GetPath()));
+  } else {
+    Respond(Error("Failed to load profile"));
+  }
+}
+
+void RuntimePrivateGetProfileStatisticsFunction::GetProfileStatsCallback(
+    base::FilePath profile_path,
+    profiles::ProfileCategoryStats result) {
+  namespace Results = vivaldi::runtime_private::GetProfileStatistics::Results;
+  using vivaldi::runtime_private::ProfileStatEntry;
+
+  if (result.size() == profiles::kProfileStatisticsCategories.size()) {
+    // We've received all results.
+    for (const auto& item : result) {
+      vivaldi::runtime_private::ProfileStatEntry stat;
+      stat.category = item.category;
+      stat.count = item.count;
+      results_.push_back(std::move(stat));
+    }
+    Respond(ArgumentList(Results::Create(results_)));
+  }
+}
+
+// MaybeScheduleProfileForDeletion does not consistently call the callback, so we
+// can't rely on it being called.
+namespace runtime_api {
+void DeleteProfileCallback(std::unique_ptr<ScopedKeepAlive> keep_alive,
+                           Profile* profile) {
+  webui::OpenNewWindowForProfile(profile);
+}
+}  // namespace runtime_api
+
+ExtensionFunction::ResponseAction
+RuntimePrivateDeleteProfileFunction::Run() {
+  namespace Results = vivaldi::runtime_private::DeleteProfile::Results;
+  using vivaldi::runtime_private::DeleteProfile::Params;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  base::FilePath profile_path =
+    base::FilePath::FromUTF8Unsafe(params->profile_path);
+
+  g_browser_process->profile_manager()->MaybeScheduleProfileForDeletion(
+      profile_path,
+      base::BindOnce(
+          &runtime_api::DeleteProfileCallback,
+          std::make_unique<ScopedKeepAlive>(KeepAliveOrigin::PROFILE_HELPER,
+                                            KeepAliveRestartOption::DISABLED)),
+      ProfileMetrics::DELETE_PROFILE_SETTINGS);
 
   return RespondNow(ArgumentList(Results::Create(true)));
 }

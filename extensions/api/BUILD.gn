@@ -63,6 +63,8 @@ jumbo_static_library("apis") {
     "infobars/infobars_api.h",
     "mail/mail_private_api.cc",
     "mail/mail_private_api.h",
+    "menubar/menubar_api.cc",
+    "menubar/menubar_api.h",
     "notes/notes_api.cc",
     "notes/notes_api.h",
     "prefs/prefs_api.cc",

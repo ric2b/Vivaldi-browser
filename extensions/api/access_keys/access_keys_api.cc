@@ -12,35 +12,28 @@
 
 namespace extensions {
 
-AccessKeysGetAccessKeysForPageFunction::
-    AccessKeysGetAccessKeysForPageFunction() {}
+ExtensionFunction::ResponseAction
+AccessKeysGetAccessKeysForPageFunction::Run() {
+  using vivaldi::access_keys::GetAccessKeysForPage::Params;
 
-AccessKeysGetAccessKeysForPageFunction::
-    ~AccessKeysGetAccessKeysForPageFunction() {}
-
-bool AccessKeysGetAccessKeysForPageFunction::RunAsync() {
-  std::unique_ptr<vivaldi::access_keys::GetAccessKeysForPage::Params> params(
-      vivaldi::access_keys::GetAccessKeysForPage::Params::Create(*args_));
+  std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  int tab_id = params->tab_id;
+  std::string error;
+  VivaldiPrivateTabObserver* tab_api = VivaldiPrivateTabObserver::FromTabId(
+      browser_context(), params->tab_id, &error);
+  if (!tab_api)
+    return RespondNow(Error(error));
 
-  content::WebContents* tabstrip_contents =
-      ::vivaldi::ui_tools::GetWebContentsFromTabStrip(tab_id,
-                                                      browser_context());
-  if (tabstrip_contents) {
-    VivaldiPrivateTabObserver* tab_api =
-        VivaldiPrivateTabObserver::FromWebContents(tabstrip_contents);
-    tab_api->GetAccessKeys(tabstrip_contents, base::BindOnce(
-        &AccessKeysGetAccessKeysForPageFunction::AccessKeysReceived, this));
-    return true;
-  }
-  SendResponse(false);
-  return false;
+  tab_api->GetAccessKeys(
+      base::BindOnce(
+          &AccessKeysGetAccessKeysForPageFunction::AccessKeysReceived, this));
+  return RespondLater();
 }
 
 void AccessKeysGetAccessKeysForPageFunction::AccessKeysReceived(
     std::vector<VivaldiViewMsg_AccessKeyDefinition> access_keys) {
+  namespace Results = vivaldi::access_keys::GetAccessKeysForPage::Results;
 
   std::vector<vivaldi::access_keys::AccessKeyDefinition> access_key_list;
 
@@ -59,37 +52,26 @@ void AccessKeysGetAccessKeysForPageFunction::AccessKeysReceived(
     access_key_list.push_back(std::move(entry));
   }
 
-  results_ = vivaldi::access_keys::GetAccessKeysForPage::Results::Create(
-      access_key_list);
-  SendResponse(true);
+  Respond(ArgumentList(Results::Create(access_key_list)));
 }
 
-AccessKeysActionFunction::
-    AccessKeysActionFunction() {}
+ExtensionFunction::ResponseAction AccessKeysActionFunction::Run() {
+  using vivaldi::access_keys::Action::Params;
 
-AccessKeysActionFunction::
-    ~AccessKeysActionFunction() {}
-
-bool AccessKeysActionFunction::RunAsync() {
-  std::unique_ptr<vivaldi::access_keys::Action::Params> params(
-      vivaldi::access_keys::Action::Params::Create(*args_));
+  std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  int tab_id = params->tab_id;
   std::string id = params->id;
 
-  content::WebContents* tabstrip_contents =
-      ::vivaldi::ui_tools::GetWebContentsFromTabStrip(tab_id,
-                                                      browser_context());
-  if (tabstrip_contents) {
-    VivaldiPrivateTabObserver* tab_api =
-        VivaldiPrivateTabObserver::FromWebContents(tabstrip_contents);
-    tab_api->AccessKeyAction(tabstrip_contents, id);
-    SendResponse(true);
-    return true;
-  }
-  SendResponse(false);
-  return false;
+  std::string error;
+  VivaldiPrivateTabObserver* tab_api = VivaldiPrivateTabObserver::FromTabId(
+      browser_context(), params->tab_id, &error);
+  if (!tab_api)
+    return RespondNow(Error(error));
+
+  tab_api->AccessKeyAction(id);
+
+  return RespondNow(NoArguments());
 }
 
 } //extensions

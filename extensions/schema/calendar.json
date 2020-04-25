@@ -5,7 +5,7 @@
     "description": "Use the <code>vivaldi.calendar</code> API to manipulate calendar events.",
     "types": [
       {
-        "id": "OccurrenceInterval",
+        "id": "OccurrenceFrequency",
         "type": "string",
         "enum": [ "", "days", "weeks", "months", "years" ],
         "description": "Interval (none (empty string),days, weeks, months) when next event should reoccur."
@@ -15,8 +15,8 @@
         "type": "object",
         "description": "A pattern describing how a event should reoccur",
         "properties": {
-          "interval": {
-            "$ref": "OccurrenceInterval",
+          "frequency": {
+            "$ref": "OccurrenceFrequency",
             "optional": true,
             "description": "Interval (days, weeks, months, year) when next event should reoccur."
           },
@@ -25,7 +25,7 @@
             "optional": true,
             "description": "How often the event shoud reoccur."
           },
-          "skip_count": {
+          "interval": {
             "type": "integer",
             "optional": true,
             "description": "How many (days, week, months) see interval, should be skipped until next event occurs."
@@ -145,6 +145,11 @@
             "description": "The event uid.",
             "type": "string",
             "optional": true
+          },
+          "eventTypeId": {
+            "description": "The event type id.",
+            "type": "string",
+            "optional": true
           }
         }
       },
@@ -229,6 +234,64 @@
         }
       },
       {
+        "id": "EventType",
+        "type": "object",
+        "description": "A event type.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minimum": 0,
+            "description": "The unique identifier for the event type. IDs are unique within the current profile, and they remain valid even after the browser is restarted."
+          },
+          "name": {
+            "type": "string",
+            "description": "The event type name."
+          },
+          "color": {
+            "type": "string",
+            "optional": true,
+            "description": "The color of the event type."
+          },
+          "iconindex": {
+            "type": "integer",
+            "optional": true,
+            "description": "The event type icon index."
+          },
+          "recurrence": {
+            "$ref": "RecurrencePattern",
+            "optional": true,
+            "description": "How this event type reoccurs."
+          }
+        }
+      },
+      {
+        "id": "CreateEventType",
+        "description": "Object passed to the typeCreate() function.",
+        "inline_doc": true,
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "optional": false
+          },
+          "color": {
+            "type": "string",
+            "optional": true,
+            "description": "The color of the event type."
+          },
+          "iconindex": {
+            "type": "integer",
+            "optional": true,
+            "description": "The event type iconindex."
+          },
+          "recurrence": {
+            "$ref": "RecurrencePattern",
+            "optional": true,
+            "description": "How this event type reoccurs."
+          }
+        }
+      },
+      {
         "id": "CreateEventsResults",
         "type": "object",
         "description": "Object stating how many events were created successfully and how many creations resulted in errors",
@@ -268,6 +331,11 @@
             "type": "integer",
             "optional": true,
             "description": "The UI order of the calendar."
+          },
+          "iconindex": {
+            "type": "integer",
+            "optional": true,
+            "description": "The iconindex of the calendar."
           },
           "color": {
             "type": "string",
@@ -376,6 +444,26 @@
         ]
       },
       {
+        "name": "getAllEventTypes",
+        "type": "function",
+        "description": "Retrieves all event types",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "results",
+                "type": "array",
+                "items": {
+                  "$ref": "EventType"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
         "name": "eventCreate",
         "type": "function",
         "description": "Creates a event in the specified calendar.",
@@ -392,33 +480,33 @@
               {
                 "name": "result",
                 "$ref": "CalendarEvent"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "name": "eventsCreate",
-          "type": "function",
-          "description": "Creates multiple events.",
-          "parameters": [
-            {
-              "name": "eventsList",
-              "type": "array",
-              "items": {
-                "$ref": "CreateDetails"
-              },
-              "minItems": 1
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "eventsCreate",
+        "type": "function",
+        "description": "Creates multiple events.",
+        "parameters": [
+          {
+            "name": "eventsList",
+            "type": "array",
+            "items": {
+              "$ref": "CreateDetails"
             },
-            {
-              "type": "function",
-              "name": "callback",
-              "optional": true,
-              "parameters": [
-                {
-                  "name": "result",
-                  "description": "Object stating how many creation attempt succeeded and how many failed",
-                  "$ref": "CreateEventsResults"
+            "minItems": 1
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "result",
+                "description": "Object stating how many creation attempt succeeded and how many failed",
+                "$ref": "CreateEventsResults"
               }
             ]
           }
@@ -538,6 +626,11 @@
                 "description": "The event uid",
                 "type": "string",
                 "optional": true
+              },
+              "eventTypeId": {
+                "description": "The event type id.",
+                "type": "string",
+                "optional": true
               }
             }
           }
@@ -593,7 +686,7 @@
           {
             "type": "string",
             "name": "id",
-            "description":  "The id of the calendar to be deleted"
+            "description": "The id of the calendar to be deleted"
           },
           {
             "type": "function",
@@ -658,7 +751,7 @@
               },
               "iconindex": {
                 "description": "The iconindex of the calendar",
-                "type": "number",
+                "type": "integer",
                 "optional": true
               },
               "ctag": {
@@ -672,6 +765,82 @@
                 "optional": true
               }
             }
+          }
+        ]
+      },
+      {
+        "name": "eventTypeCreate",
+        "type": "function",
+        "description": "Creates a event type.",
+        "parameters": [
+          {
+            "$ref": "CreateEventType",
+            "name": "event"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "result",
+                "$ref": "EventType"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "eventTypeUpdate",
+        "type": "function",
+        "description": "Updates the properties of an event type. Specify only the properties that you want to change. Unspecified properties will be left unchanged.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "id"
+          },
+          {
+            "type": "object",
+            "name": "changes",
+            "properties": {
+              "name": {
+                "name": "The updated name of the event type",
+                "type": "string",
+                "optional": true
+              },
+              "color": {
+                "description": "The updated color of the event type",
+                "type": "string",
+                "optional": true
+              },
+              "iconindex": {
+                "description": "The iconindex of the event type",
+                "type": "integer",
+                "optional": true
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "deleteEventType",
+        "type": "function",
+        "description": "Deletes an event type.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "id"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "result",
+                "type": "boolean"
+              }
+            ]
           }
         ]
       }
@@ -697,7 +866,7 @@
           {
             "name": "removedEvent",
             "$ref": "CalendarEvent",
-            "description": "The deleted event"
+            "description": "The deleted event type"
           }
         ]
       },
@@ -710,6 +879,42 @@
             "name": "changedEvent",
             "$ref": "CalendarEvent",
             "description": "The changed event"
+          }
+        ]
+      },
+      {
+        "name": "onEventTypeCreated",
+        "type": "function",
+        "description": "Fired when a event type is created.",
+        "parameters": [
+          {
+            "name": "createdEventType",
+            "$ref": "EventType",
+            "description": "The created event type"
+          }
+        ]
+      },
+      {
+        "name": "onEventTypeRemoved",
+        "type": "function",
+        "description": "Fired when event type is deleted.",
+        "parameters": [
+          {
+            "name": "removedEventType",
+            "$ref": "EventType",
+            "description": "The deleted event"
+          }
+        ]
+      },
+      {
+        "name": "onEventTypeChanged",
+        "type": "function",
+        "description": "Fired when event type is updated.",
+        "parameters": [
+          {
+            "name": "changedEventType",
+            "$ref": "EventType",
+            "description": "The changed event type"
           }
         ]
       },

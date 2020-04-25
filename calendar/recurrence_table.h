@@ -57,7 +57,7 @@ class RecurrrenceTable {
 // string, it will save time doing string appends. If you have to build a SQL
 // string dynamically anyway, use the constant, it will save space.
 #define CALENDAR_RECURRING_ROW_FIELDS                                  \
-  " id, event_id, interval, number_of_ocurrences, skip_count, "        \
+  " id, event_id, frequency, number_of_ocurrences, interval, "        \
   "day_of_week, week_of_month, day_of_month, month_of_year, created, " \
   "last_modified "
 

@@ -17,14 +17,12 @@ void ConvertThumbnailDataOnUIThread(
   // Certain profile calls can't be made on the IO thread, so off load to the UI
   // thread, then bounce to the IO thread from here.
   ProfileManager* manager = g_browser_process->profile_manager();
-  extensions::VivaldiDataSourcesAPI* api =
-    extensions::VivaldiDataSourcesAPI::GetFactoryInstance()->Get(
-      manager->GetProfile(path));
-  extensions::VivaldiDataSourcesAPI::AddBookmarkImageCallback callback =
-    base::Bind(&OnBookmarkThumbnailStored);
+  Profile* profile = manager->GetProfile(path);
 
   // No error checking, it's not the end of the world if this fails.
-  api->AddImageDataForBookmark(bookmark_id, thumbnail, callback);
+  extensions::VivaldiDataSourcesAPI::AddImageDataForBookmark(
+      profile, bookmark_id, thumbnail,
+      base::BindOnce(&OnBookmarkThumbnailStored));
 }
 
 }  // namespace vivaldi

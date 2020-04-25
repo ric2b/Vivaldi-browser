@@ -18,9 +18,9 @@ bool VivaldiTabCheck::IsVivaldiTabFrame(
     content::RenderWidgetHostViewChildFrame* child_frame) {
   if (content::RenderWidgetHostImpl* host = child_frame->host()) {
     if (content::RenderWidgetHostDelegate* delegate = host->delegate()) {
-      content::WebContents* web_contents = delegate->GetAsWebContents();
-      DCHECK(web_contents);
-      if (web_contents) {
+      // When delegate is InterstitialPageImpl like for authentication dialogs
+      // and similar windows web_contents is null.
+      if (content::WebContents* web_contents = delegate->GetAsWebContents()) {
         return IsVivaldiTab(web_contents);
       }
     }

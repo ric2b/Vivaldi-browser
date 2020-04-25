@@ -58,7 +58,6 @@ class CONTENT_EXPORT BrowserGpuChannelHostFactory
   void SetForceAllowAccessToGpu(bool) override {}
 
  private:
-  struct CreateRequest;
   class EstablishRequest;
 
   BrowserGpuChannelHostFactory();

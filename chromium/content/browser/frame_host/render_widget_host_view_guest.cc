@@ -212,7 +212,7 @@ void RenderWidgetHostViewGuest::Focus() {
     guest_->SetFocus(host(), true, blink::kWebFocusTypeNone);
 }
 
-bool RenderWidgetHostViewGuest::HasFocus() const {
+bool RenderWidgetHostViewGuest::HasFocus() {
   if (!guest_)
     return false;
   return guest_->focused();
@@ -251,7 +251,7 @@ void RenderWidgetHostViewGuest::PreProcessTouchEvent(
   }
 }
 
-gfx::Rect RenderWidgetHostViewGuest::GetViewBounds() const {
+gfx::Rect RenderWidgetHostViewGuest::GetViewBounds() {
   if (!guest_ || (guest_ && !guest_->attached()))
     return gfx::Rect();
 
@@ -352,7 +352,7 @@ void RenderWidgetHostViewGuest::Destroy() {
   RenderWidgetHostViewChildFrame::Destroy();
 }
 
-gfx::Size RenderWidgetHostViewGuest::GetCompositorViewportPixelSize() const {
+gfx::Size RenderWidgetHostViewGuest::GetCompositorViewportPixelSize() {
   gfx::Size size;
   if (guest_) {
     size = gfx::ScaleToCeiledSize(guest_->frame_rect().size(),
@@ -439,7 +439,7 @@ void RenderWidgetHostViewGuest::InitAsFullscreen(
   NOTREACHED();
 }
 
-gfx::NativeView RenderWidgetHostViewGuest::GetNativeView() const {
+gfx::NativeView RenderWidgetHostViewGuest::GetNativeView() {
   if (!guest_)
     return gfx::NativeView();
 
@@ -630,7 +630,7 @@ RenderWidgetHostViewGuest::GetOwnerRenderWidgetHostView() const {
 
 void RenderWidgetHostViewGuest::MaybeSendSyntheticTapGestureForTest(
     const blink::WebFloatPoint& position,
-    const blink::WebFloatPoint& screen_position) const {
+    const blink::WebFloatPoint& screen_position) {
   MaybeSendSyntheticTapGesture(GetOwnerRenderWidgetHostView(), position,
                                screen_position);
 }
@@ -640,7 +640,7 @@ void RenderWidgetHostViewGuest::MaybeSendSyntheticTapGestureForTest(
 void RenderWidgetHostViewGuest::MaybeSendSyntheticTapGesture(
     RenderWidgetHostViewBase* owner_view,
     const blink::WebFloatPoint& position,
-    const blink::WebFloatPoint& screen_position) const {
+    const blink::WebFloatPoint& screen_position) {
   DCHECK(owner_view);
   if (!HasFocus()) {
     // We need to convert the position of the event into the coordinate frame
@@ -654,7 +654,7 @@ void RenderWidgetHostViewGuest::MaybeSendSyntheticTapGesture(
     blink::WebGestureEvent gesture_tap_event(
         blink::WebGestureEvent::kGestureTapDown,
         blink::WebInputEvent::kNoModifiers, ui::EventTimeForNow(),
-        blink::kWebGestureDeviceTouchscreen);
+        blink::WebGestureDevice::kTouchscreen);
     gesture_tap_event.SetPositionInWidget(point_in_owner);
     gesture_tap_event.SetPositionInScreen(screen_position);
     // The touch action may not be set yet because this is still at the
@@ -757,7 +757,7 @@ InputEventAckState RenderWidgetHostViewGuest::FilterInputEvent(
   return INPUT_EVENT_ACK_STATE_NOT_CONSUMED;
 }
 
-void RenderWidgetHostViewGuest::GetScreenInfo(ScreenInfo* screen_info) const {
+void RenderWidgetHostViewGuest::GetScreenInfo(ScreenInfo* screen_info) {
   DCHECK(screen_info);
   auto* owner = GetOwnerRenderWidgetHostView();
   if (owner) {

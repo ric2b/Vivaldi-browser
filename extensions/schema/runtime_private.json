@@ -52,13 +52,55 @@
             "description": "true if this is the active profile, otherwise false. ",
             "type": "boolean"
           },
+          "path": {
+            "description": "Path of this user profile. This is used when opening and deleting profiles as it's unique.",
+            "type": "string"
+          },
           "image": {
             "description": "base64 encoded data url with the image to use for this profile. Empty for Guest profile.",
             "type": "string"
           },
+          "imageIndex": {
+            "description": "The index into our array of default images this user is using. Corrensponds to |UserProfileImage| index value. Not valid for guest profiles.",
+            "type": "integer"
+          },
           "guest": {
             "description": "true if this is the guest profile, otherwise false. ",
             "type": "boolean"
+          }
+        }
+      },
+      {
+        "id": "UserProfileImage",
+        "type": "object",
+        "description": "Object returned from the |getUserProfileImages|.",
+        "properties": {
+          "index": {
+            "description": "Index of this user profile image in the table of available images.",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Name of this user profile image.",
+            "type": "string"
+          },
+          "image": {
+            "description": "base64 encoded data url with the image.",
+            "type": "string"
+          }
+        }
+      },
+      {
+        "id": "ProfileStatEntry",
+        "type": "object",
+        "description": "Object returned from the |getProfileStatistics|.",
+        "properties": {
+          "category": {
+            "description": "Category of the count, 'History', 'Passwords' etc..",
+            "type": "string"
+          },
+          "count": {
+            "description": "Number of data entries for this category.",
+            "type": "integer"
           }
         }
       }
@@ -93,27 +135,27 @@
         "type": "function",
         "description": "Enables or disables a feature.",
         "parameters": [
-            {
-              "type": "string",
-              "name": "featureName",
-              "description": "Name of the feature to enable or disable."
-            },
-            {
-              "type": "boolean",
-              "name": "enable",
-              "description": "true to enable feature."
-            },
-            {
-              "type": "function",
-              "name": "callback",
-              "parameters": [
-                {
-                  "type": "boolean",
-                  "name": "success",
-                  "description": "true if feature name was valid, false on any error."
-                }
-              ]
-            }
+          {
+            "type": "string",
+            "name": "featureName",
+            "description": "Name of the feature to enable or disable."
+          },
+          {
+            "type": "boolean",
+            "name": "enable",
+            "description": "true to enable feature."
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "type": "boolean",
+                "name": "success",
+                "description": "true if feature name was valid, false on any error."
+              }
+            ]
+          }
         ]
       },
       {
@@ -241,8 +283,8 @@
         "parameters": [
           {
             "type": "string",
-            "name": "profileName",
-            "description": "Name of the profile to open."
+            "name": "profilePath",
+            "description": "Path of the profile to open."
           },
           {
             "type": "function",
@@ -262,6 +304,149 @@
         "type": "function",
         "description": "Close all windows for the active profile in this window.",
         "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "type": "boolean",
+                "name": "success",
+                "description": "true if success, otherwise false."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "getUserProfileImages",
+        "type": "function",
+        "description": "Get all available user profiles images.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "profileImages",
+                "type": "array",
+                "items": { "$ref": "UserProfileImage" }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "updateActiveProfile",
+        "type": "function",
+        "description": "Updates the name and icon index for the active profile.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "name",
+            "description": "New name for the profile."
+          },
+          {
+            "type": "integer",
+            "name": "avatarIndex",
+            "description": "Index into the avatar table for the new avatar."
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "type": "boolean",
+                "name": "success",
+                "description": "true if success, otherwise false."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "getProfileDefaults",
+        "type": "function",
+        "description": "Returns defaults for a new profile.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "type": "string",
+                "name": "name",
+                "description": "Suggested name for the profile."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "createProfile",
+        "type": "function",
+        "description": "Creates a new profile with the given name and icon.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "name",
+            "description": "Name for the profile."
+          },
+          {
+            "type": "string",
+            "name": "avatarUrl",
+            "description": "Url for the avatar."
+          },
+          {
+            "type": "boolean",
+            "name": "createDesktopIcon",
+            "description": "Create desktop icon."
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "type": "boolean",
+                "name": "success",
+                "description": "true if success, otherwise false."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "getProfileStatistics",
+        "type": "function",
+        "description": "Returns statistics for the profile associated with the given profile path.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "profilePath",
+            "description": "Path of the profile, unique per profile."
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "profileStats",
+                "type": "array",
+                "items": { "$ref": "ProfileStatEntry" }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "deleteProfile",
+        "type": "function",
+        "description": "Deletes a profile after closing all open windows for that profile.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "profilePath",
+            "description": "Path of the profile, unique per profile."
+          },
           {
             "type": "function",
             "name": "callback",

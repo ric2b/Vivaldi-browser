@@ -30,12 +30,14 @@
 <translation id="2147827593068025794">Background Sync</translation>
 <translation id="2166378884831602661">This site can’t provide a secure connection</translation>
 <translation id="2187317261103489799">Detect (default)</translation>
+<translation id="2224337661447660594">No internet</translation>
 <translation id="2230458221926704099">Fix your connection using the <ph name="BEGIN_LINK" />diagnostics app<ph name="END_LINK" /></translation>
 <translation id="2292556288342944218">Your Internet access is blocked</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> requires a username and password.</translation>
 <translation id="2337852623177822836">Setting controlled by your administrator</translation>
 <translation id="2355395290879513365">Attackers might be able to see the images you’re looking at on this site and trick you by modifying them.</translation>
 <translation id="2356070529366658676">Ask</translation>
+<translation id="2359808026110333948">Continue</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Running Network Diagnostics<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Notifications</translation>
 <translation id="2539524384386349900">Detect</translation>
@@ -76,6 +78,7 @@
 <translation id="3681007416295224113">Certificate information</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Checking the proxy, firewall, and DNS configuration<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">If you use a proxy server...</translation>
+<translation id="3950820424414687140">Sign in</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> is blocked</translation>
 <translation id="3987940399970879459">Less than 1 MB</translation>
 <translation id="4075732493274867456">The client and server don't support a common SSL protocol version or cipher suite.</translation>
@@ -133,6 +136,7 @@
 <translation id="5810442152076338065">Your connection to <ph name="DOMAIN" /> is encrypted using an obsolete cipher suite.</translation>
 <translation id="5838278095973806738">You should not enter any sensitive information on this site (for example, passwords or credit cards), because it could be stolen by attackers.</translation>
 <translation id="5869405914158311789">This site can’t be reached</translation>
+<translation id="5932224571077948991">Site shows intrusive or misleading ads</translation>
 <translation id="5990559369517809815">Requests to the server have been blocked by an extension.</translation>
 <translation id="6051221802930200923">You cannot visit <ph name="SITE" /> right now because the website uses certificate pinning. Network errors and attacks are usually temporary, so this page will probably work later.</translation>
 <translation id="6146055958333702838">Check any cables and reboot any routers, modems or other network
@@ -151,6 +155,7 @@
 <translation id="6417515091412812850">Unable to check whether the certificate has been revoked.</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> refused to connect.</translation>
 <translation id="6447842834002726250">Cookies</translation>
+<translation id="6451458296329894277">Confirm Form Resubmission</translation>
 <translation id="6569060085658103619">You're viewing an extension page</translation>
 <translation id="6657585470893396449">Password</translation>
 <translation id="6685834062052613830">Sign out and complete setup</translation>
@@ -183,15 +188,19 @@
 <translation id="7800304661137206267">The connection is encrypted using <ph name="CIPHER" />, with <ph name="MAC" /> for message authentication and <ph name="KX" /> as the key exchange mechanism.</translation>
 <translation id="7802523362929240268">Site is legitimate</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> normally uses encryption to protect your information. When Vivaldi tried to connect to <ph name="SITE" /> this time, the website sent back unusual and incorrect credentials. This may happen when an attacker is trying to pretend to be <ph name="SITE" />, or a Wi-Fi sign-in screen has interrupted the connection. Your information is still secure because Vivaldi stopped the connection before any data was exchanged.</translation>
+<translation id="7878562273885520351">Your password may be compromised</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
 <translation id="8025119109950072390">Attackers on this site may trick you into doing something dangerous like installing software or revealing your personal information (for example, passwords, phone numbers, or credit cards).</translation>
 <translation id="8037357227543935929">Ask (default)</translation>
 <translation id="8041940743680923270">Use global default (Ask)</translation>
+<translation id="808894953321890993">Change password</translation>
 <translation id="8142868475871995937">Visit &lt;strong&gt;vivaldi://policy&lt;/strong&gt; to see the list of blacklisted URLs and other policies enforced by your system administrator.</translation>
 <translation id="8149426793427495338">Your computer went to sleep.</translation>
 <translation id="8150722005171944719">The file at <ph name="URL" /> is not readable.  It may have been removed, moved or file permissions may be preventing access.</translation>
 <translation id="8184538546369750125">Use global default (Allow)</translation>
+<translation id="8211406090763984747">Connection is secure</translation>
 <translation id="8225771182978767009">The person who set up this computer has chosen to block this site.</translation>
+<translation id="8241707690549784388">The page that you're looking for used information that you entered. Returning to that page might cause any action you took to be repeated. Do you want to continue?</translation>
 <translation id="8241712895048303527">Block on this site</translation>
 <translation id="8288807391153049143">Show certificate</translation>
 <translation id="8289355894181816810">Contact your network administrator if you're not sure what this means.</translation>

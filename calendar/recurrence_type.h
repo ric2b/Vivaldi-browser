@@ -33,25 +33,25 @@ class EventRow;
 // UpdateRecurrence method
 enum UpdateRecurrenceFields {
   RECURRENCE_EVENT_ID = 1 << 0,
-  RECURRENCE_INTERVAL = 1 << 1,
+  RECURRENCE_FREQUENCY = 1 << 1,
   NUMBER_OF_OCCURRENCES = 1 << 2,
-  RECURRENCE_SKIP_COUNT = 1 << 3,
+  RECURRENCE_INTERVAL = 1 << 3,
   RECURRENCE_DAY_OF_WEEK = 1 << 4,
   RECURRENCE_WEEK_OF_MONTH = 1 << 5,
   RECURRENCE_DAY_OF_MONTH = 1 << 6,
   RECURRENCE_MONTH_OF_YEAR = 1 << 7,
 };
 
-enum class RecurrenceInterval { NONE = 0, DAILY, WEEKLY, MONTHLY, YEARLY };
+enum class RecurrenceFrequency { NONE = 0, DAILY, WEEKLY, MONTHLY, YEARLY };
 
 // Represents a simplified version of a event.
 struct EventRecurrence {
   EventRecurrence();
   EventRecurrence(const EventRecurrence& event);
   ~EventRecurrence();
-  RecurrenceInterval interval;
+  RecurrenceFrequency frequency;
   int number_of_occurrences;
-  int skip_count;
+  int interval;
   int day_of_week;
   int week_of_month;
   int day_of_month;
@@ -66,9 +66,9 @@ class RecurrenceRow {
   RecurrenceRow();
   RecurrenceRow(RecurrenceID id,
                 EventID event_id,
-                RecurrenceInterval recurrence_interval,
+                RecurrenceFrequency recurrence_frequency,
                 int number_of_ocurrences,
-                int skip_count,
+                int interval,
                 int day_of_week,
                 int week_of_month,
                 int day_of_month,
@@ -83,12 +83,12 @@ class RecurrenceRow {
   EventID event_id() const { return event_id_; }
   void set_event_id(EventID event_id) { event_id_ = event_id; }
 
-  RecurrenceInterval recurrence_interval() const {
-    return recurrence_interval_;
+  RecurrenceFrequency recurrence_frequency() const {
+    return recurrence_frequency_;
   }
 
-  void set_recurrence_interval(RecurrenceInterval recurrence_interval) {
-    recurrence_interval_ = recurrence_interval;
+  void set_recurrence_frequency(RecurrenceFrequency recurrence_frequncy) {
+    recurrence_frequency_ = recurrence_frequncy;
   }
 
   int number_of_ocurrences() const { return number_of_ocurrences_; }
@@ -96,8 +96,8 @@ class RecurrenceRow {
     number_of_ocurrences_ = number_of_ocurrences;
   }
 
-  int skip_count() const { return skip_count_; }
-  void set_skip_count(int skip_count) { skip_count_ = skip_count; }
+  int interval() const { return interval_; }
+  void set_interval(int interval) { interval_ = interval; }
 
   int day_of_week() const { return day_of_week_; }
   void set_day_of_week(int day_of_week) { day_of_week_ = day_of_week; }
@@ -116,9 +116,9 @@ class RecurrenceRow {
 
   RecurrenceID id_;
   EventID event_id_;
-  RecurrenceInterval recurrence_interval_;
+  RecurrenceFrequency recurrence_frequency_;
   int number_of_ocurrences_;
-  int skip_count_;
+  int interval_;
   int day_of_week_;
   int week_of_month_;
   int day_of_month_;

@@ -106,6 +106,8 @@ void VivaldiAddLinkItems(SimpleMenuModel* menu,
                          WebContents* web_contents,
                          const ContextMenuParams& params) {
   if (IsVivaldiRunning() && !params.link_url.is_empty()) {
+    Profile* profile =
+        Profile::FromBrowserContext(web_contents->GetBrowserContext());
     int firstIndex =
         menu->GetIndexOfCommandId(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB);
     DCHECK_GE(firstIndex, 0);
@@ -131,13 +133,17 @@ void VivaldiAddLinkItems(SimpleMenuModel* menu,
     menu->InsertItemWithStringIdAt(++index,
                                    IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW,
                                    IDS_VIV_OPEN_LINK_NEW_WINDOW);
-    menu->InsertItemWithStringIdAt(++index,
-                                   IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD,
-                                   IDS_VIV_OPEN_LINK_NEW_PRIVATE_WINDOW);
+    if (!profile->IsGuestSession()) {
+      menu->InsertItemWithStringIdAt(++index,
+                                     IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD,
+                                     IDS_VIV_OPEN_LINK_NEW_PRIVATE_WINDOW);
+    }
     if (!IsVivaldiWebPanel(web_contents)) {
       menu->InsertSeparatorAt(++index, ui::NORMAL_SEPARATOR);
-      menu->InsertItemWithStringIdAt(++index, IDC_VIV_BOOKMARK_LINK,
-                                     IDS_VIV_BOOKMARK_LINK);
+      if (!profile->IsGuestSession()) {
+        menu->InsertItemWithStringIdAt(++index, IDC_VIV_BOOKMARK_LINK,
+                                       IDS_VIV_BOOKMARK_LINK);
+      }
       menu->InsertItemWithStringIdAt(++index, IDC_VIV_ADD_LINK_TO_WEBPANEL,
                                      IDS_VIV_ADD_LINK_TO_WEBPANEL);
 #if !defined(OFFICIAL_BUILD)
@@ -154,6 +160,8 @@ void VivaldiAddImageItems(SimpleMenuModel* menu,
                           WebContents* web_contents,
                           const ContextMenuParams& params) {
   if (IsVivaldiRunning()) {
+    Profile* profile =
+        Profile::FromBrowserContext(web_contents->GetBrowserContext());
     int index = menu->GetIndexOfCommandId(IDC_CONTENT_CONTEXT_OPENIMAGENEWTAB);
     DCHECK_GE(index, 0);
     menu->RemoveItemAt(index);
@@ -168,9 +176,11 @@ void VivaldiAddImageItems(SimpleMenuModel* menu,
     menu->InsertSeparatorAt(++index, ui::NORMAL_SEPARATOR);
     menu->InsertItemWithStringIdAt(++index, IDC_VIV_OPEN_IMAGE_NEW_WINDOW,
                                    IDS_VIV_OPEN_IMAGE_NEW_WINDOW);
-    menu->InsertItemWithStringIdAt(++index,
-                                   IDC_VIV_OPEN_IMAGE_NEW_PRIVATE_WINDOW,
-                                   IDS_VIV_OPEN_IMAGE_NEW_PRIVATE_WINDOW);
+    if (!profile->IsGuestSession()) {
+      menu->InsertItemWithStringIdAt(++index,
+                                     IDC_VIV_OPEN_IMAGE_NEW_PRIVATE_WINDOW,
+                                     IDS_VIV_OPEN_IMAGE_NEW_PRIVATE_WINDOW);
+    }
     menu->InsertSeparatorAt(++index, ui::NORMAL_SEPARATOR);
 
     index = menu->GetIndexOfCommandId(IDC_CONTENT_CONTEXT_COPYIMAGELOCATION);
@@ -179,8 +189,10 @@ void VivaldiAddImageItems(SimpleMenuModel* menu,
     if (!IsVivaldiWebPanel(web_contents)) {
       menu->InsertItemWithStringIdAt(++index, IDC_VIV_INSPECT_IMAGE,
                                      IDS_VIV_INSPECT_IMAGE);
-      menu->InsertItemWithStringIdAt(++index, IDC_VIV_USE_IMAGE_AS_BACKGROUND,
-                                     IDS_VIV_USE_IMAGE_AS_BACKGROUND);
+      if (!profile->IsGuestSession()) {
+        menu->InsertItemWithStringIdAt(++index, IDC_VIV_USE_IMAGE_AS_BACKGROUND,
+                                      IDS_VIV_USE_IMAGE_AS_BACKGROUND);
+      }
     }
     menu->InsertItemWithStringIdAt(++index, IDC_CONTENT_CONTEXT_RELOADIMAGE,
                                    IDS_CONTENT_CONTEXT_RELOADIMAGE);
@@ -205,12 +217,16 @@ void VivaldiAddCopyItems(SimpleMenuModel* menu,
 void VivaldiAddPageItems(SimpleMenuModel* menu,
                          WebContents* web_contents,
                          const ContextMenuParams& params) {
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents->GetBrowserContext());
   if (IsVivaldiRunning() && WebViewGuest::FromWebContents(web_contents) &&
       !IsVivaldiWebPanel(web_contents) && !IsVivaldiMail(web_contents)) {
     int index = menu->GetIndexOfCommandId(IDC_SAVE_PAGE);
     DCHECK_GE(index, 0);
-    menu->InsertItemWithStringIdAt(index, IDC_VIV_BOOKMARK_PAGE,
-                                   IDS_VIV_BOOKMARK_PAGE);
+    if (!profile->IsGuestSession()) {
+      menu->InsertItemWithStringIdAt(index, IDC_VIV_BOOKMARK_PAGE,
+                                     IDS_VIV_BOOKMARK_PAGE);
+    }
     menu->InsertItemWithStringIdAt(++index, IDC_VIV_ADD_PAGE_TO_WEBPANEL,
                                    IDS_VIV_ADD_PAGE_TO_WEBPANEL);
 #if !defined(OFFICIAL_BUILD)

@@ -35,20 +35,15 @@
 <translation id="1698122934742150150">Лише поточний сеанс анонімного перегляду</translation>
 <translation id="1706625117072057435">Рівні масштабування</translation>
 <translation id="1708338024780164500">(Неактивно)</translation>
-<translation id="1708713382908678956"><ph name="NAME_PH" /> (ID: <ph name="ID_PH" />)</translation>
 <translation id="1723824996674794290">&amp;Нове вікно</translation>
 <translation id="1729533290416704613">Розширення також змінило сторінку, яка відкривається під час пошуку в універсальному вікні пошуку.</translation>
 <translation id="1744108098763830590">фонова сторінка</translation>
-<translation id="1805822111539868586">Перевірити перегляди</translation>
 <translation id="1828901632669367785">Друкувати за допомогою системного діалогу...</translation>
 <translation id="1850508293116537636">Повернути &amp;за годинниковою стрілкою</translation>
 <translation id="1886996562706621347">Дозволити сайтам запитувати, щоб стати обробниками протоколів за умовчанням (рекомендовано)</translation>
-<translation id="1890674179660343635">&lt;span&gt;Ідентифікатор: &lt;/span&gt;<ph name="EXTENSION_ID" /></translation>
 <translation id="1901303067676059328">Вибрати &amp;всі</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1963227389609234879">Видалити все</translation>
-<translation id="1989112275319619282">Перегляд</translation>
-<translation id="1992397118740194946">Не налаштовано</translation>
 <translation id="1994173015038366702">URL сайту</translation>
 <translation id="2050339315714019657">Книжкова</translation>
 <translation id="2076269580855484719">Сховати цей плагін</translation>
@@ -85,7 +80,6 @@
 <translation id="2470702053775288986">Непідтримувані розширення вимкнено</translation>
 <translation id="2476578072172137802">Налаштування сайту</translation>
 <translation id="2482878487686419369">Сповіщення</translation>
-<translation id="2501797496290880632">Введіть комбінацію</translation>
 <translation id="2509495747794740764">Вкажіть значення від 10 до 200.</translation>
 <translation id="253557089021624350">Кількість з'єднань keepalive</translation>
 <translation id="2550212893339833758">Змінна пам’ять</translation>
@@ -104,7 +98,6 @@
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> не може зв’язатися з цим принтером. Перевірте, чи принтер підключено, і повторіть спробу.</translation>
 <translation id="2904456025988372123">Запитувати, якщо сайт намагається завантажити файли автоматично після першого файлу</translation>
 <translation id="2913331724188855103">Дозволити сайтам зберігати та переглядати дані файлів cookie (рекомендовано)</translation>
-<translation id="2916745397441987255">Шукати розширення</translation>
 <translation id="2932883381142163287">Повідомити про порушення</translation>
 <translation id="2941112035454246133">Низький</translation>
 <translation id="2972581237482394796">&amp;Повторити</translation>
@@ -138,11 +131,10 @@
 <translation id="3360297538363969800">Помилка друку. Перевірте принтер і повторіть спробу.</translation>
 <translation id="3378503599595235699">Зберігати локальні дані лише до виходу з веб-переглядача</translation>
 <translation id="3378572629723696641">Це розширення могло бути пошкоджено.</translation>
+<translation id="3387614642886316601">Використовувати покращену перевірку орфографії</translation>
 <translation id="3432227430032737297">Вилучити всі показані</translation>
-<translation id="3435896845095436175">Увімкнути</translation>
 <translation id="3440761377721825626">Запитувати, якщо сайт хоче запустити плагін для доступа до комп'ютера</translation>
 <translation id="345693547134384690">Відкрити &amp;зображення в новій вкладці</translation>
-<translation id="3467267818798281173">Запитувати Google пропозиції</translation>
 <translation id="3494769164076977169">Запитувати, якщо сайт намагається завантажити файли автоматично після першого файлу (рекомендовано)</translation>
 <translation id="3505030558724226696">Скасувати доступ до пристрою</translation>
 <translation id="3523642406908660543">Запитувати, якщо сайт хоче запустити плагін для доступа до комп'ютера (рекомендується)</translation>
@@ -158,13 +150,11 @@
 <translation id="3727187387656390258">Перевірити</translation>
 <translation id="3744111561329211289">Фонова синхронізація</translation>
 <translation id="3797900183766075808">Шукати “<ph name="SEARCH_ENGINE" />“ в “<ph name="SEARCH_TERMS" />”</translation>
-<translation id="3798449238516105146">Версія</translation>
 <translation id="3800806661949714323">Показати все (рекомендовано)</translation>
 <translation id="3810973564298564668">Керувати</translation>
+<translation id="3838085852053358637">Не вдалося завантажити розширення</translation>
 <translation id="383891835335927981">Масштабування сайтів не змінено</translation>
 <translation id="385051799172605136">Назад</translation>
-<translation id="3855441664322950881">Запакувати розширення</translation>
-<translation id="3866249974567520381">Опис</translation>
 <translation id="3899879303189199559">Не в мережі більше року</translation>
 <translation id="3905761538810670789">Відновити додаток</translation>
 <translation id="3908501907586732282">Увімкнути розширення</translation>
@@ -200,7 +190,6 @@
 <translation id="4409697491990005945">Поля</translation>
 <translation id="4423482519432579560">&amp;Перевірка правопису</translation>
 <translation id="4434045419905280838">Спливаючі вікна й переадресація</translation>
-<translation id="4522570452068850558">Деталі</translation>
 <translation id="4552089082226364758">Flash</translation>
 <translation id="4579581181964204535">Не вдається транслювати з <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Перейти до <ph name="URL" /></translation>
@@ -229,7 +218,6 @@
 <translation id="5057110919553308744">Коли ви натискаєте розширення</translation>
 <translation id="5063480226653192405">Використання</translation>
 <translation id="5068918910148307423">Заборонити нещодавно закритим сайтам завершувати надсилання й отримання даних</translation>
-<translation id="5087249366037322692">Додано третьою стороною</translation>
 <translation id="5143374789336132547">Розширення "<ph name="EXTENSION_NAME" />" змінило сторінку, яка відкривається під час натискання кнопки "Домашня сторінка".</translation>
 <translation id="5154108062446123722">Додаткові налаштування для <ph name="PRINTING_DESTINATION" /></translation>
 <translation id="5233019165164992427">Порт налагодження NaCl</translation>
@@ -249,9 +237,7 @@
 <translation id="5483785310822538350">Скасувати доступ до файлу та пристрою</translation>
 <translation id="5485102783864353244">Установити додаток</translation>
 <translation id="5487521232677179737">Видалити дані</translation>
-<translation id="5488468185303821006">Дозволити в анонімному режимі</translation>
 <translation id="5521078259930077036">Це домашня сторінка, яку ви очікували?</translation>
-<translation id="5532223876348815659">Загальні</translation>
 <translation id="5542132724887566711">Профіль</translation>
 <translation id="5556459405103347317">Перезавантажити</translation>
 <translation id="5575473780076478375">Розширення в режимі анонімного перегляду: <ph name="EXTENSION_NAME" /></translation>
@@ -274,11 +260,13 @@
 <translation id="5828633471261496623">Друк...</translation>
 <translation id="583281660410589416">Невідомий</translation>
 <translation id="5838456317242088717">Поточний сеанс анонімного перегляду</translation>
+<translation id="5860491529813859533">Увімкнути</translation>
 <translation id="5877584842898320529">Вибраний принтер недоступний або неправильно встановлений. <ph name="BR" /> Перевірте принтер або спробуйте вибрати інший.</translation>
 <translation id="5908769186679515905">Забороняти сайтам запускати Flash</translation>
 <translation id="5956585768868398362">Це сторінка пошуку, яку ви очікували?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (максимум <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="5965661248935608907">Також указує сторінку, яка відкривається під час натискання кнопки "Домашня сторінка" чи пошуку в універсальному вікні пошуку.</translation>
+<translation id="5978277834170881274">&amp;Використовувати базову перевірку орфографії</translation>
 <translation id="5979421442488174909">Перекласти на <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">Очистити дані сайту</translation>
 <translation id="6040143037577758943">Закрити</translation>
@@ -288,14 +276,11 @@
 <translation id="6086846494333236931">Встановлено адміністратором</translation>
 <translation id="6101226222197207147">Додано нову програму (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Ваше з’єднання з Інтернетом контролюється</translation>
-<translation id="6124650939968185064">Від цього розширення залежать такі розширення:</translation>
 <translation id="6147020289383635445">Помилка попереднього перегляду для друку.</translation>
 <translation id="6156863943908443225">Кеш сценарію</translation>
 <translation id="6169666352732958425">Не вдається транслювати робочий стіл.</translation>
 <translation id="6196640612572343990">Блокувати сторонні cookie-файли</translation>
 <translation id="6196854373336333322">Розширення "<ph name="EXTENSION_NAME" />" керує налаштуваннями проксі-сервера, тобто може змінювати та переривати будь-які ваші дії онлайн, а також стежити за ними. Якщо ви не знаєте причини такої зміни, імовірно, вона небажана.</translation>
-<translation id="6220413761270491930">Помилка завантаження розширення</translation>
-<translation id="6226777517901268232">Файл секретного ключа (необов'язково)</translation>
 <translation id="6239558157302047471">Перезавантажити фрейм</translation>
 <translation id="6247802389331535091">Система: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="6248988683584659830">Пошук налаштувань</translation>
@@ -321,12 +306,8 @@
 <translation id="6639554308659482635">Пам'ять SQLite</translation>
 <translation id="6686817083349815241">Зберегти пароль</translation>
 <translation id="6691936601825168937">&amp;Переслати</translation>
-<translation id="6706210727756204531">Застосування</translation>
 <translation id="6723354935081862304">Надсилайте файли для зберігання та друку до  Google Docs та інші хмарні місця призначення. <ph name="BEGIN_LINK" />Увійдіть<ph name="END_LINK" />, щоб використовувати службу Google Cloud Print.</translation>
 <translation id="6782111308708962316">Забороняти стороннім веб-сайтам зберігати та переглядати дані cookie-файлів</translation>
-<translation id="6786747875388722282">Розширення</translation>
-<translation id="6787839852456839824">Комбінації клавіш</translation>
-<translation id="6788210894632713004">Розпакувати розширення</translation>
 <translation id="6798954102094737107">Плагін: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Залишити зміни</translation>
 <translation id="6817174620439930047">Запитувати, коли сайт хоче використовувати виключні повідомлення системи, щоб отримувати доступ до пристроїв MIDI (рекомендується)</translation>
@@ -342,8 +323,6 @@
 <translation id="7006634003215061422">Нижнє поле</translation>
 <translation id="7053983685419859001">Блокувати</translation>
 <translation id="708060913198414444">Копіювати адресу аудіо</translation>
-<translation id="7084192839369222683">Запускати лише важливий вміст</translation>
-<translation id="7152478047064750137">Для цього розширення не потрібні спеціальні дозволи</translation>
 <translation id="7175353351958621980">Завантажено з:</translation>
 <translation id="7270858098575133036">Запитувати, коли сайт хоче використовувати виключні повідомлення системи, щоб отримувати доступ до пристроїв MIDI</translation>
 <translation id="7287143125007575591">У доступі відмовлено.</translation>
@@ -361,6 +340,7 @@
 <translation id="7564847347806291057">Завершити процес</translation>
 <translation id="7576690715254076113">Розібрати за копіями</translation>
 <translation id="7629827748548208700">Вкладка: <ph name="TAB_NAME" /></translation>
+<translation id="7658239707568436148">Скасувати</translation>
 <translation id="7661259717474717992">Дозволити сайтам зберігати та переглядати дані файлів cookie</translation>
 <translation id="7663719505383602579">Одержувач: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7685049629764448582">Пам'ять Javascript</translation>
@@ -373,7 +353,6 @@
 <translation id="7771452384635174008">Орієнтація</translation>
 <translation id="7782102568078991263">Більше немає пропозицій від Google</translation>
 <translation id="7791543448312431591">Додати</translation>
-<translation id="780301667611848630">Ні, дякую</translation>
 <translation id="7814458197256864873">Копіювати</translation>
 <translation id="7818135753970109980">Додано нову тему (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="782057141565633384">Копіювати адресу відео</translation>
@@ -398,17 +377,14 @@
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />К</translation>
 <translation id="8137559199583651773">Керування розширеннями</translation>
 <translation id="8180239481735238521">сторінка</translation>
-<translation id="8188120771410500975">&amp;Перевіряти правопис у текстових полях</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{Триває завантаження}one{Тривають завантаження}few{Тривають завантаження}many{Тривають завантаження}other{Тривають завантаження}}</translation>
 <translation id="8230134520748321204">Зберегти пароль для <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080">Це розширення встановлено не із сайту <ph name="IDS_EXTENSION_WEB_STORE_TITLE" />. Можливо, його було додано без вашого відома.</translation>
 <translation id="8270242299912238708">Документи PDF</translation>
-<translation id="8294431847097064396">Джерело</translation>
 <translation id="8339059274628563283">Локально збережені дані сайту <ph name="SITE" /></translation>
 <translation id="8351419472474436977">Розширення керує налаштуваннями проксі-сервера, тобто може змінювати та переривати будь-які ваші дії онлайн, а також стежити за ними. Якщо ви не знаєте причини такої зміни, імовірно, вона небажана.</translation>
 <translation id="8382913212082956454">Копіювати адресу електронної пошти</translation>
 <translation id="8413385045638830869">Спершу запитувати (рекомендовано)</translation>
-<translation id="8523849605371521713">Додано корпоративною політикою</translation>
 <translation id="8546306075665861288">Кеш зображення</translation>
 <translation id="8569682776816196752">Не знайдено жодного місця призначення</translation>
 <translation id="857943718398505171">Дозволено (рекомендовано)</translation>
@@ -421,7 +397,6 @@
 <translation id="8714838604780058252">Фонові зображення</translation>
 <translation id="8725066075913043281">Спробувати ще раз</translation>
 <translation id="8757090071857742562">Не вдається транслювати робочий стіл. Перевірте, чи ви підтвердили запит на трансляцію екрана.</translation>
-<translation id="8770406935328356739">Кореневий каталог розширення</translation>
 <translation id="8774934320277480003">Верхнє поле</translation>
 <translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; хоче надати вам доступ до принтера &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt;.</translation>
 <translation id="8798099450830957504">За умовчанням</translation>

@@ -9,21 +9,20 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "calendar/calendar_model_observer.h"
+#include "calendar/calendar_service.h"
+#include "calendar/calendar_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/browser_context.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/schema/calendar.h"
 #include "extensions/tools/vivaldi_tools.h"
 
-#include "calendar/calendar_model_observer.h"
-#include "calendar/calendar_service.h"
-#include "calendar/calendar_service_factory.h"
-
 using calendar::CalendarService;
 using calendar::CalendarServiceFactory;
-using calendar::RecurrenceInterval;
-using vivaldi::MilliSecondsFromTime;
+using calendar::RecurrenceFrequency;
 using vivaldi::GetTime;
+using vivaldi::MilliSecondsFromTime;
 
 namespace {
 
@@ -45,14 +44,20 @@ bool GetStdStringAsInt64(const std::string& id_string, int64_t* id) {
 
 namespace extensions {
 
+using calendar::EventTypeRow;
 using vivaldi::calendar::Calendar;
 using vivaldi::calendar::CreateEventsResults;
-using vivaldi::calendar::OccurrenceInterval;
+using vivaldi::calendar::EventType;
+using vivaldi::calendar::OccurrenceFrequency;
 using vivaldi::calendar::RecurrencePattern;
 
 namespace OnEventCreated = vivaldi::calendar::OnEventCreated;
 namespace OnEventRemoved = vivaldi::calendar::OnEventRemoved;
 namespace OnEventChanged = vivaldi::calendar::OnEventChanged;
+
+namespace OnEventTypeCreated = vivaldi::calendar::OnEventTypeCreated;
+namespace OnEventTypeRemoved = vivaldi::calendar::OnEventTypeRemoved;
+namespace OnEventTypeChanged = vivaldi::calendar::OnEventTypeChanged;
 
 namespace OnCalendarCreated = vivaldi::calendar::OnCalendarCreated;
 namespace OnCalendarRemoved = vivaldi::calendar::OnCalendarRemoved;
@@ -60,31 +65,36 @@ namespace OnCalendarChanged = vivaldi::calendar::OnCalendarChanged;
 
 typedef std::vector<vivaldi::calendar::CalendarEvent> EventList;
 typedef std::vector<vivaldi::calendar::Calendar> CalendarList;
+typedef std::vector<vivaldi::calendar::EventType> EventTypeList;
 
 // static
-RecurrenceInterval UiOccurrenceToEventOccurrence(
-    OccurrenceInterval transition) {
+RecurrenceFrequency UiOccurrenceToEventOccurrence(
+    OccurrenceFrequency transition) {
   switch (transition) {
-    case vivaldi::calendar::OccurrenceInterval::OCCURRENCE_INTERVAL_DAYS:
-      return RecurrenceInterval::DAILY;
-    case vivaldi::calendar::OccurrenceInterval::OCCURRENCE_INTERVAL_WEEKS:
-      return calendar::RecurrenceInterval::WEEKLY;
-    case vivaldi::calendar::OccurrenceInterval::OCCURRENCE_INTERVAL_MONTHS:
-      return calendar::RecurrenceInterval::MONTHLY;
+    case vivaldi::calendar::OccurrenceFrequency::OCCURRENCE_FREQUENCY_DAYS:
+      return calendar::RecurrenceFrequency::DAILY;
+    case vivaldi::calendar::OccurrenceFrequency::OCCURRENCE_FREQUENCY_WEEKS:
+      return calendar::RecurrenceFrequency::WEEKLY;
+    case vivaldi::calendar::OccurrenceFrequency::OCCURRENCE_FREQUENCY_MONTHS:
+      return calendar::RecurrenceFrequency::MONTHLY;
+    case vivaldi::calendar::OccurrenceFrequency::OCCURRENCE_FREQUENCY_YEARS:
+      return calendar::RecurrenceFrequency::YEARLY;
     default:
       NOTREACHED();
   }
-  return RecurrenceInterval::NONE;
+  return RecurrenceFrequency::NONE;
 }
 
 CalendarEvent GetEventItem(const calendar::EventRow& row) {
   CalendarEvent event_item;
-  event_item.id = base::Int64ToString(row.id());
+  event_item.id = base::NumberToString(row.id());
   event_item.description.reset(
       new std::string(base::UTF16ToUTF8(row.description())));
   event_item.title.reset(new std::string(base::UTF16ToUTF8(row.title())));
   event_item.start.reset(new double(MilliSecondsFromTime(row.start())));
   event_item.end.reset(new double(MilliSecondsFromTime(row.end())));
+  event_item.event_type_id.reset(
+      new std::string(base::NumberToString(row.event_type_id())));
   return event_item;
 }
 
@@ -92,10 +102,10 @@ calendar::EventRecurrence GetEventRecurrence(
     const RecurrencePattern& recurring_pattern) {
   calendar::EventRecurrence recurrence_event;
 
-  if (recurring_pattern.interval) {
-    recurrence_event.interval =
-        UiOccurrenceToEventOccurrence(recurring_pattern.interval);
-    recurrence_event.updateFields |= calendar::RECURRENCE_INTERVAL;
+  if (recurring_pattern.frequency) {
+    recurrence_event.frequency =
+        UiOccurrenceToEventOccurrence(recurring_pattern.frequency);
+    recurrence_event.updateFields |= calendar::RECURRENCE_FREQUENCY;
   }
 
   if (recurring_pattern.number_of_occurrences.get()) {
@@ -104,9 +114,9 @@ calendar::EventRecurrence GetEventRecurrence(
     recurrence_event.updateFields |= calendar::NUMBER_OF_OCCURRENCES;
   }
 
-  if (recurring_pattern.skip_count.get()) {
-    recurrence_event.skip_count = *recurring_pattern.skip_count.get();
-    recurrence_event.updateFields |= calendar::RECURRENCE_SKIP_COUNT;
+  if (recurring_pattern.interval.get()) {
+    recurrence_event.interval = *recurring_pattern.interval.get();
+    recurrence_event.updateFields |= calendar::RECURRENCE_INTERVAL;
   }
 
   if (recurring_pattern.day_of_week.get()) {
@@ -134,7 +144,7 @@ calendar::EventRecurrence GetEventRecurrence(
 
 Calendar GetCalendarItem(const calendar::CalendarRow& row) {
   Calendar calendar;
-  calendar.id = base::Int64ToString(row.id());
+  calendar.id = base::NumberToString(row.id());
   calendar.name.reset(new std::string(base::UTF16ToUTF8(row.name())));
   calendar.description.reset(
       new std::string(base::UTF16ToUTF8(row.description())));
@@ -142,8 +152,19 @@ Calendar GetCalendarItem(const calendar::CalendarRow& row) {
   calendar.orderindex.reset(new int(row.orderindex()));
   calendar.active.reset(new bool(row.active()));
   calendar.iconindex.reset(new int(row.iconindex()));
+  calendar.color.reset(new std::string(row.color()));
   calendar.username.reset(new std::string(base::UTF16ToUTF8(row.username())));
   return calendar;
+}
+
+EventType GetEventType(const EventTypeRow& row) {
+  EventType event_type;
+  event_type.id = base::NumberToString(row.id());
+  event_type.name = base::UTF16ToUTF8(row.name());
+  event_type.color.reset(new std::string(row.color()));
+  event_type.iconindex.reset(new int(row.iconindex()));
+
+  return event_type;
 }
 
 CalendarEventRouter::CalendarEventRouter(Profile* profile)
@@ -173,7 +194,7 @@ void CalendarEventRouter::OnEventDeleted(CalendarService* service,
                                          const calendar::EventRow& row) {
   CalendarEvent deletedEvent = GetEventItem(row);
   std::unique_ptr<base::ListValue> args = OnEventRemoved::Create(deletedEvent);
-  DispatchEvent(OnEventCreated::kEventName, std::move(args));
+  DispatchEvent(OnEventRemoved::kEventName, std::move(args));
 }
 
 void CalendarEventRouter::OnEventChanged(CalendarService* service,
@@ -181,6 +202,33 @@ void CalendarEventRouter::OnEventChanged(CalendarService* service,
   CalendarEvent changedEvent = GetEventItem(row);
   std::unique_ptr<base::ListValue> args = OnEventChanged::Create(changedEvent);
   DispatchEvent(OnEventChanged::kEventName, std::move(args));
+}
+
+void CalendarEventRouter::OnEventTypeCreated(
+    CalendarService* service,
+    const calendar::EventTypeRow& row) {
+  EventType createdEvent = GetEventType(row);
+  std::unique_ptr<base::ListValue> args =
+      OnEventTypeCreated::Create(createdEvent);
+  DispatchEvent(OnEventTypeCreated::kEventName, std::move(args));
+}
+
+void CalendarEventRouter::OnEventTypeDeleted(
+    CalendarService* service,
+    const calendar::EventTypeRow& row) {
+  EventType deletedEvent = GetEventType(row);
+  std::unique_ptr<base::ListValue> args =
+      OnEventTypeRemoved::Create(deletedEvent);
+  DispatchEvent(OnEventTypeRemoved::kEventName, std::move(args));
+}
+
+void CalendarEventRouter::OnEventTypeChanged(
+    CalendarService* service,
+    const calendar::EventTypeRow& row) {
+  EventType changedEvent = GetEventType(row);
+  std::unique_ptr<base::ListValue> args =
+      OnEventTypeChanged::Create(changedEvent);
+  DispatchEvent(OnEventTypeChanged::kEventName, std::move(args));
 }
 
 void CalendarEventRouter::OnCalendarCreated(CalendarService* service,
@@ -237,6 +285,14 @@ CalendarAPI::CalendarAPI(content::BrowserContext* context)
   event_router->RegisterObserver(this, OnEventCreated::kEventName);
   event_router->RegisterObserver(this, OnEventRemoved::kEventName);
   event_router->RegisterObserver(this, OnEventChanged::kEventName);
+
+  event_router->RegisterObserver(this, OnEventTypeCreated::kEventName);
+  event_router->RegisterObserver(this, OnEventTypeRemoved::kEventName);
+  event_router->RegisterObserver(this, OnEventTypeChanged::kEventName);
+
+  event_router->RegisterObserver(this, OnCalendarCreated::kEventName);
+  event_router->RegisterObserver(this, OnCalendarRemoved::kEventName);
+  event_router->RegisterObserver(this, OnCalendarChanged::kEventName);
 }
 
 CalendarAPI::~CalendarAPI() {}
@@ -254,23 +310,23 @@ BrowserContextKeyedAPIFactory<CalendarAPI>* CalendarAPI::GetFactoryInstance() {
   return g_factory_calendar.Pointer();
 }
 
-OccurrenceInterval RecurrenceToUiRecurrence(RecurrenceInterval transition) {
+OccurrenceFrequency RecurrenceToUiRecurrence(RecurrenceFrequency transition) {
   switch (transition) {
-    case RecurrenceInterval::NONE:
-      return OccurrenceInterval::OCCURRENCE_INTERVAL_NONE;
-    case RecurrenceInterval::DAILY:
-      return OccurrenceInterval::OCCURRENCE_INTERVAL_DAYS;
-    case RecurrenceInterval::WEEKLY:
-      return OccurrenceInterval::OCCURRENCE_INTERVAL_WEEKS;
-    case RecurrenceInterval::MONTHLY:
-      return OccurrenceInterval::OCCURRENCE_INTERVAL_MONTHS;
-    case RecurrenceInterval::YEARLY:
-      return OccurrenceInterval::OCCURRENCE_INTERVAL_YEARS;
+    case RecurrenceFrequency::NONE:
+      return OccurrenceFrequency::OCCURRENCE_FREQUENCY_NONE;
+    case RecurrenceFrequency::DAILY:
+      return OccurrenceFrequency::OCCURRENCE_FREQUENCY_DAYS;
+    case RecurrenceFrequency::WEEKLY:
+      return OccurrenceFrequency::OCCURRENCE_FREQUENCY_WEEKS;
+    case RecurrenceFrequency::MONTHLY:
+      return OccurrenceFrequency::OCCURRENCE_FREQUENCY_MONTHS;
+    case RecurrenceFrequency::YEARLY:
+      return OccurrenceFrequency::OCCURRENCE_FREQUENCY_YEARS;
     default:
       NOTREACHED();
   }
   // We have to return something
-  return OccurrenceInterval::OCCURRENCE_INTERVAL_NONE;
+  return OccurrenceFrequency::OCCURRENCE_FREQUENCY_NONE;
 }
 
 void CalendarAPI::OnListenerAdded(const EventListenerInfo& details) {
@@ -283,10 +339,10 @@ std::unique_ptr<CalendarEvent> CreateVivaldiEvent(
     const calendar::EventResult& event) {
   std::unique_ptr<CalendarEvent> cal_event(new CalendarEvent());
 
-  cal_event->id = base::Int64ToString(event.id());
-  cal_event->calendar_id = base::Int64ToString(event.calendar_id());
+  cal_event->id = base::NumberToString(event.id());
+  cal_event->calendar_id = base::NumberToString(event.calendar_id());
   cal_event->alarm_id.reset(
-      new std::string(base::Int64ToString(event.alarm_id())));
+      new std::string(base::NumberToString(event.alarm_id())));
 
   cal_event->title.reset(new std::string(base::UTF16ToUTF8(event.title())));
   cal_event->description.reset(
@@ -305,12 +361,14 @@ std::unique_ptr<CalendarEvent> CreateVivaldiEvent(
   cal_event->etag.reset(new std::string(event.etag()));
   cal_event->href.reset(new std::string(event.href()));
   cal_event->uid.reset(new std::string(event.uid()));
+  cal_event->event_type_id.reset(
+      new std::string(base::NumberToString(event.event_type_id())));
 
   RecurrencePattern* pattern = new RecurrencePattern();
-  pattern->interval = RecurrenceToUiRecurrence(event.recurrence().interval);
+  pattern->frequency = RecurrenceToUiRecurrence(event.recurrence().frequency);
   pattern->number_of_occurrences.reset(
       new int(event.recurrence().number_of_occurrences));
-  pattern->skip_count.reset(new int(event.recurrence().skip_count));
+  pattern->interval.reset(new int(event.recurrence().interval));
   pattern->day_of_week.reset(new int(event.recurrence().day_of_week));
   pattern->week_of_month.reset(new int(event.recurrence().week_of_month));
   pattern->day_of_month.reset(new int(event.recurrence().day_of_month));
@@ -598,6 +656,16 @@ ExtensionFunction::ResponseAction CalendarUpdateEventFunction::Run() {
     updatedEvent.updateFields |= calendar::UID;
   }
 
+  if (params->changes.event_type_id.get()) {
+    calendar::EventTypeID event_type_id;
+    if (!GetStdStringAsInt64(*params->changes.event_type_id, &event_type_id)) {
+      return RespondNow(Error("Error. Invalid event_type_id"));
+    }
+
+    updatedEvent.event_type_id = event_type_id;
+    updatedEvent.updateFields |= calendar::EVENT_TYPE_ID;
+  }
+
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
   model->UpdateCalendarEvent(
       eventId, updatedEvent,
@@ -654,7 +722,7 @@ std::unique_ptr<vivaldi::calendar::Calendar> CreateVivaldiCalendar(
   std::unique_ptr<vivaldi::calendar::Calendar> calendar(
       new vivaldi::calendar::Calendar());
 
-  calendar->id = base::Int64ToString(result.id());
+  calendar->id = base::NumberToString(result.id());
   calendar->name.reset(new std::string(base::UTF16ToUTF8(result.name())));
 
   calendar->description.reset(
@@ -885,6 +953,155 @@ void CalendarDeleteFunction::DeleteCalendarComplete(
     std::shared_ptr<calendar::DeleteCalendarResult> results) {
   if (!results->success) {
     Respond(Error("Error deleting calendar"));
+  } else {
+    Respond(NoArguments());
+  }
+}
+
+ExtensionFunction::ResponseAction CalendarGetAllEventTypesFunction::Run() {
+  CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
+
+  model->GetAllEventTypes(
+      base::Bind(&CalendarGetAllEventTypesFunction::GetAllEventTypesComplete,
+                 this),
+      &task_tracker_);
+
+  return RespondLater();  // CalendarGetAllEventTypesFunction() will be called
+                          // asynchronously.
+}
+
+void CalendarGetAllEventTypesFunction::GetAllEventTypesComplete(
+    std::shared_ptr<calendar::EventTypeRows> results) {
+  EventTypeList event_type_list;
+  for (EventTypeRow event_type : *results) {
+    event_type_list.push_back(GetEventType(std::move(event_type)));
+  }
+
+  Respond(ArgumentList(
+      vivaldi::calendar::GetAllEventTypes::Results::Create(event_type_list)));
+}
+
+ExtensionFunction::ResponseAction CalendarEventTypeCreateFunction::Run() {
+  std::unique_ptr<vivaldi::calendar::Create::Params> params(
+      vivaldi::calendar::Create::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  calendar::EventTypeRow create_event_type;
+
+  base::string16 name;
+  name = base::UTF8ToUTF16(params->calendar.name);
+  create_event_type.set_name(name);
+
+  if (params->calendar.color.get()) {
+    std::string color = *params->calendar.color;
+    create_event_type.set_color(color);
+  }
+
+  if (params->calendar.iconindex.get()) {
+    int iconindex = *params->calendar.iconindex;
+    create_event_type.set_iconindex(iconindex);
+  }
+
+  CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
+
+  model->CreateEventType(
+      create_event_type,
+      base::Bind(&CalendarEventTypeCreateFunction::CreateEventTypeComplete,
+                 this),
+      &task_tracker_);
+  return RespondLater();
+}
+
+void CalendarEventTypeCreateFunction::CreateEventTypeComplete(
+    std::shared_ptr<calendar::CreateEventTypeResult> results) {
+  if (!results->success) {
+    Respond(Error("Error creating event type"));
+  } else {
+    Respond(NoArguments());
+  }
+}
+
+ExtensionFunction::ResponseAction CalendarEventTypeUpdateFunction::Run() {
+  std::unique_ptr<vivaldi::calendar::EventTypeUpdate::Params> params(
+      vivaldi::calendar::EventTypeUpdate::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  base::string16 id;
+  id = base::UTF8ToUTF16(params->id);
+  calendar::EventTypeID event_type_id;
+
+  if (!GetIdAsInt64(id, &event_type_id)) {
+    return RespondNow(Error("Error. Invalid event type id"));
+  }
+
+  calendar::EventType update_event_type;
+
+  if (params->changes.name.get()) {
+    base::string16 name;
+    name = base::UTF8ToUTF16(*params->changes.name);
+    update_event_type.name = name;
+    update_event_type.updateFields |= calendar::NAME;
+  }
+
+  if (params->changes.color.get()) {
+    std::string color = *params->changes.color;
+    update_event_type.color = color;
+    update_event_type.updateFields |= calendar::COLOR;
+  }
+
+  if (params->changes.iconindex.get()) {
+    int iconindex = *params->changes.iconindex;
+    update_event_type.iconindex = iconindex;
+    update_event_type.updateFields |= calendar::ICONINDEX;
+  }
+
+  CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
+
+  model->UpdateEventType(
+      event_type_id, update_event_type,
+      base::Bind(&CalendarEventTypeUpdateFunction::UpdateEventTypeComplete,
+                 this),
+      &task_tracker_);
+  return RespondLater();
+}
+
+void CalendarEventTypeUpdateFunction::UpdateEventTypeComplete(
+    std::shared_ptr<calendar::UpdateEventTypeResult> results) {
+  if (!results->success) {
+    Respond(Error("Error updating event type"));
+  } else {
+    Respond(NoArguments());
+  }
+}
+
+ExtensionFunction::ResponseAction CalendarDeleteEventTypeFunction::Run() {
+  std::unique_ptr<vivaldi::calendar::DeleteEventType::Params> params(
+      vivaldi::calendar::DeleteEventType::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  base::string16 id;
+  id = base::UTF8ToUTF16(params->id);
+  calendar::EventTypeID event_type_id;
+
+  if (!GetIdAsInt64(id, &event_type_id)) {
+    return RespondNow(Error("Error. Invalid event type id"));
+  }
+
+  CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
+
+  model->DeleteEventType(
+      event_type_id,
+      base::Bind(&CalendarDeleteEventTypeFunction::DeleteEventTypeComplete,
+                 this),
+      &task_tracker_);
+  return RespondLater();  // DeleteEventTypeComplete() will be called
+                          // asynchronously.
+}
+
+void CalendarDeleteEventTypeFunction::DeleteEventTypeComplete(
+    std::shared_ptr<calendar::DeleteEventTypeResult> result) {
+  if (!result->success) {
+    Respond(Error("Error deleting event type"));
   } else {
     Respond(NoArguments());
   }

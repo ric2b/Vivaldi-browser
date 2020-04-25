@@ -53,14 +53,12 @@
 #include "prefs/vivaldi_tab_zoom_pref.h"
 #include "renderer/vivaldi_render_messages.h"
 #include "third_party/blink/renderer/platform/keyboard_codes.h"
-#include "ui/base/accelerators/accelerator.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/content/vivaldi_event_hooks.h"
 #include "ui/content/vivaldi_tab_check.h"
 #include "ui/display/screen.h"
 #include "ui/display/win/dpi.h"
-#include "ui/events/keycodes/keyboard_code_conversion.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/views/drag_utils.h"
@@ -238,6 +236,8 @@ static tabs_private::MediaType ConvertTabAlertState(TabAlertState status) {
     return tabs_private::MediaType::MEDIA_TYPE_DESKTOP_CAPTURING;
   case TabAlertState::VR_PRESENTING_IN_HEADSET:
     return tabs_private::MediaType::MEDIA_TYPE_VR_PRESENTING_IN_HEADSET;
+  case TabAlertState::SERIAL_CONNECTED:
+    return tabs_private::MediaType::MEDIA_TYPE_SERIAL_CONNECTED;
   }
   NOTREACHED() << "Unknown TabAlertState Status.";
   return tabs_private::MediaType::MEDIA_TYPE_NONE;
@@ -257,175 +257,6 @@ void TabsPrivateAPIPrivate::TabChangedAt(content::WebContents* web_contents,
       web_contents->GetBrowserContext());
 }
 
-namespace {
-
-#if defined(OS_MACOSX)
-
-base::string16 KeyCodeToName(ui::KeyboardCode key_code) {
-  int string_id = 0;
-  switch (key_code) {
-    case ui::VKEY_TAB:
-      string_id = IDS_APP_TAB_KEY;
-      break;
-    case ui::VKEY_RETURN:
-      string_id = IDS_APP_ENTER_KEY;
-      break;
-    case ui::VKEY_SPACE:
-      string_id = IDS_APP_SPACE_KEY;
-      break;
-    case ui::VKEY_PRIOR:
-      string_id = IDS_APP_PAGEUP_KEY;
-      break;
-    case ui::VKEY_NEXT:
-      string_id = IDS_APP_PAGEDOWN_KEY;
-      break;
-    case ui::VKEY_END:
-      string_id = IDS_APP_END_KEY;
-      break;
-    case ui::VKEY_HOME:
-      string_id = IDS_APP_HOME_KEY;
-      break;
-    case ui::VKEY_INSERT:
-      string_id = IDS_APP_INSERT_KEY;
-      break;
-    case ui::VKEY_DELETE:
-      string_id = IDS_APP_DELETE_KEY;
-      break;
-    case ui::VKEY_LEFT:
-      string_id = IDS_APP_LEFT_ARROW_KEY;
-      break;
-    case ui::VKEY_RIGHT:
-      string_id =IDS_APP_RIGHT_ARROW_KEY;
-      break;
-    case ui::VKEY_UP:
-      string_id = IDS_APP_UP_ARROW_KEY;
-      break;
-    case ui::VKEY_DOWN:
-      string_id = IDS_APP_DOWN_ARROW_KEY;
-      break;
-    case ui::VKEY_ESCAPE:
-      string_id = IDS_APP_ESC_KEY;
-      break;
-    case ui::VKEY_BACK:
-      string_id = IDS_APP_BACKSPACE_KEY;
-      break;
-    case ui::VKEY_F1:
-      string_id = IDS_APP_F1_KEY;
-      break;
-    case ui::VKEY_F11:
-      string_id = IDS_APP_F11_KEY;
-      break;
-    case ui::VKEY_OEM_COMMA:
-      string_id = IDS_APP_COMMA_KEY;
-      break;
-    case ui::VKEY_OEM_PERIOD:
-      string_id = IDS_APP_PERIOD_KEY;
-      break;
-    case ui::VKEY_MEDIA_NEXT_TRACK:
-      string_id = IDS_APP_MEDIA_NEXT_TRACK_KEY;
-      break;
-    case ui::VKEY_MEDIA_PLAY_PAUSE:
-      string_id = IDS_APP_MEDIA_PLAY_PAUSE_KEY;
-      break;
-    case ui::VKEY_MEDIA_PREV_TRACK:
-      string_id = IDS_APP_MEDIA_PREV_TRACK_KEY;
-      break;
-    case ui::VKEY_MEDIA_STOP:
-      string_id = IDS_APP_MEDIA_STOP_KEY;
-      break;
-    default:
-      break;
-  }
-  return string_id ? l10n_util::GetStringUTF16(string_id) : base::string16();
-}
-
-#endif // OS_MACOSX
-
-std::string ShortcutText(const content::NativeWebKeyboardEvent& event) {
-  // We'd just use Accelerator::GetShortcutText to get the shortcut text but
-  // it translates the modifiers when the system language is set to
-  // non-English (since it's used for display). We can't match something
-  // like 'Strg+G' however, so we do the modifiers manually.
-  //
-  // AcceleratorToString gets the shortcut text, but doesn't localize
-  // like Accelerator::GetShortcutText() does, so it's suitable for us.
-  // It doesn't handle all keys, however, and doesn't work with ctrl+alt
-  // shortcuts so we're left with doing a little tweaking.
-  ui::KeyboardCode key_code =
-      static_cast<ui::KeyboardCode>(event.windows_key_code);
-  ui::Accelerator accelerator =
-      ui::Accelerator(key_code, 0, ui::Accelerator::KeyState::PRESSED);
-
-  std::string shortcutText = "";
-  if (event.GetModifiers() & content::NativeWebKeyboardEvent::kControlKey) {
-    shortcutText += "Ctrl+";
-  }
-  if (event.GetModifiers() & content::NativeWebKeyboardEvent::kShiftKey) {
-    shortcutText += "Shift+";
-  }
-  if (event.GetModifiers() & content::NativeWebKeyboardEvent::kAltKey) {
-    shortcutText += "Alt+";
-  }
-  if (event.GetModifiers() & content::NativeWebKeyboardEvent::kMetaKey) {
-    shortcutText += "Meta+";
-  }
-
-  std::string key_from_accelerator =
-      extensions::Command::AcceleratorToString(accelerator);
-  if (!key_from_accelerator.empty()) {
-    shortcutText += key_from_accelerator;
-  } else if (event.windows_key_code >= ui::VKEY_F1 &&
-             event.windows_key_code <= ui::VKEY_F24) {
-    char buf[4];
-    base::snprintf(buf, 4, "F%d", event.windows_key_code - ui::VKEY_F1 + 1);
-    shortcutText += buf;
-
-  } else if (event.windows_key_code >= ui::VKEY_NUMPAD0 &&
-             event.windows_key_code <= ui::VKEY_NUMPAD9) {
-    char buf[8];
-    base::snprintf(buf, 8, "Numpad%d",
-                   event.windows_key_code - ui::VKEY_NUMPAD0);
-    shortcutText += buf;
-
-  // Enter is somehow not covered anywhere else.
-  } else if (event.windows_key_code == ui::VKEY_RETURN) {
-    shortcutText += "Enter";
-  // GetShortcutText doesn't translate numbers and digits but
-  // 'does' translate backspace
-  } else if (event.windows_key_code == ui::VKEY_BACK) {
-    shortcutText += "Backspace";
-  // Escape was being translated as well in some languages
-  } else if (event.windows_key_code == ui::VKEY_ESCAPE) {
-    shortcutText += "Esc";
-  } else {
-#if defined(OS_MACOSX)
-  // This is equivalent to js event.code and deals with a few
-  // MacOS keyboard shortcuts like cmd+alt+n that fall through
-  // in some languages, i.e. AcceleratorToString returns a blank.
-  // Cmd+Alt shortcuts seem to be the only case where this fallback
-  // is required.
-  if (event.GetModifiers() & content::NativeWebKeyboardEvent::kAltKey &&
-      event.GetModifiers() & content::NativeWebKeyboardEvent::kMetaKey) {
-    shortcutText += ui::DomCodeToUsLayoutCharacter(
-        static_cast<ui::DomCode>(event.dom_code), 0);
-  } else {
-    // With chrome 67 accelerator.GetShortcutText() will return Mac specific
-    // symbols (like '⎋' for escape). All is private so we bypass that by
-    // testing with KeyCodeToName first.
-    base::string16 shortcut = KeyCodeToName(key_code);
-    if (shortcut.empty())
-      shortcut = accelerator.GetShortcutText();
-    shortcutText += base::UTF16ToUTF8(shortcut);
-  }
-#else
-    shortcutText += base::UTF16ToUTF8(accelerator.GetShortcutText());
-#endif // OS_MACOSX
-  }
-  return shortcutText;
-}
-
-}  // namespace
-
 // static
 void TabsPrivateAPI::SendKeyboardShortcutEvent(
     content::BrowserContext* browser_context,
@@ -444,7 +275,8 @@ void TabsPrivateAPI::SendKeyboardShortcutEvent(
   if (event.GetType() == blink::WebInputEvent::kKeyUp)
     return;
 
-  std::string shortcut_text = ShortcutText(event);
+  std::string shortcut_text = ::vivaldi::ShortcutTextFromEvent(event);
+
   // If the event wasn't prevented we'll get a rawKeyDown event. In some
   // exceptional cases we'll never get that, so we let these through
   // unconditionally
@@ -1041,11 +873,14 @@ void VivaldiPrivateTabObserver::BroadcastTabInfo() {
 
 const int kThemeColorBufferSize = 8;
 
-void VivaldiPrivateTabObserver::DidChangeThemeColor(SkColor theme_color) {
+void VivaldiPrivateTabObserver::DidChangeThemeColor(base::Optional<SkColor> theme_color) {
+  if (!theme_color)
+    return;
+
   char rgb_buffer[kThemeColorBufferSize];
   base::snprintf(rgb_buffer, kThemeColorBufferSize, "#%02x%02x%02x",
-                 SkColorGetR(theme_color), SkColorGetG(theme_color),
-                 SkColorGetB(theme_color));
+                 SkColorGetR(*theme_color), SkColorGetG(*theme_color),
+                 SkColorGetB(*theme_color));
   int tab_id = extensions::ExtensionTabUtil::GetTabId(web_contents());
   ::vivaldi::BroadcastEvent(
       tabs_private::OnThemeColorChanged::kEventName,
@@ -1279,13 +1114,10 @@ void VivaldiPrivateTabObserver::OnRequestThumbnailForFrameResponse(
   }
 }
 
-void VivaldiPrivateTabObserver::GetAccessKeys(
-    content::WebContents* web_contents,
-    AccessKeysCallback callback) {
+void VivaldiPrivateTabObserver::GetAccessKeys(AccessKeysCallback callback) {
   access_keys_callback_ = std::move(callback);
-  web_contents->GetRenderViewHost()->Send(
-      new VivaldiViewMsg_GetAccessKeysForPage(
-          web_contents->GetRenderViewHost()->GetRoutingID()));
+  RenderViewHost* rvh = web_contents()->GetRenderViewHost();
+  rvh->Send(new VivaldiViewMsg_GetAccessKeysForPage(rvh->GetRoutingID()));
 }
 
 void VivaldiPrivateTabObserver::OnGetAccessKeysForPageResponse(
@@ -1295,11 +1127,10 @@ void VivaldiPrivateTabObserver::OnGetAccessKeysForPageResponse(
   }
 }
 
-void VivaldiPrivateTabObserver::AccessKeyAction(
-    content::WebContents* web_contents,
-    std::string access_key) {
-  web_contents->GetRenderViewHost()->Send(new VivaldiViewMsg_AccessKeyAction(
-      web_contents->GetRenderViewHost()->GetRoutingID(), access_key));
+void VivaldiPrivateTabObserver::AccessKeyAction(std::string access_key) {
+  RenderViewHost* rvh = web_contents()->GetRenderViewHost();
+  rvh->Send(
+      new VivaldiViewMsg_AccessKeyAction(rvh->GetRoutingID(), access_key));
 }
 
 void VivaldiPrivateTabObserver::OnPermissionAccessed(
@@ -1353,35 +1184,18 @@ void VivaldiPrivateTabObserver::WebContentsDidAttach() {
       web_contents()->GetBrowserContext());
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
-namespace {
-
-content::WebContents* GetTabStripWebContents(
-    UIThreadExtensionFunction* function,
+VivaldiPrivateTabObserver* VivaldiPrivateTabObserver::FromTabId(
+    content::BrowserContext* browser_context,
     int tab_id,
     std::string* error) {
   content::WebContents* tabstrip_contents =
       ::vivaldi::ui_tools::GetWebContentsFromTabStrip(
-          tab_id, function->browser_context());
-  if (!tabstrip_contents) {
-    *error = "No such tab - " + std::to_string(tab_id);
-  }
-  return tabstrip_contents;
-}
-
-VivaldiPrivateTabObserver* GetTabObserver(
-    UIThreadExtensionFunction* function,
-    int tab_id,
-    std::string* error) {
-  content::WebContents* tabstrip_contents =
-      GetTabStripWebContents(function, tab_id, error);
+          tab_id, browser_context, error);
   if (!tabstrip_contents)
     return nullptr;
 
   VivaldiPrivateTabObserver* observer =
       VivaldiPrivateTabObserver::FromWebContents(tabstrip_contents);
-  DCHECK(observer);
   if (!observer) {
     *error = "Cannot locate VivaldiPrivateTabObserver for tab " +
              std::to_string(tab_id);
@@ -1391,12 +1205,17 @@ VivaldiPrivateTabObserver* GetTabObserver(
   return observer;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
 content::RenderViewHost *GetFocusedRenderViewHost(
     UIThreadExtensionFunction* function,
     int tab_id,
     std::string* error) {
   content::WebContents* tabstrip_contents =
-      GetTabStripWebContents(function, tab_id, error);
+      ::vivaldi::ui_tools::GetWebContentsFromTabStrip(
+          tab_id, function->browser_context(), error);
   if (!tabstrip_contents)
     return nullptr;
 
@@ -1425,8 +1244,8 @@ ExtensionFunction::ResponseAction TabsPrivateUpdateFunction::Run() {
 
   tabs_private::UpdateTabInfo* info = &params->tab_info;
   std::string error;
-  VivaldiPrivateTabObserver* tab_api =
-      GetTabObserver(this, params->tab_id, &error);
+  VivaldiPrivateTabObserver* tab_api = VivaldiPrivateTabObserver::FromTabId(
+      browser_context(), params->tab_id, &error);
   if (!tab_api)
     return RespondNow(Error(error));
 
@@ -1452,8 +1271,8 @@ ExtensionFunction::ResponseAction TabsPrivateGetFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::string error;
-  VivaldiPrivateTabObserver* tab_api =
-      GetTabObserver(this, params->tab_id, &error);
+  VivaldiPrivateTabObserver* tab_api = VivaldiPrivateTabObserver::FromTabId(
+      browser_context(), params->tab_id, &error);
   if (!tab_api)
     return RespondNow(Error(error));
 

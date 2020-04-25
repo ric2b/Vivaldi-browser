@@ -64,7 +64,13 @@ class CONTENT_EXPORT TouchSelectionControllerClientChildFrame
 
   // Not owned, non-null for the lifetime of this object.
   RenderWidgetHostViewChildFrame* rwhv_;
-  TouchSelectionControllerClientManager* manager_;
+
+  // NOTE(igor@vivaldi.com): See comments in
+  // DetachFromTouchSelectionClientManagerIfNecessary from
+  // RenderWidgetHostViewChildFrame. The field was made const to ensure that we
+  // have the manager pointer for the lifetime of the object.
+  friend class RenderWidgetHostViewChildFrame;
+  TouchSelectionControllerClientManager* const manager_;
 
   // The last selection bounds reported by the view, in view coordinates.
   gfx::SelectionBound selection_start_;

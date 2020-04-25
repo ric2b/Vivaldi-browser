@@ -119,7 +119,7 @@ def GenerateLastCommitPosition(host, header):
   describe_output = subprocess.check_output(
       ['git', 'describe', 'HEAD', '--match', ROOT_TAG], shell=host.is_windows(),
       cwd=REPO_ROOT)
-  mo = re.match(ROOT_TAG + '-(\d+)-g([0-9a-f]+)', describe_output)
+  mo = re.match(ROOT_TAG + '-(\d+)-g([0-9a-f]+)', describe_output.decode())
   if not mo:
     raise ValueError(
         'Unexpected output from git describe when generating version header')
@@ -137,11 +137,11 @@ def GenerateLastCommitPosition(host, header):
   # Only write/touch this file if the commit position has changed.
   old_contents = ''
   if os.path.isfile(header):
-    with open(header, 'rb') as f:
+    with open(header, 'r') as f:
       old_contents = f.read()
 
   if old_contents != contents:
-    with open(header, 'wb') as f:
+    with open(header, 'w') as f:
       f.write(contents)
 
 
@@ -214,7 +214,7 @@ def WriteGenericNinja(path, static_libraries, executables,
             ' '.join(cflags_cc + settings.get('cflags_cc', [])),
     ])
 
-  for library, settings in static_libraries.iteritems():
+  for library, settings in static_libraries.items():
     for src_file in settings['sources']:
       build_source(src_file, settings)
 
@@ -224,7 +224,7 @@ def WriteGenericNinja(path, static_libraries, executables,
     ninja_lines.append('  libflags = %s' % ' '.join(libflags))
 
 
-  for executable, settings in executables.iteritems():
+  for executable, settings in executables.items():
     for src_file in settings['sources']:
       build_source(src_file, settings)
 

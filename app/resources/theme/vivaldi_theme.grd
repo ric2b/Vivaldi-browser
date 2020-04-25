@@ -6,6 +6,44 @@
       <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_32" file="vivaldi/product_logo_32.png" />
       <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_WHITE" file="vivaldi/product_logo_white.png" />
       <structure type="chrome_scaled_image" name="IDR_ERROR_NETWORK_OFFLINE" file="vivaldi/error_network_offline.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_0" file="vivaldi/avatars/landscape_1.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_1" file="vivaldi/avatars/landscape_2.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_2" file="vivaldi/avatars/landscape_3.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_3" file="vivaldi/avatars/landscape_4.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_4" file="vivaldi/avatars/landscape_5.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_5" file="vivaldi/avatars/landscape_6.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_6" file="vivaldi/avatars/landscape_7.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_7" file="vivaldi/avatars/landscape_8.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_8" file="vivaldi/avatars/landscape_9.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_9" file="vivaldi/avatars/landscape_10.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_10" file="vivaldi/avatars/landscape_11.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_11" file="vivaldi/avatars/landscape_12.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_12" file="vivaldi/avatars/landscape_13.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_13" file="vivaldi/avatars/landscape_14.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_14" file="vivaldi/avatars/landscape_15.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_15" file="vivaldi/avatars/landscape_16.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_16" file="vivaldi/avatars/landscape_17.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_17" file="vivaldi/avatars/landscape_18.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_18" file="vivaldi/avatars/monster_1.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_19" file="vivaldi/avatars/monster_2.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_20" file="vivaldi/avatars/monster_3.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_21" file="vivaldi/avatars/monster_4.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_22" file="vivaldi/avatars/monster_5.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_23" file="vivaldi/avatars/monster_6.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_24" file="vivaldi/avatars/monster_7.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_25" file="vivaldi/avatars/monster_8.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_26" file="vivaldi/avatars/avatar_generic.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_27" file="vivaldi/avatars/monster_9.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_28" file="vivaldi/avatars/monster_10.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_29" file="vivaldi/avatars/avatar_animal_1.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_30" file="vivaldi/avatars/avatar_animal_2.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_31" file="vivaldi/avatars/avatar_animal_3.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_32" file="vivaldi/avatars/avatar_animal_4.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_33" file="vivaldi/avatars/avatar_animal_5.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_34" file="vivaldi/avatars/avatar_animal_6.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_35" file="vivaldi/avatars/avatar_animal_7.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_36" file="vivaldi/avatars/avatar_animal_8.png" />
+      <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_37" file="vivaldi/avatars/avatar_animal_9.png" />
     </structures>
   </release>
 </grit>

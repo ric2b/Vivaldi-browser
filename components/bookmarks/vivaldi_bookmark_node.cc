@@ -29,7 +29,7 @@ const base::Time BookmarkNode::date_visited() const {
 
 void BookmarkNode::set_date_visited(const base::Time& date) {
   if (!date.is_null())
-    SetMetaInfo("Visited", base::Int64ToString(date.ToInternalValue()));
+    SetMetaInfo("Visited", base::NumberToString(date.ToInternalValue()));
 }
 
 void BookmarkNode::set_nickname(const base::string16 &nick) {

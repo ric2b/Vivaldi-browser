@@ -54,6 +54,8 @@ constexpr char kKeyRequiredPlatformVersion[] = "required_platform_version";
 constexpr char kInvalidWebstoreResponseError[] =
     "Invalid Chrome Web Store reponse";
 
+bool ignore_kiosk_app_data_load_failures_for_testing = false;
+
 // Returns true for valid kiosk app manifest.
 bool IsValidKioskAppManifest(const extensions::Manifest& manifest) {
   bool kiosk_enabled;
@@ -106,7 +108,7 @@ class KioskAppData::CrxLoader : public extensions::SandboxedUnpackerClient {
   }
 
  private:
-  ~CrxLoader() override {}
+  ~CrxLoader() override = default;
 
   // extensions::SandboxedUnpackerClient
   void OnUnpackSuccess(
@@ -218,7 +220,7 @@ class KioskAppData::WebstoreDataParser
  private:
   friend class base::RefCounted<WebstoreDataParser>;
 
-  ~WebstoreDataParser() override {}
+  ~WebstoreDataParser() override = default;
 
   void ReportFailure() {
     if (client_)
@@ -282,9 +284,14 @@ KioskAppData::KioskAppData(KioskAppDataDelegate* delegate,
       status_(STATUS_INIT),
       update_url_(update_url),
       crx_file_(cached_crx),
-      weak_factory_(this) {}
+      weak_factory_(this) {
+  if (ignore_kiosk_app_data_load_failures_for_testing) {
+    LOG(WARNING) << "Force KioskAppData loaded for testing.";
+    SetStatus(STATUS_LOADED);
+  }
+}
 
-KioskAppData::~KioskAppData() {}
+KioskAppData::~KioskAppData() = default;
 
 void KioskAppData::Load() {
   SetStatus(STATUS_LOADING);
@@ -356,6 +363,12 @@ std::unique_ptr<KioskAppData> KioskAppData::CreateForTest(
 }
 
 void KioskAppData::SetStatus(Status status) {
+  if (status == STATUS_ERROR &&
+      ignore_kiosk_app_data_load_failures_for_testing) {
+    LOG(WARNING) << "Ignoring KioskAppData error for testing. Force OK.";
+    status = STATUS_LOADED;
+  }
+
   if (status_ == status)
     return;
 
@@ -448,6 +461,11 @@ void KioskAppData::OnIconLoadFailure() {
   kiosk_app_icon_loader_.reset();
   // Re-fetch data from web store when failed to load cached data.
   StartFetch();
+}
+
+// static
+void KioskAppData::SetIgnoreKioskAppDataLoadFailuresForTesting(bool value) {
+  ignore_kiosk_app_data_load_failures_for_testing = value;
 }
 
 void KioskAppData::OnWebstoreParseSuccess(

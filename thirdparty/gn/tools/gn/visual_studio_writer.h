@@ -29,7 +29,8 @@ class VisualStudioWriter {
   enum Version {
     Vs2013 = 1,  // Visual Studio 2013
     Vs2015,      // Visual Studio 2015
-    Vs2017       // Visual Studio 2017
+    Vs2017,      // Visual Studio 2017
+    Vs2019,      // Visual Studio 2019
   };
 
   // Writes Visual Studio project and solution files. |sln_name| is the optional

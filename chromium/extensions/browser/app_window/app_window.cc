@@ -80,8 +80,8 @@
 #include "ui/display/win/screen_win.h"
 #endif
 
+using blink::mojom::ConsoleMessageLevel;
 using content::BrowserContext;
-using content::ConsoleMessageLevel;
 using content::WebContents;
 using web_modal::WebContentsModalDialogHost;
 using web_modal::WebContentsModalDialogManager;

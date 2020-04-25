@@ -257,9 +257,6 @@ bool WebViewPrivateGetThumbnailFromServiceFunction::RunAsync() {
 // and call SendResponse().
 void WebViewPrivateGetThumbnailFromServiceFunction::SendResultFromBitmap(
     const SkBitmap& screen_capture) {
-  Profile* profile = Profile::FromBrowserContext(browser_context());
-  extensions::VivaldiDataSourcesAPI* api =
-    extensions::VivaldiDataSourcesAPI::GetFactoryInstance()->Get(profile);
 
   // Scale the  bitmap.
   gfx::Size dst_size_pixels;
@@ -274,11 +271,11 @@ void WebViewPrivateGetThumbnailFromServiceFunction::SendResultFromBitmap(
   } else {
     bitmap_ = std::make_unique<SkBitmap>(SmartCropAndSize(screen_capture, width_, height_));
   }
-  api->AddImageDataForBookmark(
-      bookmark_id_, std::move(bitmap_),
-      base::Bind(&WebViewPrivateGetThumbnailFromServiceFunction::
-                     OnBookmarkThumbnailStored,
-                 this));
+  extensions::VivaldiDataSourcesAPI::AddImageDataForBookmark(
+      browser_context(), bookmark_id_, std::move(bitmap_),
+      base::BindOnce(&WebViewPrivateGetThumbnailFromServiceFunction::
+                         OnBookmarkThumbnailStored,
+                     this));
 }
 
 void WebViewPrivateGetThumbnailFromServiceFunction::OnBookmarkThumbnailStored(
@@ -309,8 +306,6 @@ bool WebViewPrivateAddToThumbnailServiceFunction::RunAsync() {
 // and call SendResponse().
 void WebViewPrivateAddToThumbnailServiceFunction::SendResultFromBitmap(
     const SkBitmap& screen_capture) {
-  extensions::VivaldiDataSourcesAPI* api =
-    extensions::VivaldiDataSourcesAPI::GetFactoryInstance()->Get(GetProfile());
 
   // Scale the  bitmap.
   gfx::Size dst_size_pixels;
@@ -326,11 +321,11 @@ void WebViewPrivateAddToThumbnailServiceFunction::SendResultFromBitmap(
     bitmap_ = std::make_unique<SkBitmap>(
         SmartCropAndSize(screen_capture, width_, height_));
   }
-  api->AddImageDataForBookmark(
-      bookmark_id_, std::move(bitmap_),
-      base::Bind(&WebViewPrivateAddToThumbnailServiceFunction::
-                     OnBookmarkThumbnailStored,
-                 this));
+  extensions::VivaldiDataSourcesAPI::AddImageDataForBookmark(
+      browser_context(), bookmark_id_, std::move(bitmap_),
+      base::BindOnce(&WebViewPrivateAddToThumbnailServiceFunction::
+                         OnBookmarkThumbnailStored,
+                     this));
 }
 
 void WebViewPrivateAddToThumbnailServiceFunction::OnBookmarkThumbnailStored(

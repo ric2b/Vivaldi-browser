@@ -37,7 +37,6 @@ class VivaldiDataClassHandler {
   // there is no need to call the callback as the callee will handle the failure
   // condition.
   virtual bool GetData(
-      Profile* profile,
       const std::string& data_id,
       const content::URLDataSource::GotDataCallback& callback) = 0;
 };
@@ -62,23 +61,18 @@ class VivaldiDataSource : public content::URLDataSource {
       const std::string& path) const override;
 
  protected:
-  VivaldiDataClassHandler* GetOrCreateDataClassHandlerForType(
-      const std::string& type);
+  bool IsCSSRequest(const std::string& path) const;
 
-  std::map<std::string, std::unique_ptr<VivaldiDataClassHandler>>
+  std::map<const std::string, std::unique_ptr<VivaldiDataClassHandler>>
       data_class_handlers_;
 
   // Fallback image to send on failure
   scoped_refptr<base::RefCountedMemory> fallback_image_data_;
 
-  Profile* profile_;
-
  private:
   void ExtractRequestTypeAndData(const std::string& path,
                                  std::string& type,
-                                 std::string& data);
-
-  base::WeakPtrFactory<VivaldiDataSource> weak_ptr_factory_;
+                                 std::string& data) const;
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiDataSource);
 };
@@ -88,12 +82,10 @@ class VivaldiThumbDataSource : public VivaldiDataSource {
   explicit VivaldiThumbDataSource(Profile* profile);
   ~VivaldiThumbDataSource() override;
 
-  // content::URLDataSource implementation.
+    // content::URLDataSource implementation.
   std::string GetSource() const override;
 
  private:
-  base::WeakPtrFactory<VivaldiDataSource> weak_ptr_factory_;
-
   DISALLOW_COPY_AND_ASSIGN(VivaldiThumbDataSource);
 };
 

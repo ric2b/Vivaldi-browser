@@ -626,18 +626,6 @@ void GuestViewBase::WillAttach(WebContents* embedder_web_contents,
 
   WillAttachToEmbedder();
 
-  // NOTE(andre@vivaldi.com) : We need to sync up the detaching of any guests
-  // with the same web_contents() before doeing the attaching! Do this in
-  // WebContentsDidDetach.
-  if (web_contents()->GetOuterWebContents()) {
-    static_cast<content::WebContentsImpl*>(web_contents())->DetachFromOuter();
-    // this is usually |GuestViewBase::DidAttach|
-    attach_completion_callback_ = std::move(completion_callback);
-    WebContentsDidDetach();
-  }
-  else {
-
-
   if (content::GuestMode::IsCrossProcessFrameGuest(web_contents())) {
     owner_web_contents_->AttachInnerWebContents(
         base::WrapUnique<WebContents>(web_contents()), outer_contents_frame);
@@ -654,8 +642,6 @@ void GuestViewBase::WillAttach(WebContents* embedder_web_contents,
   // Completing attachment will resume suspended resource loads and then send
   // queued events.
   SignalWhenReady(std::move(completion_callback));
-
-  }
 
 }
 
@@ -808,8 +794,7 @@ bool GuestViewBase::PreHandleGestureEvent(WebContents* source,
   // Pinch events which cause a scale change should not be routed to a guest.
   // We still allow synthetic wheel events for touchpad pinch to go to the page.
   DCHECK(!blink::WebInputEvent::IsPinchGestureEventType(event.GetType()) ||
-         (event.SourceDevice() ==
-              blink::WebGestureDevice::kWebGestureDeviceTouchpad &&
+         (event.SourceDevice() == blink::WebGestureDevice::kTouchpad &&
           event.NeedsWheelEvent()));
   return false;
 }

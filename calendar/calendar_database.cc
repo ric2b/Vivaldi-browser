@@ -88,7 +88,8 @@ sql::InitStatus CalendarDatabase::Init(const base::FilePath& calendar_name) {
   if (!meta_table_.Init(&db_, GetCurrentVersion(), kCompatibleVersionNumber))
     return sql::INIT_FAILURE;
 
-  if (!CreateCalendarTable() || !CreateEventTable() || !CreateRecurringTable())
+  if (!CreateCalendarTable() || !CreateEventTable() ||
+      !CreateRecurringTable() || !CreateEventTypeTable())
     return sql::INIT_FAILURE;
 
   CreateDefaultCalendar();

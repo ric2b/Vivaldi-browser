@@ -15,13 +15,13 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "build/build_config.h"
+#include "calendar/calendar_table.h"
+#include "calendar/event_database.h"
+#include "calendar/event_type_database.h"
+#include "calendar/recurrence_table.h"
 #include "sql/database.h"
 #include "sql/init_status.h"
 #include "sql/meta_table.h"
-
-#include "calendar/calendar_table.h"
-#include "calendar/event_database.h"
-#include "calendar/recurrence_table.h"
 
 namespace base {
 class FilePath;
@@ -37,6 +37,7 @@ namespace calendar {
 // as the storage interface. Logic for manipulating this storage layer should
 // be in CalendarBackend.cc.
 class CalendarDatabase : public EventDatabase,
+                         public EventTypeDatabase,
                          public CalendarTable,
                          public RecurrrenceTable {
  public:
@@ -46,8 +47,7 @@ class CalendarDatabase : public EventDatabase,
 
   // Call before Init() to set the error callback to be used for the
   // underlying database connection.
-  void set_error_callback(
-      const sql::Database::ErrorCallback& error_callback) {
+  void set_error_callback(const sql::Database::ErrorCallback& error_callback) {
     db_.set_error_callback(error_callback);
   }
 

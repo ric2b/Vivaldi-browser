@@ -41,11 +41,6 @@
             "optional": true,
             "description": "data-url for the current icon."
           },
-          "popupUrl": {
-            "type": "string",
-            "optional": true,
-            "description": "Relative url for the popup document."
-          },
           "badgeTextColor": {
             "type": "string",
             "optional": true,
@@ -149,8 +144,9 @@
               "description": "Callback for popup actions.",
               "parameters": [
                 {
-                  "$ref": "ExtensionInfo",
-                  "name": "extension"
+                  "name": "popupUrl",
+                  "type": "string",
+                  "description": "Relative url for the popup document."
                 }
               ]
             }

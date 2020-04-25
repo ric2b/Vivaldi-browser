@@ -55,7 +55,7 @@ More information
 const char kCheck[] = "check";
 const char kCheck_HelpShort[] = "check: Check header dependencies.";
 const char kCheck_Help[] =
-    R"(gn check <out_dir> [<label_pattern>] [--force]
+    R"(gn check <out_dir> [<label_pattern>] [--force] [--check-generated]
 
   GN's include header checker validates that the includes for C-like source
   files match the build dependency graph.
@@ -74,6 +74,11 @@ Command-specific switches
       Ignores specifications of "check_includes = false" and checks all
       target's files that match the target label.
 
+  --check-generated
+      Generated files are normally not checked since they do not exist
+      until after a build. With this flag, those generated files that
+      can be found on disk are also checked.
+
 What gets checked
 
   The .gn file may specify a list of targets to be checked in the list
@@ -87,6 +92,9 @@ What gets checked
 
     - GN opens all C-like source files in the targets to be checked and scans
       the top for includes.
+
+    - Generated files (that might not exist yet) are ignored unless
+      the --check-generated flag is provided.
 
     - Includes with a "nogncheck" annotation are skipped (see
       "gn help nogncheck").

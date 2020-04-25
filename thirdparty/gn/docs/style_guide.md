@@ -34,7 +34,7 @@ Naming advice
     Prefer to give such targets short, non-redundant names without worrying
     about global uniqueness. For example, it looks much better to write a
     dependency as `"//mojo/public/bindings"` rather than
-    `"//mojo/public/bindings:mojo_bindings"
+    `"//mojo/public/bindings:mojo_bindings"`
   * Shared libraries (and by extension, components) must have globally unique
     output names. Give such targets short non-unique names above, and then
     provide a globally unique `output_name` for that target.

@@ -121,6 +121,7 @@ ADDITIONAL_PATHS = (
     os.path.join('..', 'third_party', '_winsparkle_lib'),
     os.path.join('..', 'third_party', 'sparkle_lib'),
     os.path.join('..', 'platform_media'),
+    os.path.join('..', 'scripts', 'licenses'),
     os.path.join('..', 'vivapp', 'src', 'browserjs'),
     os.path.join('..', 'vivapp', 'src', 'components', 'image-inspector'),
 )
@@ -155,6 +156,12 @@ SPECIAL_CASES = {
         "URL": "https://github.com/exif-js/exif-js",
         "License": "MIT",
         "License File": "/../vivapp/src/components/image-inspector/exif_js_license.txt",
+    },
+    os.path.join('..', 'scripts', 'licenses'): {
+        "Name": "Profile avatar illustrations",
+        "URL": "https://www.flaticon.com/",
+        "License": "attribution required",
+        "License File": "/../scripts/licenses/avatar_profiles_license.txt",
     },
 }
 

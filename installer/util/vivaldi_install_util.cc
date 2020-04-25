@@ -232,7 +232,6 @@ std::vector<base::win::ScopedHandle> GetRunningProcessesForPath(
 
 void KillProcesses(const std::vector<base::win::ScopedHandle>& processes) {
   base::string16 cmd_line_string(L"taskkill.exe /F");
-  std::vector<DWORD>::iterator it;
   for (auto& process : processes) {
     DCHECK(process.IsValid());
     cmd_line_string +=

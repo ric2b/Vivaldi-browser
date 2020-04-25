@@ -85,10 +85,12 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
   void OnPasswordIconStatusChanged(int window_id, bool show);
 
   // Close all app windows generating thumbnails.
-  void CloseAllThumbnailWindows();
+  static void CloseAllThumbnailWindows(
+      content::BrowserContext* browser_context);
 
-  // Trigger the OS authentication dialog, if needed.
-  bool AuthenticateUser(gfx::NativeWindow window);
+  // Trigger the OS authentication dialog, if needed. web_contents can be null.
+  static bool AuthenticateUser(content::BrowserContext* browser_context,
+                               content::WebContents* web_contents);
 
   // Is the Razer Chroma API available on this machine
   bool IsRazerChromaAvailable();

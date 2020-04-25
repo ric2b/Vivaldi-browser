@@ -65,6 +65,21 @@
             "description": "Should window be always on top."
           }
         }
+      },
+      {
+        "id": "PanelType",
+        "type": "string",
+        "description": "Whether to open the the element panel (inspect mode), console panel, or the default.",
+        "enum": [{
+          "name": "console",
+          "description": "Open devtool with the Console panel selected"
+        }, {
+          "name": "inspect",
+          "description": "Open devtools with the Elements panel selected"
+        }, {
+          "name": "default",
+          "description": "Open devtools with the default panel selected"
+        }]
       }
     ],
     "functions": [
@@ -78,16 +93,6 @@
             "name": "tabId",
             "minimum": 1,
             "description": "The tab id of the tab changing its devtools docking state."
-          },
-          {
-            "type": "integer",
-            "name": "containerWidth",
-            "description": "The container width that can be divided for web contents and devtools."
-          },
-          {
-            "type": "integer",
-            "name": "containerHeight",
-            "description": "The container height that can be divided for web contents and devtools."
           },
           {
             "type": "function",
@@ -138,9 +143,8 @@
         "description": "Toggle developer tools.",
         "parameters": [
           {
-            "type": "boolean",
-            "name": "inspect",
-            "description": "Whether to enable the element picker (corresponds to Ctrl+Shift+C in Chrome)"
+            "name": "panelType",
+            "$ref": "PanelType"
           }
         ]
       }

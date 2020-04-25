@@ -6,6 +6,9 @@
 
 namespace chrome {
 
+const char kAccessibilityLabelsLearnMoreURL[] =
+    "https://support.google.com/chrome/?p=image_descriptions";
+
 const char kAutomaticSettingsResetLearnMoreURL[] =
     "https://support.google.com/chrome/?p=ui_automatic_settings_reset";
 
@@ -142,6 +145,9 @@ const char kGoogleAccountActivityControlsURL[] =
     "https://myaccount.google.com/activitycontrols/search";
 
 const char kGoogleAccountURL[] = "https://myaccount.google.com";
+
+const char kGoogleAccountChooserURL[] =
+    "https://accounts.google.com/AccountChooser";
 
 const char kGooglePasswordManagerURL[] = "https://passwords.google.com";
 

@@ -23,15 +23,14 @@
 #include "content/public/browser/session_storage_namespace.h"
 #include "content/public/browser/web_contents.h"
 
+#include "app/vivaldi_apptools.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/site_instance.h"
-
-#include "app/vivaldi_apptools.h"
 #include "ui/lazy_load_service.h"
 
+using content::NavigationEntry;
 using content::RestoreType;
 using content::WebContents;
-using content::NavigationEntry;
 using sessions::ContentSerializedNavigationBuilder;
 using sessions::SerializedNavigationEntry;
 
@@ -80,8 +79,7 @@ std::unique_ptr<WebContents> CreateRestoredTab(
   WebContents* base_web_contents =
       browser->tab_strip_model()->GetActiveWebContents();
   if (base_web_contents) {
-    create_params.initial_size =
-        base_web_contents->GetContainerBounds().size();
+    create_params.initial_size = base_web_contents->GetContainerBounds().size();
   }
   std::unique_ptr<WebContents> web_contents =
       WebContents::CreateWithSessionStorage(create_params,
@@ -129,8 +127,7 @@ WebContents* AddRestoredTab(
     web_contents->SetUserData(&vivaldi::LazyLoadService::kLazyLoadIsSafe,
                               std::make_unique<base::SupportsUserData::Data>());
 
-  int add_types = select ? TabStripModel::ADD_ACTIVE
-                         : TabStripModel::ADD_NONE;
+  int add_types = select ? TabStripModel::ADD_ACTIVE : TabStripModel::ADD_NONE;
   if (pin) {
     tab_index = std::min(
         tab_index, browser->tab_strip_model()->IndexOfFirstNonPinnedTab());

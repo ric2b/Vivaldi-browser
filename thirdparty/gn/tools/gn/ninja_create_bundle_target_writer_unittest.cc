@@ -22,8 +22,6 @@ void SetupBundleDataDir(BundleData* bundle_data, const std::string& root_dir) {
       SourceDir(bundle_data->contents_dir().value() + "/Resources");
   bundle_data->executable_dir() =
       SourceDir(bundle_data->contents_dir().value() + "/MacOS");
-  bundle_data->plugins_dir() =
-      SourceDir(bundle_data->contents_dir().value() + "/Plug Ins");
 }
 
 std::unique_ptr<Target> NewAction(const TestWithScope& setup) {

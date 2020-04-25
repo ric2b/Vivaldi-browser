@@ -2,6 +2,7 @@
 
 #include "browser/vivaldi_browser_finder.h"
 
+#include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
@@ -53,6 +54,18 @@ Browser* FindBrowserWithWebContents(WebContents* web_contents) {
 #else
   return NULL;
 #endif
+}
+
+Browser* FindBrowserByWindowId(int window_id) {
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  for (Browser* browser : *BrowserList::GetInstance()) {
+    if (extensions::ExtensionTabUtil::GetWindowId(browser) == window_id &&
+        browser->window()) {
+      return browser;
+    }
+  }
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+  return nullptr;
 }
 
 int GetBrowserCountOfType(Browser::Type type) {

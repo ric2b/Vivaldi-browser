@@ -4,9 +4,9 @@
 
 package org.chromium.chrome.browser.usage_stats;
 
+import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
-import android.net.Uri;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.View.OnClickListener;
@@ -15,19 +15,25 @@ import android.widget.LinearLayout;
 import android.widget.LinearLayout.LayoutParams;
 import android.widget.TextView;
 
+import org.chromium.base.ContextUtils;
+import org.chromium.base.Log;
 import org.chromium.base.UserData;
+import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.content_public.browser.LoadUrlParams;
+import org.chromium.content_public.browser.WebContents;
 
 /**
  * Represents the suspension page presented when a user tries to visit a site whose fully-qualified
  * domain name (FQDN) has been suspended via Digital Wellbeing.
  */
 public class SuspendedTab extends EmptyTabObserver implements UserData {
-    private static final String DIGITAL_WELLBEING_DASHBOARD_ACTION =
-            "com.google.android.apps.wellbeing.action.APP_USAGE_DASHBOARD";
+    private static final String DIGITAL_WELLBEING_SITE_DETAILS_ACTION =
+            "org.chromium.chrome.browser.usage_stats.action.SHOW_WEBSITE_DETAILS";
+    private static final String EXTRA_FQDN_NAME =
+            "org.chromium.chrome.browser.usage_stats.extra.FULLY_QUALIFIED_DOMAIN_NAME";
+    private static final String TAG = "SuspendedTab";
     private static final Class<SuspendedTab> USER_DATA_KEY = SuspendedTab.class;
 
     public static SuspendedTab from(Tab tab) {
@@ -59,6 +65,12 @@ public class SuspendedTab extends EmptyTabObserver implements UserData {
         mFqdn = fqdn;
         mTab.addObserver(this);
         mTab.stopLoading();
+
+        WebContents webContents = mTab.getWebContents();
+        if (webContents != null) {
+            webContents.onHide();
+        }
+
         if (isViewAttached()) {
             updateFqdnText();
         } else {
@@ -70,7 +82,11 @@ public class SuspendedTab extends EmptyTabObserver implements UserData {
     public void removeIfPresent() {
         removeViewIfPresent();
 
-        mTab.removeObserver(this);
+        WebContents webContents = mTab.getWebContents();
+        if (webContents != null) {
+            webContents.onShow();
+        }
+
         mView = null;
         mFqdn = null;
     }
@@ -85,26 +101,16 @@ public class SuspendedTab extends EmptyTabObserver implements UserData {
         return mFqdn != null;
     }
 
+    @VisibleForTesting
+    boolean isViewAttached() {
+        return mView != null && mView.getParent() == mTab.getContentView();
+    }
+
     private View createView() {
         Context context = mTab.getContext();
         LayoutInflater inflater = LayoutInflater.from(context);
 
         View suspendedTabView = inflater.inflate(R.layout.suspended_tab, null);
-        TextView explanationText =
-                (TextView) suspendedTabView.findViewById(R.id.suspended_tab_explanation);
-        explanationText.setText(
-                context.getString(R.string.usage_stats_site_paused_explanation, mFqdn));
-
-        View settingsLink = suspendedTabView.findViewById(R.id.suspended_tab_settings_button);
-        settingsLink.setOnClickListener(new OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Intent intent = new Intent(DIGITAL_WELLBEING_DASHBOARD_ACTION);
-                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                context.startActivity(intent);
-            }
-        });
-
         return suspendedTabView;
     }
 
@@ -119,10 +125,7 @@ public class SuspendedTab extends EmptyTabObserver implements UserData {
         parent.addView(mView,
                 new LinearLayout.LayoutParams(
                         LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
-    }
-
-    private boolean isViewAttached() {
-        return mView != null && mView.getParent() == mTab.getContentView();
+        updateFqdnText();
     }
 
     private void updateFqdnText() {
@@ -130,38 +133,37 @@ public class SuspendedTab extends EmptyTabObserver implements UserData {
         TextView explanationText = (TextView) mView.findViewById(R.id.suspended_tab_explanation);
         explanationText.setText(
                 context.getString(R.string.usage_stats_site_paused_explanation, mFqdn));
+        setSettingsLinkClickListener();
+    }
+
+    private void setSettingsLinkClickListener() {
+        Context context = mTab.getContext();
+        View settingsLink = mView.findViewById(R.id.suspended_tab_settings_button);
+        settingsLink.setOnClickListener(new OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent intent = new Intent(DIGITAL_WELLBEING_SITE_DETAILS_ACTION);
+                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                intent.putExtra(EXTRA_FQDN_NAME, mFqdn);
+                intent.putExtra(Intent.EXTRA_PACKAGE_NAME,
+                        ContextUtils.getApplicationContext().getPackageName());
+                try {
+                    context.startActivity(intent);
+                } catch (ActivityNotFoundException e) {
+                    Log.e(TAG, "No activity found for site details intent", e);
+                }
+            }
+        });
     }
 
     private void removeViewIfPresent() {
         if (isViewAttached()) {
             mTab.getContentView().removeView(mView);
-        }
-    }
-
-    private void removeSelfIfFqdnChanged(String url) {
-        String newFqdn = Uri.parse(url).getHost();
-        if (newFqdn == null || !newFqdn.equals(mFqdn)) {
-            removeIfPresent();
+            mView = null;
         }
     }
 
     // TabObserver implementation.
-    @Override
-    public void onLoadUrl(Tab tab, LoadUrlParams params, int loadType) {
-        removeSelfIfFqdnChanged(params.getUrl());
-    }
-
-    @Override
-    public void onPageLoadStarted(Tab tab, String url) {
-        removeSelfIfFqdnChanged(url);
-    }
-
-    @Override
-    public void onDestroyed(Tab tab) {
-        removeIfPresent();
-    }
-
-    // TODO(pnoland): Add integration tests for SuspendedTab that exercise this multi-window logic.
     @Override
     public void onActivityAttachmentChanged(Tab tab, boolean isAttached) {
         if (!isAttached) {

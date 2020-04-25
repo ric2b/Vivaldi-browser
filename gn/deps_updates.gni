@@ -52,12 +52,6 @@ foreach(_target,
   }
 }
 
-update_template_instance("//components/sync:sync") {
-  deps += [
-    "//components/sync/protocol",
-  ]
-}
-
 if (!is_android) {
   update_template_instance("//chrome/test:interactive_ui_tests") {
     deps -= [

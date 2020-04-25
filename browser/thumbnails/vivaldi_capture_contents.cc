@@ -124,9 +124,9 @@ bool ThumbnailCaptureContents::ShouldFocusPageAfterCrash() {
 void ThumbnailCaptureContents::CanDownload(
     const GURL& url,
     const std::string& request_method,
-    const base::RepeatingCallback<void(bool)>& callback) {
+    base::OnceCallback<void(bool)> callback) {
   // Offscreen tab pages are not allowed to download files.
-  callback.Run(false);
+  std::move(callback).Run(false);
 }
 
 bool ThumbnailCaptureContents::HandleContextMenu(

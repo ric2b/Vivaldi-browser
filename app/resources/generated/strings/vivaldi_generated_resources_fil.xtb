@@ -16,7 +16,6 @@
 <translation id="1729533290416704613">Kinokontrol din nito kung anong pahina ang ipinapakita kapag naghanap ka mula sa Omnibox.</translation>
 <translation id="1850508293116537636">I-rotate &amp;pakanan</translation>
 <translation id="1901303067676059328">Piliin ang &amp;lahat</translation>
-<translation id="1992397118740194946">Hindi nakatakda</translation>
 <translation id="2087822576218954668">Print: <ph name="PRINT_NAME" /></translation>
 <translation id="2177950615300672361">Tab na Incognito: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Module ng Native Client: <ph name="NEXE_NAME" /></translation>
@@ -33,7 +32,6 @@
 <translation id="2439110203301358333">Ang isa pang program sa iyong computer ay nagdagdag ng extension na maaaring magpabago sa paraan ng paggana ng Vivaldi.</translation>
 <translation id="2445081178310039857">Kinakailangan ang pinagmulang direktoryo ng extension.</translation>
 <translation id="2470702053775288986">Na-disable ang mga hindi sinusuportahang extension</translation>
-<translation id="2501797496290880632">Mag-type ng shortcut</translation>
 <translation id="2550212893339833758">Na-swap na memory</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Muling paganahin</translation>
@@ -55,12 +53,9 @@
 <translation id="3347086966102161372">K&amp;opyahin ang address ng larawan</translation>
 <translation id="3378572629723696641">Maaaring nasira ang extension na ito.</translation>
 <translation id="345693547134384690">Buksan ang &amp;imahe sa bagong tab</translation>
-<translation id="3467267818798281173">Humingi ng mga suhestyon sa Google</translation>
 <translation id="3505030558724226696">Bawiin ang access sa device</translation>
 <translation id="3627588569887975815">Buksan ang link sa inco&amp;gnito window</translation>
 <translation id="3678156199662914018">Extension: <ph name="EXTENSION_NAME" /></translation>
-<translation id="3798449238516105146">Bersyon</translation>
-<translation id="3866249974567520381">Paglalarawan</translation>
 <translation id="3905761538810670789">Ayusin ang app</translation>
 <translation id="3908501907586732282">Paganahin ang extension</translation>
 <translation id="3909791450649380159">Al&amp;isin</translation>
@@ -103,7 +98,6 @@
 <translation id="5483785310822538350">Bawiin ang access sa file at device</translation>
 <translation id="5485102783864353244">Magdagdag ng app</translation>
 <translation id="5521078259930077036">Ito ba ang inaasahan mong home page?</translation>
-<translation id="5532223876348815659">Pandaigdigan</translation>
 <translation id="5542132724887566711">Profile</translation>
 <translation id="5556459405103347317">I-reload</translation>
 <translation id="5575473780076478375">Extension ng Incognito: <ph name="EXTENSION_NAME" /></translation>
@@ -117,7 +111,6 @@
 <translation id="5965661248935608907">Kinokontrol din nito kung anong pahina ang ipinapakita kapag na-click mo ang button ng Home o naghanap mula sa Omnibox.</translation>
 <translation id="6101226222197207147">Nagdagdag ng bagong app (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Kinokontrol ang iyong koneksyon sa Internet</translation>
-<translation id="6124650939968185064">Nakadepende ang mga sumusunod na extension sa extension na ito:</translation>
 <translation id="6156863943908443225">Script cache</translation>
 <translation id="6196854373336333322">Kinokontrol na ng extension na "<ph name="EXTENSION_NAME" />" ang iyong mga setting ng proxy, na ang ibig sabihin ay maaari nitong baguhin, sirain o alamin ang anumang bagay na gagawin mo online. Kung hindi ka sigurado kung bakit naganap ang pagbabagong ito, malamang ay hindi mo ito ginustong mangyari.</translation>
 <translation id="6239558157302047471">I-reload ang &amp;frame</translation>
@@ -134,8 +127,6 @@
 <translation id="6518014396551869914">Kop&amp;yahin ang imahe</translation>
 <translation id="6639554308659482635">Memorya sa SQLite</translation>
 <translation id="6691936601825168937">&amp;Sumulong</translation>
-<translation id="6786747875388722282">Mga Extension</translation>
-<translation id="6787839852456839824">Mga keyboard shortcut</translation>
 <translation id="6798954102094737107">Plugin: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Panatilihin ang mga pagbabago</translation>
 <translation id="6886871292305414135">Buksan ang link sa bagong &amp;tab</translation>
@@ -167,7 +158,6 @@ Key File: <ph name="KEY_FILE" />
 Ilagay ang iyong key file sa ligtas na lugar. Kailangan mo ito upang lumikha ng mga bagong bersyon ng iyong extension.</translation>
 <translation id="8004582292198964060">Browser</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
-<translation id="8188120771410500975">&amp;Tingnan ang spelling ng mga field ng text</translation>
 <translation id="8261378640211443080">Hindi nakalista ang extension na ito sa <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> at maaaring naidagdag nang hindi mo nalalaman.</translation>
 <translation id="8351419472474436977">Kinokontrol na ng extension na ito ang iyong mga setting ng proxy, na nangangahulugang maaari nitong baguhin, sirain o alamin ang anumang bagay na gagawin mo online. Kung hindi ka sigurado kung bakit naganap ang pagbabagong ito, malamang na hindi mo ito ginustong mangyari.</translation>
 <translation id="8546306075665861288">Cache ng Larawan</translation>

@@ -21,6 +21,7 @@ if (!is_android) {
 
   update_target("//chrome/test:sync_integration_test_support") {
     public_deps += [
+      "//vivaldi/sync/test:fake_server",
       "//vivaldi/sync/test:sync_integration_testsupport",
     ]
   }
@@ -33,8 +34,14 @@ update_target("//components/sync:test_support_fake_server") {
   ]
 }
 
-update_target("//components/sync:sync") {
-  public_deps += [
+update_target("//components/sync:rest_of_sync") {
+  deps += [
     "//vivaldi/sync/test:fake_server",
+  ]
+}
+
+update_target("//components/sync_sessions:sync_sessions") {
+  deps += [
+    "//vivaldi/prefs:prefs_files_generator",
   ]
 }

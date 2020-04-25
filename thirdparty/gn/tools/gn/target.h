@@ -346,7 +346,7 @@ class Target : public Item {
   void PullRecursiveBundleData();
 
   // Fills the link and dependency output files when a target is resolved.
-  void FillOutputFiles();
+  bool FillOutputFiles(Err* err);
 
   // Checks precompiled headers from configs and makes sure the resulting
   // values are in config_values_.

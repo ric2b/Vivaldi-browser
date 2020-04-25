@@ -80,13 +80,15 @@ ContentSettingsType ConvertToContentSettingsType(
   return CONTENT_SETTINGS_TYPE_DEFAULT;
 }
 
-bool SettingsSetContentSettingFunction::RunAsync() {
-  std::unique_ptr<vivaldi::settings::SetContentSetting::Params> params(
-      vivaldi::settings::SetContentSetting::Params::Create(*args_));
+ExtensionFunction::ResponseAction SettingsSetContentSettingFunction::Run() {
+  using vivaldi::settings::SetContentSetting::Params;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
+  Profile* profile = Profile::FromBrowserContext(browser_context());
   HostContentSettingsMap* content_settings =
-      HostContentSettingsMapFactory::GetForProfile(GetProfile());
+      HostContentSettingsMapFactory::GetForProfile(profile);
 
   const GURL primary_pattern(params->settings_item.primary_pattern);
   const GURL secondary_pattern(params->settings_item.secondary_pattern);
@@ -99,8 +101,7 @@ bool SettingsSetContentSettingFunction::RunAsync() {
   content_settings->SetNarrowestContentSetting(
       primary_pattern, secondary_pattern, type, setting);
 
-  SendResponse(true);
-  return true;
+  return RespondNow(NoArguments());
 }
 
 }  // namespace extensions

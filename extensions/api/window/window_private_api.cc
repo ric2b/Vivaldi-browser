@@ -22,7 +22,6 @@
 #include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/api/zoom/zoom_api.h"
 #include "ui/base/ui_base_types.h"
-#include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_ui_utils.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
@@ -63,12 +62,11 @@ void VivaldiWindowsAPI::Observe(
       // fact so it can re-enable chrome tab event.
       Browser* browser = content::Source<Browser>(source).ptr();
       DCHECK(browser);
-      ::vivaldi::DispatchEvent(
-          Profile::FromBrowserContext(browser_context_),
-          extensions::vivaldi::window_private::OnWindowCloseCancelled::
-              kEventName,
-          extensions::vivaldi::window_private::OnWindowCloseCancelled::Create(
-              browser->session_id().id()));
+      ::vivaldi::BroadcastEvent(
+          vivaldi::window_private::OnWindowCloseCancelled::kEventName,
+          vivaldi::window_private::OnWindowCloseCancelled::Create(
+              browser->session_id().id()),
+          browser_context_);
       break;
     }
     default: {
@@ -84,34 +82,39 @@ void VivaldiWindowsAPI::Notify(app_modal::JavaScriptAppModalDialog* dialog) {
     // appropiate action can be taken.
     int id = SessionTabHelper::IdForTab(dialog->web_contents()).id();
 
-    ::vivaldi::DispatchEvent(
-        Profile::FromBrowserContext(browser_context_),
-        extensions::vivaldi::window_private::OnBeforeUnloadDialogOpened::
-            kEventName,
-        extensions::vivaldi::window_private::OnBeforeUnloadDialogOpened::Create(
-            id));
+    ::vivaldi::BroadcastEvent(
+        vivaldi::window_private::OnBeforeUnloadDialogOpened::kEventName,
+        vivaldi::window_private::OnBeforeUnloadDialogOpened::Create(id),
+        browser_context_);
   }
 }
 
+// static
 void VivaldiWindowsAPI::WindowsForProfileClosing(Profile* profile) {
   if (profile->IsGuestSession()) {
     // We don't care about guest windows.
     return;
   }
+  VivaldiWindowsAPI* api = GetFactoryInstance()->Get(profile);
+  DCHECK(api);
+  if (!api)
+    return;
+
   for (auto* browser : *BrowserList::GetInstance()) {
     if (browser->profile()->GetOriginalProfile() ==
         profile->GetOriginalProfile())
-      closing_windows_.push_back(browser);
+      api->closing_windows_.push_back(browser);
   }
 }
 
+// static
 bool VivaldiWindowsAPI::IsWindowClosingBecauseProfileClose(Browser* browser) {
-  for (auto* item : *BrowserList::GetInstance()) {
-    if (browser == item) {
-      return true;
-    }
-  }
-  return false;
+  VivaldiWindowsAPI* api = GetFactoryInstance()->Get(browser->profile());
+  DCHECK(api);
+  if (!api)
+    return false;
+  const auto& v = api->closing_windows_;
+  return std::find(v.begin(), v.end(), browser) != v.end();
 }
 
 void VivaldiWindowsAPI::OnBrowserAdded(Browser* browser) {
@@ -127,16 +130,14 @@ void VivaldiWindowsAPI::OnBrowserAdded(Browser* browser) {
       TabsPrivateAPI::GetTabStripModelObserver(browser_context_));
 
   if (browser->is_vivaldi()) {
-    ZoomAPI* zoom_api = ZoomAPI::GetFactoryInstance()->Get(
-        Profile::FromBrowserContext(browser_context_));
-    zoom_api->AddZoomObserver(browser);
+    ZoomAPI::AddZoomObserver(browser);
   }
   int id = browser->session_id().id();
 
-  ::vivaldi::DispatchEvent(
-      Profile::FromBrowserContext(browser_context_),
+  ::vivaldi::BroadcastEvent(
       extensions::vivaldi::window_private::OnWindowCreated::kEventName,
-      extensions::vivaldi::window_private::OnWindowCreated::Create(id));
+      extensions::vivaldi::window_private::OnWindowCreated::Create(id),
+      browser_context_);
 }
 
 void VivaldiWindowsAPI::OnBrowserRemoved(Browser* browser) {
@@ -152,8 +153,7 @@ void VivaldiWindowsAPI::OnBrowserRemoved(Browser* browser) {
       TabsPrivateAPI::GetTabStripModelObserver(browser_context_));
 
   if (browser->is_vivaldi()) {
-    ZoomAPI* zoom_api = ZoomAPI::GetFactoryInstance()->Get(browser_context_);
-    zoom_api->RemoveZoomObserver(browser);
+    ZoomAPI::RemoveZoomObserver(browser);
   }
   for (auto it = closing_windows_.begin(); it != closing_windows_.end(); ++it) {
     if ((*it) == browser) {
@@ -163,10 +163,10 @@ void VivaldiWindowsAPI::OnBrowserRemoved(Browser* browser) {
   }
   int id = browser->session_id().id();
 
-  ::vivaldi::DispatchEvent(
-    Profile::FromBrowserContext(browser_context_),
-    extensions::vivaldi::window_private::OnWindowClosed::kEventName,
-    extensions::vivaldi::window_private::OnWindowClosed::Create(id));
+  ::vivaldi::BroadcastEvent(
+      vivaldi::window_private::OnWindowClosed::kEventName,
+      vivaldi::window_private::OnWindowClosed::Create(id),
+      browser_context_);
 
 #if !defined(OS_MACOSX)
   // On mac there is no reason to close the settings window just because the
@@ -220,9 +220,11 @@ VivaldiBrowserWindow::WindowType ConvertToVivaldiWindowType(
   return VivaldiBrowserWindow::WindowType::NORMAL;
 }
 
-bool WindowPrivateCreateFunction::RunAsync() {
-  std::unique_ptr<vivaldi::window_private::Create::Params> params(
-      vivaldi::window_private::Create::Params::Create(*args_));
+ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
+  using vivaldi::window_private::Create::Params;
+  namespace Results = vivaldi::window_private::Create::Results;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   int top = 0;
@@ -262,7 +264,7 @@ bool WindowPrivateCreateFunction::RunAsync() {
     ext_data = *params->options.ext_data.get();
   }
   type = params->type;
-  Profile* profile = GetProfile();
+  Profile* profile = Profile::FromBrowserContext(browser_context());
   if (incognito) {
     profile = profile->GetOffTheRecordProfile();
   } else {
@@ -282,7 +284,7 @@ bool WindowPrivateCreateFunction::RunAsync() {
     app_params.frame =
         window_decoration ? AppWindow::FRAME_CHROME : AppWindow::FRAME_NONE;
   } else {
-    if (GetProfile()->GetPrefs()->GetBoolean(
+    if (profile->GetPrefs()->GetBoolean(
             vivaldiprefs::kWindowsUseNativeDecoration)) {
       app_params.frame = extensions::AppWindow::FRAME_CHROME;
     } else {
@@ -296,8 +298,8 @@ bool WindowPrivateCreateFunction::RunAsync() {
     // Opening a new window from a guest session is only allowed for
     // incognito windows.  It will crash on purpose otherwise.
     // See Browser::Browser() for the CHECKs.
-    SendResponse(false);
-    return true;
+    return RespondNow(
+        Error("New guest window can only be opened from incognito window"));
   }
 
   VivaldiBrowserWindow* window =
@@ -330,39 +332,32 @@ bool WindowPrivateCreateFunction::RunAsync() {
   // TODO(pettern): If we ever need to open unfocused windows, we need to
   // add a new method for open delayed and unfocused.
   //  window->Show(focused ? AppWindow::SHOW_ACTIVE : AppWindow::SHOW_INACTIVE);
-  results_ = vivaldi::window_private::Create::Results::Create(
-      browser->session_id().id());
-
-  SendResponse(true);
-  return true;
+  return RespondNow(ArgumentList(Results::Create(browser->session_id().id())));
 }
 
-bool WindowPrivateGetCurrentIdFunction::RunAsync() {
+ExtensionFunction::ResponseAction WindowPrivateGetCurrentIdFunction::Run() {
+  namespace Results = vivaldi::window_private::GetCurrentId::Results;
+
   Browser* browser = ::vivaldi::FindBrowserForEmbedderWebContents(
       dispatcher()->GetAssociatedWebContents());
+  if (!browser)
+    return RespondNow(Error("No Browser instance"));
 
-  DCHECK(browser);
-  if (browser) {
-    results_ = vivaldi::window_private::GetCurrentId::Results::Create(
-        browser->session_id().id());
-    SendResponse(true);
-    return true;
-  }
-  SendResponse(false);
-  return true;
+  return RespondNow(ArgumentList(Results::Create(browser->session_id().id())));
 }
 
-bool WindowPrivateSetStateFunction::RunAsync() {
-  std::unique_ptr<vivaldi::window_private::SetState::Params> params(
-      vivaldi::window_private::SetState::Params::Create(*args_));
+ExtensionFunction::ResponseAction WindowPrivateSetStateFunction::Run() {
+  using vivaldi::window_private::SetState::Params;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
+
   Browser* browser;
+  std::string error;
   if (!windows_util::GetBrowserFromWindowID(
           this, params->window_id, WindowController::GetAllWindowFilter(),
-          &browser, &error_)) {
-    results_ = vivaldi::window_private::SetState::Results::Create(false);
-    SendResponse(false);
-    return true;
+          &browser, &error)) {
+    return RespondNow(Error(error));
   }
   ui::WindowShowState show_state = ConvertToWindowShowState(params->state);
 
@@ -394,7 +389,6 @@ bool WindowPrivateSetStateFunction::RunAsync() {
     default:
       break;
   }
-  SendResponse(true);
-  return true;
+  return RespondNow(NoArguments());
 }
 }  // namespace extensions

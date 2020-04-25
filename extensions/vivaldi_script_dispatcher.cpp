@@ -19,10 +19,6 @@ void VivaldiAddScriptResources(
   resources->push_back({"webViewPrivateMethods",
                         IDR_WEB_VIEW_PRIVATE_API_METHODS_JS});
 
-  if (!base::FeatureList::IsEnabled(extensions_features::kNativeCrxBindings)) {
-    // This is now "internal" and will be removed.
-    resources->push_back({ "webViewPrivate", IDR_WEB_VIEW_PRIVATE_JS });
-  }
 
   resources->push_back({"webViewEventsPrivate", IDR_WEB_VIEW_PRIVATE_EVENTS_JS});
 

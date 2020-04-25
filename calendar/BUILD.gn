@@ -28,6 +28,8 @@ jumbo_static_library("calendar") {
     "event_database.h",
     "event_type.cc",
     "event_type.h",
+    "event_type_database.cc",
+    "event_type_database.h",
     "recurrence_table.cc",
     "recurrence_table.h",
     "recurrence_type.cc",

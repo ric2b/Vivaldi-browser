@@ -592,7 +592,6 @@ Example
     bundle_contents_dir = "${bundle_root_dir}/Contents"
     bundle_resources_dir = "${bundle_contents_dir}/Resources"
     bundle_executable_dir = "${bundle_contents_dir}/MacOS"
-    bundle_plugins_dir = "${bundle_contents_dir}/PlugIns"
   }
 )";
 
@@ -618,8 +617,10 @@ const char kBundleResourcesDir_HelpShort[] =
     "bundle_resources_dir: "
     "Expansion of {{bundle_resources_dir}} in create_bundle.";
 const char kBundleResourcesDir_Help[] =
-    R"(bundle_resources_dir: Expansion of {{bundle_resources_dir}} in
-                             create_bundle.
+    R"(bundle_resources_dir
+
+  bundle_resources_dir: Expansion of {{bundle_resources_dir}} in
+                        create_bundle.
 
   A string corresponding to a path in $root_build_dir.
 
@@ -668,30 +669,16 @@ const char kBundleExecutableDir_HelpShort[] =
     "bundle_executable_dir: "
     "Expansion of {{bundle_executable_dir}} in create_bundle";
 const char kBundleExecutableDir_Help[] =
-    R"(bundle_executable_dir: Expansion of {{bundle_executable_dir}} in
-                              create_bundle.
+    R"(bundle_executable_dir
+
+  bundle_executable_dir: Expansion of {{bundle_executable_dir}} in
+                         create_bundle.
 
   A string corresponding to a path in $root_build_dir.
 
   This string is used by the "create_bundle" target to expand the
   {{bundle_executable_dir}} of the "bundle_data" target it depends on. This
   must correspond to a path under "bundle_root_dir".
-
-  See "gn help bundle_root_dir" for examples.
-)";
-
-const char kBundlePlugInsDir[] = "bundle_plugins_dir";
-const char kBundlePlugInsDir_HelpShort[] =
-    "bundle_plugins_dir: "
-    "Expansion of {{bundle_plugins_dir}} in create_bundle.";
-const char kBundlePlugInsDir_Help[] =
-    R"(bundle_plugins_dir: Expansion of {{bundle_plugins_dir}} in create_bundle.
-
-  A string corresponding to a path in $root_build_dir.
-
-  This string is used by the "create_bundle" target to expand the
-  {{bundle_plugins_dir}} of the "bundle_data" target it depends on. This must
-  correspond to a path under "bundle_root_dir".
 
   See "gn help bundle_root_dir" for examples.
 )";
@@ -2165,7 +2152,6 @@ const VariableInfoMap& GetTargetVariables() {
     INSERT_VARIABLE(BundleResourcesDir)
     INSERT_VARIABLE(BundleDepsFilter)
     INSERT_VARIABLE(BundleExecutableDir)
-    INSERT_VARIABLE(BundlePlugInsDir)
     INSERT_VARIABLE(Cflags)
     INSERT_VARIABLE(CflagsC)
     INSERT_VARIABLE(CflagsCC)

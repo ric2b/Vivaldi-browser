@@ -18,13 +18,10 @@
 <translation id="1682548588986054654">Dritare të re private</translation>
 <translation id="1698122934742150150">Vetëm seancën private aktuale</translation>
 <translation id="1708338024780164500">(Joaktiv)</translation>
-<translation id="1708713382908678956"><ph name="NAME_PH" /> (ID: <ph name="ID_PH" />)</translation>
 <translation id="1723824996674794290">Dritare të &amp;re</translation>
 <translation id="1744108098763830590">faqe në sfond</translation>
 <translation id="1850508293116537636">Rrotulloj në kahun &amp;orar</translation>
 <translation id="1901303067676059328">Përzgjedh të &amp;gjitha</translation>
-<translation id="1989112275319619282">Shfletoj</translation>
-<translation id="1992397118740194946">E pacaktuar</translation>
 <translation id="2087822576218954668">Printimi: <ph name="PRINT_NAME" /></translation>
 <translation id="2148892889047469596">Transmetoj skedën</translation>
 <translation id="2177950615300672361">Skeda private: <ph name="TAB_NAME" /></translation>
@@ -44,7 +41,6 @@
 <translation id="2423578206845792524">Ru&amp;aj imazhin si...</translation>
 <translation id="2439110203301358333">Një program në kompjuterin tuaj instaloi një shtesë që mund të ndryshojë funksionet e Vivaldit.</translation>
 <translation id="2445081178310039857">Nevojitet katalogu kryesor i shtesës.</translation>
-<translation id="2501797496290880632">Shkruani kombinimin</translation>
 <translation id="2550212893339833758">Memorja virtuale</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Riaktivizoj</translation>
@@ -56,7 +52,6 @@
 <translation id="2861941300086904918">Përgjegjësi i sigurisë së Native Client</translation>
 <translation id="2904456025988372123">Pyet kur një faqe provon të transferojë automatikisht skedarët në radhë</translation>
 <translation id="2913331724188855103">Lejoj faqet e internetit që të regjistrojnë dhe të lexojnë të dhënat e cookie (rekomandohet)</translation>
-<translation id="2916745397441987255">Kërkoni shtesat</translation>
 <translation id="2932883381142163287">Sinjalizoj abuzimet</translation>
 <translation id="2941112035454246133">Ulët</translation>
 <translation id="2972581237482394796">&amp;Përsërit</translation>
@@ -73,15 +68,11 @@
 <translation id="3347086966102161372">K&amp;opjoj adresën e imazhit</translation>
 <translation id="3378572629723696641">Kjo shtesë mund të jetë dëmtuar.</translation>
 <translation id="345693547134384690">Hap &amp;imazhin në skedë të re</translation>
-<translation id="3467267818798281173">Marr sugjerime nga Google</translation>
 <translation id="3494769164076977169">Pyet kur një faqe provon të transferojë automatikisht skedarët në radhë (rekomandohet)</translation>
 <translation id="3505030558724226696">Revokoj aksesin te aparati</translation>
 <translation id="3627588569887975815">Hap lidhjen në dritare pri&amp;vate</translation>
 <translation id="3678156199662914018">Shtesa: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3727187387656390258">Inspektoj faqen automatike</translation>
-<translation id="3798449238516105146">Versioni</translation>
-<translation id="3855441664322950881">Paketoj shtesën</translation>
-<translation id="3866249974567520381">Përshkrimi</translation>
 <translation id="3905761538810670789">Riparoj aplikacionin</translation>
 <translation id="3908501907586732282">Aktivizoj shtesën</translation>
 <translation id="3909791450649380159">Pre&amp;s</translation>
@@ -117,7 +108,6 @@
 <translation id="5027562294707732951">Shtoj shtesën</translation>
 <translation id="5036662165765606524">Nuk lejoj asnjë faqe që të shkarkojë automatikisht skedarët në seri</translation>
 <translation id="5039804452771397117">Lejoj</translation>
-<translation id="5087249366037322692">E shtuar nga një palë e tretë</translation>
 <translation id="5143374789336132547">Shtesa <ph name="EXTENSION_NAME" /> ka ndryshuar faqen që tregohet kur klikoni butonin e shtëpisë.</translation>
 <translation id="5233231016133573565">ID procesi</translation>
 <translation id="5233736638227740678">&amp;Ngjit</translation>
@@ -129,7 +119,6 @@
 <translation id="5483785310822538350">Revokoj aksesin te skedari dhe aparati</translation>
 <translation id="5485102783864353244">Shtoj aplikacionin</translation>
 <translation id="5521078259930077036">A është kjo faqja zyrtare që po prisnit?</translation>
-<translation id="5532223876348815659">Global</translation>
 <translation id="5542132724887566711">Profili</translation>
 <translation id="5556459405103347317">Freskoj</translation>
 <translation id="5575473780076478375">Shtesa private: <ph name="EXTENSION_NAME" /></translation>
@@ -147,12 +136,9 @@
 <translation id="6086846494333236931">E instaluar nga administratori juaj</translation>
 <translation id="6101226222197207147">U shtua një aplikacion i ri (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Linja juaj e internetit po kontrollohet</translation>
-<translation id="6124650939968185064">Shtesat më poshtë varen nga kjo shtesë:</translation>
 <translation id="6156863943908443225">Cache i skripteve</translation>
 <translation id="6169666352732958425">Nuk transmetohet tryeza e punës.</translation>
 <translation id="6196854373336333322">Shtesa <ph name="EXTENSION_NAME" /> ka marrë nën kontroll vlerat e proxy-t, që do të thotë se mund të ndryshojë, dëmtojë ose mbikëqyrë çdo gjë që bëni në linjë. Nëse nuk e dini arsyen e këtij ndryshimi, ka shumë mundësi që të mos ju duhet.</translation>
-<translation id="6220413761270491930">Problem me hapjen e shtesës</translation>
-<translation id="6226777517901268232">Çelësi privat (fakultativ)</translation>
 <translation id="6239558157302047471">Freskoj &amp;kuadrin</translation>
 <translation id="6247802389331535091">Sistemi: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="6308937455967653460">Regjistroj lidhje&amp;n si...</translation>
@@ -166,10 +152,6 @@
 <translation id="6639554308659482635">Memorja SQLite</translation>
 <translation id="6686817083349815241">Regjistroni fjalëkalimin</translation>
 <translation id="6691936601825168937">&amp;Përpara</translation>
-<translation id="6706210727756204531">Sfera</translation>
-<translation id="6786747875388722282">Shtesat</translation>
-<translation id="6787839852456839824">Kombinimet e tastierës</translation>
-<translation id="6788210894632713004">Shtesë e shpaketuar</translation>
 <translation id="6798954102094737107">Fisha: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Ruaj ndryshimet</translation>
 <translation id="682123305478866682">Transmetoj tryezën e punës</translation>
@@ -208,9 +190,7 @@ Ruajeni çelësin në vend të sigurt. Do ju duhet kur të krijoni versione të 
 <translation id="8032244173881942855">Nuk transmetohet skeda.</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> K</translation>
 <translation id="8137559199583651773">Administroj shtesat</translation>
-<translation id="8188120771410500975">&amp;Kontrolloj drejtshkrimin në fushat me tekst</translation>
 <translation id="8261378640211443080">Kjo shtesë nuk është në listën e <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> dhe mund të jetë shtuar pa dijeninë tuaj.</translation>
-<translation id="8294431847097064396">Burimi</translation>
 <translation id="8351419472474436977">Kjo shtesë ka marrë nën kontroll vlerat e proxy-t, që do të thotë se mund të ndryshojë, dëmtojë ose mbikëqyrë çdo gjë që bëni në linjë. Nëse nuk e dini arsyen e këtij ndryshimi, ka shumë mundësi që të mos ju duhet.</translation>
 <translation id="8382913212082956454">Kopjoj adresën &amp;postare</translation>
 <translation id="8546306075665861288">Cache i imazheve</translation>
@@ -219,7 +199,6 @@ Ruajeni çelësin në vend të sigurt. Do ju duhet kur të krijoni versione të 
 <translation id="8627151598708688654">Përzgjedhja e burimit</translation>
 <translation id="862750493060684461">Cache CSS</translation>
 <translation id="8664389313780386848">&amp;Shoh burimin e faqes</translation>
-<translation id="8770406935328356739">Katalogu kryesor i shtesës</translation>
 <translation id="8808478386290700967">Web Store</translation>
 <translation id="8823514049557262177">Kopjoj te&amp;kstin e lidhjes</translation>
 <translation id="8859174528519900719">Kuadri dytësor: <ph name="SUBFRAME_SITE" /></translation>

@@ -9,12 +9,9 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
-#include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chromium/net/http/http_request_headers.h"
-#include "components/autofill/core/common/password_form.h"
 #include "components/os_crypt/os_crypt.h"
-#include "components/password_manager/core/browser/password_store.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -113,11 +110,6 @@ bool ParseFailureResponse(std::unique_ptr<std::string> response_body,
 
 }  // anonymous namespace
 
-const std::string VivaldiAccountManager::kSyncSignonRealm =
-    "vivaldi-sync-login";
-const std::string VivaldiAccountManager::kSyncOrigin =
-    "vivaldi://settings/sync";
-
 VivaldiAccountManager::FetchError::FetchError()
     : type(NONE), server_message(""), error_code(0) {}
 
@@ -127,7 +119,7 @@ VivaldiAccountManager::FetchError::FetchError(FetchErrorType type,
     : type(type), server_message(server_message), error_code(error_code) {}
 
 VivaldiAccountManager::VivaldiAccountManager(Profile* profile)
-    : profile_(profile) {
+    : profile_(profile), password_handler_(profile, this) {
   account_info_.username =
       profile_->GetPrefs()->GetString(vivaldiprefs::kVivaldiAccountUsername);
   account_info_.account_id =
@@ -157,10 +149,7 @@ VivaldiAccountManager::VivaldiAccountManager(Profile* profile)
     }
   }
 
-  base::PostTaskWithTraits(
-      FROM_HERE, {content::BrowserThread::UI},
-      base::Bind(&VivaldiAccountManager::TryLoginWithSavedPassword,
-                 base::Unretained(this)));
+  password_handler_.AddObserver(this);
 }
 
 VivaldiAccountManager::~VivaldiAccountManager() {}
@@ -183,42 +172,28 @@ void VivaldiAccountManager::MigrateOldCredentialsIfNeeded() {
   account_info_.username = username;
   account_info_.account_id = account_id;
 
-  base::PostTaskWithTraits(
-      FROM_HERE, {content::BrowserThread::UI},
-      base::Bind(&VivaldiAccountManager::TryLoginWithSavedPassword,
-                 base::Unretained(this)));
+  password_handler_.AddObserver(this);
 }
 
-void VivaldiAccountManager::TryLoginWithSavedPassword() {
-  scoped_refptr<password_manager::PasswordStore> password_store(
-      PasswordStoreFactory::GetForProfile(profile_,
-                                          ServiceAccessType::IMPLICIT_ACCESS));
+void VivaldiAccountManager::OnAccountPasswordStateChanged() {
+  password_handler_.RemoveObserver(this);
 
-  password_manager::PasswordStore::FormDigest form_digest(
-      autofill::PasswordForm::SCHEME_OTHER, kSyncSignonRealm,
-      GURL(kSyncOrigin));
+  if (account_info_.account_id.empty() || !refresh_token_.empty())
+    return;
 
-  password_store->GetLogins(form_digest, this);
-}
-
-void VivaldiAccountManager::OnGetPasswordStoreResults(
-    std::vector<std::unique_ptr<autofill::PasswordForm>> results) {
-  for (const auto& result : results) {
-    const std::string username = base::UTF16ToUTF8(result->username_value);
-    if (username == account_info_.username &&
-        !account_info_.account_id.empty()) {
-      Login(username, base::UTF16ToUTF8(result->password_value), false);
-    }
-  }
-
-  if (!delayed_failure_notification_.is_null())
-    std::move(delayed_failure_notification_).Run();
+  Login(account_info_.username, std::string(), false);
 }
 
 void VivaldiAccountManager::Login(const std::string& username,
                                   const std::string& password,
                                   bool save_password) {
   DCHECK(!username.empty());
+
+  if (!password.empty() || username != account_info_.username) {
+    // If the user provided new credentials, we just want to forget the
+    // previously stored ones.
+    password_handler_.ForgetPassword();
+  }
 
   if (username == account_info_.username && !account_info_.account_id.empty()) {
     // Trying to re-login into the same account. Don't do a full reset.
@@ -246,7 +221,8 @@ void VivaldiAccountManager::Login(const std::string& username,
       net::EscapeUrlEncodedData(kClientSecret, true);
   std::string enc_username =
       net::EscapeUrlEncodedData(username.substr(0, domain_position), true);
-  std::string enc_password = net::EscapeUrlEncodedData(password, true);
+  std::string enc_password = net::EscapeUrlEncodedData(
+      password.empty() ? password_handler_.password() : password, true);
   std::string body = base::StringPrintf(
       kRequestTokenFromCredentials, enc_client_id.c_str(),
       enc_client_secret.c_str(), enc_username.c_str(), enc_password.c_str());
@@ -302,8 +278,6 @@ void VivaldiAccountManager::ClearTokens() {
 
   last_token_fetch_error_ = FetchError();
   last_account_info_fetch_error_ = FetchError();
-
-  delayed_failure_notification_.Reset();
 }
 
 void VivaldiAccountManager::Reset() {
@@ -312,7 +286,10 @@ void VivaldiAccountManager::Reset() {
 
   ClearTokens();
 
+  std::string username;
+  username.swap(account_info_.username);
   account_info_ = AccountInfo();
+  account_info_.username.swap(username);
   profile_->GetPrefs()->ClearPref(vivaldiprefs::kVivaldiAccountId);
 }
 
@@ -331,12 +308,11 @@ void VivaldiAccountManager::OnTokenRequestDone(
   if (response_code == net::HTTP_BAD_REQUEST) {
     std::string server_message;
     ParseFailureResponse(std::move(response_body), &server_message);
-    if (!using_password) {
-      delayed_failure_notification_ =
-          base::Bind(&VivaldiAccountManager::NotifyTokenFetchFailed,
-                     base::Unretained(this), INVALID_CREDENTIALS,
-                     server_message, response_code);
-      TryLoginWithSavedPassword();
+    if (!using_password && !password_handler_.password().empty()) {
+      base::PostTaskWithTraits(
+          FROM_HERE, {content::BrowserThread::UI},
+          base::Bind(&VivaldiAccountManager::Login, base::Unretained(this),
+                     account_info_.username, std::string(), false));
     } else {
       NotifyTokenFetchFailed(INVALID_CREDENTIALS, server_message,
                              response_code);
@@ -473,20 +449,7 @@ void VivaldiAccountManager::NotifyAccountUpdated() {
 
 void VivaldiAccountManager::NotifyTokenFetchSucceeded() {
   if (!password_for_saving_.empty()) {
-    scoped_refptr<password_manager::PasswordStore> password_store(
-        PasswordStoreFactory::GetForProfile(
-            profile_, ServiceAccessType::EXPLICIT_ACCESS));
-
-    autofill::PasswordForm password_form = {};
-    password_form.scheme = autofill::PasswordForm::SCHEME_OTHER;
-    password_form.signon_realm = kSyncSignonRealm;
-    password_form.origin = GURL(kSyncOrigin);
-    password_form.username_value = base::UTF8ToUTF16(account_info_.username);
-    password_form.password_value = base::UTF8ToUTF16(password_for_saving_);
-    password_form.date_created = base::Time::Now();
-
-    password_store->AddLogin(password_form);
-
+    password_handler_.SetPassword(password_for_saving_);
     password_for_saving_.clear();
   }
 
@@ -521,6 +484,10 @@ void VivaldiAccountManager::NotifyShutdown() {
   for (auto& observer : observers_) {
     observer.OnVivaldiAccountShutdown();
   }
+}
+
+std::string VivaldiAccountManager::GetUsername() {
+  return account_info_.username;
 }
 
 }  // namespace vivaldi

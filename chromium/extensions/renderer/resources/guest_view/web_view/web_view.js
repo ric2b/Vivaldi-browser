@@ -13,9 +13,7 @@ var GuestViewInternalNatives = requireNative('guest_view_internal');
 var WebViewConstants = require('webViewConstants').WebViewConstants;
 var WebViewAttributes = require('webViewAttributes').WebViewAttributes;
 var WebViewEvents = require('webViewEvents').WebViewEvents;
-var WebViewInternal = getInternalApi ?
-    getInternalApi('webViewInternal') :
-    require('webViewInternal').WebViewInternal;
+var WebViewInternal = getInternalApi('webViewInternal');
 
 var RegisterVivaldiWebViewExtensions = require("webViewPrivateImpl").RegisterVivaldiWebViewExtensions;
 
@@ -148,8 +146,13 @@ WebViewImpl.prototype.createGuest = function() {
       WebViewConstants.ATTRIBUTE_PARTITION].getValue();
 
   if (this.attributes[WebViewConstants.ATTRIBUTE_TAB_ID].getValue()) {
-    params['tab_id'] = this.attributes[
-        WebViewConstants.ATTRIBUTE_TAB_ID].getValue();
+    params['tab_id'] = Number(this.attributes[
+        WebViewConstants.ATTRIBUTE_TAB_ID].getValue());
+  }
+
+  if (this.attributes[WebViewConstants.ATTRIBUTE_INSPECT_TAB_ID].getValue()) {
+    params['inspect_tab_id'] = Number(this.attributes[
+        WebViewConstants.ATTRIBUTE_INSPECT_TAB_ID].getValue());
   }
 
   }

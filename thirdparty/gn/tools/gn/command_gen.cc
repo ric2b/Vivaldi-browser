@@ -39,6 +39,7 @@ const char kSwitchIdeValueVs[] = "vs";
 const char kSwitchIdeValueVs2013[] = "vs2013";
 const char kSwitchIdeValueVs2015[] = "vs2015";
 const char kSwitchIdeValueVs2017[] = "vs2017";
+const char kSwitchIdeValueVs2019[] = "vs2019";
 const char kSwitchIdeValueWinSdk[] = "winsdk";
 const char kSwitchIdeValueXcode[] = "xcode";
 const char kSwitchIdeValueJson[] = "json";
@@ -200,12 +201,15 @@ bool RunIdeWriter(const std::string& ide,
     }
     return res;
   } else if (ide == kSwitchIdeValueVs || ide == kSwitchIdeValueVs2013 ||
-             ide == kSwitchIdeValueVs2015 || ide == kSwitchIdeValueVs2017) {
+             ide == kSwitchIdeValueVs2015 || ide == kSwitchIdeValueVs2017 ||
+             ide == kSwitchIdeValueVs2019) {
     VisualStudioWriter::Version version = VisualStudioWriter::Version::Vs2017;
     if (ide == kSwitchIdeValueVs2013)
       version = VisualStudioWriter::Version::Vs2013;
     else if (ide == kSwitchIdeValueVs2015)
       version = VisualStudioWriter::Version::Vs2015;
+    else if (ide == kSwitchIdeValueVs2019)
+      version = VisualStudioWriter::Version::Vs2019;
 
     std::string sln_name;
     if (command_line->HasSwitch(kSwitchSln))
@@ -333,6 +337,7 @@ IDE options
       "vs2013" - Visual Studio 2013 project/solution files.
       "vs2015" - Visual Studio 2015 project/solution files.
       "vs2017" - Visual Studio 2017 project/solution files.
+      "vs2019" - Visual Studio 2019 project/solution files.
       "xcode" - Xcode workspace/solution files.
       "qtcreator" - QtCreator project files.
       "json" - JSON file containing target information
@@ -436,6 +441,10 @@ int RunGen(const std::vector<std::string>& args) {
 
   // Deliberately leaked to avoid expensive process teardown.
   Setup* setup = new Setup();
+  // Generate an empty args.gn file if it does not exists
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kArgs)) {
+    setup->set_gen_empty_args(true);
+  }
   if (!setup->DoSetup(args[0], true))
     return 1;
 

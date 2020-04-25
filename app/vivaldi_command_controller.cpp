@@ -11,7 +11,7 @@
 #include "extensions/buildflags/buildflags.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-#include "extensions/api/show_menu/show_menu_api.h"
+#include "extensions/api/menubar/menubar_api.h"
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 #endif
 
@@ -195,7 +195,7 @@ bool ExecuteVivaldiCommands(Browser* browser, int id) {
     case IDC_VIV_ALLOW_APPLE_EVENTS: {
       // The API is registered with a regular profile.
       Profile* profile = browser->profile()->GetOriginalProfile();
-      extensions::ShowMenuAPI::SendCommandExecuted(
+      extensions::MenubarAPI::SendOnActivated(
           profile, browser->session_id().id(), id);
       break;
     }

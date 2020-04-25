@@ -9,16 +9,12 @@
 #include <string>
 
 #include "base/memory/singleton.h"
-#include "base/memory/weak_ptr.h"
-#include "base/scoped_observer.h"
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
-#include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
-#include "chrome/browser/ui/toolbar/toolbar_action_view_controller.h"
-#include "chrome/browser/ui/toolbar/toolbar_action_view_delegate.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
+#include "extensions/browser/extension_function.h"
 #include "extensions/browser/extension_icon_image.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_registry_observer.h"
@@ -50,39 +46,25 @@ class ExtensionActionUtilFactory : public BrowserContextKeyedServiceFactory {
       content::BrowserContext* context) const override;
 };
 
-// A class observing being an observer on ExtensionActionAPI
-
 class ExtensionActionUtil
     : public KeyedService,
       public extensions::ExtensionActionAPI::Observer,
       public extensions::ExtensionRegistryObserver,
-      public TabStripModelObserver,
-      public ToolbarActionViewDelegate {
+      public TabStripModelObserver {
   friend struct base::DefaultSingletonTraits<ExtensionActionUtil>;
-  Profile* profile_;
-
-  ScopedObserver<extensions::ExtensionRegistry,
-                 extensions::ExtensionRegistryObserver>
-      extension_registry_observer_;
-
-  ScopedObserver<ExtensionActionAPI, ExtensionActionAPI::Observer>
-      extension_action_api_observer_;
-
-  void OnImageLoaded(const std::string& extension_id, const gfx::Image& image);
-
-  content::WebContents* current_webcontents_ = nullptr;
-
-  // This is only the bundled Chrome cast extension being shown when a cast
-  // action is active.
-  std::set<std::string> component_extension_actions_;
-  std::unique_ptr<ToolbarActionViewController> media_router_component_action_;
 
  public:
+  static void SendIconLoaded(content::BrowserContext* browser_context,
+                             const std::string& extension_id,
+                             const gfx::Image& image);
+
   explicit ExtensionActionUtil(Profile*);
 
-  static void BroadcastEvent(const std::string& eventname,
-                             std::unique_ptr<base::ListValue> args,
-                             content::BrowserContext* context);
+ private:
+  ~ExtensionActionUtil() override;
+
+  // KeyedService implementation.
+  void Shutdown() override;
 
   // Implementing ExtensionActionAPI::Observer.
   void OnExtensionActionUpdated(
@@ -98,10 +80,6 @@ class ExtensionActionUtil
   // in count or visibility.
   void OnPageActionsUpdated(content::WebContents* web_contents) override;
 
-  // Called when the ExtensionActionAPI is shutting down, giving observers a
-  // chance to unregister themselves if there is not a definitive lifecycle.
-  void OnExtensionActionAPIShuttingDown() override;
-
   // Overridden from extensions::ExtensionRegistryObserver:
   void OnExtensionUninstalled(content::BrowserContext* browser_context,
                               const extensions::Extension* extension,
@@ -113,110 +91,87 @@ class ExtensionActionUtil
       const extensions::Extension* extension,
       extensions::UnloadedExtensionReason reason) override;
 
-  // ToolbarActionViewDelegate:
-  content::WebContents* GetCurrentWebContents() const override;
-
   // Overridden from TabStripModelObserver:
   void OnTabStripModelChanged(
     TabStripModel* tab_strip_model,
     const TabStripModelChange& change,
     const TabStripSelectionChange& selection) override;
 
-  // Updates the view to reflect current state.
-  void UpdateState() override;
+  Profile* profile_;
 
-  // Returns true if a context menu is running.
-  bool IsMenuRunning() const override;
-
-  // Encodes the passed bitmap as a PNG represented as a dataurl.
-  static std::string* EncodeBitmapToPng(const SkBitmap* bitmap);
-
-  void set_current_webcontents(content::WebContents* contents) {
-    current_webcontents_ = contents;
-  }
-
-  std::set<std::string> component_extension_actions() {
-    return component_extension_actions_;
-  }
-
-  ToolbarActionViewController* media_router_component_action() {
-    return media_router_component_action_.get();
-  }
- private:
-  ~ExtensionActionUtil() override;
-
-  base::WeakPtrFactory<ExtensionActionUtil> weak_ptr_factory_;
+  content::WebContents* current_webcontents_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionActionUtil);
 };
 
 class ExtensionActionUtilsGetToolbarExtensionsFunction
-    : public ChromeAsyncExtensionFunction {
+    : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("extensionActionUtils.getToolbarExtensions",
                              GETTOOLBAR_EXTENSIONS)
-  ExtensionActionUtilsGetToolbarExtensionsFunction();
+  ExtensionActionUtilsGetToolbarExtensionsFunction() = default;
 
  private:
-  ~ExtensionActionUtilsGetToolbarExtensionsFunction() override;
+  ~ExtensionActionUtilsGetToolbarExtensionsFunction() override = default;
 
   // ExtensionFunction:
-  bool RunAsync() override;
+  ResponseAction Run() override;
   DISALLOW_COPY_AND_ASSIGN(ExtensionActionUtilsGetToolbarExtensionsFunction);
 };
 
 class ExtensionActionUtilsExecuteExtensionActionFunction
-    : public ChromeAsyncExtensionFunction {
+    : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("extensionActionUtils.executeExtensionAction",
                              EXECUTE_EXTENSIONACTION)
-  ExtensionActionUtilsExecuteExtensionActionFunction();
+  ExtensionActionUtilsExecuteExtensionActionFunction() = default;
 
  private:
-  ~ExtensionActionUtilsExecuteExtensionActionFunction() override;
+  ~ExtensionActionUtilsExecuteExtensionActionFunction() override = default;
 
   // ExtensionFunction:
-  bool RunAsync() override;
+  ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionActionUtilsExecuteExtensionActionFunction);
 };
 
 class ExtensionActionUtilsToggleBrowserActionVisibilityFunction
-    : public ChromeAsyncExtensionFunction {
+    : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION(
       "extensionActionUtils.toggleBrowserActionVisibility",
       TOGGLE_BROWSERACTIONVISIBILITY)
-  ExtensionActionUtilsToggleBrowserActionVisibilityFunction();
+  ExtensionActionUtilsToggleBrowserActionVisibilityFunction() = default;
 
  private:
-  ~ExtensionActionUtilsToggleBrowserActionVisibilityFunction() override;
+  ~ExtensionActionUtilsToggleBrowserActionVisibilityFunction() override =
+      default;
 
   // ExtensionFunction:
-  bool RunAsync() override;
+  ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(
       ExtensionActionUtilsToggleBrowserActionVisibilityFunction);
 };
 
 class ExtensionActionUtilsRemoveExtensionFunction
-    : public ChromeAsyncExtensionFunction {
+    : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("extensionActionUtils.removeExtension",
                              EXTENSIONS_REMOVE)
-  ExtensionActionUtilsRemoveExtensionFunction();
+  ExtensionActionUtilsRemoveExtensionFunction() = default;
 
  private:
-  ~ExtensionActionUtilsRemoveExtensionFunction() override;
+  ~ExtensionActionUtilsRemoveExtensionFunction() override = default;
 
   // ExtensionFunction:
-  bool RunAsync() override;
+  ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionActionUtilsRemoveExtensionFunction);
 };
 
 class ExtensionActionUtilsShowExtensionOptionsFunction
-    : public ChromeAsyncExtensionFunction {
+    : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("extensionActionUtils.showExtensionOptions",
                              EXTENSIONS_SHOWOPTIONS)
@@ -226,7 +181,7 @@ class ExtensionActionUtilsShowExtensionOptionsFunction
   ~ExtensionActionUtilsShowExtensionOptionsFunction() override = default;
 
   // ExtensionFunction:
-  bool RunAsync() override;
+  ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionActionUtilsShowExtensionOptionsFunction);
 };

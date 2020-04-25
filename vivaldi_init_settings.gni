@@ -42,11 +42,20 @@ declare_overrides() {
 
   if (is_win) {
     skip_archive_compression = is_component_build
+    if (is_debug) {
+      # Fixes debug view of std lib classes in VS2017 (at least)
+      use_custom_libcxx = false
+    }
   }
 
   if (is_mac) { # && !is_component_build) {
     # We need to force SDK 10.13 for Mac builds
     # since Chromium don't compile with 10.14
     mac_use_sdk = "10.13"
+  }
+
+  # Needed until we discover what is causing the unused argument during clcache
+  if (is_win && cc_wrapper != "") {
+    use_ghash = false
   }
 }

@@ -69,7 +69,6 @@ enum SubstitutionType {
   SUBSTITUTION_BUNDLE_CONTENTS_DIR,    // {{bundle_contents_dir}}
   SUBSTITUTION_BUNDLE_RESOURCES_DIR,   // {{bundle_resources_dir}}
   SUBSTITUTION_BUNDLE_EXECUTABLE_DIR,  // {{bundle_executable_dir}}
-  SUBSTITUTION_BUNDLE_PLUGINS_DIR,     // {{bundle_plugins_dir}}
 
   // Valid for compile_xcassets tool.
   SUBSTITUTION_BUNDLE_PRODUCT_TYPE,        // {{bundle_product_type}}

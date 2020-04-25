@@ -228,11 +228,9 @@ bool ThumbnailsIsThumbnailAvailableFunction::RunAsync() {
     vivaldi::thumbnails::IsThumbnailAvailable::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  extensions::VivaldiDataSourcesAPI* api =
-      extensions::VivaldiDataSourcesAPI::GetFactoryInstance()->Get(
-          GetProfile());
   vivaldi::thumbnails::ThumbnailQueryResult result;
-  result.has_thumbnail = api->HasBookmarkThumbnail(params->bookmark_id);
+  result.has_thumbnail = VivaldiDataSourcesAPI::HasBookmarkThumbnail(
+      browser_context(), params->bookmark_id);
   result.thumbnail_url = base::StringPrintf(
       "chrome://vivaldi-data/local-image/%d", params->bookmark_id);
 
@@ -697,14 +695,12 @@ void ThumbnailsCaptureUrlFunction::OnCapturedAndScaled(const SkBitmap& bitmap,
     Respond(ArgumentList(Create(bookmark_id_, false, std::string())));
     return;
   }
-  VivaldiDataSourcesAPI* api =
-      VivaldiDataSourcesAPI::GetFactoryInstance()->Get(browser_context());
-  std::unique_ptr<SkBitmap> bitmap_ptr(new SkBitmap(bitmap));
 
-  api->AddImageDataForBookmark(
-      bookmark_id_, std::move(bitmap_ptr),
-      base::Bind(&ThumbnailsCaptureUrlFunction::OnBookmarkThumbnailStored,
-                 this));
+  auto bitmap_ptr = std::make_unique<SkBitmap>(bitmap);
+  VivaldiDataSourcesAPI::AddImageDataForBookmark(
+      browser_context(), bookmark_id_, std::move(bitmap_ptr),
+      base::BindOnce(&ThumbnailsCaptureUrlFunction::OnBookmarkThumbnailStored,
+                     this));
 }
 
 void ThumbnailsCaptureUrlFunction::OnBookmarkThumbnailStored(

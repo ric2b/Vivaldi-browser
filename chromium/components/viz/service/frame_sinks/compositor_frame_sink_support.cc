@@ -63,7 +63,7 @@ CompositorFrameSinkSupport::~CompositorFrameSinkSupport() {
   if (last_activated_surface_id_.is_valid())
     EvictLastActiveSurface();
   if (last_created_surface_id_.is_valid())
-    surface_manager_->DestroySurface(last_created_surface_id_);
+    surface_manager_->MarkSurfaceForDestruction(last_created_surface_id_);
   frame_sink_manager_->UnregisterCompositorFrameSinkSupport(frame_sink_id_);
 
   // The display compositor has ownership of shared memory for each
@@ -78,7 +78,7 @@ CompositorFrameSinkSupport::~CompositorFrameSinkSupport() {
   DCHECK(!added_frame_observer_);
 }
 
-CompositorFrameSinkSupport::PresentationFeedbackMap
+PresentationFeedbackMap
 CompositorFrameSinkSupport::TakePresentationFeedbacks() {
   PresentationFeedbackMap map;
   map.swap(presentation_feedbacks_);
@@ -120,20 +120,19 @@ void CompositorFrameSinkSupport::OnSurfaceActivated(Surface* surface) {
   if (!last_activated_surface_id_.is_valid() ||
       local_surface_id > last_activated_local_surface_id) {
     if (last_activated_surface_id_.is_valid()) {
-      // NOTE(andre@vivaldi.com) : In vivaldi we might get an activation twice,
-      // so the parent_sequence_number can be equal.
-      if (!vivaldi::IsVivaldiRunning()) {
-      CHECK_GE(local_surface_id.parent_sequence_number(),
-               last_activated_local_surface_id.parent_sequence_number());
-      CHECK_GE(local_surface_id.child_sequence_number(),
-               last_activated_local_surface_id.child_sequence_number());
-      } // IsVivaldiRunning
+      if (last_activated_local_surface_id.embed_token() ==
+          local_surface_id.embed_token()) {
+        DCHECK_GE(local_surface_id.parent_sequence_number(),
+                  last_activated_local_surface_id.parent_sequence_number());
+        DCHECK_GE(local_surface_id.child_sequence_number(),
+                  last_activated_local_surface_id.child_sequence_number());
+      }
 
       Surface* prev_surface =
           surface_manager_->GetSurfaceForId(last_activated_surface_id_);
       DCHECK(prev_surface);
       surface->SetPreviousFrameSurface(prev_surface);
-      surface_manager_->DestroySurface(prev_surface->surface_id());
+      surface_manager_->MarkSurfaceForDestruction(prev_surface->surface_id());
     }
     last_activated_surface_id_ = surface->surface_id();
   } else if (surface->surface_id() < last_activated_surface_id_) {
@@ -141,7 +140,7 @@ void CompositorFrameSinkSupport::OnSurfaceActivated(Surface* surface) {
     // deferred until after a parent-initiated synchronization happens resulting
     // in activations happening out of order. In that case, we simply discard
     // the stale surface.
-    surface_manager_->DestroySurface(surface->surface_id());
+    surface_manager_->MarkSurfaceForDestruction(surface->surface_id());
   }
 
   DCHECK(surface->HasActiveFrame());
@@ -188,7 +187,7 @@ void CompositorFrameSinkSupport::OnSurfaceAggregatedDamage(
   }
 }
 
-void CompositorFrameSinkSupport::OnSurfaceDiscarded(Surface* surface) {
+void CompositorFrameSinkSupport::OnSurfaceDestroyed(Surface* surface) {
   if (surface->surface_id() == last_activated_surface_id_)
     last_activated_surface_id_ = SurfaceId();
 
@@ -243,22 +242,19 @@ CompositorFrameSinkSupport::TakeCopyOutputRequests(
 }
 
 void CompositorFrameSinkSupport::EvictSurface(const LocalSurfaceId& id) {
-  DCHECK_GE(id.parent_sequence_number(), last_evicted_parent_sequence_number_);
-  last_evicted_parent_sequence_number_ = id.parent_sequence_number();
+  DCHECK(id.embed_token() != last_evicted_local_surface_id_.embed_token() ||
+         id.parent_sequence_number() >=
+             last_evicted_local_surface_id_.parent_sequence_number());
+  last_evicted_local_surface_id_ = id;
   surface_manager_->DropTemporaryReference(SurfaceId(frame_sink_id_, id));
   MaybeEvictSurfaces();
 }
 
 void CompositorFrameSinkSupport::MaybeEvictSurfaces() {
-  if (last_activated_surface_id_.is_valid() &&
-      last_activated_surface_id_.local_surface_id().parent_sequence_number() <=
-          last_evicted_parent_sequence_number_) {
+  if (IsEvicted(last_activated_surface_id_.local_surface_id()))
     EvictLastActiveSurface();
-  }
-  if (last_created_surface_id_.is_valid() &&
-      last_created_surface_id_.local_surface_id().parent_sequence_number() <=
-          last_evicted_parent_sequence_number_) {
-    surface_manager_->DestroySurface(last_created_surface_id_);
+  if (IsEvicted(last_created_surface_id_.local_surface_id())) {
+    surface_manager_->MarkSurfaceForDestruction(last_created_surface_id_);
     last_created_surface_id_ = SurfaceId();
   }
 }
@@ -268,7 +264,7 @@ void CompositorFrameSinkSupport::EvictLastActiveSurface() {
   if (last_created_surface_id_ == last_activated_surface_id_)
     last_created_surface_id_ = SurfaceId();
   last_activated_surface_id_ = SurfaceId();
-  surface_manager_->DestroySurface(to_destroy_surface_id);
+  surface_manager_->MarkSurfaceForDestruction(to_destroy_surface_id);
 
   // For display root surfaces the surface is no longer going to be visible.
   // Make it unreachable from the top-level root.
@@ -412,6 +408,9 @@ SubmitResult CompositorFrameSinkSupport::MaybeSubmitCompositorFrameInternal(
 
   if (!ui::LatencyInfo::Verify(frame.metadata.latency_info,
                                "RenderWidgetHostImpl::OnSwapCompositorFrame")) {
+    for (auto& info : frame.metadata.latency_info) {
+      info.Terminate();
+    }
     std::vector<ui::LatencyInfo>().swap(frame.metadata.latency_info);
   }
   for (ui::LatencyInfo& latency : frame.metadata.latency_info) {
@@ -462,18 +461,13 @@ SubmitResult CompositorFrameSinkSupport::MaybeSubmitCompositorFrameInternal(
              last_created_local_surface_id.parent_sequence_number() ||
          child_initiated_synchronization_event);
 
-    // NOTE(andre@vivald.com) : last_created_local_surface_id.embed_token() will
-    // be set after reparenting and therefore the sequence will always be
-    // monotone.
-    if (!monotonically_increasing_id &
-        !last_created_local_surface_id.embed_token().is_empty()) {
-      monotonically_increasing_id = true;
-    }
-
-    if (!surface_info.is_valid() || !monotonically_increasing_id) {
-      TRACE_EVENT_INSTANT0("viz", "Surface Invariants Violation",
+    DCHECK(surface_info.is_valid());
+    if (local_surface_id.embed_token() ==
+            last_created_local_surface_id.embed_token() &&
+        !monotonically_increasing_id) {
+      TRACE_EVENT_INSTANT0("viz", "LocalSurfaceId decreased",
                            TRACE_EVENT_SCOPE_THREAD);
-      return SubmitResult::SURFACE_INVARIANTS_VIOLATION;
+      return SubmitResult::SURFACE_ID_DECREASED;
     }
 
     // If the last Surface doesn't have a dependent frame, and this frame
@@ -486,17 +480,16 @@ SubmitResult CompositorFrameSinkSupport::MaybeSubmitCompositorFrameInternal(
 
     // Don't recreate a surface that was previously evicted. Drop the
     // CompositorFrame and return all its resources.
-    if (local_surface_id.parent_sequence_number() <=
-        last_evicted_parent_sequence_number_) {
+    if (IsEvicted(local_surface_id)) {
       TRACE_EVENT_INSTANT0("viz", "Submit rejected to evicted surface",
                            TRACE_EVENT_SCOPE_THREAD);
       return SubmitResult::ACCEPTED;
     }
     current_surface = CreateSurface(surface_info, block_activation_on_parent);
     if (!current_surface) {
-      TRACE_EVENT_INSTANT0("viz", "Surface Invariants Violation",
+      TRACE_EVENT_INSTANT0("viz", "Surface belongs to another client",
                            TRACE_EVENT_SCOPE_THREAD);
-      return SubmitResult::SURFACE_INVARIANTS_VIOLATION;
+      return SubmitResult::SURFACE_OWNED_BY_ANOTHER_CLIENT;
     }
     last_created_surface_id_ = SurfaceId(frame_sink_id_, local_surface_id);
 
@@ -521,7 +514,7 @@ SubmitResult CompositorFrameSinkSupport::MaybeSubmitCompositorFrameInternal(
                      weak_factory_.GetWeakPtr(), frame.metadata.frame_token));
   if (!result) {
     TRACE_EVENT_INSTANT0("viz", "QueueFrame failed", TRACE_EVENT_SCOPE_THREAD);
-    return SubmitResult::SURFACE_INVARIANTS_VIOLATION;
+    return SubmitResult::SIZE_MISMATCH;
   }
 
   if (begin_frame_source_)
@@ -744,8 +737,12 @@ const char* CompositorFrameSinkSupport::GetSubmitResultAsString(
       return "Accepted";
     case SubmitResult::COPY_OUTPUT_REQUESTS_NOT_ALLOWED:
       return "CopyOutputRequests not allowed";
-    case SubmitResult::SURFACE_INVARIANTS_VIOLATION:
-      return "Surface invariants violation";
+    case SubmitResult::SIZE_MISMATCH:
+      return "CompositorFrame size doesn't match surface size";
+    case SubmitResult::SURFACE_ID_DECREASED:
+      return "LocalSurfaceId sequence numbers decreased";
+    case SubmitResult::SURFACE_OWNED_BY_ANOTHER_CLIENT:
+      return "Surface belongs to another client";
   }
   NOTREACHED();
   return nullptr;
@@ -787,10 +784,16 @@ bool CompositorFrameSinkSupport::ShouldSendBeginFrame(
 
   uint64_t active_frame_index = surface->GetActiveFrameIndex();
 
+  // NOTE(andre@vivaldi.com) : In Vivaldi we might get an activation twice,
+  // so the parent_sequence_number can be equal. See
+  // CompositingRequirementsUpdater::UpdateRecursive where we never skip
+  // children.
+  if (!vivaldi::IsVivaldiRunning()) {
   // Since we have an active frame, and frame indexes strictly increase during
   // the lifetime of the CompositorFrameSinkSupport, our active frame index
   // must be at least as large as our last drawn frame index.
   DCHECK_GE(active_frame_index, last_drawn_frame_index_);
+  }
 
   // Determine the number of undrawn frames. If this is below our limit, send
   // begin frame. Limit must be at least 1, as the relative ordering of
@@ -805,6 +808,14 @@ bool CompositorFrameSinkSupport::ShouldSendBeginFrame(
   // ago.
   constexpr base::TimeDelta throttled_rate = base::TimeDelta::FromSeconds(1);
   return (frame_time - last_frame_time_) >= throttled_rate;
+}
+
+bool CompositorFrameSinkSupport::IsEvicted(
+    const LocalSurfaceId& local_surface_id) const {
+  return local_surface_id.embed_token() ==
+             last_evicted_local_surface_id_.embed_token() &&
+         local_surface_id.parent_sequence_number() <=
+             last_evicted_local_surface_id_.parent_sequence_number();
 }
 
 }  // namespace viz

@@ -11,6 +11,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_switches.h"
+#include "components/adverse_adblocking/adverse_ad_filter_list_factory.h"
 #include "components/datasource/vivaldi_data_source_api.h"
 #include "components/prefs/pref_service.h"
 #include "components/translate/core/browser/translate_language_list.h"
@@ -76,7 +77,7 @@ void VivaldiBrowserMainExtraParts::
   extensions::TabsPrivateAPI::GetFactoryInstance();
   extensions::SyncAPI::GetFactoryInstance();
   extensions::VivaldiAccountAPI::GetFactoryInstance();
-  extensions::VivaldiDataSourcesAPI::GetFactoryInstance();
+  extensions::VivaldiDataSourcesAPI::InitFactory();
   extensions::VivaldiExtensionInit::GetFactoryInstance();
   extensions::VivaldiPrefsApiNotificationFactory::GetInstance();
   extensions::VivaldiRuntimeFeaturesFactory::GetInstance();
@@ -85,6 +86,7 @@ void VivaldiBrowserMainExtraParts::
   extensions::ZoomAPI::GetFactoryInstance();
   extensions::HistoryPrivateAPI::GetFactoryInstance();
 #endif
+  VivaldiAdverseAdFilterListFactory::GetFactoryInstance();
 }
 
 void VivaldiBrowserMainExtraParts::PreProfileInit() {

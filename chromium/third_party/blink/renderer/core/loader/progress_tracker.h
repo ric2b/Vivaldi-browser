@@ -50,8 +50,6 @@ struct ProgressItem;
 class CORE_EXPORT ProgressTracker final
     : public GarbageCollectedFinalized<ProgressTracker> {
  public:
-  static ProgressTracker* Create(LocalFrame*);
-
   explicit ProgressTracker(LocalFrame*);
   ~ProgressTracker();
   void Trace(blink::Visitor*);
@@ -65,13 +63,17 @@ class CORE_EXPORT ProgressTracker final
   void FinishedParsing();
   void DidFirstContentfulPaint();
 
-  void WillStartLoading(unsigned long identifier, ResourceLoadPriority);
-  void IncrementProgress(unsigned long identifier, const ResourceResponse&);
-  void IncrementProgress(unsigned long identifier, uint64_t);
-  void CompleteProgress(unsigned long identifier);
+  void WillStartLoading(uint64_t identifier, ResourceLoadPriority);
+  void IncrementProgress(uint64_t identifier, const ResourceResponse&);
+  void IncrementProgress(uint64_t identifier, uint64_t);
+  void CompleteProgress(uint64_t identifier);
 
  private:
   LocalFrameClient* GetLocalFrameClient() const;
+
+  void UpdateProgressItem(ProgressItem& item,
+                          int64_t bytes_received,
+                          int64_t estimated_length);
 
   void MaybeSendProgress();
   void SendFinalProgress();
@@ -86,10 +88,13 @@ class CORE_EXPORT ProgressTracker final
   bool did_first_contentful_paint_;
   double progress_value_;
 
-  int elementsLoaded_;
-  int elementsTotal_;
+  int64_t bytes_received_ = 0;
+  int64_t estimated_bytes_for_pending_requests_ = 0;
 
-  HashMap<unsigned long, std::unique_ptr<ProgressItem>> progress_items_;
+  HashMap<uint64_t, ProgressItem> progress_items_;
+
+  int elementsLoaded_ = 0;
+  int elementsTotal_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(ProgressTracker);
 };

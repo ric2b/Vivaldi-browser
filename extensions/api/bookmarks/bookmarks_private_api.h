@@ -46,6 +46,8 @@ class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
   static BrowserContextKeyedAPIFactory<VivaldiBookmarksAPI>*
   GetFactoryInstance();
 
+  void SetPartnerUpgradeActive(bool active);
+
   // EventRouter::Observer implementation.
   void OnListenerAdded(const EventListenerInfo& details) override;
 
@@ -69,7 +71,7 @@ class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
   }
   // Invoked when the title or url of a node changes.
   void BookmarkNodeChanged(BookmarkModel* model,
-                           const BookmarkNode* node) override {}
+                           const BookmarkNode* node) override;
   void BookmarkMetaInfoChanged(BookmarkModel* model,
                                const BookmarkNode* node) override;
   void BookmarkNodeFaviconChanged(BookmarkModel* model,
@@ -88,6 +90,8 @@ class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
   bookmarks::BookmarkModel* bookmark_model_;
 
   std::unique_ptr<VivaldiBookmarksEventRouter> event_router_;
+
+  bool partner_upgrade_active_;
 
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "VivaldiBookmarksAPI"; }
@@ -130,6 +134,23 @@ class BookmarksPrivateEmptyTrashFunction : public BookmarksFunction {
   bool RunOnReady() override;
 
   DISALLOW_COPY_AND_ASSIGN(BookmarksPrivateEmptyTrashFunction);
+};
+
+class BookmarksPrivateUpgradePartnerFunction : public BookmarksUpdateFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("bookmarksPrivate.upgradePartner",
+                             BOOKMARKSPRIVATE_UPGRADE_PARTNER)
+
+  BookmarksPrivateUpgradePartnerFunction() = default;
+
+ protected:
+  ~BookmarksPrivateUpgradePartnerFunction() override = default;
+
+ private:
+  // BookmarksFunction:
+  bool RunOnReady() override;
+
+  DISALLOW_COPY_AND_ASSIGN(BookmarksPrivateUpgradePartnerFunction);
 };
 
 }  // namespace extensions

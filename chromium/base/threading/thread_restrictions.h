@@ -53,7 +53,7 @@
 // Avoid using allowances outside of unit tests. In unit tests, use allowances
 // with the suffix "ForTesting".
 //
-// Prefer making blocking calls from tasks posted to base::TaskScheduler with
+// Prefer making blocking calls from tasks posted to base::ThreadPool with
 // base::MayBlock().
 //
 // Instead of waiting on a WaitableEvent or a ConditionVariable, prefer putting
@@ -110,6 +110,7 @@ namespace audio {
 class OutputDevice;
 }
 namespace blink {
+class SourceStream;
 class VideoFrameResourceProvider;
 }
 namespace cc {
@@ -139,6 +140,9 @@ class DesktopCaptureDevice;
 class DWriteFontLookupTableBuilder;
 class GpuProcessTransportFactory;
 class NestedMessagePumpAndroid;
+class RTCVideoDecoder;
+class RTCVideoDecoderAdapter;
+class RTCVideoEncoder;
 class SandboxHostLinux;
 class ScopedAllowWaitForDebugURL;
 class ServiceWorkerContextClient;
@@ -164,11 +168,17 @@ class InFlightIO;
 namespace functions {
 class ExecScriptScopedAllowBaseSyncPrimitives;
 }
+namespace history_report {
+class HistoryReportJniBridge;
+}
 namespace gpu {
 class GpuChannelHost;
 }
 namespace leveldb {
 class LevelDBMojoProxy;
+}
+namespace leveldb_env {
+class DBTracker;
 }
 namespace media {
 class AudioInputDevice;
@@ -286,8 +296,13 @@ class Thread;
 #define EMPTY_BODY_IF_DCHECK_IS_OFF
 #else
 #define INLINE_IF_DCHECK_IS_OFF inline
+
+// The static_assert() eats follow-on semicolons. `= default` would work
+// too, but it makes clang realize that all the Scoped classes are no-ops in
+// non-dcheck builds and it starts emitting many -Wunused-variable warnings.
 #define EMPTY_BODY_IF_DCHECK_IS_OFF \
-  {}
+  {}                                \
+  static_assert(true, "")
 #endif
 
 namespace internal {
@@ -378,6 +393,7 @@ class BASE_EXPORT ScopedAllowBaseSyncPrimitives {
   // Allowed usage:
   friend class SimpleThread;
   friend class base::GetAppOutputScopedAllowBaseSyncPrimitives;
+  friend class blink::SourceStream;
   friend class chrome_cleaner::SystemReportComponent;
   friend class content::BrowserMainLoop;
   friend class content::BrowserProcessSubThread;
@@ -385,12 +401,13 @@ class BASE_EXPORT ScopedAllowBaseSyncPrimitives {
   friend class content::ServiceWorkerContextClient;
   friend class content::SessionStorageDatabase;
   friend class functions::ExecScriptScopedAllowBaseSyncPrimitives;
+  friend class history_report::HistoryReportJniBridge;
   friend class internal::TaskTracker;
   friend class leveldb::LevelDBMojoProxy;
+  friend class leveldb_env::DBTracker;
   friend class media::BlockingUrlProtocol;
   friend class mojo::core::ScopedIPCSupport;
   friend class net::MultiThreadedCertVerifierScopedAllowBaseSyncPrimitives;
-  friend class remoting::AutoThread;
   friend class rlz_lib::FinancialPing;
   friend class shell_integration_linux::
       LaunchXdgUtilityScopedAllowBaseSyncPrimitives;
@@ -440,6 +457,9 @@ class BASE_EXPORT ScopedAllowBaseSyncPrimitivesOutsideBlockingScope {
   friend class base::ScopedAllowThreadRecallForStackSamplingProfiler;
   friend class base::StackSamplingProfiler;
   friend class content::DesktopCaptureDevice;
+  friend class content::RTCVideoDecoder;
+  friend class content::RTCVideoDecoderAdapter;
+  friend class content::RTCVideoEncoder;
   friend class content::SandboxHostLinux;
   friend class content::ScopedAllowWaitForDebugURL;
   friend class content::SynchronousCompositor;
@@ -481,6 +501,7 @@ class BASE_EXPORT ScopedAllowBaseSyncPrimitivesOutsideBlockingScope {
   friend class net::
       ScopedAllowThreadJoinForProxyResolverV8Tracing;  // http://crbug.com/69710
   friend class printing::PrinterQuery;                 // http://crbug.com/66082
+  friend class remoting::AutoThread;  // https://crbug.com/944316
   // Not used in production yet, https://crbug.com/844078.
   friend class service_manager::ServiceProcessLauncher;
   friend class ui::WindowResizeHelperMac;  // http://crbug.com/902829
@@ -612,6 +633,9 @@ class BASE_EXPORT ThreadRestrictions {
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(ThreadRestrictions);
 };
+
+#undef INLINE_IF_DCHECK_IS_OFF
+#undef EMPTY_BODY_IF_DCHECK_IS_OFF
 
 }  // namespace base
 

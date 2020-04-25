@@ -255,7 +255,14 @@ constexpr SkColor kAvatarBubbleGaiaBackgroundColor =
     SkColorSetRGB(0xf5, 0xf5, 0xf5);
 constexpr SkColor kUserManagerBackgroundColor = SkColorSetRGB(0xee, 0xee, 0xee);
 
+#ifdef VIVALDI_BUILD
+constexpr char kDefaultUrlPrefix[] = "chrome://theme/IDR_PROFILE_VIVALDI_AVATAR_";
+constexpr char kOldDefaultUrlPrefix[] = "chrome://theme/IDR_PROFILE_AVATAR_";
+// Number of our avatars to show in Chromiums creation dialog.
+constexpr size_t kVivaldiAvatarsOnCreate = 15;
+#else
 constexpr char kDefaultUrlPrefix[] = "chrome://theme/IDR_PROFILE_AVATAR_";
+#endif  // VIVALDI_BUILD
 constexpr char kGAIAPictureFileName[] = "Google Profile Picture.png";
 constexpr char kHighResAvatarFolderName[] = "Avatars";
 
@@ -387,6 +394,95 @@ std::string GetPlaceholderAvatarIconUrl() {
 
 const IconResourceInfo* GetDefaultAvatarIconResourceInfo(size_t index) {
   CHECK_LT(index, kDefaultAvatarIconsCount);
+#ifdef VIVALDI_BUILD
+#include "app/vivaldi_resources.h"
+
+  // If more icons are added, we need to add them too.
+  CHECK_EQ((size_t)38, kDefaultAvatarIconsCount);
+  static const IconResourceInfo resource_info[kDefaultAvatarIconsCount] = {
+      {IDR_PROFILE_VIVALDI_AVATAR_0, "landscape_1.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_1},
+      {IDR_PROFILE_VIVALDI_AVATAR_1, "landscape_2.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_2},
+      {IDR_PROFILE_VIVALDI_AVATAR_2, "landscape_3.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_3},
+      {IDR_PROFILE_VIVALDI_AVATAR_3, "landscape_4.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_4},
+      {IDR_PROFILE_VIVALDI_AVATAR_4, "landscape_5.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_5},
+      {IDR_PROFILE_VIVALDI_AVATAR_5, "landscape_6.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_6},
+      {IDR_PROFILE_VIVALDI_AVATAR_6, "landscape_7.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_7},
+      {IDR_PROFILE_VIVALDI_AVATAR_7, "landscape_8.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_8},
+      {IDR_PROFILE_VIVALDI_AVATAR_8, "landscape_9.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_9},
+      {IDR_PROFILE_VIVALDI_AVATAR_9, "landscape_10.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_10},
+      {IDR_PROFILE_VIVALDI_AVATAR_10, "landscape_11.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_11},
+      {IDR_PROFILE_VIVALDI_AVATAR_11, "landscape_12.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_12},
+      {IDR_PROFILE_VIVALDI_AVATAR_12, "landscape_13.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_13},
+      {IDR_PROFILE_VIVALDI_AVATAR_13, "landscape_14.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_14},
+      {IDR_PROFILE_VIVALDI_AVATAR_14, "landscape_15.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_15},
+      {IDR_PROFILE_VIVALDI_AVATAR_15, "landscape_16.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_16},
+      {IDR_PROFILE_VIVALDI_AVATAR_16, "landscape_17.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_17},
+      {IDR_PROFILE_VIVALDI_AVATAR_17, "landscape_18.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_18},
+      {IDR_PROFILE_VIVALDI_AVATAR_18, "monster_1.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_19},
+      {IDR_PROFILE_VIVALDI_AVATAR_19, "monster_2.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_20},
+      {IDR_PROFILE_VIVALDI_AVATAR_20, "monster_3.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_21},
+      {IDR_PROFILE_VIVALDI_AVATAR_21, "monster_4.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_22},
+      {IDR_PROFILE_VIVALDI_AVATAR_22, "monster_5.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_23},
+      {IDR_PROFILE_VIVALDI_AVATAR_23, "monster_6.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_24},
+      {IDR_PROFILE_VIVALDI_AVATAR_24, "monster_7.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_25},
+      {IDR_PROFILE_VIVALDI_AVATAR_25, "monster_8.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_26},
+
+      // Placeholder avatar icon:
+      {IDR_PROFILE_VIVALDI_AVATAR_26, "avatar_generic.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_38},
+
+#if !defined(OS_ANDROID)
+      {IDR_PROFILE_VIVALDI_AVATAR_27, "monster_9.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_27},
+      {IDR_PROFILE_VIVALDI_AVATAR_28, "monster_10.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_28},
+      {IDR_PROFILE_VIVALDI_AVATAR_29, "avatar_animal_1.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_29},
+      {IDR_PROFILE_VIVALDI_AVATAR_30, "avatar_animal_2.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_30},
+      {IDR_PROFILE_VIVALDI_AVATAR_31, "avatar_animal_3.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_31},
+      {IDR_PROFILE_VIVALDI_AVATAR_32, "avatar_animal_4.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_32},
+      {IDR_PROFILE_VIVALDI_AVATAR_33, "avatar_animal_5.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_33},
+      {IDR_PROFILE_VIVALDI_AVATAR_34, "avatar_animal_6.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_34},
+      {IDR_PROFILE_VIVALDI_AVATAR_35, "avatar_animal_7.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_35},
+      {IDR_PROFILE_VIVALDI_AVATAR_36, "avatar_animal_8.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_36},
+      {IDR_PROFILE_VIVALDI_AVATAR_37, "avatar_animal_9.png",
+       IDS_DEFAULT_VIVALDI_AVATAR_NAME_37},
+#endif  // !defined(OS_ANDROID)
+  };
+#else
   static const IconResourceInfo resource_info[kDefaultAvatarIconsCount] = {
     // Old avatar icons:
     {IDR_PROFILE_AVATAR_0, "avatar_generic.png", IDS_DEFAULT_AVATAR_LABEL_0},
@@ -455,8 +551,45 @@ const IconResourceInfo* GetDefaultAvatarIconResourceInfo(size_t index) {
      IDS_DEFAULT_AVATAR_LABEL_36},
     {IDR_PROFILE_AVATAR_37, "avatar_origami_unicorn.png",
      IDS_DEFAULT_AVATAR_LABEL_37},
+    {IDR_PROFILE_AVATAR_38, "avatar_illustration_basketball.png",
+     IDS_DEFAULT_AVATAR_LABEL_38},
+    {IDR_PROFILE_AVATAR_39, "avatar_illustration_bike.png",
+     IDS_DEFAULT_AVATAR_LABEL_39},
+    {IDR_PROFILE_AVATAR_40, "avatar_illustration_bird.png",
+     IDS_DEFAULT_AVATAR_LABEL_40},
+    {IDR_PROFILE_AVATAR_41, "avatar_illustration_cheese.png",
+     IDS_DEFAULT_AVATAR_LABEL_41},
+    {IDR_PROFILE_AVATAR_42, "avatar_illustration_football.png",
+     IDS_DEFAULT_AVATAR_LABEL_42},
+    {IDR_PROFILE_AVATAR_43, "avatar_illustration_ramen.png",
+     IDS_DEFAULT_AVATAR_LABEL_43},
+    {IDR_PROFILE_AVATAR_44, "avatar_illustration_sunglasses.png",
+     IDS_DEFAULT_AVATAR_LABEL_44},
+    {IDR_PROFILE_AVATAR_45, "avatar_illustration_sushi.png",
+     IDS_DEFAULT_AVATAR_LABEL_45},
+    {IDR_PROFILE_AVATAR_46, "avatar_illustration_tamagotchi.png",
+     IDS_DEFAULT_AVATAR_LABEL_46},
+    {IDR_PROFILE_AVATAR_47, "avatar_illustration_vinyl.png",
+     IDS_DEFAULT_AVATAR_LABEL_47},
+    {IDR_PROFILE_AVATAR_48, "avatar_abstract_avocado.png",
+     IDS_DEFAULT_AVATAR_LABEL_48},
+    {IDR_PROFILE_AVATAR_49, "avatar_abstract_cappuccino.png",
+     IDS_DEFAULT_AVATAR_LABEL_49},
+    {IDR_PROFILE_AVATAR_50, "avatar_abstract_icecream.png",
+     IDS_DEFAULT_AVATAR_LABEL_50},
+    {IDR_PROFILE_AVATAR_51, "avatar_abstract_icewater.png",
+     IDS_DEFAULT_AVATAR_LABEL_51},
+    {IDR_PROFILE_AVATAR_52, "avatar_abstract_melon.png",
+     IDS_DEFAULT_AVATAR_LABEL_52},
+    {IDR_PROFILE_AVATAR_53, "avatar_abstract_onigiri.png",
+     IDS_DEFAULT_AVATAR_LABEL_53},
+    {IDR_PROFILE_AVATAR_54, "avatar_abstract_pizza.png",
+     IDS_DEFAULT_AVATAR_LABEL_54},
+    {IDR_PROFILE_AVATAR_55, "avatar_abstract_sandwich.png",
+     IDS_DEFAULT_AVATAR_LABEL_55},
 #endif
   };
+#endif  // VIVALDI_BUILD
   return &resource_info[index];
 }
 
@@ -493,6 +626,22 @@ bool IsDefaultAvatarIconIndex(size_t index) {
 
 bool IsDefaultAvatarIconUrl(const std::string& url, size_t* icon_index) {
   DCHECK(icon_index);
+#ifdef VIVALDI_BUILD
+  // We need to handle the Chromium old urls
+  if (base::StartsWith(url, kOldDefaultUrlPrefix, base::CompareCase::SENSITIVE)) {
+    int int_value = -1;
+    if (base::StringToInt(base::StringPiece(url.begin() +
+      strlen(kOldDefaultUrlPrefix),
+      url.end()),
+      &int_value)) {
+      if (int_value < 0 ||
+        int_value >= static_cast<int>(kDefaultAvatarIconsCount))
+        return false;
+      *icon_index = int_value;
+      return true;
+    }
+  }
+#endif  // VIVALDI_BUILD
   if (!base::StartsWith(url, kDefaultUrlPrefix, base::CompareCase::SENSITIVE))
     return false;
 
@@ -515,8 +664,12 @@ std::unique_ptr<base::ListValue> GetDefaultProfileAvatarIconsAndLabels(
     size_t selected_avatar_idx) {
   std::unique_ptr<base::ListValue> avatars(new base::ListValue());
 
+#ifdef VIVALDI_BUILD
+  for (size_t i = 0; i < kVivaldiAvatarsOnCreate; ++i) {
+#else
   for (size_t i = GetModernAvatarIconStartIndex();
        i < GetDefaultAvatarIconCount(); ++i) {
+#endif  // VIVALDI_BUILD
     std::unique_ptr<base::DictionaryValue> avatar_info(
         new base::DictionaryValue());
     avatar_info->SetString("url", profiles::GetDefaultAvatarIconUrl(i));

@@ -19,6 +19,8 @@
 #include "printing/printing_utils.h"
 #include "services/service_manager/public/cpp/connector.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace printing {
 
 namespace {
@@ -98,6 +100,12 @@ void PrintCompositeClient::OnDidPrintFrameContent(
     const PrintHostMsg_DidPrintContent_Params& params) {
   auto* outer_contents = web_contents()->GetOuterWebContents();
   if (outer_contents) {
+    // NOTE(andre@vivaldi.com) : Vivaldi turned on
+    // |MimeHandlerViewInCrossProcessFrame| and the outer_contents is our UI which
+    // should not notified as printed. This will report a new printed frame and
+    // cause the state in the pdf-compositor to go stale as this is never printed.
+    if (!vivaldi::IsVivaldiApp(
+      outer_contents->GetSiteInstance()->GetSiteURL().host())) {
     // When the printed content belongs to an extension or app page, the print
     // composition needs to be handled by its outer content.
     // TODO(weili): so far, we don't have printable web contents nested in more
@@ -109,6 +117,7 @@ void PrintCompositeClient::OnDidPrintFrameContent(
     outer_client->OnDidPrintFrameContent(render_frame_host, document_cookie,
                                          params);
     return;
+    }
   }
 
   // Content in |params| is sent from untrusted source; only minimal processing
@@ -240,9 +249,8 @@ mojom::PdfCompositorPtr& PrintCompositeClient::GetCompositeRequest(int cookie) {
     return iter->second;
   }
 
-  auto iterator =
-      compositor_map_.emplace(cookie, CreateCompositeRequest()).first;
-  return iterator->second;
+  iter = compositor_map_.emplace(cookie, CreateCompositeRequest()).first;
+  return iter->second;
 }
 
 void PrintCompositeClient::RemoveCompositeRequest(int cookie) {

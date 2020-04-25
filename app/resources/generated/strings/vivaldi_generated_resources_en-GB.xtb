@@ -19,6 +19,7 @@
 <translation id="1274977772557788323">Adobe Flash Player Storage settings</translation>
 <translation id="1297175357211070620">Destination</translation>
 <translation id="1303101771013849280">Bookmarks HTML File</translation>
+<translation id="1380436189840894976">Quit incognito mode anyway?</translation>
 <translation id="1430915738399379752">Print</translation>
 <translation id="1433811987160647649">Ask before accessing</translation>
 <translation id="1451375123200651445">Webpage, Single File</translation>
@@ -30,23 +31,19 @@
 <translation id="1603914832182249871">(Incognito)</translation>
 <translation id="1620510694547887537">Camera</translation>
 <translation id="1635033183663317347">Installed by your custodian.</translation>
+<translation id="1682548588986054654">New Incognito Window</translation>
 <translation id="1698122934742150150">Current incognito session only</translation>
 <translation id="1706625117072057435">Zoom levels</translation>
 <translation id="1708338024780164500">(Inactive)</translation>
-<translation id="1708713382908678956"><ph name="NAME_PH" /> (ID: <ph name="ID_PH" />)</translation>
 <translation id="1723824996674794290">&amp;New window</translation>
 <translation id="1729533290416704613">It also controls what page is shown when you search from the Omnibox.</translation>
 <translation id="1744108098763830590">background page</translation>
-<translation id="1805822111539868586">Inspect views</translation>
 <translation id="1828901632669367785">Print Using System Dialogue...</translation>
 <translation id="1850508293116537636">Rotate &amp;clockwise</translation>
 <translation id="1886996562706621347">Allow sites to ask to become default handlers for protocols (recommended)</translation>
-<translation id="1890674179660343635">&lt;span&gt;ID: &lt;/span&gt;<ph name="EXTENSION_ID" /></translation>
 <translation id="1901303067676059328">Select &amp;all</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1963227389609234879">Remove All</translation>
-<translation id="1989112275319619282">Browser</translation>
-<translation id="1992397118740194946">Not set</translation>
 <translation id="1994173015038366702">Site URL</translation>
 <translation id="2050339315714019657">Portrait</translation>
 <translation id="2076269580855484719">Hide this plugin</translation>
@@ -83,7 +80,6 @@
 <translation id="2470702053775288986">Unsupported extensions disabled</translation>
 <translation id="2476578072172137802">Site Settings</translation>
 <translation id="2482878487686419369">Notifications</translation>
-<translation id="2501797496290880632">Type a shortcut</translation>
 <translation id="2509495747794740764">Scale amount must be a number between 10 and 200.</translation>
 <translation id="253557089021624350">Keepalive count</translation>
 <translation id="2550212893339833758">Swapped memory</translation>
@@ -102,7 +98,6 @@
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> could not communicate with this printer. Make sure the printer is plugged in and try again.</translation>
 <translation id="2904456025988372123">Ask when a site tries to download files automatically after the first file</translation>
 <translation id="2913331724188855103">Allow sites to save and read cookie data (recommended)</translation>
-<translation id="2916745397441987255">Repair extension</translation>
 <translation id="2932883381142163287">Report abuse</translation>
 <translation id="2941112035454246133">Low</translation>
 <translation id="2972581237482394796">&amp;Redo</translation>
@@ -137,13 +132,13 @@
 <translation id="3378503599595235699">Keep local data only until you quit your browser</translation>
 <translation id="3378572629723696641">This extension may have been corrupted.</translation>
 <translation id="3432227430032737297">Remove all shown</translation>
-<translation id="3435896845095436175">Enable</translation>
 <translation id="3440761377721825626">Ask when a site wants to use a plug-in to access your computer</translation>
 <translation id="345693547134384690">Open &amp;image in new tab</translation>
-<translation id="3467267818798281173">Ask Google for suggestions</translation>
 <translation id="3494769164076977169">Ask when a site tries to download files automatically after the first file (recommended)</translation>
 <translation id="3505030558724226696">Revoke device access</translation>
 <translation id="3523642406908660543">Ask when a site wants to use a plug-in to access your computer (recommended)</translation>
+<translation id="354068948465830244">This can read and change site data</translation>
+<translation id="3574917942258583917">Exit incognito mode anyway?</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; wants to share a printer &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; with a group you own: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. If you accept, all group members will be able to print to the printer.</translation>
 <translation id="3587482841069643663">All</translation>
 <translation id="3627588569887975815">Open link in inco&amp;gnito window</translation>
@@ -154,12 +149,10 @@
 <translation id="3727187387656390258">Inspect popup</translation>
 <translation id="3744111561329211289">Background sync</translation>
 <translation id="3797900183766075808">&amp;Search <ph name="SEARCH_ENGINE" /> for “<ph name="SEARCH_TERMS" />”</translation>
-<translation id="3798449238516105146">Version</translation>
 <translation id="3800806661949714323">Show all (recommended)</translation>
+<translation id="3810973564298564668">Manage</translation>
 <translation id="383891835335927981">No sites have been zoomed in or out</translation>
 <translation id="385051799172605136">Back</translation>
-<translation id="3855441664322950881">Pack extension</translation>
-<translation id="3866249974567520381">Description</translation>
 <translation id="3899879303189199559">Offline for more than a year</translation>
 <translation id="3905761538810670789">Repair app</translation>
 <translation id="3908501907586732282">Enable extension</translation>
@@ -184,6 +177,7 @@
 <translation id="4131410914670010031">Black and white</translation>
 <translation id="4176463684765177261">Disabled</translation>
 <translation id="4200983522494130825">New &amp;tab</translation>
+<translation id="4225397296022057997">On all sites</translation>
 <translation id="4278390842282768270">Allowed</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K live)</translation>
 <translation id="4345587454538109430">Configure...</translation>
@@ -193,7 +187,7 @@
 <translation id="4394049700291259645">Disable</translation>
 <translation id="4409697491990005945">Margins</translation>
 <translation id="4423482519432579560">&amp;Spellcheck</translation>
-<translation id="4522570452068850558">Details</translation>
+<translation id="4434045419905280838">Pop-ups and redirects</translation>
 <translation id="4552089082226364758">Flash</translation>
 <translation id="4579581181964204535">Unable to cast <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Go to <ph name="URL" /></translation>
@@ -219,9 +213,9 @@
 <translation id="5027562294707732951">Add extension</translation>
 <translation id="5036662165765606524">Do not allow any site to download multiple files automatically</translation>
 <translation id="5039804452771397117">Allow</translation>
+<translation id="5057110919553308744">When you click the extension</translation>
 <translation id="5063480226653192405">Usage</translation>
 <translation id="5068918910148307423">Do not allow recently closed sites to finish sending and receiving data</translation>
-<translation id="5087249366037322692">Added by a third-party</translation>
 <translation id="5143374789336132547">The extension "<ph name="EXTENSION_NAME" />" has changed the page that is shown when you click the Home button.</translation>
 <translation id="5154108062446123722">Advanced settings for <ph name="PRINTING_DESTINATION" /></translation>
 <translation id="5233019165164992427">NaCl debug port</translation>
@@ -236,15 +230,16 @@
 <translation id="5362741141255528695">Select private key file.</translation>
 <translation id="5370819323174483825">&amp;Reload</translation>
 <translation id="5398572795982417028">Out of bounds page reference, limit is <ph name="MAXIMUM_PAGE" /></translation>
+<translation id="5425042808445046667">Continue downloading</translation>
 <translation id="5431318178759467895">Colour</translation>
 <translation id="5483785310822538350">Revoke file and device access</translation>
 <translation id="5485102783864353244">Add app</translation>
-<translation id="5488468185303821006">Allow in incognito</translation>
+<translation id="5487521232677179737">Clear data</translation>
 <translation id="5521078259930077036">Is this the home page that you were expecting?</translation>
-<translation id="5532223876348815659">Global</translation>
 <translation id="5542132724887566711">Profile</translation>
 <translation id="5556459405103347317">Reload</translation>
 <translation id="5575473780076478375">Incognito Extension: <ph name="EXTENSION_NAME" /></translation>
+<translation id="5614553682702429503">Save password?</translation>
 <translation id="5623842676595125836">Low</translation>
 <translation id="5627086634964711283">It also controls what page is shown when you click the Home button.</translation>
 <translation id="563535393368633106">Ask before accessing (recommended)</translation>
@@ -254,6 +249,7 @@
 <translation id="5707185214361380026">Failed to load extension from:</translation>
 <translation id="5715711091495208045">Plug-in Broker: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Save as PDF</translation>
+<translation id="5747809636523347288">Pa&amp;ste and go to <ph name="URL" /></translation>
 <translation id="5759728514498647443">Documents you send to print via <ph name="APP_NAME" /> can be read by <ph name="APP_NAME" />.</translation>
 <translation id="5764483294734785780">Sa&amp;ve audio as...</translation>
 <translation id="577624874850706961">Search cookies</translation>
@@ -262,6 +258,7 @@
 <translation id="5828633471261496623">Printing...</translation>
 <translation id="583281660410589416">Unknown</translation>
 <translation id="5838456317242088717">Current incognito session</translation>
+<translation id="5877584842898320529">The selected printer is not available or not installed correctly. <ph name="BR" /> Check your printer or try selecting another printer.</translation>
 <translation id="5908769186679515905">Block sites from running Flash</translation>
 <translation id="5956585768868398362">Is this the search page that you were expecting?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> peak)</translation>
@@ -275,14 +272,11 @@
 <translation id="6086846494333236931">Installed by your administrator</translation>
 <translation id="6101226222197207147">New app added (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Your Internet connection is being controlled</translation>
-<translation id="6124650939968185064">The following extensions depend on this extension:</translation>
 <translation id="6147020289383635445">Print preview failed.</translation>
 <translation id="6156863943908443225">Script cache</translation>
 <translation id="6169666352732958425">Unable to cast desktop.</translation>
 <translation id="6196640612572343990">Block third-party cookies</translation>
 <translation id="6196854373336333322">The extension "<ph name="EXTENSION_NAME" />" has taken control of your proxy settings, which means it can change, break or eavesdrop on anything you do online. If you aren't sure why this change happened, you probably don't want it.</translation>
-<translation id="6220413761270491930">Error Loading Extension</translation>
-<translation id="6226777517901268232">Private key file (optional)</translation>
 <translation id="6239558157302047471">Reload &amp;frame</translation>
 <translation id="6247802389331535091">System: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="6248988683584659830">Search settings</translation>
@@ -301,16 +295,15 @@
 <translation id="6498249116389603658">&amp;All your languages</translation>
 <translation id="6503077044568424649">Most visited</translation>
 <translation id="6508261954199872201">App: <ph name="APP_NAME" /></translation>
+<translation id="6516243500644829484">New &amp;private window</translation>
 <translation id="6518014396551869914">Cop&amp;y image</translation>
 <translation id="6550675742724504774">Options</translation>
 <translation id="6612358246767739896">Protected content</translation>
 <translation id="6639554308659482635">SQLite memory</translation>
+<translation id="6686817083349815241">Save your password</translation>
 <translation id="6691936601825168937">&amp;Forward</translation>
-<translation id="6706210727756204531">Scope</translation>
+<translation id="6723354935081862304">Print to Google Docs and other cloud destinations. <ph name="BEGIN_LINK" />Sign in<ph name="END_LINK" /> to print to Google Cloud Print.</translation>
 <translation id="6782111308708962316">Prevent third-party websites from saving and reading cookie data</translation>
-<translation id="6786747875388722282">Extensions</translation>
-<translation id="6787839852456839824">Keyboard shortcuts</translation>
-<translation id="6788210894632713004">Unpacked extension</translation>
 <translation id="6798954102094737107">Plug-in: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Keep changes</translation>
 <translation id="6817174620439930047">Ask when a site wants to use system exclusive messages to access MIDI devices (recommended)</translation>
@@ -326,8 +319,6 @@
 <translation id="7006634003215061422">Bottom margin</translation>
 <translation id="7053983685419859001">Block</translation>
 <translation id="708060913198414444">C&amp;opy audio address</translation>
-<translation id="7084192839369222683">Run only important content</translation>
-<translation id="7152478047064750137">This extension requires no special permissions</translation>
 <translation id="7175353351958621980">Loaded from:</translation>
 <translation id="7270858098575133036">Ask when a site wants to use system exclusive messages to access MIDI devices</translation>
 <translation id="7287143125007575591">Access denied.</translation>
@@ -351,12 +342,12 @@
 <translation id="7701040980221191251">None</translation>
 <translation id="7704305437604973648">Task</translation>
 <translation id="7710568461918838723">&amp;Cast...</translation>
+<translation id="7750228210027921155">Picture in picture</translation>
 <translation id="7751260505918304024">Show all</translation>
 <translation id="7760004034676677601">Is this the start-up page that you were expecting?</translation>
 <translation id="7771452384635174008">Layout</translation>
 <translation id="7782102568078991263">No more suggestions from Google</translation>
 <translation id="7791543448312431591">Add</translation>
-<translation id="780301667611848630">No, thank you</translation>
 <translation id="7814458197256864873">&amp;Copy</translation>
 <translation id="7818135753970109980">New theme added (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="782057141565633384">C&amp;opy video address</translation>
@@ -381,15 +372,15 @@ Keep your key file in a safe place. You will need it to create new versions of y
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8137559199583651773">Manage extensions</translation>
 <translation id="8180239481735238521">page</translation>
-<translation id="8188120771410500975">&amp;Check the spelling of text fields</translation>
+<translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
+        =1 {Download is in progress} other {Downloads are in progress}}</translation>
+<translation id="8230134520748321204">Save password for <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080">This extension is not listed in the <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> and may have been added without your knowledge.</translation>
 <translation id="8270242299912238708">PDF documents</translation>
-<translation id="8294431847097064396">Source</translation>
 <translation id="8339059274628563283"><ph name="SITE" /> locally stored data</translation>
 <translation id="8351419472474436977">This extension has taken control of your proxy settings, which means it can change, break or eavesdrop on anything that you do online. If you aren't sure why this change happened, you probably don't want it.</translation>
 <translation id="8382913212082956454">Copy &amp;email address</translation>
 <translation id="8413385045638830869">Ask first (recommended)</translation>
-<translation id="8523849605371521713">Added by policy</translation>
 <translation id="8546306075665861288">Image cache</translation>
 <translation id="8569682776816196752">No destinations found</translation>
 <translation id="857943718398505171">Allowed (recommended)</translation>
@@ -402,7 +393,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
 <translation id="8714838604780058252">Background graphics</translation>
 <translation id="8725066075913043281">Try again</translation>
 <translation id="8757090071857742562">Unable to cast desktop.  Check to see if you confirmed the prompt to start sharing your screen.</translation>
-<translation id="8770406935328356739">Extension root directory</translation>
 <translation id="8774934320277480003">Top margin</translation>
 <translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; wants to share a printer &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; with you.</translation>
 <translation id="8798099450830957504">Default</translation>
@@ -410,6 +400,7 @@ Keep your key file in a safe place. You will need it to create new versions of y
 <translation id="8808478386290700967">Web Store</translation>
 <translation id="8813811964357448561">sheet of paper</translation>
 <translation id="8823514049557262177">Copy link te&amp;xt</translation>
+<translation id="8823704566850948458">Suggest password...</translation>
 <translation id="8859174528519900719">Subframe: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Open link in new &amp;window</translation>
 <translation id="8910146161325739742">Share your screen</translation>
@@ -417,10 +408,12 @@ Keep your key file in a safe place. You will need it to create new versions of y
 <translation id="8916476537757519021">Incognito Subframe: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8962083179518285172">Hide Details</translation>
 <translation id="8973557916016709913">Remove zoom level</translation>
+<translation id="897939795688207351">On <ph name="ORIGIN" /></translation>
 <translation id="8996526648899750015">Add account...</translation>
 <translation id="9003647077635673607">Allow on all websites</translation>
 <translation id="9056810968620647706">No matches were found.</translation>
 <translation id="9137916601698928395">Open link as <ph name="USER" /></translation>
+<translation id="916607977885256133">Picture in Picture</translation>
 <translation id="9170848237812810038">&amp;Undo</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" added</translation>
 <translation id="9218430445555521422">Set as default</translation>

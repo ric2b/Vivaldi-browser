@@ -20,14 +20,10 @@
 <translation id="1723824996674794290">نافذة &amp;جديدة</translation>
 <translation id="1729533290416704613">كما أنها تتحكم في الصفحة التي تظهر عند إجراء بحث من المربع متعدد الاستخدامات.</translation>
 <translation id="1744108098763830590">خلفية الصفحة</translation>
-<translation id="1805822111539868586">فحص المشاهدات</translation>
 <translation id="1828901632669367785">طباعة باستخدام مربع حوار النظام ...</translation>
 <translation id="1850508293116537636">تدوير &amp;في اتجاه عقارب الساعة</translation>
-<translation id="1890674179660343635">‏&lt;span&gt;المعرف: &lt;/span&gt;<ph name="EXTENSION_ID" /></translation>
 <translation id="1901303067676059328">تح&amp;ديد الكلّ</translation>
 <translation id="1963227389609234879">حذف كلمات المرور كلّها</translation>
-<translation id="1989112275319619282">تصفح</translation>
-<translation id="1992397118740194946">لم يتم تعيينه</translation>
 <translation id="2050339315714019657">صورة</translation>
 <translation id="2076269580855484719">إخفاء هذا البلوجن</translation>
 <translation id="2087822576218954668">الطباعة: <ph name="PRINT_NAME" /></translation>
@@ -48,7 +44,6 @@
 <translation id="2439110203301358333">‏أضاف برنامج آخر بجهاز الكمبيوتر إضافة قد تؤدي إلى تغيير طريقة عمل Vivaldi.</translation>
 <translation id="2445081178310039857">دليل الجذر للإضافة مطلوب.</translation>
 <translation id="2470702053775288986">تم تعطيل الإضافات غير المدعومة</translation>
-<translation id="2501797496290880632">اكتب اختصارًا</translation>
 <translation id="2550212893339833758">ذاكرة مساحة التبديل</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">إعادة تمكين</translation>
@@ -56,7 +51,6 @@
 <translation id="2809586584051668049">و<ph name="NUMBER_ADDITIONAL_DISABLED" /> من الإضافات الأخرى</translation>
 <translation id="2850541429955027218">إضافة مظهر</translation>
 <translation id="2861941300086904918">‏إدارة الأمان لـ Native Client</translation>
-<translation id="2916745397441987255">ملحقات البحث</translation>
 <translation id="2932883381142163287">الإبلاغ عن إساءة الاستخدام</translation>
 <translation id="2941112035454246133">منخفضة</translation>
 <translation id="2972581237482394796">إعا&amp;دة</translation>
@@ -78,14 +72,10 @@
 <translation id="3378572629723696641">قد تكون هذه الإضافة تالفة.</translation>
 <translation id="3432227430032737297">حذف كل العناصر المعروضة</translation>
 <translation id="345693547134384690">فتح &amp;الصورة في علامة تبويب جديدة</translation>
-<translation id="3467267818798281173">‏طلب اقتراحات Google</translation>
 <translation id="3505030558724226696">إبطال الوصول إلى الجهاز</translation>
 <translation id="3627588569887975815">فتح الرّابط في نافذة للتصفّح المتخ&amp;فّي</translation>
 <translation id="3678156199662914018">الإضافة: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3727187387656390258">فحص المنبثقة</translation>
-<translation id="3798449238516105146">الإصدار</translation>
-<translation id="3855441664322950881">حزمة للإضافة</translation>
-<translation id="3866249974567520381">الوصف</translation>
 <translation id="3905761538810670789">إصلاح التطبيق</translation>
 <translation id="3908501907586732282">تمكين الإضافة</translation>
 <translation id="3909791450649380159">&amp;قص</translation>
@@ -124,7 +114,6 @@
 <translation id="5027562294707732951">تثبيت إضافة</translation>
 <translation id="5036662165765606524">عدم السماح لأي موقع بتنزيل ملفات متعددة تلقائيا</translation>
 <translation id="5039804452771397117">سماح</translation>
-<translation id="5087249366037322692">أضيفت من قبل طرف ثالث</translation>
 <translation id="5143374789336132547">غيّرت الإضافة "<ph name="EXTENSION_NAME" />" الصفحة التي تظهر عند النقر على زر الصفحة الرئيسية.</translation>
 <translation id="5233019165164992427">‏منفذ تصحيح أخطاء NaCl</translation>
 <translation id="5233231016133573565">معرِّف العملية</translation>
@@ -138,7 +127,6 @@
 <translation id="5485102783864353244">إضافة تطبيق</translation>
 <translation id="5487521232677179737">مسح البيانات</translation>
 <translation id="5521078259930077036">هل هذه هي الصفحة الرئيسية التي كنت تتوقع ظهورها؟</translation>
-<translation id="5532223876348815659">عام</translation>
 <translation id="5542132724887566711">ملف تعريف</translation>
 <translation id="5556459405103347317">إعادة تحميل</translation>
 <translation id="5575473780076478375">إضافة وضع التصفح المتخفي: <ph name="EXTENSION_NAME" /></translation>
@@ -151,7 +139,6 @@
 <translation id="5764483294734785780">حف&amp;ظ ملف الصوت باسم...</translation>
 <translation id="577624874850706961">البحث في ملفات تعريف ارتباط</translation>
 <translation id="5780973441651030252">أولوية المعالجة</translation>
-<translation id="5804241973901381774">الصلاحيات</translation>
 <translation id="583281660410589416">غير معروف</translation>
 <translation id="5956585768868398362">هل هذه هي صفحة البحث التي كنت تتوقع ظهورها؟</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> في الذروة)</translation>
@@ -161,10 +148,8 @@
 <translation id="6086846494333236931">تثبيت من قبل المدير</translation>
 <translation id="6101226222197207147">تمت إضافة تطبيق جديد (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">يتم التحكم في اتصال الإنترنت التابع لك</translation>
-<translation id="6124650939968185064">تعتمد الإضافات التالية على هذه الإضافة:</translation>
 <translation id="6156863943908443225">ذاكرة التخزين المؤقت للنص البرمجي</translation>
 <translation id="6196854373336333322">أصبح بإمكان الإضافة "<ph name="EXTENSION_NAME" />" التحكم في إعدادات الخادم الوكيل التابعة لك، مما يعني أن بإمكانها تغيير أي إجراء لك عبر الإنترنت أو قطعه أو التجسس عليه. إذا كنت غير متيقن من سبب حدوث هذا التغيير، فأنت لا ترغب فيه على الأرجح.</translation>
-<translation id="6220413761270491930">خطأ عند تحميل الإضافة</translation>
 <translation id="6239558157302047471">إعادة تحميل الإطار</translation>
 <translation id="6247802389331535091">النظام: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="6251870443722440887">معالجات واجهة الجهاز الرسومية</translation>
@@ -179,9 +164,6 @@
 <translation id="6518014396551869914">نس&amp;خ الصورة</translation>
 <translation id="6639554308659482635">‏ذاكرة SQLite</translation>
 <translation id="6691936601825168937">إعا&amp;دة توجيه</translation>
-<translation id="6706210727756204531">نطاق</translation>
-<translation id="6786747875388722282">الإضافات</translation>
-<translation id="6787839852456839824">اختصارات لوحة المفاتيح</translation>
 <translation id="6798954102094737107">المكوّن الإضافي: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">الإبقاء على التغييرات</translation>
 <translation id="6886871292305414135">فتح الرابط في &amp;علامة تبويب جديدة</translation>
@@ -215,10 +197,8 @@
 <translation id="8004582292198964060">المتصفّح</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> ‏                 كيلوبايت</translation>
 <translation id="8137559199583651773">عرض في شريط الأدوات</translation>
-<translation id="8188120771410500975">&amp;مراجعة حقول النص إملائيًا</translation>
 <translation id="8261378640211443080">هذه الإضافة غير مدرجة في <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> وربما تمت إضافتها بدون علمك.</translation>
 <translation id="8351419472474436977">أصبح بإمكان هذه الإضافة التحكم في إعدادات الخادم الوكيل التابعة لك، مما يعني أن بإمكانها تغيير أي إجراء لك عبر الإنترنت أو قطعه أو التجسس عليه. إذا كنت غير متيقن من سبب حدوث هذا التغيير، فأنت لا ترغب فيه على الأرجح.</translation>
-<translation id="8523849605371521713">أضيفت من قبل السياسة</translation>
 <translation id="8546306075665861288">ذاكرة التخزين المؤقت للصور</translation>
 <translation id="8584280235376696778">&amp;فتح مقطع الفيديو في علامة تبويب جديدة</translation>
 <translation id="8615618338313291042">تطبيق وضع التصفح المتخفي: <ph name="APP_NAME" /></translation>

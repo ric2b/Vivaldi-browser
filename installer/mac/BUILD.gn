@@ -9,21 +9,17 @@ import("//vivaldi/gn/config/signer_features.gni")
 build_app_dmg_script_path = "//vivaldi/thirdparty/create_dmg/create-dmg"
 
 dmg_name = "Vivaldi.$vivaldi_version_full.dmg"
+mac_product_name = "Vivaldi"
+mac_app_name = "$root_build_dir/$mac_product_name.app"
 
 perform_signing = vivaldi_signing_key != "" && vivaldi_signing_id != ""
 
 signing_deps = []
 if (perform_signing) {
   signing_deps += [ ":sign_mac" ]
-  mac_product_name = "Vivaldi"
-  mac_packaging_dir = "$root_build_dir/$mac_product_name Packaging"
+  mac_packaging_dir = "$root_build_dir/${mac_product_name}_Packaging"
 
-  # <(PRODUCT_DIR) expands to $(BUILT_PRODUCTS_DIR), which doesn't
-  # work properly in a shell script, where ${BUILT_PRODUCTS_DIR} is
-  # needed.
-  #mac_packaging_sh_dir = "\${BUILT_PRODUCTS_DIR}/$mac_product_name Packaging"
-  mac_app_name = "$root_build_dir/$mac_product_name.app"
-  mac_signed_inner_framework = "$root_build_dir/$mac_product_name.app/Contents/Versions/$vivaldi_version_full/$mac_product_name Framework.framework/$mac_product_name Framework"
+  mac_app_name = "$root_build_dir/$mac_product_name-$vivaldi_version_full"
 }
 
 group("mac") {
@@ -75,87 +71,60 @@ command_bash("build_dmg") {
     "--format", "UDBZ",
     "--no-internet-enable",
     "Vivaldi.$vivaldi_version_full.dmg",
-    "Vivaldi.app",
+    rebase_path(mac_app_name, root_build_dir),
   ]
 }
 
 if (perform_signing) {
   group("sign_mac") {
     deps = [
-      ":sign_inner_bundle",
       ":sign_package",
       ":create_tar",
     ]
   }
-  command_bash("sign_inner_bundle") {
+
+  action("sign_package") {
     if (!perform_signing || !is_full_mac_signer) {
       deps = [
+        "//chrome:chrome_app",
         "//chrome/installer/mac",
         "//vivaldi:vivaldi",
       ]
     }
-    command = "$mac_packaging_dir/sign_versioned_dir.sh"
-    inputs = [
-      #command,
-    ]
-    outputs = [
-      "$root_gen_dir/signed_version.done",
-      mac_signed_inner_framework,
-    ]
+    script = "$mac_packaging_dir/sign_chrome.py"
+    inputs = []
+    outputs = ["$root_gen_dir/signed_package.done"]
     args = [
-      rebase_path(mac_app_name, root_build_dir),
-      vivaldi_signing_key,
-      vivaldi_signing_id,
-    ]
-  }
-
-  command_bash("sign_package") {
-    deps = [
-      ":sign_inner_bundle",
-    ]
-    if (!perform_signing || !is_full_mac_signer) {
-      deps += [
-        "//chrome/installer/mac",
-        "//vivaldi:vivaldi",
-      ]
-    }
-    command = "$mac_packaging_dir/sign_app.sh"
-    inputs = [
-      #command,
-      mac_signed_inner_framework,
-    ]
-    outputs = [
-      "$root_gen_dir/signed_package.done",
-    ]
-    args = [
-      rebase_path(mac_app_name, root_build_dir),
-      vivaldi_signing_key,
-      vivaldi_signing_id,
+      "--keychain", vivaldi_signing_key,
+      "--identity", vivaldi_signing_id,
+      "--input", ".",
+      "--output", ".",
+      "--no-dmg",
+      # Vivaldi does not use entitlements_plist or provisioning_profile
+      # so using this flag to disable that part of the code
+      "--development",
     ]
   }
 
   #correct permissions in app before tar-ing it.
   system_command("chmod_app") {
     deps = [
-      ":sign_inner_bundle",
       ":sign_package",
     ]
     if (!perform_signing || !is_full_mac_signer) {
       deps += [
+        "//chrome:chrome_app",
         "//chrome/installer/mac",
         "//vivaldi:vivaldi",
       ]
     }
     command = "find"
-    app_path = "$root_build_dir/Vivaldi.app"
-    inputs = [
-      mac_signed_inner_framework,
-    ]
+    inputs = []
     outputs = [
       "$root_gen_dir/chmod.done",
     ]
     args = [
-      rebase_path(app_path, root_build_dir),
+      rebase_path(mac_app_name, root_build_dir),
       "-exec", "chmod", "-h", "a-st+rX,u+w,go-w", "{}", ";"
     ]
   }
@@ -166,7 +135,6 @@ if (perform_signing) {
       ":sign_package",
     ]
     command = "tar"
-    app_path = "$root_build_dir/Vivaldi.app"
     tar_path = "$root_build_dir/Vivaldi.$vivaldi_version_full.tar.xz"
     inputs = [
       "$root_gen_dir/chmod.done",
@@ -175,9 +143,11 @@ if (perform_signing) {
     outputs = [tar_path]
 
     args = [
-      "cfJ",
+      "-C",
+      rebase_path(mac_app_name, root_build_dir),
+      "-cJf",
       rebase_path(tar_path, root_build_dir),
-      rebase_path(app_path, root_build_dir)
+      "$mac_product_name.app",
     ]
   }
 }

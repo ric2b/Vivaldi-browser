@@ -30,6 +30,14 @@ foreach(_target, _main_dll_targets) {
         "//vivaldi/browser/win/vivaldi_running_dlg.cc",
       ]
     }
+    deps += [
+      "//vivaldi/components:adverse_adblocking",
+    ]
+    if (_target != "//chrome:chrome_child") {
+      deps += [
+        "//vivaldi/components:content_adverse_adblocking",
+      ]
+    }
     if (!is_android) {
       deps += [ "//vivaldi/extensions:extensions_client" ]
     }
@@ -40,6 +48,10 @@ update_target("//chrome/test:test_support") {
   sources += [
     "//vivaldi/extraparts/vivaldi_main_delegate.cpp",
     "//vivaldi/extraparts/vivaldi_main_delegate.h",
+  ]
+  public_deps += [
+    "//vivaldi/components:adverse_adblocking",
+    "//vivaldi/components:content_adverse_adblocking",
   ]
   if (!is_android) {
     public_deps += [ "//vivaldi/extensions:extensions_client" ]

@@ -632,8 +632,10 @@ TEST_F(DisplayPrefsTest, PreventStore) {
   display::ManagedDisplayMode old_mode(gfx::Size(400, 300));
   display::ManagedDisplayMode new_mode(gfx::Size(500, 400));
   EXPECT_TRUE(shell->resolution_notification_controller()
-                  ->PrepareNotificationAndSetDisplayMode(id, old_mode, new_mode,
-                                                         base::OnceClosure()));
+                  ->PrepareNotificationAndSetDisplayMode(
+                      id, old_mode, new_mode,
+                      ash::mojom::DisplayConfigSource::kUser,
+                      base::OnceClosure()));
   UpdateDisplay("500x400#500x400|400x300|300x200");
 
   const base::DictionaryValue* properties =
@@ -854,17 +856,18 @@ TEST_F(DisplayPrefsTest, DontSaveTabletModeControllerRotations) {
 
   // Open up 270 degrees to trigger tablet mode
   scoped_refptr<AccelerometerUpdate> update(new AccelerometerUpdate());
-  update->Set(ACCELEROMETER_SOURCE_ATTACHED_KEYBOARD, 0.0f, 0.0f, kMeanGravity);
-  update->Set(ACCELEROMETER_SOURCE_SCREEN, 0.0f, -kMeanGravity, 0.0f);
+  update->Set(ACCELEROMETER_SOURCE_ATTACHED_KEYBOARD, false,
+              0.0f, 0.0f, kMeanGravity);
+  update->Set(ACCELEROMETER_SOURCE_SCREEN, false, 0.0f, -kMeanGravity, 0.0f);
   ash::TabletModeController* controller =
       ash::Shell::Get()->tablet_mode_controller();
   controller->OnAccelerometerUpdated(update);
   EXPECT_TRUE(controller->IsTabletModeWindowManagerEnabled());
 
   // Trigger 90 degree rotation
-  update->Set(ACCELEROMETER_SOURCE_ATTACHED_KEYBOARD, -kMeanGravity, 0.0f,
-              0.0f);
-  update->Set(ACCELEROMETER_SOURCE_SCREEN, -kMeanGravity, 0.0f, 0.0f);
+  update->Set(ACCELEROMETER_SOURCE_ATTACHED_KEYBOARD, false,
+              -kMeanGravity, 0.0f, 0.0f);
+  update->Set(ACCELEROMETER_SOURCE_SCREEN, false, -kMeanGravity, 0.0f, 0.0f);
   controller->OnAccelerometerUpdated(update);
   shell->screen_orientation_controller()->OnAccelerometerUpdated(update);
   EXPECT_EQ(display::Display::ROTATE_90, GetCurrentInternalDisplayRotation());
@@ -1002,8 +1005,9 @@ TEST_F(DisplayPrefsTest, LoadRotationNoLogin) {
 
   // Open up 270 degrees to trigger tablet mode
   scoped_refptr<AccelerometerUpdate> update(new AccelerometerUpdate());
-  update->Set(ACCELEROMETER_SOURCE_ATTACHED_KEYBOARD, 0.0f, 0.0f, kMeanGravity);
-  update->Set(ACCELEROMETER_SOURCE_SCREEN, 0.0f, -kMeanGravity, 0.0f);
+  update->Set(ACCELEROMETER_SOURCE_ATTACHED_KEYBOARD, false,
+              0.0f, 0.0f, kMeanGravity);
+  update->Set(ACCELEROMETER_SOURCE_SCREEN, false, 0.0f, -kMeanGravity, 0.0f);
   ash::TabletModeController* tablet_mode_controller =
       ash::Shell::Get()->tablet_mode_controller();
   tablet_mode_controller->OnAccelerometerUpdated(update);

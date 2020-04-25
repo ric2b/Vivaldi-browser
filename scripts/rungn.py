@@ -180,18 +180,23 @@ if args.official:
 if args.static:
   gn_defines += " is_component_build=false"
 
+user_arg_files = []
+user_arg_files.append(os.path.expanduser("~/.gn/args.gn"))
 if args.args_gn:
-  user_arg_file = args.args_gn
-else:
-  user_arg_file = os.path.expanduser("~/.gn/args.gn")
-if user_arg_file and os.access(user_arg_file, os.F_OK):
-  if is_windows:
-     # convert to gn absolute file system label
-    user_arg_file = user_arg_file.replace("\\", "/")
-    if not args.args_gn:
-      user_arg_file = "/"+user_arg_file
-else:
-  user_arg_file = None
+  user_arg_files.append(args.args_gn)
+user_arg_files.append(os.path.abspath("args.gn"))
+
+
+tmp_args = []
+for f in user_arg_files:
+  if f and os.access(f, os.F_OK):
+    if is_windows:
+       # convert to gn absolute file system label
+      f = f.replace("\\", "/")
+      if not args.args_gn:
+        f= "/"+f
+    tmp_args.append(f)
+user_arg_files = tmp_args
 
 if args.refresh or not args.args:
   is_builder = os.environ.get("CHROME_HEADLESS", 0) != 0
@@ -208,7 +213,7 @@ if args.refresh or not args.args:
 
   platform_target=' target_os="android"' if is_android else ""
 
-  include_arg = 'import(\"'+ user_arg_file + '\") ' if user_arg_file else ""
+  include_arg = "".join(['import(\"'+ f + '\") ' for f in user_arg_files])
 
   profiles = [
       # args MUST be unquoted. are passed directly to the command

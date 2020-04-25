@@ -514,18 +514,6 @@ void WebContentsImpl::WebContentsTreeNode::AttachInnerWebContents(
   inner_web_contents_node.outer_contents_frame_tree_node_id_ =
       render_frame_host->frame_tree_node()->frame_tree_node_id();
 
-  // NOTE(david@vivaldi): In order to find the correct view while
-  // hit testing we need to merge the top most event router with the current
-  // event router. This is particularly required when we have iframes.
-  RenderWidgetHostInputEventRouter* input_event_router =
-      current_web_contents_->GetInputEventRouter();
-
-  if (vivaldi::IsVivaldiRunning()) {
-    RenderWidgetHostInputEventRouter* outer_input_event_router =
-      current_web_contents_->GetInputEventRouter();
-    outer_input_event_router->MergeFrameSinkIdOwners(input_event_router);
-  }
-
   inner_web_contents_.push_back(std::move(inner_web_contents));
 
   render_frame_host->frame_tree_node()->AddObserver(&inner_web_contents_node);
@@ -576,7 +564,6 @@ void WebContentsImpl::WebContentsTreeNode::OnFrameTreeNodeDestroyed(
       // If the current WebContents is in focus, unset it.
       outermost->SetAsFocusedWebContentsIfNecessary();
     }
-
     // Disconnect the view hierarhy from the text_input.
     // NOTE(igor@vivaldi.com) This also clears the text input state for each
     // view that is stored is a hash map in TextInputManager. It seems
@@ -594,31 +581,15 @@ void WebContentsImpl::WebContentsTreeNode::OnFrameTreeNodeDestroyed(
         }
       }
     }
-
-    // If the tab has crashed, there is no RenderWidgetHostView in the
-    // rendermanager.
-    if (current_web_contents_->GetRenderManager()->GetRenderWidgetHostView()) {
-      static_cast<RenderWidgetHostViewChildFrame*>(
-          current_web_contents_->GetRenderManager()->GetRenderWidgetHostView())
-          ->UnregisterFrameSinkId();
-    }
-
-    current_web_contents_->GetRenderManager()->ClearRFHsPendingShutdown();
-
-    // We need to make sure FrameTree::render_view_host_map_ matches
-    // GetRenderManager::proxy_hosts_. Calling ResetForNewProcess will make sure
-    // both are populated when needed. This is important when reusing
-    // current_web_contents_ in another WebContentsView.
-    current_web_contents_->frame_tree_.root()
-        ->current_frame_host()
-        ->ResetChildren();
-
-    current_web_contents_->GetRenderManager()->ResetProxyHosts();
-
+    // Make sure this isn't freed here. It is owned by the TabStrip.
+    current_web_contents_->DetachFromOuterWebContents().release();
+    // Vivaldi specific to be able to re-attach to outer_web_contents_.
     DetachFromOuterWebContents();
 
     node->RemoveObserver(this);
 
+    // This is Vivaldi specific to be able to sync the mounting in the client
+    // after it has been detached.
     current_web_contents_->FrameTreeNodeDestroyed();
   }
 }
@@ -675,8 +646,6 @@ WebContentsImpl::WebContentsImpl(BrowserContext* browser_context)
       is_resume_pending_(false),
       interstitial_page_(nullptr),
       has_accessed_initial_document_(false),
-      theme_color_(SK_ColorTRANSPARENT),
-      last_sent_theme_color_(SK_ColorTRANSPARENT),
       did_first_visually_non_empty_paint_(false),
       capturer_count_(0),
       is_being_destroyed_(false),
@@ -698,7 +667,6 @@ WebContentsImpl::WebContentsImpl(BrowserContext* browser_context)
           GetContentClient()->browser()->GetAXModeForBrowserContext(
               browser_context)),
       audio_stream_monitor_(this),
-      bluetooth_connected_device_count_(0),
       media_web_contents_observer_(
           std::make_unique<MediaWebContentsObserver>(this)),
       media_device_group_id_salt_base_(
@@ -708,6 +676,7 @@ WebContentsImpl::WebContentsImpl(BrowserContext* browser_context)
 #endif  // !defined(OS_ANDROID)
       is_overlay_content_(false),
       showing_context_menu_(false),
+      had_inner_webcontents_(false),
       loading_weak_factory_(this),
       weak_factory_(this) {
   frame_tree_.SetFrameRemoveListener(
@@ -803,7 +772,8 @@ WebContentsImpl::~WebContentsImpl() {
   // Do not update state as the WebContents is being destroyed.
   frame_tree_.root()->ResetNavigationRequest(true, true);
   if (root->speculative_frame_host()) {
-    root->speculative_frame_host()->DeleteRenderFrame();
+    root->speculative_frame_host()->DeleteRenderFrame(
+        FrameDeleteIntention::kSpeculativeMainFrameForShutdown);
     root->speculative_frame_host()->SetRenderFrameCreated(false);
     root->speculative_frame_host()->ResetNavigationRequests();
   }
@@ -976,7 +946,6 @@ bool WebContentsImpl::OnMessageReceived(RenderViewHostImpl* render_view_host,
 
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP_WITH_PARAM(WebContentsImpl, message, render_view_host)
-    IPC_MESSAGE_HANDLER(ViewHostMsg_GoToEntryAtOffset, OnGoToEntryAtOffset)
     IPC_MESSAGE_HANDLER(ViewHostMsg_UpdateZoomLimits, OnUpdateZoomLimits)
     IPC_MESSAGE_HANDLER(ViewHostMsg_PageScaleFactorChanged,
                         OnPageScaleFactorChanged)
@@ -1027,6 +996,7 @@ bool WebContentsImpl::OnMessageReceived(RenderFrameHostImpl* render_frame_host,
                         OnDidDisplayContentWithCertificateErrors)
     IPC_MESSAGE_HANDLER(FrameHostMsg_DidRunContentWithCertificateErrors,
                         OnDidRunContentWithCertificateErrors)
+    IPC_MESSAGE_HANDLER(FrameHostMsg_GoToEntryAtOffset, OnGoToEntryAtOffset)
     IPC_MESSAGE_HANDLER(FrameHostMsg_RegisterProtocolHandler,
                         OnRegisterProtocolHandler)
     IPC_MESSAGE_HANDLER(FrameHostMsg_UnregisterProtocolHandler,
@@ -1208,7 +1178,7 @@ void WebContentsImpl::OnScreenOrientationChange() {
   screen_orientation_provider_->OnOrientationChange();
 }
 
-SkColor WebContentsImpl::GetThemeColor() {
+base::Optional<SkColor> WebContentsImpl::GetThemeColor() {
   return theme_color_;
 }
 
@@ -1667,6 +1637,10 @@ bool WebContentsImpl::IsConnectedToBluetoothDevice() {
   return bluetooth_connected_device_count_ > 0;
 }
 
+bool WebContentsImpl::IsConnectedToSerialPort() const {
+  return serial_active_frame_count_ > 0;
+}
+
 bool WebContentsImpl::HasPictureInPictureVideo() {
   return has_picture_in_picture_video_;
 }
@@ -1919,13 +1893,11 @@ bool WebContentsImpl::NeedToFireBeforeUnload() {
   if (GetRenderViewHost()->SuddenTerminationAllowed())
     return false;
 
-  // TODO(alexmos): This checks for both beforeunload and unload handlers from
-  // the whole main frame process.  Remove this and explicitly check whether
-  // the main frame has each of these handlers. This can be done for
-  // beforeunload via RenderFrameHostImpl::ShouldDispatchBeforeUnload(), and
-  // something similar is needed for unload.
-  if (!GetMainFrame()->GetProcess()->SuddenTerminationAllowed())
+  // Check whether the main frame needs to run beforeunload or unload handlers.
+  if (GetMainFrame()->GetSuddenTerminationDisablerState(
+          blink::kBeforeUnloadHandler | blink::kUnloadHandler)) {
     return true;
+  }
 
   // Check whether any subframes need to run beforeunload handlers.
   //
@@ -2025,9 +1997,20 @@ std::unique_ptr<WebContents> WebContentsImpl::DetachFromOuterWebContents() {
       node_.OuterContentsFrameTreeNode()
           ->current_frame_host()
           ->GetSiteInstance());
-  view_.reset(CreateWebContentsView(
-      this, GetContentClient()->browser()->GetWebContentsViewDelegate(this),
-      &render_view_host_delegate_view_));
+  // NOTE(andre@vivaldi.com) : This is needed in code-paths used in Vivaldi
+  // since we support reparenting of WebContentsImpl. On Mac the path would lead
+  // directly to an attach via
+  // |WebContentsImpl::ReattachToOuterWebContentsFrame| This will likely be the
+  // default behaviour in a later Chromium rev.
+  if (GuestMode::IsCrossProcessFrameGuest(this)) {
+    view_.reset(new WebContentsViewChildFrame(
+        this, GetContentClient()->browser()->GetWebContentsViewDelegate(this),
+        &render_view_host_delegate_view_));
+  } else {
+    view_.reset(CreateWebContentsView(
+        this, GetContentClient()->browser()->GetWebContentsViewDelegate(this),
+        &render_view_host_delegate_view_));
+  }
   view_->CreateView(GetPreferredSize(), nullptr);
   std::unique_ptr<WebContents> web_contents =
       node_.DisconnectFromOuterWebContents();
@@ -2040,10 +2023,12 @@ std::unique_ptr<WebContents> WebContentsImpl::DetachFromOuterWebContents() {
 void WebContentsImpl::RecursivelyRegisterFrameSinkIds() {
   auto* view = static_cast<RenderWidgetHostViewBase*>(
       GetRenderManager()->GetRenderWidgetHostView());
-  DCHECK(view);
+  DCHECK(view || ::vivaldi::IsVivaldiRunning());
 
   // NOTE(andre@vivaldi.com) : If there is no view here we need to create it.
   // Can happen for links clicked in extensions, webuis and shift-click.
+  // NOTE(igor@vivaldi.com): This also happens when the page's rendering
+  // process crashes on out-of-memory or stack oveflow.
   if (!view) {
     CreateRenderWidgetHostViewForRenderManager(GetRenderViewHost());
     view = static_cast<RenderWidgetHostViewBase*>(
@@ -2520,6 +2505,10 @@ RenderWidgetHostImpl* WebContentsImpl::GetFocusedRenderWidgetHost(
 
   WebContentsImpl* focused_contents = GetFocusedWebContents();
 
+  // NOTE(igor@vivaldi.com): focused_contents can be null at least in Vivaldi
+  if (!focused_contents)
+    return receiving_widget;
+
   // If the focused WebContents is showing an interstitial, return the
   // interstitial's widget.
   if (focused_contents->ShowingInterstitialPage()) {
@@ -2994,10 +2983,6 @@ void WebContentsImpl::CreateNewWindow(
     AddDestructionObserver(new_contents_impl);
   }
 
-  // Track the delegate on which WebContentsCreated may be called.
-  // TODO(ericrk): Remove this once debugging complete. https://crbug.com/758186
-  web_contents_created_delegate_ = delegate_;
-  web_contents_added_to_delegate_ = false;
   if (delegate_) {
     delegate_->WebContentsCreated(this, render_process_id,
                                   opener->GetRoutingID(), params.frame_name,
@@ -3139,18 +3124,6 @@ void WebContentsImpl::ShowCreatedWindow(int process_id,
 
   // The delegate can be null in tests, so we must check for it :(.
   if (delegate) {
-    // TODO(ericrk): Remove this once debugging complete.
-    // https://crbug.com/758186
-    if (web_contents_created_delegate_ != delegate_) {
-      LOG(ERROR) << "AddNewContents called on different delegate from "
-                    "WebContentsCreated. "
-                 << delegate_ << " vs " << web_contents_created_delegate_;
-    }
-    if (web_contents_added_to_delegate_) {
-      LOG(ERROR) << "WebContents added to delegate twice";
-    }
-    web_contents_added_to_delegate_ = true;
-
     // Mark the web contents as pending resume, then immediately do
     // the resume if the delegate wants it.
     created->is_resume_pending_ = true;
@@ -3721,6 +3694,10 @@ void WebContentsImpl::DidProceedOnInterstitial() {
   // Restart the throbber now that the interstitial page no longer pauses it.
   if (ShowingInterstitialPage() && frame_tree_.IsLoading())
     LoadingStateChanged(true, true, nullptr);
+}
+
+bool WebContentsImpl::HadInnerWebContents() {
+  return had_inner_webcontents_;
 }
 
 void WebContentsImpl::DetachInterstitialPage(bool has_focus) {
@@ -4508,7 +4485,13 @@ void WebContentsImpl::ReadyToCommitNavigation(
   // SSLInfo is not needed on subframe navigations since the main-frame
   // certificate is the only one that can be inspected (using the info
   // bubble) without refreshing the page with DevTools open.
-  if (navigation_handle->IsInMainFrame()) {
+  // We don't call DidStartResourceResponse on net errors, since that results on
+  // existing cert exceptions being revoked, which leads to weird behavior with
+  // committed interstitials or while offline. We only need the error check for
+  // the main frame case because unlike this method, SubresourceResponseStarted
+  // does not get called on network errors.
+  if (navigation_handle->IsInMainFrame() &&
+      navigation_handle->GetNetErrorCode() == net::OK) {
     controller_.ssl_manager()->DidStartResourceResponse(
         navigation_handle->GetURL(),
         navigation_handle->GetSSLInfo().has_value()
@@ -4632,12 +4615,15 @@ void WebContentsImpl::DidNavigateMainFramePostCommit(
     did_first_visually_non_empty_paint_ = false;
 
     // Reset theme color on navigation to new page.
-    theme_color_ = SK_ColorTRANSPARENT;
+    theme_color_.reset();
   }
 
   if (delegate_)
     delegate_->DidNavigateMainFramePostCommit(this);
   view_->SetOverscrollControllerEnabled(CanOverscrollContent());
+
+  if (!details.is_same_document && GetInnerWebContents().empty())
+    had_inner_webcontents_ = false;
 }
 
 void WebContentsImpl::DidNavigateAnyFramePostCommit(
@@ -4675,7 +4661,7 @@ bool WebContentsImpl::CanOverscrollContent() const {
 }
 
 void WebContentsImpl::OnThemeColorChanged(RenderFrameHostImpl* source,
-                                          SkColor theme_color) {
+                                          base::Optional<SkColor> theme_color) {
   if (source != GetMainFrame()) {
     // Only the main frame may control the theme.
     return;
@@ -4713,7 +4699,7 @@ void WebContentsImpl::OnDidLoadResourceFromMemoryCache(
                                                              top_frame_origin);
     } else {
       scoped_refptr<net::URLRequestContextGetter> request_context(
-          resource_type == RESOURCE_TYPE_MEDIA
+          resource_type == ResourceType::kMedia
               ? partition->GetMediaURLRequestContext()
               : partition->GetURLRequestContext());
       base::PostTaskWithTraits(
@@ -4938,7 +4924,7 @@ void WebContentsImpl::OnDidFinishLoad(RenderFrameHostImpl* source,
     observer.DidFinishLoad(source, validated_url);
 }
 
-void WebContentsImpl::OnGoToEntryAtOffset(RenderViewHostImpl* source,
+void WebContentsImpl::OnGoToEntryAtOffset(RenderFrameHostImpl* source,
                                           int offset,
                                           bool has_user_gesture) {
   // Non-user initiated navigations coming from the renderer should be ignored
@@ -4957,8 +4943,16 @@ void WebContentsImpl::OnGoToEntryAtOffset(RenderViewHostImpl* source,
   }
 
   // All frames are allowed to navigate the global history.
-  if (!delegate_ || delegate_->OnGoToEntryOffset(offset))
-    controller_.GoToOffset(offset);
+  if (!delegate_ || delegate_->OnGoToEntryOffset(offset)) {
+    if (source->IsSandboxed(blink::WebSandboxFlags::kTopNavigation)) {
+      // Keep track of whether this is a session history from a sandboxed iframe
+      // with top level navigation disallowed.
+      controller_.GoToOffsetInSandboxedFrame(offset,
+                                             source->GetFrameTreeNodeId());
+    } else {
+      controller_.GoToOffset(offset);
+    }
+  }
 }
 
 void WebContentsImpl::OnUpdateZoomLimits(RenderViewHostImpl* source,
@@ -5145,7 +5139,7 @@ void WebContentsImpl::OnRequestPpapiBrokerPermission(
     int ppb_broker_route_id,
     const GURL& url,
     const base::FilePath& plugin_path) {
-  base::Callback<void(bool)> permission_result_callback = base::Bind(
+  base::OnceCallback<void(bool)> permission_result_callback = base::BindOnce(
       &WebContentsImpl::SendPpapiBrokerPermissionResult, base::Unretained(this),
       source->GetProcess()->GetID(), ppb_broker_route_id);
   if (!delegate_) {
@@ -5153,11 +5147,8 @@ void WebContentsImpl::OnRequestPpapiBrokerPermission(
     return;
   }
 
-  if (!delegate_->RequestPpapiBrokerPermission(this, url, plugin_path,
-                                               permission_result_callback)) {
-    NOTIMPLEMENTED();
-    std::move(permission_result_callback).Run(false);
-  }
+  delegate_->RequestPpapiBrokerPermission(
+      this, url, plugin_path, std::move(permission_result_callback));
 }
 
 void WebContentsImpl::SendPpapiBrokerPermissionResult(int process_id,
@@ -5711,6 +5702,10 @@ bool WebContentsImpl::HasPersistentVideo() const {
   return has_persistent_video_;
 }
 
+bool WebContentsImpl::IsSpatialNavigationDisabled() const {
+  return is_spatial_navigation_disabled_;
+}
+
 RenderFrameHost* WebContentsImpl::GetPendingMainFrame() {
   return GetRenderManager()->speculative_frame_host();
 }
@@ -5847,6 +5842,7 @@ void WebContentsImpl::FocusOuterAttachmentFrameChain() {
 }
 
 void WebContentsImpl::InnerWebContentsCreated(WebContents* inner_web_contents) {
+  had_inner_webcontents_ = true;
   for (auto& observer : observers_)
     observer.InnerWebContentsCreated(inner_web_contents);
 }
@@ -6667,7 +6663,7 @@ bool WebContentsImpl::CreateRenderViewForRenderManager(
 
 bool WebContentsImpl::CreateRenderFrameForRenderManager(
     RenderFrameHost* render_frame_host,
-    int proxy_routing_id,
+    int previous_routing_id,
     int opener_routing_id,
     int parent_routing_id,
     int previous_sibling_routing_id) {
@@ -6676,7 +6672,7 @@ bool WebContentsImpl::CreateRenderFrameForRenderManager(
 
   RenderFrameHostImpl* rfh =
       static_cast<RenderFrameHostImpl*>(render_frame_host);
-  if (!rfh->CreateRenderFrame(proxy_routing_id, opener_routing_id,
+  if (!rfh->CreateRenderFrame(previous_routing_id, opener_routing_id,
                               parent_routing_id, previous_sibling_routing_id))
     return false;
 
@@ -6967,6 +6963,31 @@ void WebContentsImpl::DecrementBluetoothConnectedDeviceCount() {
   }
 }
 
+void WebContentsImpl::IncrementSerialActiveFrameCount() {
+  // Trying to invalidate the tab state while being destroyed could result in a
+  // use after free.
+  if (IsBeingDestroyed())
+    return;
+
+  // Notify for UI updates if the state changes.
+  serial_active_frame_count_++;
+  if (serial_active_frame_count_ == 1)
+    NotifyNavigationStateChanged(INVALIDATE_TYPE_TAB);
+}
+
+void WebContentsImpl::DecrementSerialActiveFrameCount() {
+  // Trying to invalidate the tab state while being destroyed could result in a
+  // use after free.
+  if (IsBeingDestroyed())
+    return;
+
+  // Notify for UI updates if the state changes.
+  DCHECK_NE(0u, serial_active_frame_count_);
+  serial_active_frame_count_--;
+  if (serial_active_frame_count_ == 0)
+    NotifyNavigationStateChanged(INVALIDATE_TYPE_TAB);
+}
+
 void WebContentsImpl::SetHasPersistentVideo(bool has_persistent_video) {
   if (has_persistent_video_ == has_persistent_video)
     return;
@@ -6974,6 +6995,14 @@ void WebContentsImpl::SetHasPersistentVideo(bool has_persistent_video) {
   has_persistent_video_ = has_persistent_video;
   NotifyPreferencesChanged();
   media_web_contents_observer()->RequestPersistentVideo(has_persistent_video);
+}
+
+void WebContentsImpl::SetSpatialNavigationDisabled(bool disabled) {
+  if (is_spatial_navigation_disabled_ == disabled)
+    return;
+
+  is_spatial_navigation_disabled_ = disabled;
+  NotifyPreferencesChanged();
 }
 
 void WebContentsImpl::BrowserPluginGuestWillDetach() {
@@ -7060,7 +7089,7 @@ ForwardingAudioStreamFactory* WebContentsImpl::GetAudioStreamFactory() {
 
 void WebContentsImpl::MediaStartedPlaying(
     const WebContentsObserver::MediaPlayerInfo& media_info,
-    const WebContentsObserver::MediaPlayerId& id) {
+    const MediaPlayerId& id) {
   if (media_info.has_video)
     currently_playing_video_count_++;
 
@@ -7070,7 +7099,7 @@ void WebContentsImpl::MediaStartedPlaying(
 
 void WebContentsImpl::MediaStoppedPlaying(
     const WebContentsObserver::MediaPlayerInfo& media_info,
-    const WebContentsObserver::MediaPlayerId& id,
+    const MediaPlayerId& id,
     WebContentsObserver::MediaStoppedReason reason) {
   if (media_info.has_video)
     currently_playing_video_count_--;
@@ -7079,9 +7108,8 @@ void WebContentsImpl::MediaStoppedPlaying(
     observer.MediaStoppedPlaying(media_info, id, reason);
 }
 
-void WebContentsImpl::MediaResized(
-    const gfx::Size& size,
-    const WebContentsObserver::MediaPlayerId& id) {
+void WebContentsImpl::MediaResized(const gfx::Size& size,
+                                   const MediaPlayerId& id) {
   cached_video_sizes_[id] = size;
 
   for (auto& observer : observers_)
@@ -7094,7 +7122,7 @@ void WebContentsImpl::MediaEffectivelyFullscreenChanged(bool is_fullscreen) {
 }
 
 base::Optional<gfx::Size> WebContentsImpl::GetFullscreenVideoSize() {
-  base::Optional<WebContentsObserver::MediaPlayerId> id =
+  base::Optional<MediaPlayerId> id =
       media_web_contents_observer_->GetFullscreenVideoMediaPlayerId();
   if (id && base::ContainsKey(cached_video_sizes_, id.value()))
     return base::Optional<gfx::Size>(cached_video_sizes_[id.value()]);
@@ -7210,7 +7238,7 @@ void WebContentsImpl::ShowInsecureLocalhostWarningIfNeeded() {
     return;
 
   GetMainFrame()->AddMessageToConsole(
-      content::CONSOLE_MESSAGE_LEVEL_WARNING,
+      blink::mojom::ConsoleMessageLevel::kWarning,
       base::StringPrintf("This site does not have a valid SSL "
                          "certificate! Without SSL, your site's and "
                          "visitors' data is vulnerable to theft and "
@@ -7253,9 +7281,8 @@ void WebContentsImpl::SetOpenerForNewContents(FrameTreeNode* opener,
   }
 }
 
-void WebContentsImpl::MediaMutedStatusChanged(
-    const WebContentsObserver::MediaPlayerId& id,
-    bool muted) {
+void WebContentsImpl::MediaMutedStatusChanged(const MediaPlayerId& id,
+                                              bool muted) {
   for (auto& observer : observers_)
     observer.MediaMutedStatusChanged(id, muted);
 }

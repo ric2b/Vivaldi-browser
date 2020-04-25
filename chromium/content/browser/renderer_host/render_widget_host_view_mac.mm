@@ -273,6 +273,9 @@ void RenderWidgetHostViewMac::MigrateNSViewBridge(
   ns_view_client_binding_.Close();
   ns_view_bridge_remote_.reset();
 
+  // Enable accessibility focus overriding for remote NSViews.
+  accessibility_focus_overrider_.SetAppIsRemote(bridge_factory_host != nullptr);
+
   // If no host is specified, then use the locally hosted NSView.
   if (!bridge_factory_host) {
     ns_view_bridge_ = ns_view_bridge_local_.get();
@@ -314,6 +317,11 @@ void RenderWidgetHostViewMac::SetParentUiLayer(ui::Layer* parent_ui_layer) {
   }
   if (browser_compositor_)
     browser_compositor_->SetParentUiLayer(parent_ui_layer);
+}
+
+void RenderWidgetHostViewMac::SetParentAccessibilityElement(
+    id parent_accessibility_element) {
+  [cocoa_view() setAccessibilityParentElement:parent_accessibility_element];
 }
 
 RenderWidgetHostViewCocoa* RenderWidgetHostViewMac::cocoa_view() const {
@@ -443,7 +451,7 @@ void RenderWidgetHostViewMac::UpdateNSViewAndDisplayProperties() {
   }
 }
 
-void RenderWidgetHostViewMac::GetScreenInfo(ScreenInfo* screen_info) const {
+void RenderWidgetHostViewMac::GetScreenInfo(ScreenInfo* screen_info) {
   browser_compositor_->GetRendererScreenInfo(screen_info);
 }
 
@@ -471,10 +479,13 @@ void RenderWidgetHostViewMac::WasUnOccluded() {
       browser_compositor_->GetDelegatedFrameHost();
 
   bool has_saved_frame =
-      delegated_frame_host ? delegated_frame_host->HasSavedFrame() : false;
+      browser_compositor_->has_saved_frame_before_state_transition();
+
+  auto tab_switch_start_time = GetAndResetLastTabChangeStartTime();
 
   const bool renderer_should_record_presentation_time = !has_saved_frame;
-  host()->WasShown(renderer_should_record_presentation_time);
+  host()->WasShown(renderer_should_record_presentation_time,
+                   tab_switch_start_time);
 
   if (delegated_frame_host) {
     // If the frame for the renderer is already available, then the
@@ -483,7 +494,8 @@ void RenderWidgetHostViewMac::WasUnOccluded() {
     delegated_frame_host->WasShown(
         browser_compositor_->GetRendererLocalSurfaceIdAllocation()
             .local_surface_id(),
-        browser_compositor_->GetRendererSize(), record_presentation_time);
+        browser_compositor_->GetRendererSize(), record_presentation_time,
+        tab_switch_start_time);
   }
 }
 
@@ -502,7 +514,7 @@ void RenderWidgetHostViewMac::SetBounds(const gfx::Rect& rect) {
   ns_view_bridge_->SetBounds(rect);
 }
 
-gfx::NativeView RenderWidgetHostViewMac::GetNativeView() const {
+gfx::NativeView RenderWidgetHostViewMac::GetNativeView() {
   return cocoa_view();
 }
 
@@ -514,11 +526,11 @@ void RenderWidgetHostViewMac::Focus() {
   ns_view_bridge_->MakeFirstResponder();
 }
 
-bool RenderWidgetHostViewMac::HasFocus() const {
+bool RenderWidgetHostViewMac::HasFocus() {
   return is_first_responder_;
 }
 
-bool RenderWidgetHostViewMac::IsSurfaceAvailableForCopy() const {
+bool RenderWidgetHostViewMac::IsSurfaceAvailableForCopy() {
   return browser_compositor_->GetDelegatedFrameHost()
       ->CanCopyFromCompositingSurface();
 }
@@ -527,7 +539,7 @@ bool RenderWidgetHostViewMac::IsShowing() {
   return is_visible_;
 }
 
-gfx::Rect RenderWidgetHostViewMac::GetViewBounds() const {
+gfx::Rect RenderWidgetHostViewMac::GetViewBounds() {
   return view_bounds_in_window_dip_ +
          window_frame_in_screen_dip_.OffsetFromOrigin();
 }
@@ -749,7 +761,7 @@ void RenderWidgetHostViewMac::DidNavigate() {
   browser_compositor_->DidNavigate();
 }
 
-gfx::Size RenderWidgetHostViewMac::GetRequestedRendererSize() const {
+gfx::Size RenderWidgetHostViewMac::GetRequestedRendererSize() {
   return browser_compositor_->GetRendererSize();
 }
 
@@ -1370,7 +1382,7 @@ void RenderWidgetHostViewMac::UpdateBackgroundColor() {
   browser_compositor_->SetBackgroundColor(color);
 }
 
-base::Optional<SkColor> RenderWidgetHostViewMac::GetBackgroundColor() const {
+base::Optional<SkColor> RenderWidgetHostViewMac::GetBackgroundColor() {
   // This is used to specify a color to temporarily show while waiting for web
   // content. This should never return transparent, since that will cause bugs
   // where views are initialized as having a transparent background
@@ -1439,11 +1451,7 @@ id RenderWidgetHostViewMac::GetRootBrowserAccessibilityElement() {
 }
 
 id RenderWidgetHostViewMac::GetFocusedBrowserAccessibilityElement() {
-  // This function should never be called because
-  // |accessibility_focus_overrider_| override the application focus query.
-  DLOG(ERROR) << "GetFocusedBrowserAccessibilityElement should not be reached "
-                 "in-process.";
-  return nil;
+  return GetAccessibilityFocusedUIElement();
 }
 
 void RenderWidgetHostViewMac::SetAccessibilityWindow(NSWindow* window) {
@@ -1673,8 +1681,7 @@ void RenderWidgetHostViewMac::GestureUpdate(
     mouse_wheel_phase_handler_.DispatchPendingWheelEndEvent();
     WebGestureEvent begin_event(*gesture_begin_event_);
     begin_event.SetType(WebInputEvent::kGesturePinchBegin);
-    begin_event.SetSourceDevice(
-        blink::WebGestureDevice::kWebGestureDeviceTouchpad);
+    begin_event.SetSourceDevice(blink::WebGestureDevice::kTouchpad);
     begin_event.SetNeedsWheelEvent(true);
     SendTouchpadZoomEvent(&begin_event);
     gesture_begin_pinch_sent_ = YES;
@@ -1960,13 +1967,6 @@ void RenderWidgetHostViewMac::StartSpeaking() {
 
 void RenderWidgetHostViewMac::StopSpeaking() {
   ui::TextServicesContextMenu::StopSpeaking();
-}
-
-void RenderWidgetHostViewMac::SyncGetRootAccessibilityElement(
-    SyncGetRootAccessibilityElementCallback callback) {
-  id element_id = GetRootBrowserAccessibilityElement();
-  std::move(callback).Run(
-      getpid(), ui::RemoteAccessibility::GetTokenForLocalElement(element_id));
 }
 
 void RenderWidgetHostViewMac::SetRemoteAccessibilityWindowToken(

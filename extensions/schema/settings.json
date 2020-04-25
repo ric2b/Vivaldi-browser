@@ -49,17 +49,6 @@
           {
             "name": "settingsItem",
             "$ref": "ContentSettingItem"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "result",
-                "type": "boolean"
-              }
-            ]
           }
         ]
       }

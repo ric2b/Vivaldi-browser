@@ -31,9 +31,9 @@ bool RecurrrenceTable::CreateRecurringTable() {
       "("
       "id INTEGER PRIMARY KEY AUTOINCREMENT,"
       "event_id INTEGER NOT NULL UNIQUE,"
-      "interval VARCHAR NOT NULL,"  // daily, weekly, monthly, yearly
+      "frequency VARCHAR NOT NULL,"  // daily, weekly, monthly, yearly
       "number_of_ocurrences INTEGER,"
-      "skip_count INTEGER,"
+      "interval INTEGER,"
       "day_of_week INTEGER,"
       "week_of_month INTEGER,"
       "day_of_month INTEGER,"
@@ -49,38 +49,38 @@ RecurrenceID RecurrrenceTable::CreateRecurrenceEvent(RecurrenceRow row) {
   sql::Statement statement(GetDB().GetCachedStatement(
       SQL_FROM_HERE,
       "INSERT OR REPLACE into recurring_events "
-      "(event_id, interval, number_of_ocurrences, skip_count, "
+      "(event_id, frequency, number_of_ocurrences, interval, "
       "day_of_week, "
       " week_of_month, day_of_month, month_of_year) "
       "VALUES (?, ?, ?, ?, ?, ?, ?, ?)"));
 
-  std::string interval = "";
+  std::string frequency = "";
 
-  switch (row.recurrence_interval()) {
-    case RecurrenceInterval::DAILY:
-      interval = "days";
+  switch (row.recurrence_frequency()) {
+    case RecurrenceFrequency::DAILY:
+      frequency = "days";
       break;
 
-    case RecurrenceInterval::WEEKLY:
-      interval = "weeks";
+    case RecurrenceFrequency::WEEKLY:
+      frequency = "weeks";
       break;
 
-    case RecurrenceInterval::MONTHLY:
-      interval = "months";
+    case RecurrenceFrequency::MONTHLY:
+      frequency = "months";
       break;
 
-    case RecurrenceInterval::YEARLY:
-      interval = "years";
+    case RecurrenceFrequency::YEARLY:
+      frequency = "years";
       break;
 
     default:
-      interval = "none";
+      frequency = "none";
   }
 
   statement.BindInt64(0, row.event_id());
-  statement.BindString(1, interval);
+  statement.BindString(1, frequency);
   statement.BindInt(2, row.number_of_ocurrences());
-  statement.BindInt(3, row.skip_count());
+  statement.BindInt(3, row.interval());
   statement.BindInt(4, row.day_of_week());
   statement.BindInt(5, row.week_of_month());
   statement.BindInt(6, row.day_of_month());
@@ -126,37 +126,37 @@ bool RecurrrenceTable::UpdateRecurrenceRow(const RecurrenceRow& recurrence) {
   sql::Statement statement(GetDB().GetCachedStatement(
       SQL_FROM_HERE,
       "UPDATE recurring_events SET \
-        event_id=?, interval=?, number_of_ocurrences=?, skip_count=?, "
+        event_id=?, frequency=?, number_of_ocurrences=?, interval=?, "
       "day_of_week=?, week_of_month=?, day_of_month=?, month_of_year=? \
         WHERE id=?"));
 
-  std::string interval = "";
+  std::string frequency = "";
 
-  switch (recurrence.recurrence_interval()) {
-    case RecurrenceInterval::DAILY:
-      interval = "days";
+  switch (recurrence.recurrence_frequency()) {
+    case RecurrenceFrequency::DAILY:
+      frequency = "days";
       break;
 
-    case RecurrenceInterval::WEEKLY:
-      interval = "weeks";
+    case RecurrenceFrequency::WEEKLY:
+      frequency = "weeks";
       break;
 
-    case RecurrenceInterval::MONTHLY:
-      interval = "months";
+    case RecurrenceFrequency::MONTHLY:
+      frequency = "months";
       break;
 
-    case RecurrenceInterval::YEARLY:
-      interval = "years";
+    case RecurrenceFrequency::YEARLY:
+      frequency = "years";
       break;
 
     default:
-      interval = "";
+      frequency = "";
   }
 
   statement.BindInt64(0, recurrence.event_id());
-  statement.BindString(1, interval);
+  statement.BindString(1, frequency);
   statement.BindInt(2, recurrence.number_of_ocurrences());
-  statement.BindInt(3, recurrence.skip_count());
+  statement.BindInt(3, recurrence.interval());
   statement.BindInt(4, recurrence.day_of_week());
   statement.BindInt(5, recurrence.week_of_month());
   statement.BindInt(6, recurrence.day_of_month());
@@ -170,30 +170,30 @@ void RecurrrenceTable::FillRecurrenceRow(const sql::Statement& statement,
                                          RecurrenceRow* recurrenceRow) {
   int64_t id = statement.ColumnInt64(0);
   int64_t event_id = statement.ColumnInt64(1);
-  std::string recurrence_interval = statement.ColumnString(2);
+  std::string recurrence_frequency = statement.ColumnString(2);
   int number_of_ocurrences = statement.ColumnInt(3);
-  int skip_count = statement.ColumnInt(4);
+  int interval = statement.ColumnInt(4);
   int day_of_week = statement.ColumnInt(5);
   int week_of_month = statement.ColumnInt(6);
   int day_of_month = statement.ColumnInt(7);
   int month_of_year = statement.ColumnInt(8);
 
-  RecurrenceInterval interval = RecurrenceInterval::NONE;
-  if (recurrence_interval == "days") {
-    interval = RecurrenceInterval::DAILY;
-  } else if (recurrence_interval == "weeks") {
-    interval = RecurrenceInterval::WEEKLY;
-  } else if (recurrence_interval == "months") {
-    interval = RecurrenceInterval::MONTHLY;
-  } else if (recurrence_interval == "years") {
-    interval = RecurrenceInterval::YEARLY;
+  RecurrenceFrequency frequency = RecurrenceFrequency::NONE;
+  if (recurrence_frequency == "days") {
+    frequency = RecurrenceFrequency::DAILY;
+  } else if (recurrence_frequency == "weeks") {
+    frequency = RecurrenceFrequency::WEEKLY;
+  } else if (recurrence_frequency == "months") {
+    frequency = RecurrenceFrequency::MONTHLY;
+  } else if (recurrence_frequency == "years") {
+    frequency = RecurrenceFrequency::YEARLY;
   }
 
   recurrenceRow->set_id(id);
   recurrenceRow->set_event_id(event_id);
-  recurrenceRow->set_recurrence_interval(interval);
+  recurrenceRow->set_recurrence_frequency(frequency);
   recurrenceRow->set_number_of_ocurrences(number_of_ocurrences);
-  recurrenceRow->set_skip_count(skip_count);
+  recurrenceRow->set_interval(interval);
   recurrenceRow->set_day_of_week(day_of_week);
   recurrenceRow->set_week_of_month(week_of_month);
   recurrenceRow->set_day_of_month(day_of_month);

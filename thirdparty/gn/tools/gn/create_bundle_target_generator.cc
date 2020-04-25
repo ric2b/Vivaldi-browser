@@ -42,9 +42,6 @@ void CreateBundleTargetGenerator::DoRun() {
   if (!FillBundleDir(bundle_data.root_dir(), variables::kBundleExecutableDir,
                      &bundle_data.executable_dir()))
     return;
-  if (!FillBundleDir(bundle_data.root_dir(), variables::kBundlePlugInsDir,
-                     &bundle_data.plugins_dir()))
-    return;
 
   if (!FillXcodeExtraAttributes())
     return;
@@ -78,6 +75,8 @@ bool CreateBundleTargetGenerator::FillBundleDir(
     const SourceDir& bundle_root_dir,
     const base::StringPiece& name,
     SourceDir* bundle_dir) {
+  // All bundle_foo_dir properties are optional. They are only required if they
+  // are used in an expansion. The check is performed there.
   const Value* value = scope_->GetValue(name, true);
   if (!value)
     return true;

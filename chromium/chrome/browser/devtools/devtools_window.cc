@@ -1252,6 +1252,13 @@ void DevToolsWindow::AddNewContents(WebContents* source,
                                     bool* was_blocked) {
   if (new_contents.get() == toolbox_web_contents_) {
     owned_toolbox_web_contents_ = std::move(new_contents);
+    extensions::WebViewGuest* web_view_guest =
+      extensions::WebViewGuest::FromWebContents(
+        owned_toolbox_web_contents_.get());
+    if (web_view_guest) {
+      // Devtools owns this webcontents, let the webviewguest know.
+      web_view_guest->SetWebContentsIsOwnedByThis(false);
+    }
 
     toolbox_web_contents_->SetDelegate(
         new DevToolsToolboxDelegate(toolbox_web_contents_,
@@ -1664,6 +1671,8 @@ void DevToolsWindow::SetOpenNewWindowForPopups(bool value) {
 void DevToolsWindow::CreateDevToolsBrowser() {
   PrefService* prefs = profile_->GetPrefs();
   if (!prefs->GetDictionary(prefs::kAppWindowPlacement)->HasKey(kDevToolsApp)) {
+    // Ensure there is always a default size so that
+    // BrowserFrame::InitBrowserFrame can retrieve it later.
     DictionaryPrefUpdate update(prefs, prefs::kAppWindowPlacement);
     base::DictionaryValue* wp_prefs = update.Get();
     auto dev_tools_defaults = std::make_unique<base::DictionaryValue>();

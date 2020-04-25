@@ -3,19 +3,19 @@
 #ifndef EXTENSIONS_API_EDITCOMMAND_EDITCOMMAND_API_H_
 #define EXTENSIONS_API_EDITCOMMAND_EDITCOMMAND_API_H_
 
-#include "chrome/browser/extensions/chrome_extension_function.h"
+#include "extensions/browser/extension_function.h"
 #include "extensions/schema/editcommand.h"
 
 namespace extensions {
 
-class EditcommandExecuteFunction : public ChromeAsyncExtensionFunction {
+class EditcommandExecuteFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("editcommand.execute", EDITCOMMAND_EXECUTE)
-  EditcommandExecuteFunction();
+  EditcommandExecuteFunction() = default;
 
  private:
-  ~EditcommandExecuteFunction() override;
-  bool RunAsync() override;
+  ~EditcommandExecuteFunction() override = default;
+  ResponseAction Run() override;
   DISALLOW_COPY_AND_ASSIGN(EditcommandExecuteFunction);
 };
 

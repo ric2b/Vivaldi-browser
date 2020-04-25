@@ -27,13 +27,18 @@ class BundleFileRule {
 
   // Applies the substitution pattern to a source file, returning the result
   // as either a SourceFile or an OutputFile.
-  SourceFile ApplyPatternToSource(const Settings* settings,
-                                  const BundleData& bundle_data,
-                                  const SourceFile& source_file) const;
-  OutputFile ApplyPatternToSourceAsOutputFile(
-      const Settings* settings,
-      const BundleData& bundle_data,
-      const SourceFile& source_file) const;
+  bool ApplyPatternToSource(const Settings* settings,
+                            const Target* target,
+                            const BundleData& bundle_data,
+                            const SourceFile& source_file,
+                            SourceFile* expanded_source_file,
+                            Err* err) const;
+  bool ApplyPatternToSourceAsOutputFile(const Settings* settings,
+                                        const Target* target,
+                                        const BundleData& bundle_data,
+                                        const SourceFile& source_file,
+                                        OutputFile* expanded_output_file,
+                                        Err* err) const;
 
   // Returns the associated target (of type Target::BUNDLE_DATA). May be
   // null during testing.

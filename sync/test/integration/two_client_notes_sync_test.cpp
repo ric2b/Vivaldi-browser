@@ -55,7 +55,7 @@ class TwoClientNotesSyncTest : public NotesSyncTest {
 
 class LegacyTwoClientNotesSyncTest : public NotesSyncTest {
  public:
-  LegacyTwoClientNotesSyncTest() : NotesSyncTest(TWO_CLIENT_LEGACY) {}
+  LegacyTwoClientNotesSyncTest() : NotesSyncTest(TWO_CLIENT) {}
   ~LegacyTwoClientNotesSyncTest() override {}
 
  private:
@@ -1505,12 +1505,12 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, DisableNotes) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
-  ASSERT_TRUE(GetClient(1)->DisableSyncForDatatype(syncer::NOTES));
+  ASSERT_TRUE(GetClient(1)->DisableSyncForType(syncer::UserSelectableType::kNotes));
   ASSERT_TRUE(AddFolder(1, kGenericFolderName) != NULL);
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_FALSE(AllModelsMatch());
 
-  ASSERT_TRUE(GetClient(1)->EnableSyncForDatatype(syncer::NOTES));
+  ASSERT_TRUE(GetClient(1)->EnableSyncForType(syncer::UserSelectableType::kNotes));
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(AllModelsMatch());
 }
@@ -1561,7 +1561,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, MC_DuplicateFolders) {
 // This test fails when run with FakeServer and FakeServerInvalidationService.
 IN_PROC_BROWSER_TEST_F(LegacyTwoClientNotesSyncTest, MC_DeleteNote) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
-  ASSERT_TRUE(GetClient(1)->DisableSyncForDatatype(syncer::NOTES));
+  ASSERT_TRUE(GetClient(1)->DisableSyncForType(syncer::UserSelectableType::kNotes));
 
   const GURL bar_url("http://example.com/bar");
   const GURL other_url("http://example.com/other");
@@ -1582,7 +1582,7 @@ IN_PROC_BROWSER_TEST_F(LegacyTwoClientNotesSyncTest, MC_DeleteNote) {
   ASSERT_FALSE(HasNodeWithURL(0, bar_url));
   ASSERT_TRUE(HasNodeWithURL(0, other_url));
 
-  ASSERT_TRUE(GetClient(1)->EnableSyncForDatatype(syncer::NOTES));
+  ASSERT_TRUE(GetClient(1)->EnableSyncForType(syncer::UserSelectableType::kNotes));
   ASSERT_TRUE(AwaitQuiescence());
 
   ASSERT_FALSE(HasNodeWithURL(0, bar_url));

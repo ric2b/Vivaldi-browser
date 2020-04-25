@@ -78,10 +78,6 @@ ContextMenuController::ContextMenuController(Page* page) : page_(page) {}
 
 ContextMenuController::~ContextMenuController() = default;
 
-ContextMenuController* ContextMenuController::Create(Page* page) {
-  return MakeGarbageCollected<ContextMenuController>(page);
-}
-
 void ContextMenuController::Trace(blink::Visitor* visitor) {
   visitor->Trace(page_);
   visitor->Trace(menu_provider_);
@@ -447,12 +443,14 @@ bool ContextMenuController::ShowContextMenu(LocalFrame* frame,
   if (web_url.IsValid())
     data.vivaldi_keyword_url = web_url;
 #endif  // VIVALDI_BUILD
-  if (EditingStyle::SelectionHasStyle(*selected_frame, CSSPropertyDirection,
+  if (EditingStyle::SelectionHasStyle(*selected_frame,
+                                      CSSPropertyID::kDirection,
                                       "ltr") != EditingTriState::kFalse) {
     data.writing_direction_left_to_right |=
         WebContextMenuData::kCheckableMenuItemChecked;
   }
-  if (EditingStyle::SelectionHasStyle(*selected_frame, CSSPropertyDirection,
+  if (EditingStyle::SelectionHasStyle(*selected_frame,
+                                      CSSPropertyID::kDirection,
                                       "rtl") != EditingTriState::kFalse) {
     data.writing_direction_right_to_left |=
         WebContextMenuData::kCheckableMenuItemChecked;

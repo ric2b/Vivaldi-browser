@@ -17,6 +17,7 @@
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "extensions/api/runtime/runtime_api.h"
 #include "extensions/helper/vivaldi_app_helper.h"
 #endif
 
@@ -67,6 +68,11 @@ void VivaldiContentBrowserClientParts::OverrideWebkitPrefs(
     if (prefs->GetBoolean(vivaldiprefs::kMouseGesturesEnabled) ||
       prefs->GetBoolean(vivaldiprefs::kMouseGesturesRockerGesturesEnabled)) {
       web_prefs->context_menu_on_mouse_up = true;
+    }
+    if (extensions::VivaldiRuntimeFeatures::IsEnabled(profile,
+                                                      "double_click_menu") &&
+        prefs->GetBoolean(vivaldiprefs::kMouseGesturesDoubleClickMenuEnabled)) {
+      web_prefs->vivaldi_show_context_menu_on_double_click = true;
     }
 
 #endif

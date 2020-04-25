@@ -63,25 +63,20 @@ VivaldiBookmarkMenu* CreateVivaldiBookmarkMenu(
     content::WebContents* web_contents,
     const vivaldi::BookmarkMenuParams& params,
     const gfx::Rect& button_rect) {
-  // Transform coordinate from local to screen. Since Mac uses a lower-left
-  // origin and chrome does not we must adjust for this before and after,
-  NSView* view = web_contents->GetNativeView().GetNativeNSView();
-  NSWindow* window = [view window];
-  // Adjust position to lower left in view
-  NSPoint position = NSMakePoint(button_rect.x(),
-                                 NSHeight([view bounds]) - button_rect.y());
-  // Position in window
-  position = [view convertPoint:position toView:nil];
-  // Position in screen
-  NSRect screen_rect = [window convertRectToScreen:
-      NSMakeRect(position.x, position.y, 0, 0)];
-  // Adjust to upper left in screen
-  gfx::Rect rect(screen_rect.origin.x,
-                 window.screen.frame.size.height - screen_rect.origin.y,
-                 button_rect.width(),
-                 button_rect.height());
-
-  return new VivaldiBookmarkMenuViews(web_contents, params, rect);
+  VivaldiBookmarkMenuViews* menu =
+      new VivaldiBookmarkMenuViews(web_contents, params, button_rect);
+  // Compute bounds after we know we can access widget.
+  if (menu->CanShow()) {
+    views::Widget* widget = views::Widget::GetTopLevelWidgetForNativeView(
+      VivaldiBookmarkMenuViews::GetActiveNativeViewFromWebContents(
+          web_contents));
+    gfx::Point screen_loc;
+    views::View::ConvertPointToScreen(widget->GetContentsView(), &screen_loc);
+    // Adjust for the button position within content area.
+    screen_loc.Offset(button_rect.x(), button_rect.y());
+    menu->set_button_rect(gfx::Rect(screen_loc, button_rect.size()));
+  }
+  return menu;
 }
 }  // vivialdi
 

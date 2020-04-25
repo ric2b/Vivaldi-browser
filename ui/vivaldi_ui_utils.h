@@ -17,6 +17,10 @@ class WebViewGuest;
 
 class VivaldiBrowserWindow;
 
+namespace thumbnails {
+enum class ClipResult;
+}
+
 namespace vivaldi {
 namespace ui_tools {
 
@@ -38,7 +42,8 @@ extern extensions::WebViewGuest* GetActiveWebGuestFromBrowser(Browser* browser);
 
 extern content::WebContents* GetWebContentsFromTabStrip(
     int tab_id,
-    content::BrowserContext* browser_context);
+    content::BrowserContext* browser_context,
+    std::string* error = nullptr);
 
 extern bool IsOutsideAppWindow(int screen_x, int screen_y);
 
@@ -52,6 +57,9 @@ extern bool EncodeBitmap(
     int image_quality,
     bool resize);
 
+extern gfx::Rect GetClippingRect(const gfx::Size& source_size,
+                                 const gfx::Size& desired_size,
+                                 thumbnails::ClipResult* clip_result);
 extern SkBitmap SmartCropAndSize(const SkBitmap& capture,
                                  int target_width,
                                  int target_height);

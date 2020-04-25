@@ -58,7 +58,7 @@
 
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
-#include "base/md5.h"
+#include "base/hash/md5.h"
 #include "browser/win/vivaldi_utils.h"
 
 namespace shell_integration {

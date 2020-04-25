@@ -43,6 +43,7 @@ class EventDatabase {
   bool GetRowForEvent(EventID event_id, EventRow* out_event);
   bool UpdateEventRow(const EventRow& event);
   bool DeleteEvent(EventID event_id);
+  bool DeleteEventsForCalendar(CalendarID calendar_id);
 
  protected:
   virtual sql::Database& GetDB() = 0;
@@ -56,10 +57,10 @@ class EventDatabase {
 // the macro if you want to put this in the middle of an otherwise constant
 // string, it will save time doing string appends. If you have to build a SQL
 // string dynamically anyway, use the constant, it will save space.
-#define CALENDAR_EVENT_ROW_FIELDS                                         \
-  " id, calendar_id, alarm_id, title, description, start, end, all_day, " \
-  "is_recurring, start_recurring, end_recurring, location, url, etag, href,"\
-  " uid "
+#define CALENDAR_EVENT_ROW_FIELDS                                            \
+  " id, calendar_id, alarm_id, title, description, start, end, all_day, "    \
+  "is_recurring, start_recurring, end_recurring, location, url, etag, href," \
+  " uid, event_type_id "
 
 }  // namespace calendar
 

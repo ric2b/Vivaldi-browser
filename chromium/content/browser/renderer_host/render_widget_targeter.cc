@@ -150,9 +150,9 @@ void RenderWidgetTargeter::FindTargetAndDispatch(
          blink::WebInputEvent::IsTouchEventType(event.GetType()) ||
          (blink::WebInputEvent::IsGestureEventType(event.GetType()) &&
           (static_cast<const blink::WebGestureEvent&>(event).SourceDevice() ==
-               blink::WebGestureDevice::kWebGestureDeviceTouchscreen ||
+               blink::WebGestureDevice::kTouchscreen ||
            static_cast<const blink::WebGestureEvent&>(event).SourceDevice() ==
-               blink::WebGestureDevice::kWebGestureDeviceTouchpad)));
+               blink::WebGestureDevice::kTouchpad)));
 
   RenderWidgetTargetResult result;
   if (request_in_flight_) {
@@ -499,7 +499,7 @@ void RenderWidgetTargeter::FoundTarget(
       vivaldi_active_down_target_ = target;
     } else if (event.GetType() == blink::WebInputEvent::kMouseUp &&
                        vivaldi_active_down_target_) {
-      if (vivaldi_active_down_target_ != target) {
+      if (target && (vivaldi_active_down_target_ != target)) {
         delegate_->DispatchEventToTarget(root_view, vivaldi_active_down_target_,
                                          event, latency, target_location);
       }

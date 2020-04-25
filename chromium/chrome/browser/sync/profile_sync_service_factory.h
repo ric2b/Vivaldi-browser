@@ -19,15 +19,15 @@ struct DefaultSingletonTraits;
 
 namespace browser_sync {
 class ChromeSyncClient;
-class ProfileSyncService;
 }  // namespace browser_sync
 
 namespace syncer {
+class ProfileSyncService;
 class SyncService;
 }  // namespace syncer
 
 namespace vivaldi {
-class VivaldiSyncManagerFactory;
+class VivaldiProfileSyncServiceFactory;
 }
 
 class ProfileSyncServiceFactory : public BrowserContextKeyedServiceFactory {
@@ -40,7 +40,7 @@ class ProfileSyncServiceFactory : public BrowserContextKeyedServiceFactory {
   static syncer::SyncService* GetForProfile(Profile* profile);
   // Returns the ProfileSyncService for the given profile. DO NOT USE unless
   // absolutely necessary! Prefer GetForProfile instead.
-  static browser_sync::ProfileSyncService* GetAsProfileSyncServiceForProfile(
+  static syncer::ProfileSyncService* GetAsProfileSyncServiceForProfile(
       Profile* profile);
 
   // Returns whether a SyncService has already been created for the profile.
@@ -54,7 +54,7 @@ class ProfileSyncServiceFactory : public BrowserContextKeyedServiceFactory {
 
  private:
   friend struct base::DefaultSingletonTraits<ProfileSyncServiceFactory>;
-  friend vivaldi::VivaldiSyncManagerFactory;
+  friend vivaldi::VivaldiProfileSyncServiceFactory;
 
   ProfileSyncServiceFactory();
   ~ProfileSyncServiceFactory() override;

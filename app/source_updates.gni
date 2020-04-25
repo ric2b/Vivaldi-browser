@@ -191,7 +191,8 @@ foreach(
         "//components/strings:components_locale_settings",
         "//vivaldi/app/resources/components_locale_settings/vivaldi_components_locale_settings.grd",
         {
-          have_strings_flag = false
+          translation_dir_setting = "strings"
+          pak_file_prefix="components_locale_settings_"
         },
       ],
       [

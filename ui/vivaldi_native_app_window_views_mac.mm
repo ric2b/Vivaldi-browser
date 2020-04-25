@@ -15,6 +15,7 @@
 #include "chrome/browser/apps/app_shim/extension_app_shim_handler_mac.h"
 #import "chrome/browser/ui/views/apps/app_window_native_widget_mac.h"
 #include "extensions/schema/window_private.h"
+#include "extensions/tools/vivaldi_tools.h"
 #import "ui/gfx/mac/coordinate_conversion.h"
 #include "ui/vivaldi_browser_window.h"
 #import "ui/vivaldi_native_app_window_frame_view_mac.h"
@@ -256,9 +257,9 @@ void VivaldiNativeAppWindowViewsMac::DispatchFullscreenMenubarChangedEvent(
   if (!browser) {
     return;
   }
-  vivaldi::DispatchEvent(
-    browser->profile(),
+  ::vivaldi::BroadcastEvent(
     extensions::vivaldi::window_private::OnFullscreenMenubarChanged::kEventName,
     extensions::vivaldi::window_private::OnFullscreenMenubarChanged::Create(
-        browser->session_id().id(), shown));
+        browser->session_id().id(), shown),
+    browser->profile());
 }

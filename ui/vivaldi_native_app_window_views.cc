@@ -789,7 +789,7 @@ void VivaldiNativeAppWindowViews::Layout() {
 }
 
 void VivaldiNativeAppWindowViews::ViewHierarchyChanged(
-    const ViewHierarchyChangedDetails& details) {
+    const views::ViewHierarchyChangedDetails& details) {
   if (details.is_add && details.child == this) {
     web_view_ = new views::WebView(NULL);
     AddChildView(web_view_);
@@ -935,17 +935,11 @@ void VivaldiNativeAppWindowViews::Close() {
   // the rest will continue.  This is not ideal, but avoids
   // lingering processes until AppWindows are no longer used
   // for thumbnail generation. See VB-38712.
-  extensions::VivaldiUtilitiesAPI* utils_api =
-    extensions::VivaldiUtilitiesAPI::GetFactoryInstance()->Get(
+  extensions::VivaldiUtilitiesAPI::CloseAllThumbnailWindows(
       window_->GetProfile());
-  DCHECK(utils_api);
-  utils_api->CloseAllThumbnailWindows();
 
-  extensions::DevtoolsConnectorAPI* api =
-    extensions::DevtoolsConnectorAPI::GetFactoryInstance()->Get(
-      window_->GetProfile());
-  DCHECK(api);
-  api->CloseDevtoolsForBrowser(window_->browser());
+  extensions::DevtoolsConnectorAPI::CloseDevtoolsForBrowser(
+      window_->GetProfile(), window_->browser());
 
 #if defined(OS_WIN)
   // This must be as early as possible.
@@ -1005,11 +999,10 @@ bool VivaldiAppWindowClientView::CanClose() {
   Browser* browser = window_->browser();
 
 #if !defined(OS_MACOSX)
-  extensions::VivaldiWindowsAPI* api =
-    extensions::VivaldiWindowsAPI::GetFactoryInstance()->Get(
-      window_->GetProfile());
   // Is window closing due to a profile being closed?
-  bool closed_due_to_profile = api->IsWindowClosingBecauseProfileClose(browser);
+  bool closed_due_to_profile =
+      extensions::VivaldiWindowsAPI::IsWindowClosingBecauseProfileClose(
+          browser);
 
   int tabbed_windows_cnt = vivaldi::GetBrowserCountOfType(Browser::TYPE_TABBED);
   const PrefService* prefs = window_->GetProfile()->GetPrefs();

@@ -153,7 +153,7 @@ bool IsVivaldiMenuItem(int id) {
 }
 
 void AddSeparator(views::MenuItemView* menu) {
-  if ( menu->HasSubmenu() &&  menu->GetSubmenu()->GetMenuItemCount() > 0) {
+  if (menu->HasSubmenu() &&  menu->GetSubmenu()->HasVisibleChildren()) {
     menu->AppendSeparator();
   }
 }

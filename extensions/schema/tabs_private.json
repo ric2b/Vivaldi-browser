@@ -12,7 +12,8 @@
         "id": "MediaType",
         "type": "string",
         "description": "The active media type.",
-        "enum": [ "empty", "recording", "capturing", "playing", "muting", "bluetooth", "usb", "pip", "desktop_capturing", "vr_presenting_in_headset" ]
+        "enum": [ "empty", "recording", "capturing", "playing", "muting", "bluetooth", "usb",
+                  "pip", "desktop_capturing", "vr_presenting_in_headset", "serial_connected" ]
       },
       {
         "id": "UpdateTabInfo",

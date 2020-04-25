@@ -60,8 +60,7 @@ TEST(NinjaActionTargetWriter, ActionNoSources) {
   NinjaActionTargetWriter writer(&target, out);
   writer.Run();
 
-  const char* expected = 1 /* skip initial newline */ + R"(
-rule __foo_bar___rule
+  const char* expected = R"(rule __foo_bar___rule
   command = /usr/bin/python ../../foo/script.py
   description = ACTION //foo:bar()
   restat = 1
@@ -70,7 +69,7 @@ build foo.out: __foo_bar___rule | ../../foo/script.py ../../foo/included.txt
 
 build obj/foo/bar.stamp: stamp foo.out
 )";
-  EXPECT_EQ(expected, out.str());
+  EXPECT_EQ(expected, out.str()) << expected << "--" << out.str();
 }
 
 // Tests an action with no sources and pool
@@ -105,8 +104,7 @@ TEST(NinjaActionTargetWriter, ActionNoSourcesConsole) {
 
   // The console pool's name must be mapped exactly to the string "console"
   // which is a special pre-defined pool name in ninja.
-  const char* expected = 1 /* skip initial newline */ + R"(
-rule __foo_bar___rule
+  const char* expected = R"(rule __foo_bar___rule
   command = /usr/bin/python ../../foo/script.py
   description = ACTION //foo:bar()
   restat = 1

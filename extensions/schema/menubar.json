@@ -1,0 +1,135 @@
+//
+// Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved.
+//
+
+[
+  {
+    "namespace": "menubar",
+    "description": "Use the <code>vivaldi.menubar</code> API to set up and manage main menu bar",
+    "types": [
+      {
+        "id": "Mode",
+        "type": "string",
+        "description": "What part menubar to manipulate",
+        "enum": ["all", "update", "tabs"]
+      },
+      {
+        "id": "MenuItem",
+        "type": "object",
+        "description": "One menu item.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Text in item."
+          },
+          "id": {
+            "type": "integer",
+            "description": "The unique id of item."
+          },
+          "items": {
+            "type": "array",
+            "optional": true,
+            "items": {"$ref": "MenuItem"},
+            "description": "Child menu items."
+          },
+          "visible": {
+            "type": "boolean",
+            "optional": true,
+            "description": "Whether this menu item is visible or not. Defaults to true."
+          },
+          "type": {
+            "type": "string",
+            "optional": true,
+            "description": "'normal' or 'checkbox'. Defaults to 'normal'."
+          },
+          "checked": {
+            "type": "boolean",
+            "optional": true,
+            "description": "true if the checkbox is checked, otherwise false. Only applies for type='checkbox'."
+          },
+          "disabled": {
+            "type": "boolean",
+            "optional": true,
+            "description": "true if the item should appear as grayed out."
+          },
+          "emphasized": {
+            "type": "boolean",
+            "optional": true,
+            "description": "true if the item should appear in an emphasized style (typically bold)."
+          },
+          "shortcut": {
+            "type": "string",
+            "optional": true,
+            "description": "String which illustrates a shortcut. The presence of a string will not execute menu action."
+          },
+          "url": {
+            "type": "string",
+            "optional": true,
+            "description": "Url that can be used to determine a corresponding icon."
+          },
+          "parameter": {
+            "type": "string",
+            "optional": true,
+            "description": "Parameter to command. Sent back unaltered."
+          },
+          "index": {
+            "type": "integer",
+            "optional": true,
+            "description": "Index in menu list. Can only be used insert into an existing list"
+          },
+          "icon": {
+            "type": "string",
+            "optional": true,
+            "description": "Icon in PNG format encoded as base64."
+          }
+        }
+      }
+    ],
+    "functions": [
+        {
+        "name": "setup",
+        "type": "function",
+        "description": "Setup application's main menu",
+        "parameters": [
+          {
+            "name": "items",
+            "type": "array",
+            "items": {"$ref": "MenuItem"},
+            "description": "Menu items with string label."
+          },
+          {
+            "name": "mode",
+            "$ref": "Mode",
+            "description": "What part of menu to set up"
+          }
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "onActivated",
+        "type": "function",
+        "description": "Fired when a main menu item is activated",
+        "parameters": [
+           {
+            "type": "integer",
+            "name": "window",
+            "minimum": 0,
+            "description": "id of window where command occurred"
+          },
+          {
+            "type": "integer",
+            "name": "command",
+            "minimum": 0,
+            "description": "id of the command selected."
+          },
+          {
+            "type": "string",
+            "name": "parameter",
+            "description": "Free format parameter to 'command'. Can be empty"
+          }
+        ]
+      }
+    ]
+  }
+]

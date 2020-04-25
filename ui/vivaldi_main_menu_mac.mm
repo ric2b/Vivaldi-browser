@@ -12,16 +12,15 @@
 #include "chrome/app/chrome_command_ids.h"  // For IDC_WINDOW_MENU
 #import "chrome/browser/app_controller_mac.h"
 #include "components/favicon/core/favicon_service.h"
-#include "extensions/api/show_menu/show_menu_api.h"
 #include "ui/vivaldi_main_menu.h"
 
 // This tag value must be used in the js code setting up the menus.
 const int kSeparatorTag = 55555;
 
-namespace show_menu = extensions::vivaldi::show_menu;
+namespace menubar = extensions::vivaldi::menubar;
 
 namespace vivaldi {
-void PopulateMenu(const show_menu::MenuItem& item, NSMenu* menu, bool topLevel,
+void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
     long index, FaviconLoaderMac* faviconLoader);
 }
 
@@ -30,14 +29,14 @@ void PopulateMenu(const show_menu::MenuItem& item, NSMenu* menu, bool topLevel,
 // the section starts with a separator with tag value kSeparatorTag
 @interface MainMenuDelegate : NSObject<NSMenuDelegate> {
  @private
-  std::vector<show_menu::MenuItem> items_;
+  std::vector<menubar::MenuItem> items_;
   bool has_new_content_;
   int tag_;
   std::unique_ptr<vivaldi::FaviconLoaderMac> favicon_loader_;
 }
 
 - (id)initWithProfile:(Profile*)profile tag:(int)tag;
-- (void)setMenuItems:(std::vector<show_menu::MenuItem>*)items;
+- (void)setMenuItems:(std::vector<menubar::MenuItem>*)items;
 - (void)menuNeedsUpdate:(NSMenu *)menu;
 - (vivaldi::FaviconLoaderMac*)faviconLoader;
 
@@ -70,7 +69,7 @@ void PopulateMenu(const show_menu::MenuItem& item, NSMenu* menu, bool topLevel,
   has_new_content_ = false;
 }
 
-- (void)setMenuItems:(std::vector<show_menu::MenuItem>*)items {
+- (void)setMenuItems:(std::vector<menubar::MenuItem>*)items {
   items_ = std::move(*items);
   has_new_content_ = true;
 }
@@ -101,9 +100,9 @@ void PopulateMenu(const show_menu::MenuItem& item, NSMenu* menu, bool topLevel,
   }
   // Add all pending items
   if (startIndex != -1) {
-    for (std::vector<show_menu::MenuItem>::const_iterator it =
+    for (std::vector<menubar::MenuItem>::const_iterator it =
           items_.begin(); it != items_.end(); ++it) {
-      const show_menu::MenuItem& item = *it;
+      const menubar::MenuItem& item = *it;
       vivaldi::PopulateMenu(item, menu, false, ++startIndex,
         favicon_loader_.get());
     }
@@ -346,7 +345,7 @@ void setMenuItemBold(NSMenuItem* item, bool bold) {
 // Adds item and any subitems to the given menu at the given index. Adds at end
 // if index is negative. If the item has a url and the faviconLoader is defined
 // a favicon will be assigned to the item if available.
-void PopulateMenu(const show_menu::MenuItem& item, NSMenu* menu, bool topLevel,
+void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
     long index, FaviconLoaderMac* faviconLoader) {
   // Reuse existing toplevel menu item (if any). Assumes the string will
   // never change.
@@ -467,10 +466,10 @@ void PopulateMenu(const show_menu::MenuItem& item, NSMenu* menu, bool topLevel,
       [menuItem setSubmenu:subMenu];
     }
 
-    for (std::vector<show_menu::MenuItem>::const_iterator it =
+    for (std::vector<menubar::MenuItem>::const_iterator it =
             item.items->begin();
         it != item.items->end(); ++it) {
-      const show_menu::MenuItem& child = *it;
+      const menubar::MenuItem& child = *it;
       long index = -1;
       if (isBookmarkMenu) {
         NSMenuItem* item = [subMenu itemWithTag:child.id];
@@ -506,7 +505,7 @@ void PopulateMenu(const show_menu::MenuItem& item, NSMenu* menu, bool topLevel,
   }
 }
 
-void UpdateMenuItem(const show_menu::MenuItem& item, NSMenuItem* menuItem) {
+void UpdateMenuItem(const menubar::MenuItem& item, NSMenuItem* menuItem) {
   if (item.checked) {
     [menuItem setState:*item.checked ? NSOnState : NSOffState];
   }
@@ -532,8 +531,8 @@ NSMenuItem* GetMenuItemByTag(NSMenu* menu, int tag) {
 
 void CreateVivaldiMainMenu(
     Profile* profile,
-    std::vector<show_menu::MenuItem>* items,
-    const std::string& mode) {
+    std::vector<menubar::MenuItem>* items,
+    menubar::Mode mode) {
 
   if (!g_window_menu_delegate) {
     NSMenu* mainMenu = [NSApp mainMenu];
@@ -550,20 +549,20 @@ void CreateVivaldiMainMenu(
     }
   }
 
-  if (mode == "menubar") {
+  if (mode == menubar::MODE_ALL) {
     // Full update. Remove any pending requests.
     [g_window_menu_delegate reset];
 
     NSMenu* mainMenu = [NSApp mainMenu];
     FaviconLoaderMac* faviconLoader = [g_window_menu_delegate faviconLoader];
-    for (const show_menu::MenuItem& item : *items) {
+    for (const menubar::MenuItem& item : *items) {
       PopulateMenu(item, mainMenu, true, -1, faviconLoader);
     }
-  } else if (mode == "tabs") {
+  } else if (mode == menubar::MODE_TABS) {
     [g_window_menu_delegate setMenuItems:items];
-  } else if (mode == "update") {
+  } else if (mode == menubar::MODE_UPDATE) {
     // Update one or more items. Title is not changed.
-    for (const show_menu::MenuItem& item : *items) {
+    for (const menubar::MenuItem& item : *items) {
       NSMenuItem* menuItem = GetMenuItemByTag([NSApp mainMenu], item.id);
       if (menuItem)
         UpdateMenuItem(item, menuItem);

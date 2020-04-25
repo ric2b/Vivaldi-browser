@@ -17,10 +17,6 @@ namespace extensions {
 
 class ShowMenuAPI {
  public:
-  static void SendCommandExecuted(Profile* profile,
-                                  int window_id,
-                                  int command_id,
-                                  const std::string& parameter = "");
   static void SendOpen(Profile* profile);
   static void SendClose(Profile* profile);
   static void SendUrlHighlighted(Profile* profile, const std::string& url);
@@ -44,21 +40,6 @@ class ShowMenuShowContextMenuFunction : public UIThreadExtensionFunction {
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ShowMenuShowContextMenuFunction);
-};
-
-class ShowMenuSetupMainMenuFunction : public UIThreadExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("showMenu.setupMainMenu", SHOWMENU_SETUP_MAIN_MENU)
-  ShowMenuSetupMainMenuFunction() = default;
-
- protected:
-  ~ShowMenuSetupMainMenuFunction() override = default;
-
-  // UIThreadExtensionFunction
-  ExtensionFunction::ResponseAction Run() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ShowMenuSetupMainMenuFunction);
 };
 
 }  // namespace extensions

@@ -17,6 +17,8 @@ Browser* FindBrowserForEmbedderWebContents(
 
 Browser* FindBrowserWithWebContents(content::WebContents* web_contents);
 
+Browser* FindBrowserByWindowId(int window_id);
+
 int GetBrowserCountOfType(Browser::Type type);
 
 }  // namespace vivaldi

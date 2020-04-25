@@ -674,7 +674,7 @@ TEST(PermissionsTest, IsPrivilegeIncrease) {
       {"hosts6", false},        // http://a.com -> http://a.com + http://a.co.uk
       {"permissions1", false},  // tabs -> tabs
       {"permissions2", true},   // tabs -> tabs,bookmarks
-      // TODO(treib): This is wrong, kAllHosts implies kTabs. crbug.com/512344
+      // TODO(crbug.com/512344): This is wrong, kAllHosts implies kTabs.
       {"permissions3", true},          // http://*/* -> http://*/*,tabs
       {"permissions5", true},          // bookmarks -> bookmarks,history
       {"equivalent_warnings", false},  // tabs --> tabs, webNavigation
@@ -863,7 +863,6 @@ TEST(PermissionsTest, PermissionMessages) {
   skip.insert(APIPermission::kMediaRouterPrivate);
   skip.insert(APIPermission::kMetricsPrivate);
   skip.insert(APIPermission::kNetworkingCastPrivate);
-  skip.insert(APIPermission::kPreferencesPrivate);
   skip.insert(APIPermission::kImageWriterPrivate);
   skip.insert(APIPermission::kResourcesPrivate);
   skip.insert(APIPermission::kRtcPrivate);

@@ -7,7 +7,8 @@
 
 #include <string>
 
-#include "sync/vivaldi_syncmanager.h"
+#include "base/task/post_task.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "vivaldi_account/vivaldi_account_manager.h"
 
 namespace vivaldi {
@@ -81,6 +82,15 @@ syncer::SyncTokenStatus VivaldiSyncAuthManager::GetSyncTokenStatus() const {
   return token_status;
 }
 
+void VivaldiSyncAuthManager::ConnectionOpened() {
+  connection_open_ = true;
+  if (account_manager_->has_refresh_token()) {
+    access_token_ = account_manager_->access_token();
+    base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::UI},
+                             credentials_changed_callback_);
+  }
+}
+
 void VivaldiSyncAuthManager::ConnectionStatusChanged(
     syncer::ConnectionStatus status) {
   partial_token_status_.connection_status_update_time = base::Time::Now();
@@ -92,11 +102,8 @@ void VivaldiSyncAuthManager::ConnectionStatusChanged(
       account_manager_->RequestNewToken();
       break;
     case syncer::CONNECTION_OK:
-      last_auth_error_ = GoogleServiceAuthError::AuthErrorNone();
       break;
     case syncer::CONNECTION_SERVER_ERROR:
-      last_auth_error_ =
-          GoogleServiceAuthError(GoogleServiceAuthError::CONNECTION_FAILED);
       break;
     case syncer::CONNECTION_NOT_ATTEMPTED:
       // The connection status should never change to "not attempted".
@@ -105,15 +112,24 @@ void VivaldiSyncAuthManager::ConnectionStatusChanged(
   }
 }
 
+void VivaldiSyncAuthManager::ConnectionClosed() {
+  connection_open_ = false;
+
+  partial_token_status_ = syncer::SyncTokenStatus();
+  ClearAccessTokenAndRequest();
+}
+
 void VivaldiSyncAuthManager::OnVivaldiAccountUpdated() {
   syncer::SyncAccountInfo new_account =
       ToSyncAccountInfo(account_manager_->account_info());
-  if (new_account.account_info.account_id == sync_account_.account_info.account_id)
+  if (new_account.account_info.account_id ==
+      sync_account_.account_info.account_id)
     return;
 
   if (!sync_account_.account_info.account_id.empty()) {
     sync_account_ = syncer::SyncAccountInfo();
     ConnectionClosed();
+    SetLastAuthError(GoogleServiceAuthError::AuthErrorNone());
     account_state_changed_callback_.Run();
   }
 
@@ -124,9 +140,11 @@ void VivaldiSyncAuthManager::OnVivaldiAccountUpdated() {
 }
 
 void VivaldiSyncAuthManager::OnTokenFetchSucceeded() {
-  last_auth_error_ = GoogleServiceAuthError::AuthErrorNone();
-  access_token_ = account_manager_->access_token();
-  credentials_changed_callback_.Run();
+  SetLastAuthError(GoogleServiceAuthError::AuthErrorNone());
+  if (connection_open_) {
+    access_token_ = account_manager_->access_token();
+    credentials_changed_callback_.Run();
+  }
 }
 
 void VivaldiSyncAuthManager::OnTokenFetchFailed() {
@@ -134,8 +152,8 @@ void VivaldiSyncAuthManager::OnTokenFetchFailed() {
       VivaldiAccountManager::INVALID_CREDENTIALS)
     return;
 
-  last_auth_error_ =
-      ToGoogleServiceAuthError(account_manager_->last_token_fetch_error());
+  SetLastAuthError(
+      ToGoogleServiceAuthError(account_manager_->last_token_fetch_error()));
   credentials_changed_callback_.Run();
 }
 

@@ -11,6 +11,18 @@
       "description": "Enables Razer Chroma color device integration (on Windows). Requires a restart of Vivaldi to be active.",
       "value": "true",
       "internal_value": "true"
+    },
+    "double_click_menu": {
+      "friendly_name": "Show context menu on a double click",
+      "description": "Use a double click anywhere in the page to show its context menu. Requires a restart of Vivaldi to be active.",
+      "value": "false",
+      "internal_value": "true"
+    },
+    "css_mods": {
+      "friendly_name": "Allow for using CSS modifications.",
+      "description": "Allow for CSS modifications set in appearance in settings.",
+      "value": "false",
+      "internal_value": "false"
     }
   }
 }

@@ -308,12 +308,15 @@ bool HeaderChecker::CheckFile(const Target* from_target,
   CIncludeIterator iter(&input_file);
   base::StringPiece current_include;
   LocationRange range;
+
+  std::set<std::pair<const Target*, const Target*>> no_dependency_cache;
   while (iter.GetNextIncludeString(&current_include, &range)) {
     Err err;
     SourceFile include = SourceFileForInclude(current_include, include_dirs,
                                               input_file, range, &err);
     if (!include.is_null())
-      CheckInclude(from_target, input_file, include, range, errors);
+      CheckInclude(from_target, input_file, include, range,
+                   &no_dependency_cache, errors);
   }
 
   return errors->size() == error_count_before;
@@ -325,11 +328,13 @@ bool HeaderChecker::CheckFile(const Target* from_target,
 //  - The dependency path to the included target must follow only public_deps.
 //  - If there are multiple targets with the header in it, only one need be
 //    valid for the check to pass.
-void HeaderChecker::CheckInclude(const Target* from_target,
-                                 const InputFile& source_file,
-                                 const SourceFile& include_file,
-                                 const LocationRange& range,
-                                 std::vector<Err>* errors) const {
+void HeaderChecker::CheckInclude(
+    const Target* from_target,
+    const InputFile& source_file,
+    const SourceFile& include_file,
+    const LocationRange& range,
+    std::set<std::pair<const Target*, const Target*>>* no_dependency_cache,
+    std::vector<Err>* errors) const {
   // Assume if the file isn't declared in our sources that we don't need to
   // check it. It would be nice if we could give an error if this happens, but
   // our include finder is too primitive and returns all includes, even if
@@ -388,7 +393,17 @@ void HeaderChecker::CheckInclude(const Target* from_target,
       return;
 
     bool is_permitted_chain = false;
-    if (IsDependencyOf(to_target, from_target, &chain, &is_permitted_chain)) {
+
+    bool cached_no_dependency =
+        no_dependency_cache->find(std::make_pair(to_target, from_target)) !=
+        no_dependency_cache->end();
+
+    bool add_to_cache = !cached_no_dependency;
+
+    if (!cached_no_dependency &&
+        IsDependencyOf(to_target, from_target, &chain, &is_permitted_chain)) {
+      add_to_cache = false;
+
       DCHECK(chain.size() >= 2);
       DCHECK(chain[0].target == to_target);
       DCHECK(chain[chain.size() - 1].target == from_target);
@@ -425,6 +440,10 @@ void HeaderChecker::CheckInclude(const Target* from_target,
       found_dependency = true;
       last_error = Err();
       break;
+    }
+
+    if (add_to_cache) {
+      no_dependency_cache->emplace(to_target, from_target);
     }
   }
 

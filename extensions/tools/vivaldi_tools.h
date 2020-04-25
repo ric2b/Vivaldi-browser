@@ -6,7 +6,10 @@
 #include <memory>
 #include <string>
 
+#include "base/strings/string16.h"
+#include "content/public/browser/native_web_keyboard_event.h"
 #include "third_party/blink/public/platform/web_float_point.h"
+#include "ui/events/keycodes/keyboard_code_conversion.h"
 
 class Browser;
 
@@ -21,6 +24,16 @@ class Time;
 }
 
 namespace vivaldi {
+
+// Helper class for setting and resetting a bookmark upgrade flag.
+class SetPartnerUpgrade {
+ public:
+  SetPartnerUpgrade(content::BrowserContext* context, bool active);
+  ~SetPartnerUpgrade();
+ private:
+  void Set(bool active);
+  content::BrowserContext* context_;
+};
 
 // Find first available Vivaldi browser.
 Browser* FindVivaldiBrowser();
@@ -40,6 +53,12 @@ blink::WebFloatPoint FromUICoordinates(content::WebContents* web_contents,
 
 blink::WebFloatPoint ToUICoordinates(content::WebContents* web_contents,
                                      blink::WebFloatPoint p);
+
+base::string16 KeyCodeToName(ui::KeyboardCode key_code);
+
+std::string ShortcutTextFromEvent(const content::NativeWebKeyboardEvent& event);
+
+std::string ShortcutText(int windows_key_code, int modifiers, int dom_code);
 
 }  // namespace vivaldi
 

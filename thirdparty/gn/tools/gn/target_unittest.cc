@@ -1044,11 +1044,17 @@ TEST_F(TargetTest, PullRecursiveBundleData) {
   e.public_deps().push_back(LabelTargetPair(&f));
   e.public_deps().push_back(LabelTargetPair(&b));
 
+  a.bundle_data().root_dir() = SourceDir("//out/foo_a.bundle");
+  a.bundle_data().resources_dir() = SourceDir("//out/foo_a.bundle/Resources");
+
   b.sources().push_back(SourceFile("//foo/b1.txt"));
   b.sources().push_back(SourceFile("//foo/b2.txt"));
   b.action_values().outputs() = SubstitutionList::MakeForTest(
       "{{bundle_resources_dir}}/{{source_file_part}}");
   ASSERT_TRUE(b.OnResolved(&err));
+
+  c.bundle_data().root_dir() = SourceDir("//out/foo_c.bundle");
+  c.bundle_data().resources_dir() = SourceDir("//out/foo_c.bundle/Resources");
 
   d.sources().push_back(SourceFile("//foo/d.txt"));
   d.action_values().outputs() = SubstitutionList::MakeForTest(

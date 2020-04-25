@@ -94,7 +94,7 @@ class CONTENT_EXPORT TouchEmulator : public ui::GestureProviderClient {
   }
 
   // NOTE(david@vivaldi.com): Get default cursor.
-  WebCursor GetDefaultCursor() { return pointer_cursor_; }
+  const WebCursor &GetDefaultCursor() const { return pointer_cursor_; }
 
  private:
   // ui::GestureProviderClient implementation.

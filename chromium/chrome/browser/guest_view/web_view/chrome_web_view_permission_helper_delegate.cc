@@ -102,7 +102,7 @@ void ChromeWebViewPermissionHelperDelegate::OnOpenPDF(const GURL& url) {
 void ChromeWebViewPermissionHelperDelegate::CanDownload(
     const GURL& url,
     const std::string& request_method,
-    const base::Callback<void(bool)>& callback) {
+    base::OnceCallback<void(bool)> callback) {
   base::DictionaryValue request_info;
   request_info.SetString(guest_view::kUrl, url.spec());
   request_info.SetDouble(guest_view::kFileSize,
@@ -111,15 +111,15 @@ void ChromeWebViewPermissionHelperDelegate::CanDownload(
   request_info.SetString(guest_view::kSuggestedFilename,
                          download_info_.suggested_filename);
   web_view_permission_helper()->RequestPermission(
-    WEB_VIEW_PERMISSION_TYPE_DOWNLOAD, request_info,
-    base::BindOnce(
-      &ChromeWebViewPermissionHelperDelegate::OnDownloadPermissionResponse,
-      weak_factory_.GetWeakPtr(), std::move(callback)),
-    false /* allowed_by_default */);
+      WEB_VIEW_PERMISSION_TYPE_DOWNLOAD, request_info,
+      base::BindOnce(
+          &ChromeWebViewPermissionHelperDelegate::OnDownloadPermissionResponse,
+          weak_factory_.GetWeakPtr(), std::move(callback)),
+      false /* allowed_by_default */);
 }
 
 void ChromeWebViewPermissionHelperDelegate::OnDownloadPermissionResponse(
-    const base::Callback<void(bool)>& callback,
+    base::OnceCallback<void(bool)> callback,
     bool allow,
     const std::string& user_input) {
   bool open_when_done = user_input == "open";
@@ -131,7 +131,7 @@ void ChromeWebViewPermissionHelperDelegate::OnDownloadPermissionResponse(
   downloadinfo->open_when_done = open_when_done;
   downloadinfo->ask_for_target = ask_for_target;
 
-  callback.Run(allow && web_view_guest()->attached());
+  std::move(callback).Run(allow && web_view_guest()->attached());
 }
 
 void ChromeWebViewPermissionHelperDelegate::RequestPointerLockPermission(

@@ -128,10 +128,10 @@ group("All") {
 group("vivaldi") {
   deps = [
     ":standalone",
-    "//chrome:chrome",
+    "//chrome",
   ]
   if (is_android) {
-    deps -= [ "//chrome:chrome" ]
+    deps -= [ "//chrome" ]
     deps += [ "//chrome/android:chrome_public_apk" ]
   }
   if (is_mac || is_win) {

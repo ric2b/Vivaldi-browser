@@ -10,6 +10,7 @@ class VivaldiMainDelegate : public ChromeMainDelegate {
   VivaldiMainDelegate();
   explicit VivaldiMainDelegate(base::TimeTicks exe_entry_point_ticks);
   ~VivaldiMainDelegate() override;
+  content::ContentBrowserClient* CreateContentBrowserClient() override;
 };
 
 #endif  // EXTRAPARTS_VIVALDI_MAIN_DELEGATE_H_

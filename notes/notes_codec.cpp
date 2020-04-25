@@ -74,7 +74,7 @@ std::unique_ptr<base::Value> NotesCodec::Encode(const Notes_Node* notes_node,
   if (main) {
     if (sync_transaction_version != Notes_Node::kInvalidSyncTransactionVersion) {
       main->SetString(kSyncTransactionVersion,
-                      base::Int64ToString(sync_transaction_version));
+                      base::NumberToString(sync_transaction_version));
     }
     main->SetInteger(kVersionKey, kCurrentVersion);
     FinalizeChecksum();

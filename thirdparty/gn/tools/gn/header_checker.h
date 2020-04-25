@@ -8,6 +8,7 @@
 #include <condition_variable>
 #include <map>
 #include <mutex>
+#include <set>
 #include <vector>
 
 #include "base/atomic_ref_count.h"
@@ -127,11 +128,15 @@ class HeaderChecker : public base::RefCountedThreadSafe<HeaderChecker> {
   // given include file. If disallowed, adds the error or errors to
   // the errors array.  The range indicates the location of the
   // include in the file for error reporting.
-  void CheckInclude(const Target* from_target,
-                    const InputFile& source_file,
-                    const SourceFile& include_file,
-                    const LocationRange& range,
-                    std::vector<Err>* errors) const;
+  // |no_depeency_cache| is used to cache or check whether there is no
+  // dependency from |from_target| to target having |include_file|.
+  void CheckInclude(
+      const Target* from_target,
+      const InputFile& source_file,
+      const SourceFile& include_file,
+      const LocationRange& range,
+      std::set<std::pair<const Target*, const Target*>>* no_dependency_cache,
+      std::vector<Err>* errors) const;
 
   // Returns true if the given search_for target is a dependency of
   // search_from.

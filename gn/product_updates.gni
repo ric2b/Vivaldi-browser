@@ -141,6 +141,11 @@ if (is_android) {
     icons -= ["${branding_path_component}/product.icon"]
     icons += ["//vivaldi/app/resources/vector_icons/product.icon"]
   }
+
+  update_template_instance("//ui/message_center:message_center_vector_icons") {
+    icons -= ["product.icon"]
+    icons += ["//vivaldi/app/resources/message_center_vector_icons/product.icon"]
+  }
 #}
 
 if (is_linux) {

@@ -40,11 +40,11 @@ index 3bf037258ce9..81ee7695dc64 100644
 -    int nAlloc = pSrc->nSrc*2+nExtra;
 +    sqlite3_int64 nAlloc = 2*(sqlite3_int64)pSrc->nSrc+nExtra;
      sqlite3 *db = pParse->db;
-
+ 
      if( pSrc->nSrc+nExtra>=SQLITE_MAX_SRCLIST ){
 @@ -4634,7 +4634,7 @@ With *sqlite3WithAdd(
    }
-
+ 
    if( pWith ){
 -    int nByte = sizeof(*pWith) + (sizeof(pWith->a[1]) * pWith->nCte);
 +    sqlite3_int64 nByte = sizeof(*pWith) + (sizeof(pWith->a[1]) * pWith->nCte);
@@ -83,13 +83,13 @@ index dc9f9a0c71bd..8106cafab736 100644
 +++ b/third_party/sqlite/patched/src/test_fs.c
 @@ -744,7 +744,7 @@ static int fsColumn(sqlite3_vtab_cursor *cur, sqlite3_context *ctx, int i){
      fstat(fd, &sbuf);
-
+ 
      if( sbuf.st_size>=pCur->nAlloc ){
 -      int nNew = sbuf.st_size*2;
 +      sqlite3_int64 nNew = sbuf.st_size*2;
        char *zNew;
        if( nNew<1024 ) nNew = 1024;
-
+ 
 diff --git a/third_party/sqlite/patched/src/util.c b/third_party/sqlite/patched/src/util.c
 index 7e4bb725280d..c173ddbd2440 100644
 --- a/third_party/sqlite/patched/src/util.c
@@ -120,7 +120,7 @@ index ca2f38741068..31b6e068d77e 100644
 +                      : (sqlite3_int64)1024/sizeof(Op));
    UNUSED_PARAMETER(nOp);
  #endif
-
+ 
 @@ -944,7 +946,7 @@ void sqlite3VdbeScanStatus(
    LogEst nEst,                    /* Estimated number of output rows */
    const char *zName               /* Name of table or index being scanned */
@@ -174,7 +174,7 @@ index 8a4d2a5cbf22..34ee6c5554e9 100644
      sqlite3DbFree(db, zArg);
 @@ -339,9 +343,9 @@ void sqlite3VtabBeginParse(
    db = pParse->db;
-
+ 
    assert( pTable->nModuleArg==0 );
 -  addModuleArgument(db, pTable, sqlite3NameFromToken(db, pModuleName));
 -  addModuleArgument(db, pTable, 0);
@@ -193,7 +193,7 @@ index 8a4d2a5cbf22..34ee6c5554e9 100644
 +    addModuleArgument(pParse, pParse->pNewTable, sqlite3DbStrNDup(db, z, n));
    }
  }
-
+ 
 @@ -663,7 +667,8 @@ static int growVTrans(sqlite3 *db){
    /* Grow the sqlite3.aVTrans array if required */
    if( (db->nVTrans%ARRAY_INCR)==0 ){
@@ -217,5 +217,6 @@ index 8a4d2a5cbf22..34ee6c5554e9 100644
    rc = vtabCallConstructor(db, pTab, pMod, pModule->xConnect, &zErr);
    if( rc ){
      sqlite3ErrorMsg(pParse, "%s", zErr);
---
+-- 
 2.21.0.392.gf8f6787159e-goog
+

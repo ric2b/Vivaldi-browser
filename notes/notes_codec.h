@@ -9,7 +9,7 @@
 #include <set>
 #include <string>
 
-#include "base/md5.h"
+#include "base/hash/md5.h"
 #include "base/strings/string16.h"
 #include "notes/notes_model.h"
 #include "notes/notesnode.h"

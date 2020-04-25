@@ -53,7 +53,7 @@ using bookmarks::BookmarkModel;
 std::unique_ptr<HistoryPrivateItem> GetHistoryItem(const history::URLRow& row) {
   std::unique_ptr<HistoryPrivateItem> history_item(new HistoryPrivateItem());
 
-  history_item->id = base::Int64ToString(row.id());
+  history_item->id = base::NumberToString(row.id());
   history_item->url.reset(new std::string(row.url().spec()));
   history_item->title.reset(new std::string(base::UTF16ToUTF8(row.title())));
   history_item->last_visit_time.reset(

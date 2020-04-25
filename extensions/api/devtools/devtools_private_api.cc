@@ -16,46 +16,52 @@
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_ui_utils.h"
 
+using extensions::vivaldi::devtools_private::PanelType;
+
 namespace extensions {
 
-bool DevtoolsPrivateGetDockingStateSizesFunction::RunAsync() {
-  std::unique_ptr<vivaldi::devtools_private::GetDockingStateSizes::Params>
-      params(vivaldi::devtools_private::GetDockingStateSizes::Params::Create(
-          *args_));
+ExtensionFunction::ResponseAction
+DevtoolsPrivateGetDockingStateSizesFunction::Run() {
+  using vivaldi::devtools_private::GetDockingStateSizes::Params;
+  namespace Results = vivaldi::devtools_private::GetDockingStateSizes::Results;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   int tab_id = params->tab_id;
+
+  std::string error;
   content::WebContents* contents =
-      ::vivaldi::ui_tools::GetWebContentsFromTabStrip(tab_id, GetProfile());
+      ::vivaldi::ui_tools::GetWebContentsFromTabStrip(tab_id, browser_context(),
+                                                      &error);
+  if (!contents)
+    return RespondNow(Error(error));
+
   DevToolsContentsResizingStrategy strategy;
+
+  // If the call returns null, contiue with default values for the strategy.
   DevToolsWindow::GetInTabWebContents(contents, &strategy);
-
-  gfx::Size container_size(params->container_width, params->container_height);
-
-  vivaldi::devtools_private::DevtoolResizingStrategy sizes;
 
   // bounds is the size of the web page contents here.
   const gfx::Rect& bounds = strategy.bounds();
 
   // The devtools bounds is expected to be the same size as the container
   // with the inspected contents being overlaid at the given rect below.
+  vivaldi::devtools_private::DevtoolResizingStrategy sizes;
   sizes.inspected_width = bounds.width();
   sizes.inspected_height = bounds.height();
   sizes.inspected_top = bounds.y();
   sizes.inspected_left = bounds.x();
   sizes.hide_inspected_contents = strategy.hide_inspected_contents();
 
-  results_ =
-      vivaldi::devtools_private::GetDockingStateSizes::Results::Create(sizes);
-
-  SendResponse(true);
-  return true;
+  return RespondNow(ArgumentList(Results::Create(sizes)));
 }
 
-bool DevtoolsPrivateCloseDevtoolsFunction::RunAsync() {
-  std::unique_ptr<vivaldi::devtools_private::CloseDevtools::Params>
-    params(vivaldi::devtools_private::CloseDevtools::Params::Create(
-      *args_));
+ExtensionFunction::ResponseAction DevtoolsPrivateCloseDevtoolsFunction::Run() {
+  using vivaldi::devtools_private::CloseDevtools::Params;
+  namespace Results = vivaldi::devtools_private::CloseDevtools::Results;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   int tab_id = params->tab_id;
@@ -73,13 +79,8 @@ bool DevtoolsPrivateCloseDevtoolsFunction::RunAsync() {
             DevToolsWindow::GetInstanceForInspectedWebContents(contents);
           if (window) {
             window->ForceCloseWindow();
-            std::unique_ptr<base::ListValue> args =
-                vivaldi::devtools_private::OnClosed::Create(
-                    SessionTabHelper::IdForTab(contents).id());
-
-            DevtoolsConnectorAPI::BroadcastEvent(
-              vivaldi::devtools_private::OnClosed::kEventName, std::move(args),
-              GetProfile());
+            int tab_id = SessionTabHelper::IdForTab(contents).id();
+            DevtoolsConnectorAPI::SendClosed(browser_context(), tab_id);
           }
         }
         success = true;
@@ -91,36 +92,27 @@ bool DevtoolsPrivateCloseDevtoolsFunction::RunAsync() {
     int tab_index;
 
     if (extensions::ExtensionTabUtil::GetTabById(
-            tab_id, GetProfile(), true, &browser, NULL, &contents,
+            tab_id, browser_context(), true, &browser, NULL, &contents,
             &tab_index)) {
       DevToolsWindow* window =
           DevToolsWindow::GetInstanceForInspectedWebContents(contents);
       if (window) {
         window->ForceCloseWindow();
         success = true;
-        std::unique_ptr<base::ListValue> args =
-          vivaldi::devtools_private::OnClosed::Create(tab_id);
-
-        DevtoolsConnectorAPI::BroadcastEvent(
-          vivaldi::devtools_private::OnClosed::kEventName, std::move(args),
-          GetProfile());
+        DevtoolsConnectorAPI::SendClosed(browser_context(), tab_id);
       }
     }
   }
-  results_ =
-    vivaldi::devtools_private::CloseDevtools::Results::Create(success);
-
-  SendResponse(true);
-  return true;
+  return RespondNow(ArgumentList(Results::Create(success)));
 }
 
-bool DevtoolsPrivateToggleDevtoolsFunction::RunAsync() {
-  std::unique_ptr<vivaldi::devtools_private::ToggleDevtools::Params>
-    params(vivaldi::devtools_private::ToggleDevtools::Params::Create(
-      *args_));
+ExtensionFunction::ResponseAction DevtoolsPrivateToggleDevtoolsFunction::Run() {
+  using vivaldi::devtools_private::ToggleDevtools::Params;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  bool inspect = params->inspect;
+  PanelType panelType = params->panel_type;
 
   Browser* browser = ::vivaldi::FindBrowserForEmbedderWebContents(
       dispatcher()->GetAssociatedWebContents());
@@ -140,14 +132,19 @@ bool DevtoolsPrivateToggleDevtoolsFunction::RunAsync() {
           static_cast<VivaldiBrowserWindow*>(browser->window())
           ->web_contents()->GetMainFrame(), 0, 0);
     } else {
-      DevToolsWindow::OpenDevToolsWindow(
-          current_tab, inspect ? DevToolsToggleAction::Inspect()
-                               : DevToolsToggleAction::Show());
+      if (panelType == PanelType::PANEL_TYPE_DEFAULT) {
+        DevToolsWindow::OpenDevToolsWindow(
+            current_tab, DevToolsToggleAction::Show());
+      } else if (panelType == PanelType::PANEL_TYPE_INSPECT) {
+        DevToolsWindow::OpenDevToolsWindow(current_tab,
+                                           DevToolsToggleAction::Inspect());
+      } else if (panelType == PanelType::PANEL_TYPE_CONSOLE) {
+        DevToolsWindow::OpenDevToolsWindow(
+            current_tab, DevToolsToggleAction::ShowConsolePanel());
+      }
     }
   }
-  SendResponse(true);
-  return true;
+  return RespondNow(NoArguments());
 }
-
 
 }  // namespace extensions

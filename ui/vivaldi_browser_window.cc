@@ -62,8 +62,8 @@
 #include "extensions/browser/view_type_utils.h"
 #include "extensions/common/extension_messages.h"
 #include "extensions/helper/vivaldi_app_helper.h"
-#include "extensions/schema/devtools_private.h"
 #include "extensions/schema/window_private.h"
+#include "extensions/tools/vivaldi_tools.h"
 #include "renderer/vivaldi_render_messages.h"
 #include "ui/devtools/devtools_connector.h"
 #include "ui/gfx/geometry/rect.h"
@@ -335,9 +335,11 @@ void VivaldiAppWindowContentsImpl::RenderProcessGone(
       host_->browser()->tab_strip_model()->CloseAllTabs();
     }
   }
+#ifndef _DEBUG
   if (status == base::TerminationStatus::TERMINATION_STATUS_PROCESS_CRASHED) {
     chrome::AttemptRestart();
   }
+#endif //_DEBUG
 }
 
 bool VivaldiAppWindowContentsImpl::OnMessageReceived(
@@ -768,7 +770,7 @@ LocationBar* VivaldiBrowserWindow::GetLocationBar() const {
 }
 
 void VivaldiBrowserWindow::UpdateToolbar(content::WebContents* contents) {
-  GetPageActionIconContainer()->UpdatePageActionIcon(
+  GetToolbarPageActionIconContainer()->UpdatePageActionIcon(
       PageActionIconType::kManagePasswords);
 }
 
@@ -848,29 +850,27 @@ void VivaldiBrowserWindow::VivaldiShowWebsiteSettingsAt(
     Profile* profile,
     content::WebContents* web_contents,
     const GURL& url,
-    const security_state::SecurityInfo& security_info,
+    security_state::SecurityLevel security_level,
+    const security_state::VisibleSecurityState& visible_security_state,
     gfx::Point pos) {
 #if defined(USE_AURA)
   // This is only for AURA.  Mac is done in VivaldiBrowserCocoa.
   PageInfoBubbleView::ShowPopupAtPos(pos, profile, web_contents, url,
-                                     security_info, browser_.get(),
-                                     GetNativeWindow());
+                                     security_level, visible_security_state,
+                                     browser_.get(), GetNativeWindow());
 #endif
 #if defined(OS_MACOSX)
   gfx::Rect anchor_rect = gfx::Rect(pos, gfx::Size());
   views::BubbleDialogDelegateView* bubble =
-    PageInfoBubbleView::CreatePageInfoBubble(nullptr, anchor_rect,
-      GetNativeWindow(), profile, web_contents, url, security_info);
+      PageInfoBubbleView::CreatePageInfoBubble(
+          nullptr, anchor_rect, GetNativeWindow(), profile, web_contents, url,
+          security_level, visible_security_state);
   bubble->GetWidget()->Show();
 #endif
 }
 
 FindBar* VivaldiBrowserWindow::CreateFindBar() {
   return nullptr;
-}
-
-int VivaldiBrowserWindow::GetRenderViewHeightInsetWithDetachedBookmarkBar() {
-  return 0;
 }
 
 void VivaldiBrowserWindow::ExecuteExtensionCommand(
@@ -976,13 +976,7 @@ void VivaldiBrowserWindow::UpdateDevTools() {
         DevToolsWindow::GetInstanceForInspectedWebContents(inspected_contents);
     if (w && w->IsClosing()) {
       int id = SessionTabHelper::IdForTab(inspected_contents).id();
-      std::unique_ptr<base::ListValue> args =
-        extensions::vivaldi::devtools_private::OnClosed::Create(id);
-
-      extensions::DevtoolsConnectorAPI::BroadcastEvent(
-        extensions::vivaldi::devtools_private::OnClosed::kEventName,
-        std::move(args), browser_->profile());
-
+      extensions::DevtoolsConnectorAPI::SendClosed(browser_->profile(), id);
       ResetDockingState(id);
     }
   }
@@ -998,14 +992,8 @@ void VivaldiBrowserWindow::UpdateDevTools() {
         if (item->docking_state() != docking_state) {
           item->set_docking_state(docking_state);
 
-          std::unique_ptr<base::ListValue> args =
-              extensions::vivaldi::devtools_private::OnDockingStateChanged::
-                  Create(tab_id, docking_state);
-
-          extensions::DevtoolsConnectorAPI::BroadcastEvent(
-              extensions::vivaldi::devtools_private::OnDockingStateChanged::
-                  kEventName,
-              std::move(args), browser_->profile());
+          extensions::DevtoolsConnectorAPI::SendDockingStateChanged(
+              browser_->profile(), tab_id, docking_state);
         }
       }
       if (prefs->GetString("showDeviceMode", &device_mode)) {
@@ -1030,13 +1018,8 @@ void VivaldiBrowserWindow::ResetDockingState(int tab_id) {
 
   item->ResetDockingState();
 
-  std::unique_ptr<base::ListValue> args =
-      extensions::vivaldi::devtools_private::OnDockingStateChanged::Create(
-          tab_id, item->docking_state());
-
-  extensions::DevtoolsConnectorAPI::BroadcastEvent(
-      extensions::vivaldi::devtools_private::OnDockingStateChanged::kEventName,
-      std::move(args), browser_->profile());
+  extensions::DevtoolsConnectorAPI::SendDockingStateChanged(
+      browser_->profile(), tab_id, item->docking_state());
 }
 
 bool VivaldiBrowserWindow::IsToolbarShowing() const {
@@ -1215,64 +1198,51 @@ content::WebContents* VivaldiBrowserWindow::GetActiveWebContents() const {
   return browser_->tab_strip_model()->GetActiveWebContents();
 }
 
-namespace vivaldi {
-void DispatchEvent(Profile* profile,
-                   const std::string& event_name,
-                   std::unique_ptr<base::ListValue> event_args) {
-  extensions::EventRouter* event_router = extensions::EventRouter::Get(profile);
-  if (event_router) {
-    event_router->BroadcastEvent(base::WrapUnique(
-        new extensions::Event(extensions::events::VIVALDI_EXTENSION_EVENT,
-                              event_name, std::move(event_args))));
-  }
-}
-}  // vivaldi namespace
-
 // VivaldiWindowEventDelegate implementation
 void VivaldiBrowserWindow::OnMinimizedChanged(bool minimized) {
   if (browser_.get() == nullptr) {
     return;
   }
-  vivaldi::DispatchEvent(
-      browser_->profile(),
+  ::vivaldi::BroadcastEvent(
       extensions::vivaldi::window_private::OnMinimized::kEventName,
       extensions::vivaldi::window_private::OnMinimized::Create(
-          browser_->session_id().id(), minimized));
+          browser_->session_id().id(), minimized),
+      browser_->profile());
 }
 
 void VivaldiBrowserWindow::OnMaximizedChanged(bool maximized) {
   if (browser_.get() == nullptr) {
     return;
   }
-  vivaldi::DispatchEvent(
-      browser_->profile(),
+  ::vivaldi::BroadcastEvent(
       extensions::vivaldi::window_private::OnMaximized::kEventName,
       extensions::vivaldi::window_private::OnMaximized::Create(
-          browser_->session_id().id(), maximized));
+          browser_->session_id().id(), maximized),
+      browser_->profile());
 }
 
 void VivaldiBrowserWindow::OnFullscreenChanged(bool fullscreen) {
-  vivaldi::DispatchEvent(
-      browser_->profile(),
+  ::vivaldi::BroadcastEvent(
       extensions::vivaldi::window_private::OnFullscreen::kEventName,
       extensions::vivaldi::window_private::OnFullscreen::Create(
-          browser_->session_id().id(), fullscreen));
+          browser_->session_id().id(), fullscreen),
+      browser_->profile());
 }
 
 void VivaldiBrowserWindow::OnActivationChanged(bool activated) {
-  vivaldi::DispatchEvent(
-      browser_->profile(),
+  ::vivaldi::BroadcastEvent(
       extensions::vivaldi::window_private::OnActivated::kEventName,
       extensions::vivaldi::window_private::OnActivated::Create(
-          browser_->session_id().id(), activated));
+          browser_->session_id().id(), activated),
+      browser_->profile());
 }
 
 void VivaldiBrowserWindow::OnPositionChanged() {
-  vivaldi::DispatchEvent(
-      browser_->profile(),
+  ::vivaldi::BroadcastEvent(
       extensions::vivaldi::window_private::OnPositionChanged::kEventName,
       extensions::vivaldi::window_private::OnPositionChanged::Create(
-          browser_->session_id().id()));
+          browser_->session_id().id()),
+      browser_->profile());
 }
 
 void VivaldiBrowserWindow::OnDocumentLoaded() {
@@ -1280,7 +1250,11 @@ void VivaldiBrowserWindow::OnDocumentLoaded() {
   Show();
 }
 
-PageActionIconContainer* VivaldiBrowserWindow::GetPageActionIconContainer() {
+PageActionIconContainer* VivaldiBrowserWindow::GetOmniboxPageActionIconContainer() {
+  return page_action_icon_container_.get();
+}
+
+PageActionIconContainer* VivaldiBrowserWindow::GetToolbarPageActionIconContainer() {
   if (!page_action_icon_container_) {
     page_action_icon_container_.reset(new VivaldiPageActionIconContainer(
         browser_->profile(), browser_.get()));

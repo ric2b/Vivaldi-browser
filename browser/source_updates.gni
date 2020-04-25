@@ -26,14 +26,6 @@ update_template_instance("//chrome/browser:browser") {
       "//vivaldi/browser/vivaldi_session_service.cc",
     ]
   }
-  if (is_android) {
-    if (!defined(jumbo_excluded_sources)) {
-      jumbo_excluded_sources = []
-    }
-    jumbo_excluded_sources += [
-      "android/explore_sites/explore_sites_service_impl.cc",
-    ]
-  }
 }
 
 update_template_instance("//chrome/browser/ui:ui") {
@@ -45,6 +37,8 @@ update_template_instance("//chrome/browser/ui:ui") {
     "//vivaldi/browser/startup_vivaldi_browser.cpp",
     "//vivaldi/browser/startup_vivaldi_browser.h",
     "//vivaldi/browser/ui/viv_tab_contents_synced_tab_delegate.cc",
+    "//vivaldi/browser/ui/vivaldi_tab_helpers.cc",
+    "//vivaldi/browser/ui/vivaldi_tab_helpers.h",
     "//vivaldi/browser/ui/vivaldi_window_sizer.cc",
   ]
   if (is_posix) {
@@ -84,7 +78,6 @@ update_target("//chrome/common:constants") {
 
 update_template_instance("//content/public/browser:browser_sources") {
   sources += [
-    "//vivaldi/browser/renderer_host/vivaldi_render_widget_host_input_event_router.cc",
     "//vivaldi/browser/renderer_host/devtools/protocol/vivaldi_emulation_handler.cc",
   ]
 }

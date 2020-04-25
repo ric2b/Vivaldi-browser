@@ -89,7 +89,7 @@ NotesEntityBuilder EntityBuilderFactory::NewNotesEntityBuilder(
   const string& title, const GURL& url, const string& content) {
   --latest_client_item_id_;
   NotesEntityBuilder builder(title, url, content, cache_guid_,
-    base::Int64ToString(latest_client_item_id_));
+    base::NumberToString(latest_client_item_id_));
   return builder;
 }
 

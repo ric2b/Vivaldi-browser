@@ -16,7 +16,6 @@
 <translation id="1729533290416704613">Sambungan turut mengawal halaman yang ditunjukkan apabila anda membuat carian dari Kotak Omni.</translation>
 <translation id="1850508293116537636">Putar &amp;ikut arah jam</translation>
 <translation id="1901303067676059328">Pilih &amp;semua</translation>
-<translation id="1992397118740194946">Tidak ditetapkan</translation>
 <translation id="2087822576218954668">Cetak: <ph name="PRINT_NAME" /></translation>
 <translation id="2177950615300672361">Tab Inkognito: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Modul Klien Asli: <ph name="NEXE_NAME" /></translation>
@@ -33,7 +32,6 @@
 <translation id="2439110203301358333">Program lain pada komputer anda menambah sambungan yang boleh mengubah cara Vivaldi berfungsi.</translation>
 <translation id="2445081178310039857">Direktori akar sambungan adalah diperlukan.</translation>
 <translation id="2470702053775288986">Pelanjutan yang tidak disokong dilumpuhkan</translation>
-<translation id="2501797496290880632">Taipkan pintasan</translation>
 <translation id="2550212893339833758">Memori ditukar</translation>
 <translation id="2662876636500006917">Kedai Web Vivaldi</translation>
 <translation id="2678063897982469759">Dayakan semula</translation>
@@ -55,12 +53,9 @@
 <translation id="3347086966102161372">S&amp;alin alamat imej</translation>
 <translation id="3378572629723696641">Sambungan ini mungkin telah tercemar.</translation>
 <translation id="345693547134384690">Buka &amp;imej dalam tab baharu</translation>
-<translation id="3467267818798281173">Minta cadangan daripada Google</translation>
 <translation id="3505030558724226696">Batalkan akses peranti</translation>
 <translation id="3627588569887975815">Buka pautan dalam tetingkap inko&amp;gnito</translation>
 <translation id="3678156199662914018">Sambungan: <ph name="EXTENSION_NAME" /></translation>
-<translation id="3798449238516105146">Versi</translation>
-<translation id="3866249974567520381">Huraian</translation>
 <translation id="3905761538810670789">Baiki apl</translation>
 <translation id="3908501907586732282">Dayakan sambungan</translation>
 <translation id="3909791450649380159">Po&amp;tong</translation>
@@ -104,7 +99,6 @@
 <translation id="5483785310822538350">Batalkan akses fail dan peranti</translation>
 <translation id="5485102783864353244">Tambah apl</translation>
 <translation id="5521078259930077036">Adakah ini halaman utama yang anda jangkakan?</translation>
-<translation id="5532223876348815659">Global</translation>
 <translation id="5542132724887566711">Profil</translation>
 <translation id="5556459405103347317">Muat Semula</translation>
 <translation id="5575473780076478375">Sambungan Inkognito: <ph name="EXTENSION_NAME" /></translation>
@@ -118,7 +112,6 @@
 <translation id="5965661248935608907">Sambungan turut mengawal halaman yang ditunjukkan apabila anda mengklik butang Laman Utama atau membuat carian dari Kotak Omni.</translation>
 <translation id="6101226222197207147">Apl baharu ditambah (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Sambungan Internet anda sedang dikawal</translation>
-<translation id="6124650939968185064">Sambungan berikut bergantung kepada sambungan ini:</translation>
 <translation id="6156863943908443225">Cache skrip</translation>
 <translation id="6196854373336333322">Sambungan "<ph name="EXTENSION_NAME" />" telah mengambil alih kawalan tetapan proksi anda, yang bermakna sambungan ini boleh mengubah, menghentikan atau mencuri dengar apa-apa sahaja yang anda lakukan dalam talian. Jika anda tidak pasti mengapa perubahan ini berlaku, anda mungkin tidak mahukannya.</translation>
 <translation id="6239558157302047471">Muat semula &amp;bingkai</translation>
@@ -135,8 +128,6 @@
 <translation id="6518014396551869914">Sal&amp;in imej</translation>
 <translation id="6639554308659482635">Memori SQLite</translation>
 <translation id="6691936601825168937">&amp;Majukan</translation>
-<translation id="6786747875388722282">Pelanjutan</translation>
-<translation id="6787839852456839824">Pintasan papan kekunci</translation>
 <translation id="6798954102094737107">Pemalam: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Simpan perubahan</translation>
 <translation id="6886871292305414135">Buka pautan dalam &amp;tab baharu</translation>
@@ -170,7 +161,6 @@ Fail Kunci: <ph name="KEY_FILE" />
 Simpan fail kunci anda di tempat selamat. Anda akan memerlukannya untuk mencipta versi baharu sambungan anda.</translation>
 <translation id="8004582292198964060">Penyemak Imbas</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
-<translation id="8188120771410500975">&amp;Semak ejaan medan teks</translation>
 <translation id="8261378640211443080">Sambungan ini tidak disenaraikan dalam <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> dan mungkin telah ditambahkan tanpa pengetahuan anda.</translation>
 <translation id="8351419472474436977">Pelanjutan telah mengambil alih kawalan tetapan proksi anda, yang bermakna pelanjutan ini boleh mengubah, menghentikan atau mendengar secara senyap terhadap apa sahaja yang anda lakukan dalam talian. Jika anda tidak pasti mengapa 
 perubahan ini berlaku, anda mungkin tidak mahukannya.</translation>

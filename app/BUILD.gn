@@ -103,6 +103,7 @@ repack_locales("vivaldi_merge_repacks") {
   source_patterns = [
     "${root_gen_dir}/components/strings/components_google_chrome_strings_",
     "${root_gen_dir}/components/strings/components_strings_",
+    "${root_gen_dir}/components/strings/components_locale_settings_",
     "${root_gen_dir}/content/app/strings/content_strings_",
     "${root_gen_dir}/chrome/generated_resources_",
     "${root_gen_dir}/chrome/google_chrome_strings_",
@@ -116,6 +117,7 @@ repack_locales("vivaldi_merge_repacks") {
     "//chrome/app/resources:platform_locale_settings",
     "//components/strings:components_google_chrome_strings",
     "//components/strings:components_strings",
+    "//components/strings:components_locale_settings",
     "//content/app/strings:strings",
     "//ui/strings:ui_strings",
     "//vivaldi/app:vivaldi_native_strings",

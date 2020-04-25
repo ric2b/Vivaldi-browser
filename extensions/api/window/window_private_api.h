@@ -6,13 +6,15 @@
 #include <vector>
 
 #include "base/lazy_instance.h"
-#include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "components/app_modal/javascript_app_modal_dialog.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
+#include "extensions/browser/extension_function.h"
 #include "extensions/schema/window_private.h"
+
+class Profile;
 
 namespace extensions {
 
@@ -43,10 +45,10 @@ class VivaldiWindowsAPI : public BrowserListObserver,
   void Notify(app_modal::JavaScriptAppModalDialog* dialog) override;
 
   // Call when all windows for a given profile is being closed.
-  void WindowsForProfileClosing(Profile* profile);
+  static void WindowsForProfileClosing(Profile* profile);
 
   // Is closing because a profile is closing or not?
-  bool IsWindowClosingBecauseProfileClose(Browser* browser);
+  static bool IsWindowClosingBecauseProfileClose(Browser* browser);
 
  protected:
   // chrome::BrowserListObserver implementation
@@ -70,7 +72,7 @@ class VivaldiWindowsAPI : public BrowserListObserver,
   static const bool kServiceRedirectedInIncognito = true;
 };
 
-class WindowPrivateCreateFunction : public ChromeAsyncExtensionFunction {
+class WindowPrivateCreateFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("windowPrivate.create", WINDOW_PRIVATE_CREATE)
 
@@ -80,12 +82,12 @@ class WindowPrivateCreateFunction : public ChromeAsyncExtensionFunction {
   ~WindowPrivateCreateFunction() override = default;
 
  private:
-  bool RunAsync() override;
+  ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(WindowPrivateCreateFunction);
 };
 
-class WindowPrivateGetCurrentIdFunction : public ChromeAsyncExtensionFunction {
+class WindowPrivateGetCurrentIdFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("windowPrivate.getCurrentId",
                              WINDOW_PRIVATE_GET_CURRENT_ID)
@@ -96,12 +98,12 @@ class WindowPrivateGetCurrentIdFunction : public ChromeAsyncExtensionFunction {
   ~WindowPrivateGetCurrentIdFunction() override = default;
 
  private:
-  bool RunAsync() override;
+  ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(WindowPrivateGetCurrentIdFunction);
 };
 
-class WindowPrivateSetStateFunction : public ChromeAsyncExtensionFunction {
+class WindowPrivateSetStateFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("windowPrivate.setState",
                              WINDOW_PRIVATE_SET_STATE)
@@ -112,7 +114,7 @@ class WindowPrivateSetStateFunction : public ChromeAsyncExtensionFunction {
   ~WindowPrivateSetStateFunction() override = default;
 
  private:
-  bool RunAsync() override;
+  ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(WindowPrivateSetStateFunction);
 };

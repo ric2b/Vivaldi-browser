@@ -9,9 +9,10 @@
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
-#include "chromium/components/password_manager/core/browser/password_store_consumer.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/sync/driver/sync_token_status.h"
+
+#include "vivaldi_account/vivaldi_account_password_handler.h"
 
 class Profile;
 
@@ -24,7 +25,8 @@ namespace vivaldi {
 class VivaldiAccountManagerRequestHandler;
 
 class VivaldiAccountManager : public KeyedService,
-                              public password_manager::PasswordStoreConsumer {
+                              VivaldiAccountPasswordHandler::Delegate,
+                              VivaldiAccountPasswordHandler::Observer {
  public:
   enum FetchErrorType {
     NONE,
@@ -119,15 +121,18 @@ class VivaldiAccountManager : public KeyedService,
   // attempt will be made (if it can be retried).
   base::Time GetNextTokenRequestTime();
 
+  VivaldiAccountPasswordHandler* password_handler() {
+    return &password_handler_;
+  }
+
   // Called from shutdown service before shutting down the browser
   void Shutdown() override;
 
-  // Implementing password_manager::PasswordStoreConsumer
-  void OnGetPasswordStoreResults(
-      std::vector<std::unique_ptr<autofill::PasswordForm>> results) override;
+  // Implementing VivaldiAccountPasswordHandler::Delegate
+  std::string GetUsername() override;
 
-  static const std::string kSyncOrigin;
-  static const std::string kSyncSignonRealm;
+  // Implementing VivaldiAccountPasswordHandler::Observer
+  void OnAccountPasswordStateChanged() override;
 
  private:
   void OnTokenRequestDone(bool using_password,
@@ -166,7 +171,7 @@ class VivaldiAccountManager : public KeyedService,
   // Temporarily keeps a copy of the password if Login was called with
   // save_password set to true
   std::string password_for_saving_;
-  base::OnceClosure delayed_failure_notification_;
+  VivaldiAccountPasswordHandler password_handler_;
 
   std::unique_ptr<VivaldiAccountManagerRequestHandler>
       access_token_request_handler_;

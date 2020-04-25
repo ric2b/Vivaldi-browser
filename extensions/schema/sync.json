@@ -25,6 +25,9 @@
           "name": "starting",
           "description": "Sync has been requested but the engine is not done starting"
         }, {
+          "name": "starting_server_error",
+          "description": "Sync has been requested but the engine is not done starting and can't do so because of a server issue"
+        }, {
           "name": "started",
           "description": "The sync engine is running normally"
         }, {
@@ -65,27 +68,30 @@
         "description": "Possible error types for errors returned as part of sync server responses. This should be kept in sync with syncer::SyncProtocolErrorType (chromium/components/sync/protocol/sync_protocol_error.h)",
         "type": "string",
         "enum" : [ "success", "not_my_birthday", "throttled", "clear_pending",
-          "transient_error", "migration_done", "invalid_credential",
-          "disabled_by_admin", "partial_failure", "client_data_obsolete",
-          "unknown" ]
+          "transient_error", "migration_done", "disabled_by_admin",
+          "partial_failure", "client_data_obsolete", "unknown" ]
       },
       {
         "id": "ClientAction",
         "description": "Possible action that the client can take to fix the last server-returned error. This should be kept in sync with syncer::ClientAction (chromium/components/sync/protocol/sync_protocol_error.h)",
         "type": "string",
-        "enum" : [ "upgrade_client", "clear_user_data_and_resync",
-          "enable_sync_on_account", "stop_and_restart_sync",
-          "disable_sync_on_client", "stop_sync_for_disabled_account",
-          "reset_local_sync_data", "unknown" ]
+        "enum" : [ "upgrade_client", "disable_sync_on_client",
+          "stop_sync_for_disabled_account", "reset_local_sync_data", "unknown" ]
       },
       {
         "id": "DataType",
+        "description": "User selectable data types that we support",
+        "type" : "string",
+        "enum" : [ "bookmarks", "preferences", "passwords", "autofill",
+          "typed_urls", "extensions", "notes" ]
+      },
+      {
+        "id": "DataTypeSelection",
         "type": "object",
         "description": "A structure containing the system status of a data type.",
         "properties": {
-          "name": {
-            "type": "string",
-            "description": "Name of the data type."
+          "dataType": {
+            "$ref": "DataType"
           },
           "enabled": {
             "type": "boolean",
@@ -144,7 +150,7 @@
           "dataTypes": {
             "type": "array",
             "items": {
-              "$ref": "DataType"
+              "$ref": "DataTypeSelection"
             },
             "description": "List of available data types and whether the user chose to sync them."
           },
@@ -210,7 +216,9 @@
         "parameters": [
           {
             "name": "password",
-            "type": "string"
+            "type": "string",
+            "optional": true,
+            "description": "The encryption password to use. If not specified, We will attempt to use the currently stored login password instead."
           },
           {
             "name": "callback",
@@ -256,7 +264,7 @@
             "name": "types",
             "type": "array",
             "items": {
-              "$ref": "DataType"
+              "$ref": "DataTypeSelection"
             },
             "description": "List of data types to be enabled"
           }

@@ -77,6 +77,8 @@ void ExternalProcessImporterClient::Start() {
       IDS_BOOKMARK_GROUP_FROM_OPERA, l10n_util::GetStringUTF8(IDS_BOOKMARK_GROUP_FROM_OPERA));
   localized_strings.try_emplace(
       IDS_NOTES_GROUP_FROM_OPERA, l10n_util::GetStringUTF8(IDS_NOTES_GROUP_FROM_OPERA));
+  localized_strings.try_emplace(
+      IDS_IMPORTED_BOOKMARKS, l10n_util::GetStringUTF8(IDS_IMPORTED_BOOKMARKS));
   // End Vivaldi
 
   // If the utility process hasn't started yet the message will queue until it

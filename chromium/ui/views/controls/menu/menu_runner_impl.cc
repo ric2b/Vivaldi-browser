@@ -4,6 +4,8 @@
 
 #include "ui/views/controls/menu/menu_runner_impl.h"
 
+#include <memory>
+
 #include "build/build_config.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/controls/button/menu_button.h"
@@ -30,8 +32,9 @@ namespace internal {
 MenuRunnerImplInterface* MenuRunnerImplInterface::Create(
     ui::MenuModel* menu_model,
     int32_t run_types,
-    const base::Closure& on_menu_closed_callback) {
-  return new MenuRunnerImplAdapter(menu_model, on_menu_closed_callback);
+    base::RepeatingClosure on_menu_closed_callback) {
+  return new MenuRunnerImplAdapter(menu_model,
+                                   std::move(on_menu_closed_callback));
 }
 #endif
 
@@ -40,7 +43,7 @@ MenuRunnerImpl::MenuRunnerImpl(MenuItemView* menu)
       running_(false),
       delete_after_run_(false),
       for_drop_(false),
-      controller_(NULL),
+      controller_(nullptr),
       owns_controller_(false),
       weak_factory_(this) {}
 
@@ -62,7 +65,7 @@ void MenuRunnerImpl::Release() {
     // Swap in a different delegate. That way we know the original MenuDelegate
     // won't be notified later on (when it's likely already been deleted).
     if (!empty_delegate_.get())
-      empty_delegate_.reset(new MenuDelegate());
+      empty_delegate_ = std::make_unique<MenuDelegate>();
     menu_->set_delegate(empty_delegate_.get());
 
     // Verify that the MenuController is still active. It may have been
@@ -142,7 +145,7 @@ void MenuRunnerImpl::RunMenuAt(Widget* parent,
   controller_ = controller->AsWeakPtr();
   menu_->set_controller(controller_.get());
   menu_->PrepareForRun(owns_controller_, has_mnemonics,
-                       !for_drop_ && ShouldShowMnemonics(button));
+                       !for_drop_ && ShouldShowMnemonics(button, run_types));
 
   controller->Run(parent, button, menu_, bounds, anchor,
                   (run_types & MenuRunner::CONTEXT_MENU) != 0,
@@ -205,9 +208,10 @@ MenuRunnerImpl::~MenuRunnerImpl() {
     delete *i;
 }
 
-bool MenuRunnerImpl::ShouldShowMnemonics(MenuButton* button) {
+bool MenuRunnerImpl::ShouldShowMnemonics(MenuButton* button,
+                                         int32_t run_types) {
+  bool show_mnemonics = run_types & MenuRunner::SHOULD_SHOW_MNEMONICS;
   // Show mnemonics if the button has focus or alt is pressed.
-  bool show_mnemonics = button ? button->HasFocus() : false;
   if (vivaldi::IsVivaldiRunning())
     show_mnemonics = true;
 #if defined(OS_WIN)

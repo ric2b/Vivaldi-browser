@@ -6,20 +6,27 @@
 #include "components/datasource/vivaldi_data_source_api.h"
 #include "content/public/browser/browser_thread.h"
 
-LocalImageDataClassHandler::LocalImageDataClassHandler() {}
+LocalImageDataClassHandler::LocalImageDataClassHandler(
+    content::BrowserContext* browser_context) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-LocalImageDataClassHandler::~LocalImageDataClassHandler() {}
+  data_sources_api_ =
+      extensions::VivaldiDataSourcesAPI::FromBrowserContext(browser_context);
+  DCHECK(data_sources_api_);
+}
+
+LocalImageDataClassHandler::~LocalImageDataClassHandler() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+}
 
 bool LocalImageDataClassHandler::GetData(
-    Profile* profile,
     const std::string& data_id,
     const content::URLDataSource::GotDataCallback& callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
-  extensions::VivaldiDataSourcesAPI* api =
-      extensions::VivaldiDataSourcesAPI::GetFactoryInstance()->Get(profile);
-
-  api->GetDataForId(data_id, callback);
+  if (!data_sources_api_)
+    return false;
+  data_sources_api_->GetDataForId(data_id, callback);
 
   return true;
 }

@@ -123,10 +123,6 @@ extern const char kBundleExecutableDir[];
 extern const char kBundleExecutableDir_HelpShort[];
 extern const char kBundleExecutableDir_Help[];
 
-extern const char kBundlePlugInsDir[];
-extern const char kBundlePlugInsDir_HelpShort[];
-extern const char kBundlePlugInsDir_Help[];
-
 extern const char kCflags[];
 extern const char kCflags_HelpShort[];
 extern const char* kCflags_Help;

@@ -86,7 +86,7 @@ void SendCreated(BrowserContext* browser_context,
                  const NoteTreeNode& treenode) {
   ::vivaldi::BroadcastEvent(
       vivaldi::notes::OnCreated::kEventName,
-      vivaldi::notes::OnCreated::Create(base::Int64ToString(id), treenode),
+      vivaldi::notes::OnCreated::Create(base::NumberToString(id), treenode),
       browser_context);
 }
 
@@ -95,7 +95,7 @@ void SendChanged(BrowserContext* browser_context,
                  const vivaldi::notes::OnChanged::ChangeInfo& change_info) {
   ::vivaldi::BroadcastEvent(
       vivaldi::notes::OnChanged::kEventName,
-      vivaldi::notes::OnChanged::Create(base::Int64ToString(id), change_info),
+      vivaldi::notes::OnChanged::Create(base::NumberToString(id), change_info),
       browser_context);
 }
 
@@ -109,12 +109,12 @@ void SendMoved(BrowserContext* browser_context,
 
   move_info.index = index;
   move_info.old_index = old_index;
-  move_info.parent_id = base::Int64ToString(parent_id);
-  move_info.old_parent_id = base::Int64ToString(old_parent_id);
+  move_info.parent_id = base::NumberToString(parent_id);
+  move_info.old_parent_id = base::NumberToString(old_parent_id);
 
   ::vivaldi::BroadcastEvent(
       vivaldi::notes::OnMoved::kEventName,
-      vivaldi::notes::OnMoved::Create(base::Int64ToString(id), move_info),
+      vivaldi::notes::OnMoved::Create(base::NumberToString(id), move_info),
       browser_context);
 }
 
@@ -124,12 +124,12 @@ void SendRemoved(BrowserContext* browser_context,
                  int indexofdeleted) {
   vivaldi::notes::OnRemoved::RemoveInfo info;
 
-  info.parent_id = base::Int64ToString(parent_id);
+  info.parent_id = base::NumberToString(parent_id);
   info.index = indexofdeleted;
 
   ::vivaldi::BroadcastEvent(
       vivaldi::notes::OnRemoved::kEventName,
-      vivaldi::notes::OnRemoved::Create(base::Int64ToString(id), info),
+      vivaldi::notes::OnRemoved::Create(base::NumberToString(id), info),
       browser_context);
 }
 
@@ -154,12 +154,12 @@ std::unique_ptr<std::vector<NoteAttachment>> CreateNoteAttachments(
 NoteTreeNode MakeTreeNode(Notes_Node* node) {
   NoteTreeNode notes_tree_node;
 
-  notes_tree_node.id = base::Int64ToString(node->id());
+  notes_tree_node.id = base::NumberToString(node->id());
 
   const Notes_Node* parent = node->parent();
   if (parent) {
     notes_tree_node.parent_id.reset(
-        new std::string(base::Int64ToString(parent->id())));
+        new std::string(base::NumberToString(parent->id())));
     notes_tree_node.index.reset(new int(parent->GetIndexOf(node)));
   }
   notes_tree_node.trash.reset(new bool(node->is_trash()));

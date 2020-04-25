@@ -104,6 +104,8 @@ void ChromeExtensionWebContentsObserver::RenderFrameCreated(
         process_id, url::Origin::Create(GURL(chrome::kChromeUIFaviconHost)));
     policy->GrantRequestOrigin(
         process_id, url::Origin::Create(GURL(chrome::kChromeUIThumbnailHost)));
+    policy->GrantRequestOrigin(
+      process_id, url::Origin::Create(GURL(chrome::kChromeUIThemeHost)));
   }
 }
 

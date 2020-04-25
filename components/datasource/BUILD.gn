@@ -2,6 +2,8 @@ import("//build/config/jumbo.gni")
 
 jumbo_source_set("datasource") {
   sources = [
+    "css_mods_data_source.cc",
+    "css_mods_data_source.h",
     "desktop_data_source_win.cc",
     "desktop_data_source_win.h",
     "local_image_data_source.cc",
@@ -18,5 +20,6 @@ jumbo_source_set("datasource") {
     "//content/public/browser",
     "//base:base",
     "//skia",
+    "//vivaldi/prefs:prefs_files_generated"
   ]
 }

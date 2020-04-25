@@ -172,7 +172,9 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
   void AppendLanguageSettings();
   void AppendInsertNoteSubMenu();
   void AppendSpellingSuggestionItems();
-  void AppendAccessibilityLabelsItems();
+  // Returns true if the items were appended. This might not happen in all
+  // cases, e.g. these are only appended if a screen reader is enabled.
+  bool AppendAccessibilityLabelsItems();
   void AppendSearchProvider();
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   void AppendAllExtensionItems();
@@ -247,7 +249,7 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
   ProtocolHandlerRegistry* protocol_handler_registry_;
 
   // An observer that handles spelling suggestions, "Add to dictionary", and
-  // "Ask Google for suggestions" items.
+  // "Use enhanced spell check" items.
   std::unique_ptr<SpellingMenuObserver> spelling_suggestions_menu_observer_;
 
   // An observer that handles accessibility labels items.

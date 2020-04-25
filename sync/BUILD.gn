@@ -20,6 +20,8 @@ source_set("sync") {
 
 jumbo_source_set("browser") {
   sources = [
+    "vivaldi_device_info_utils.cc",
+    "vivaldi_device_info_utils.h",
     "vivaldi_invalidation_service.cc",
     "vivaldi_invalidation_service.h",
     "vivaldi_sync_auth_manager.h",
@@ -28,10 +30,10 @@ jumbo_source_set("browser") {
     "vivaldi_sync_client.h",
     "vivaldi_sync_ui_helper.cc",
     "vivaldi_sync_ui_helper.h",
-    "vivaldi_syncmanager.cpp",
-    "vivaldi_syncmanager.h",
-    "vivaldi_syncmanager_factory.h",
-    "vivaldi_syncmanager_factory.cc",
+    "vivaldi_profile_sync_service.cc",
+    "vivaldi_profile_sync_service.h",
+    "vivaldi_profile_sync_service_factory.h",
+    "vivaldi_profile_sync_service_factory.cc",
   ]
   deps = [
     "//chrome/browser/ui",

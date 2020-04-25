@@ -5,10 +5,13 @@
 
 #include <map>
 #include <string>
+#include <vector>
 
 #include "base/memory/singleton.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
+#include "chrome/browser/profiles/profile_statistics_common.h"
+#include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/prefs/json_pref_store.h"
 #include "extensions/browser/extension_function.h"
@@ -18,6 +21,11 @@ class ProfileAttributesStorage;
 namespace extensions {
 
 class VivaldiRuntimeFeatures;
+namespace vivaldi {
+namespace runtime_private {
+struct ProfileStatEntry;
+}
+}
 
 typedef struct FeatureEntry {
   FeatureEntry();
@@ -276,6 +284,114 @@ class RuntimePrivateCloseActiveProfileFunction
   ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(RuntimePrivateCloseActiveProfileFunction);
+};
+
+class RuntimePrivateGetUserProfileImagesFunction
+    : public UIThreadExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("runtimePrivate.getUserProfileImages",
+                             RUNTIME_GETUSERPROFILEIMAGES)
+
+  RuntimePrivateGetUserProfileImagesFunction() = default;
+
+ private:
+  ~RuntimePrivateGetUserProfileImagesFunction() override = default;
+
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(RuntimePrivateGetUserProfileImagesFunction);
+};
+
+class RuntimePrivateUpdateActiveProfileFunction
+    : public UIThreadExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("runtimePrivate.updateActiveProfile",
+                             RUNTIME_UPDATEACTIVEPROFILE)
+
+  RuntimePrivateUpdateActiveProfileFunction() = default;
+
+ private:
+  ~RuntimePrivateUpdateActiveProfileFunction() override = default;
+
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(RuntimePrivateUpdateActiveProfileFunction);
+};
+
+class RuntimePrivateGetProfileDefaultsFunction
+    : public UIThreadExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("runtimePrivate.getProfileDefaults",
+                             RUNTIME_GETPROFILEDEFAULTS)
+
+  RuntimePrivateGetProfileDefaultsFunction() = default;
+
+ private:
+  ~RuntimePrivateGetProfileDefaultsFunction() override = default;
+
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(RuntimePrivateGetProfileDefaultsFunction);
+};
+
+class RuntimePrivateCreateProfileFunction : public UIThreadExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("runtimePrivate.createProfile",
+                             RUNTIME_CREATEPROFILE)
+
+  RuntimePrivateCreateProfileFunction() = default;
+
+ private:
+  ~RuntimePrivateCreateProfileFunction() override = default;
+
+  void OnProfileCreated(bool create_shortcut,
+                        Profile* profile,
+                        Profile::CreateStatus status);
+  void CreateShortcutAndShowSuccess(bool create_shortcut, Profile* profile);
+  void OnBrowserReadyCallback(Profile* profile,
+                              Profile::CreateStatus profile_create_status);
+  void OpenNewWindowForProfile(Profile* profile, Profile::CreateStatus status);
+
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(RuntimePrivateCreateProfileFunction);
+};
+
+class RuntimePrivateGetProfileStatisticsFunction
+    : public UIThreadExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("runtimePrivate.getProfileStatistics",
+                             RUNTIME_GETPROFILESTATISTICS)
+
+  RuntimePrivateGetProfileStatisticsFunction();
+
+ private:
+  void GatherStatistics(Profile* profile);
+  void GetProfileStatsCallback(base::FilePath profile_path,
+                               profiles::ProfileCategoryStats result);
+
+  ~RuntimePrivateGetProfileStatisticsFunction() override;
+
+  ResponseAction Run() override;
+
+  std::vector<vivaldi::runtime_private::ProfileStatEntry> results_;
+
+  DISALLOW_COPY_AND_ASSIGN(RuntimePrivateGetProfileStatisticsFunction);
+};
+
+class RuntimePrivateDeleteProfileFunction : public UIThreadExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("runtimePrivate.deleteProfile",
+                             RUNTIME_DELETEPROFILE)
+
+  RuntimePrivateDeleteProfileFunction() = default;
+
+ private:
+  ~RuntimePrivateDeleteProfileFunction() override = default;
+
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(RuntimePrivateDeleteProfileFunction);
 };
 
 }  // namespace extensions

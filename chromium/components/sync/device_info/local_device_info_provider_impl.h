@@ -18,27 +18,34 @@
 
 namespace syncer {
 
-class LocalDeviceInfoProviderImpl : public LocalDeviceInfoProvider {
+class LocalDeviceInfoProviderImpl : public MutableLocalDeviceInfoProvider {
  public:
   using SigninScopedDeviceIdCallback = base::RepeatingCallback<std::string()>;
+  using SendTabToSelfReceivingEnabledCallback = base::RepeatingCallback<bool()>;
+
+  using SessionNameOverrideCallback = base::RepeatingCallback<std::string()>;
 
   LocalDeviceInfoProviderImpl(
       version_info::Channel channel,
       const std::string& version,
-      bool is_tablet,
-      const SigninScopedDeviceIdCallback& signin_scoped_device_id_callback);
+      const SigninScopedDeviceIdCallback& signin_scoped_device_id_callback,
+      const SendTabToSelfReceivingEnabledCallback&
+          send_tab_to_self_receiving_enabled_callback);
   ~LocalDeviceInfoProviderImpl() override;
 
-  // LocalDeviceInfoProvider implementation.
+  // MutableLocalDeviceInfoProvider implementation.
+  void Initialize(const std::string& cache_guid,
+                  const std::string& session_name) override;
+  void Clear() override;
   version_info::Channel GetChannel() const override;
   const DeviceInfo* GetLocalDeviceInfo() const override;
-  std::string GetSyncUserAgent() const override;
   std::unique_ptr<Subscription> RegisterOnInitializedCallback(
       const base::RepeatingClosure& callback) override;
 
-  void Initialize(const std::string& cache_guid,
-                  const std::string& session_name);
-  void Clear();
+  void set_session_name_override_callback(
+        SessionNameOverrideCallback session_name_override_callback) {
+      session_name_override_callback_ = session_name_override_callback;
+  }
 
  private:
   // The channel (CANARY, DEV, BETA, etc.) of the current client.
@@ -47,11 +54,11 @@ class LocalDeviceInfoProviderImpl : public LocalDeviceInfoProvider {
   // The version string for the current client.
   const std::string version_;
 
-  // Whether this device has a tablet form factor (only used on Android
-  // devices).
-  const bool is_tablet_;
-
   const SigninScopedDeviceIdCallback signin_scoped_device_id_callback_;
+  const SendTabToSelfReceivingEnabledCallback
+      send_tab_to_self_receiving_enabled_callback_;
+
+  SessionNameOverrideCallback session_name_override_callback_;
 
   std::unique_ptr<DeviceInfo> local_device_info_;
   base::CallbackList<void(void)> callback_list_;

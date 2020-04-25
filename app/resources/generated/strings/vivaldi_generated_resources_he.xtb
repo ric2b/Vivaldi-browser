@@ -16,7 +16,6 @@
 <translation id="1729533290416704613">הגדרה זו גם קובעת איזה דף מוצג כשאתה מבצע חיפוש מסרגל הכתובות.</translation>
 <translation id="1850508293116537636">סובב &amp;בכיוון השעון</translation>
 <translation id="1901303067676059328">בחר &amp;הכל</translation>
-<translation id="1992397118740194946">לא מוגדר</translation>
 <translation id="2087822576218954668">הדפס: <ph name="PRINT_NAME" /></translation>
 <translation id="2177950615300672361">כרטיסיית גלישה בסתר: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">‏<ph name="NEXE_NAME" /> :Native Client יישום </translation>
@@ -33,7 +32,6 @@
 <translation id="2439110203301358333">‏תכנית אחרת במחשב שלך הוסיפה תוסף שעשוי לשנות את אופן הפעולה של Vivaldi.</translation>
 <translation id="2445081178310039857">ספריית הבסיס של ההרחבה נחוצה.</translation>
 <translation id="2470702053775288986">תוספים שלא נתמכים הושבתו</translation>
-<translation id="2501797496290880632">הקלד קיצור</translation>
 <translation id="2550212893339833758">זיכרון מוחלף</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">הפוך מחדש לפעיל</translation>
@@ -55,12 +53,9 @@
 <translation id="3347086966102161372">העתק כתובת &amp;תמונה</translation>
 <translation id="3378572629723696641">ייתכן שתוסף זה פגום.</translation>
 <translation id="345693547134384690">פתח &amp;תמונה בכרטיסייה חדשה</translation>
-<translation id="3467267818798281173">‏בקש הצעות מ-Google</translation>
 <translation id="3505030558724226696">בטל גישה למכשירים</translation>
 <translation id="3627588569887975815">פתח קישור בחלון גלישה פרטית</translation>
 <translation id="3678156199662914018">תוסף: <ph name="EXTENSION_NAME" /></translation>
-<translation id="3798449238516105146">גרסה</translation>
-<translation id="3866249974567520381">תיאור</translation>
 <translation id="3905761538810670789">תקן את היישום</translation>
 <translation id="3908501907586732282">הפעל תוסף</translation>
 <translation id="3909791450649380159">גז&amp;ור</translation>
@@ -103,7 +98,6 @@
 <translation id="5483785310822538350">בטל גישה לקבצים ולמכשירים</translation>
 <translation id="5485102783864353244">הוסף יישום</translation>
 <translation id="5521078259930077036">האם זהו דף הבית שציפית לראות?</translation>
-<translation id="5532223876348815659">גלובלי</translation>
 <translation id="5542132724887566711">פרופיל</translation>
 <translation id="5556459405103347317">טען שוב</translation>
 <translation id="5575473780076478375">תוסף של גלישה פרטית: <ph name="EXTENSION_NAME" /></translation>
@@ -117,7 +111,6 @@
 <translation id="5965661248935608907">הגדרה זו גם קובעת איזה דף מוצג כשאתה לוחץ על הלחצן 'דף הבית' או מבצע חיפוש מסרגל הכתובות.</translation>
 <translation id="6101226222197207147">יישום חדש נוסף (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">החיבור שלך לאינטרנט נשלט על ידי גורם כלשהו</translation>
-<translation id="6124650939968185064">התוספים הבאים תלויים בתוסף הזה:</translation>
 <translation id="6156863943908443225">מטמון סקריפטים</translation>
 <translation id="6196854373336333322">‏התוסף "<ph name="EXTENSION_NAME" />" השתלט על הגדרות שרת ה-Proxy. פירוש הדבר שהוא יכול לשנות ולקטוע לכל פעולה שתבצע באינטרנט או לצותת לה. אם אינך יודע בוודאות מדוע שינוי זה התרחש, סביר להניח שזהו שינוי לא רצוי.</translation>
 <translation id="6239558157302047471">טען מחדש את ה&amp;מסגרת</translation>
@@ -134,8 +127,6 @@
 <translation id="6518014396551869914">הע&amp;תק תמונה</translation>
 <translation id="6639554308659482635">‏זיכרון SQLite </translation>
 <translation id="6691936601825168937">&amp;קדימה</translation>
-<translation id="6786747875388722282">תוספים</translation>
-<translation id="6787839852456839824">מקשי קיצור</translation>
 <translation id="6798954102094737107">פלאגין: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">השאר שינויים</translation>
 <translation id="6886871292305414135">פתח קישור &amp;בכרטיסייה חדשה</translation>
@@ -167,7 +158,6 @@
 שמור על קובץ המפתח שלך במקום בטוח. תצטרך אותו כדי ליצור גרסאות חדשות של התוסף שלך.</translation>
 <translation id="8004582292198964060">דפדפן</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
-<translation id="8188120771410500975">בדוק את האיות של &amp;שדות הטקסט</translation>
 <translation id="8261378640211443080">התוסף הזה לא רשום ב<ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> וייתכן שנוסף ללא ידיעתך.</translation>
 <translation id="8351419472474436977">‏תוסף זה השתלט על הגדרות שרת ה-Proxy שלך. משמעות הדבר היא שהוא יכול לשנות, לקטוע או לצותת לכל פעולה שתבצע באינטרנט. אם אינך יודע בוודאות מדוע שינוי זה התרחש, סביר להניח שזהו שינוי לא רצוי.</translation>
 <translation id="8546306075665861288">מטמון תמונות</translation>

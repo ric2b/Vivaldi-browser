@@ -7,6 +7,7 @@ jumbo_static_library("browser") {
     "//vivaldi/app",
     "//vivaldi/app/resources",
     "//vivaldi/app/resources",
+    "//vivaldi/components:content_adverse_adblocking",
     "//vivaldi/clientparts",
     "//vivaldi/importer:browser",
     "//vivaldi/notifications",
@@ -55,6 +56,8 @@ jumbo_static_library("browser") {
     "../app/vivaldi_command_controller.cpp",
     "../app/vivaldi_command_controller.h",
     "../app/vivaldi_commands.h",
+    "../components/adverse_adblocking/adverse_ad_filter_list_factory.cc",
+    "../components/adverse_adblocking/adverse_ad_filter_list_factory.h",
   ]
   if (!is_android) {
     sources += [

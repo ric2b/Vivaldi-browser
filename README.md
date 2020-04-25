@@ -57,7 +57,7 @@ mv vivaldi-source v0
 ls -ld v0/.git
 rm -rf v0/.git
 
-cp w/.git README.md v0
+cp -r w/.git w/README.md v0
 cd v0
 git status | grep -v chromium
 git add .
@@ -76,7 +76,7 @@ mv vivaldi-source v1
 ls -ld v0/.git
 rm -rf v1/.git
 
-cp w/.git README.md v1
+cp -r w/.git w/README.md v1
 ...
 ```
 

@@ -28,5 +28,6 @@ index efb9155f545d..6c21cc6172b9 100644
      pPg->flags |= (pPgOld->flags&PGHDR_NEED_SYNC);
      if( pPager->tempFile ){
        /* Do not discard pages from an in-memory database since we might
---
+-- 
 2.21.0.392.gf8f6787159e-goog
+

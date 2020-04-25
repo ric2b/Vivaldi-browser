@@ -164,18 +164,6 @@
             "name": "state",
             "$ref": "WindowState",
             "description": "The state to set the window to."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "success",
-                "type": "boolean",
-                "description": "true if successful, false otherwise."
-              }
-            ]
           }
         ]
       }

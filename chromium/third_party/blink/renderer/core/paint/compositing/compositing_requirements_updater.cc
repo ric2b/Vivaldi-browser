@@ -184,6 +184,11 @@ static CompositingReasons SubtreeReasonsForCompositing(
     subtree_reasons |= CompositingReason::kIsolateCompositedDescendants;
   }
 
+  if (layer->GetLayoutObject().StyleRef().GetPosition() == EPosition::kFixed) {
+    subtree_reasons |=
+        CompositingReason::kPositionFixedWithCompositedDescendants;
+  }
+
   // A layer with preserve-3d or perspective only needs to be composited if
   // there are descendant layers that will be affected by the preserve-3d or
   // perspective.
@@ -413,13 +418,13 @@ void CompositingRequirementsUpdater::UpdateRecursive(
   //  * may escape |layer|'s clip.
   //  * may need compositing requirements update for another reason (
   //    e.g. change of stacking order)
-  bool skip_children =
+  bool skip_children = false && ( // TODO: Make this IsVivaldi.
       !layer->DescendantHasDirectOrScrollingCompositingReason() &&
       !needs_recursion_for_composited_scrolling_plus_fixed_or_sticky &&
       !needs_recursion_for_out_of_flow_descendant &&
       layer->GetLayoutObject().ShouldClipOverflow() &&
       !layer->HasCompositingDescendant() &&
-      !layer->DescendantMayNeedCompositingRequirementsUpdate();
+      !layer->DescendantMayNeedCompositingRequirementsUpdate());
 
   if (!skip_children &&
       layer->GetLayoutObject().StyleRef().IsStackingContext()) {

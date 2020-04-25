@@ -248,7 +248,7 @@ DownloadRequestCore::CreateDownloadCreateInfo(
 }
 
 bool DownloadRequestCore::OnResponseStarted(
-    const std::string &override_mime_type) {
+    const std::string& override_mime_type) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DVLOG(20) << __func__ << "() " << DebugString();
 

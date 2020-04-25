@@ -69,7 +69,7 @@ class PlatformMediaMockMediaSource : public TestMediaSource {
                         mimetype,
                         initial_append_size,
                         initial_sequence_mode,
-                        GetVivaldiTestDataFilePath(filename)){};
+                        GetVivaldiTestDataFilePath(filename)){}
 };
 
 class PlatformMediaPipelineIntegrationTest

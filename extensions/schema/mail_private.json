@@ -207,6 +207,42 @@
             ]
           }
         ]
+      },
+      {
+        "name": "rename",
+        "type": "function",
+        "description": "Renames a file on disk. The root folder location is the profile directory of the current running instance /Mail",
+        "parameters": [
+          {
+            "name": "paths",
+            "type": "array",
+            "description": "String array that is used to create a folder structure, starting at user default profile /Mail The function returns error if empty",
+            "items": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fileName",
+            "type": "string",
+            "description": "The file name to be renamed. With file ending"
+          },
+          {
+            "name": "newFileName",
+            "type": "string",
+            "description": "The new file name. With file ending"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "result",
+                "type": "string"
+              }
+            ]
+          }
+        ]
       }
     ]
   }

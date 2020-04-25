@@ -22,11 +22,10 @@
 #include "base/single_thread_task_runner.h"
 #include "base/supports_user_data.h"
 #include "base/task/cancelable_task_tracker.h"
-#include "sql/init_status.h"
-
 #include "calendar/calendar_backend_notifier.h"
 #include "calendar/calendar_database.h"
 #include "calendar/event_type.h"
+#include "sql/init_status.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -67,6 +66,10 @@ class CalendarBackend
     virtual void NotifyCalendarModified(const CalendarRow& row) = 0;
     virtual void NotifyCalendarDeleted(const CalendarRow& row) = 0;
 
+    virtual void NotifyEventTypeCreated(const EventTypeRow& row) = 0;
+    virtual void NotifyEventTypeModified(const EventTypeRow& row) = 0;
+    virtual void NotifyEventTypeDeleted(const EventTypeRow& row) = 0;
+
     // Invoked when the backend has finished loading the db.
     virtual void DBLoaded() = 0;
   };
@@ -100,9 +103,10 @@ class CalendarBackend
 
   // Creates multiple events
   void CreateCalendarEvents(std::vector<calendar::EventRow> events,
-	  std::shared_ptr<CreateEventsResult> result);
+                            std::shared_ptr<CreateEventsResult> result);
 
   void GetAllEvents(std::shared_ptr<EventQueryResults> results);
+
   // Updates an event
   void UpdateEvent(EventID event_id,
                    const CalendarEvent& event,
@@ -119,6 +123,15 @@ class CalendarBackend
   void DeleteCalendar(CalendarID calendar_id,
                       std::shared_ptr<DeleteCalendarResult> result);
 
+  void GetAllEventTypes(std::shared_ptr<EventTypeRows> results);
+  void CreateEventType(EventTypeRow event_type_row,
+                       std::shared_ptr<CreateEventTypeResult> result);
+  void UpdateEventType(EventTypeID event_id,
+                       const EventType& event_type,
+                       std::shared_ptr<UpdateEventTypeResult> result);
+  void DeleteEventType(EventTypeID event_type_id,
+                       std::shared_ptr<DeleteEventTypeResult> result);
+
   void NotifyEventCreated(const EventRow& row) override;
   void NotifyEventModified(const EventRow& row) override;
   void NotifyEventDeleted(const EventRow& row) override;
@@ -126,6 +139,10 @@ class CalendarBackend
   void NotifyCalendarCreated(const CalendarRow& row) override;
   void NotifyCalendarModified(const CalendarRow& row) override;
   void NotifyCalendarDeleted(const CalendarRow& row) override;
+
+  void NotifyEventTypeCreated(const EventTypeRow& row) override;
+  void NotifyEventTypeModified(const EventTypeRow& row) override;
+  void NotifyEventTypeDeleted(const EventTypeRow& row) override;
 
  protected:
   ~CalendarBackend() override;

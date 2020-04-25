@@ -7,14 +7,14 @@
 #include <utility>
 #include <vector>
 
+#include "base/memory/scoped_refptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
-#include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/language/core/browser/pref_names.h"
-#include "components/password_manager/core/browser/password_store.h"
+#include "components/password_manager/core/browser/password_list_sorter.h"
 #include "components/prefs/pref_service.h"
 #include "components/url_formatter/url_formatter.h"
 #include "content/public/browser/web_ui.h"
@@ -22,128 +22,104 @@
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 
 namespace extensions {
-namespace passwords = vivaldi::savedpasswords;
-using passwords::SavedPasswordItem;
 
-SavedpasswordsGetListFunction::SavedpasswordsGetListFunction()
-    : password_manager_presenter_(this) {}
+namespace {
 
-bool SavedpasswordsGetListFunction::RunAsync() {
-  AddRef();
-  password_manager_presenter_.Initialize();
-  password_manager_presenter_.UpdatePasswordLists();
-  return true;
+void FilterAndSortPasswords(
+    std::vector<std::unique_ptr<autofill::PasswordForm>>* password_list) {
+  password_list->erase(
+      std::remove_if(
+          password_list->begin(), password_list->end(),
+          [](const auto& form) { return form->blacklisted_by_user; }),
+      password_list->end());
+
+  password_manager::DuplicatesMap ignored_duplicates;
+  password_manager::SortEntriesAndHideDuplicates(password_list,
+                                                 &ignored_duplicates);
 }
 
-SavedpasswordsGetListFunction::~SavedpasswordsGetListFunction() {
-  Respond(ArgumentList(std::move(results_)));
+}  // namespace
+
+ExtensionFunction::ResponseAction SavedpasswordsGetListFunction::Run() {
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  scoped_refptr<password_manager::PasswordStore> password_store =
+      PasswordStoreFactory::GetForProfile(profile,
+                                          ServiceAccessType::EXPLICIT_ACCESS);
+
+  AddRef();  // Balanced in OnGetPasswordStoreResults
+  password_store->GetAllLoginsWithAffiliationAndBrandingInformation(this);
+  return RespondLater();
 }
 
-Profile* SavedpasswordsGetListFunction::GetProfile() {
-  return Profile::FromBrowserContext(browser_context());
-}
+void SavedpasswordsGetListFunction::OnGetPasswordStoreResults(
+    std::vector<std::unique_ptr<autofill::PasswordForm>> password_list) {
+  using vivaldi::savedpasswords::SavedPasswordItem;
+  namespace Results = vivaldi::savedpasswords::GetList::Results;
 
-void SavedpasswordsGetListFunction::SetPasswordList(
-    const std::vector<std::unique_ptr<autofill::PasswordForm>>& password_list) {
+  FilterAndSortPasswords(&password_list);
+
   std::vector<SavedPasswordItem> svd_pwd_entries;
-  base::ListValue entries;
-  languages_ = GetProfile()->GetPrefs()->GetString(language::prefs::kAcceptLanguages);
-
   for (size_t i = 0; i < password_list.size(); ++i) {
-    std::unique_ptr<SavedPasswordItem> new_node(
-        GetSavedPasswordItem(password_list[i], i));
-    svd_pwd_entries.push_back(std::move(*new_node));
+    autofill::PasswordForm* form = password_list[i].get();
+    svd_pwd_entries.emplace_back();
+    SavedPasswordItem* notes_tree_node = &svd_pwd_entries.back();
+    notes_tree_node->username = base::UTF16ToUTF8(form->username_value);
+    notes_tree_node->password = base::UTF16ToUTF8(form->password_value);
+    notes_tree_node->origin =
+        base::UTF16ToUTF8(url_formatter::FormatUrl(form->origin));
+    notes_tree_node->id = base::NumberToString(i);
   }
 
-  results_ = vivaldi::savedpasswords::GetList::Results::Create(svd_pwd_entries);
-  SendAsyncResponse();
+  Respond(ArgumentList(Results::Create(svd_pwd_entries)));
+  Release();  // Balanced in Run().
 }
 
-SavedPasswordItem* SavedpasswordsGetListFunction::GetSavedPasswordItem(
-    const std::unique_ptr<autofill::PasswordForm>& form,
-    int id) {
-  SavedPasswordItem* notes_tree_node = new SavedPasswordItem();
-  notes_tree_node->username = base::UTF16ToUTF8(form->username_value);
-  notes_tree_node->password = base::UTF16ToUTF8(form->password_value);
-  notes_tree_node->origin =
-      base::UTF16ToUTF8(url_formatter::FormatUrl(form->origin));
-  notes_tree_node->id = base::Int64ToString(id);
-
-  return notes_tree_node;
-}
-
-void SavedpasswordsGetListFunction::SendAsyncResponse() {
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::Bind(&SavedpasswordsGetListFunction::SendResponseToCallback, this));
-}
-
-void SavedpasswordsGetListFunction::SendResponseToCallback() {
-  Release();  // Balanced in RunAsync().
-}
-
-void SavedpasswordsGetListFunction::SetPasswordExceptionList(
-    const std::vector<std::unique_ptr<autofill::PasswordForm>>&
-        password_exception_list) {}
-
-SavedpasswordsRemoveFunction::SavedpasswordsRemoveFunction()
-    : password_manager_presenter_(this) {}
+SavedpasswordsRemoveFunction::SavedpasswordsRemoveFunction() {}
 
 SavedpasswordsRemoveFunction::~SavedpasswordsRemoveFunction() {}
 
-bool SavedpasswordsRemoveFunction::RunAsync() {
-  AddRef();  // Balanced in SendResponseToCallback
-  password_manager_presenter_.Initialize();
-  password_manager_presenter_.UpdatePasswordLists();
+ExtensionFunction::ResponseAction SavedpasswordsRemoveFunction::Run() {
+  using vivaldi::savedpasswords::Remove::Params;
 
-  std::unique_ptr<passwords::Remove::Params> params(
-      passwords::Remove::Params::Create(*args_));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
-  base::StringToInt64(params->id, &idToRemove);
-  return true;
-}
-
-Profile* SavedpasswordsRemoveFunction::GetProfile() {
-  return Profile::FromBrowserContext(browser_context());
-}
-
-void SavedpasswordsRemoveFunction::SetPasswordList(
-    const std::vector<std::unique_ptr<autofill::PasswordForm>>& password_list) {
-  password_manager_presenter_.RemoveSavedPassword(
-      static_cast<size_t>(idToRemove));
-
-  results_ = passwords::Remove::Results::Create();
-  SendAsyncResponse();
-}
-void SavedpasswordsRemoveFunction::SetPasswordExceptionList(
-    const std::vector<std::unique_ptr<autofill::PasswordForm>>&
-        password_exception_list) {}
-
-void SavedpasswordsRemoveFunction::SendResponseToCallback() {
-  SendResponse(true);
-  Release();  // Balanced in RunAsync().
-}
-
-void SavedpasswordsRemoveFunction::SendAsyncResponse() {
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::Bind(&SavedpasswordsRemoveFunction::SendResponseToCallback, this));
-}
-
-bool SavedpasswordsAddFunction::RunAsync() {
-  std::unique_ptr<passwords::Add::Params> params(
-      passwords::Add::Params::Create(*args_));
+  std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  scoped_refptr<password_manager::PasswordStore> password_store(
-      PasswordStoreFactory::GetForProfile(
-          GetProfile(), params->is_explicit
-                            ? ServiceAccessType::EXPLICIT_ACCESS
-                            : ServiceAccessType::IMPLICIT_ACCESS));
+  if (!base::StringToSizeT(params->id, &id_to_remove_)) {
+    return RespondNow(Error("id is not a valid index - " + params->id));
+  }
+
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  password_store_ = PasswordStoreFactory::GetForProfile(
+      profile, ServiceAccessType::EXPLICIT_ACCESS);
+
+  AddRef();  // Balanced in OnGetPasswordStoreResults
+  password_store_->GetAllLoginsWithAffiliationAndBrandingInformation(this);
+  return RespondLater();
+}
+
+void SavedpasswordsRemoveFunction::OnGetPasswordStoreResults(
+    std::vector<std::unique_ptr<autofill::PasswordForm>> password_list) {
+  namespace Results = vivaldi::savedpasswords::Remove::Results;
+
+  FilterAndSortPasswords(&password_list);
+  if (id_to_remove_ >= password_list.size()) {
+    Respond(Error("id is outside the allowed range"));
+  } else {
+    password_store_->RemoveLogin(*password_list[id_to_remove_]);
+    Respond(ArgumentList(Results::Create()));
+  }
+
+  Release();  // Balanced in Run().
+}
+
+ExtensionFunction::ResponseAction SavedpasswordsAddFunction::Run() {
+  using vivaldi::savedpasswords::Add::Params;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
 
   if (!params->password_form.password.get()) {
-    SendResponse(false);
-    return true;
+    return RespondNow(Error("No password"));
   }
 
   autofill::PasswordForm password_form = {};
@@ -156,22 +132,27 @@ bool SavedpasswordsAddFunction::RunAsync() {
       base::UTF8ToUTF16(*params->password_form.password.get());
   password_form.date_created = base::Time::Now();
 
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  scoped_refptr<password_manager::PasswordStore> password_store =
+      PasswordStoreFactory::GetForProfile(
+          profile, params->is_explicit ? ServiceAccessType::EXPLICIT_ACCESS
+                                       : ServiceAccessType::IMPLICIT_ACCESS);
   password_store->AddLogin(password_form);
 
-  SendResponse(true);
-  return true;
+  return RespondNow(NoArguments());
 }
 
-bool SavedpasswordsGetFunction::RunAsync() {
-  std::unique_ptr<passwords::Get::Params> params(
-      passwords::Get::Params::Create(*args_));
+ExtensionFunction::ResponseAction SavedpasswordsGetFunction::Run() {
+  using vivaldi::savedpasswords::Get::Params;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  scoped_refptr<password_manager::PasswordStore> password_store(
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  scoped_refptr<password_manager::PasswordStore> password_store =
       PasswordStoreFactory::GetForProfile(
-          GetProfile(), params->is_explicit
-                            ? ServiceAccessType::EXPLICIT_ACCESS
-                            : ServiceAccessType::IMPLICIT_ACCESS));
+          profile, params->is_explicit ? ServiceAccessType::EXPLICIT_ACCESS
+                                       : ServiceAccessType::IMPLICIT_ACCESS);
 
   username_ = params->password_form.username;
 
@@ -184,35 +165,41 @@ bool SavedpasswordsGetFunction::RunAsync() {
   AddRef();
   password_store->GetLogins(form_digest, this);
 
-  return true;
+  return RespondLater();
 }
 
 void SavedpasswordsGetFunction::OnGetPasswordStoreResults(
-    std::vector<std::unique_ptr<autofill::PasswordForm>> results) {
-  results_ = passwords::Get::Results::Create(false, "");
-  for (const auto& result : results) {
+    std::vector<std::unique_ptr<autofill::PasswordForm>> passwords) {
+  namespace Results = vivaldi::savedpasswords::Get::Results;
+
+  std::unique_ptr<base::ListValue> results;
+  for (const auto& result : passwords) {
     if (base::UTF16ToUTF8(result->username_value) == username_) {
-      results_ = passwords::Get::Results::Create(
-          true, base::UTF16ToASCII(result->password_value));
+      results =
+          Results::Create(true, base::UTF16ToASCII(result->password_value));
     }
   }
+  if (!results) {
+    results = Results::Create(false, "");
+  }
 
-  SendResponse(true);
+  Respond(ArgumentList(std::move(results)));
 
-  // Balance the AddRef in RunAsync
+  // Balance the AddRef in Run
   Release();
 }
 
-bool SavedpasswordsDeleteFunction::RunAsync() {
-  std::unique_ptr<passwords::Delete::Params> params(
-      passwords::Delete::Params::Create(*args_));
+ExtensionFunction::ResponseAction SavedpasswordsDeleteFunction::Run() {
+  using vivaldi::savedpasswords::Delete::Params;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
+  Profile* profile = Profile::FromBrowserContext(browser_context());
   scoped_refptr<password_manager::PasswordStore> password_store(
       PasswordStoreFactory::GetForProfile(
-          GetProfile(), params->is_explicit
-                            ? ServiceAccessType::EXPLICIT_ACCESS
-                            : ServiceAccessType::IMPLICIT_ACCESS));
+          profile, params->is_explicit ? ServiceAccessType::EXPLICIT_ACCESS
+                                       : ServiceAccessType::IMPLICIT_ACCESS));
 
   autofill::PasswordForm password_form = {};
   password_form.scheme = autofill::PasswordForm::SCHEME_OTHER;
@@ -223,31 +210,16 @@ bool SavedpasswordsDeleteFunction::RunAsync() {
 
   password_store->RemoveLogin(password_form);
 
-  SendResponse(true);
-  return true;
+  return RespondNow(NoArguments());
 }
 
-SavedpasswordsAuthenticateFunction::SavedpasswordsAuthenticateFunction() {}
+ExtensionFunction::ResponseAction SavedpasswordsAuthenticateFunction::Run() {
+  namespace Results = vivaldi::savedpasswords::Authenticate::Results;
 
-SavedpasswordsAuthenticateFunction::~SavedpasswordsAuthenticateFunction() {}
+  bool success = VivaldiUtilitiesAPI::AuthenticateUser(
+      browser_context(), dispatcher()->GetAssociatedWebContents());
 
-bool SavedpasswordsAuthenticateFunction::RunAsync() {
-  extensions::VivaldiUtilitiesAPI* utils_api =
-    extensions::VivaldiUtilitiesAPI::GetFactoryInstance()->Get(
-      browser_context());
-  DCHECK(utils_api);
-
-  content::WebContents* web_contents = dispatcher()->GetAssociatedWebContents();
-  gfx::NativeWindow window =
-      web_contents ? platform_util::GetTopLevel(web_contents->GetNativeView())
-                   : nullptr;
-
-  bool success = utils_api->AuthenticateUser(window);
-
-  results_ = vivaldi::savedpasswords::Authenticate::Results::Create(success);
-
-  SendResponse(true);
-  return true;
+  return RespondNow(ArgumentList(Results::Create(success)));
 }
 
 }  // namespace extensions

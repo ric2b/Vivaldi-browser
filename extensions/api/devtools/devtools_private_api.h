@@ -3,13 +3,13 @@
 #ifndef EXTENSIONS_API_DEVTOOLS_DEVTOOLS_PRIVATE_API_H_
 #define EXTENSIONS_API_DEVTOOLS_DEVTOOLS_PRIVATE_API_H_
 
-#include "chrome/browser/extensions/chrome_extension_function.h"
+#include "extensions/browser/extension_function.h"
 #include "extensions/schema/devtools_private.h"
 
 namespace extensions {
 
 class DevtoolsPrivateGetDockingStateSizesFunction
-    : public ChromeAsyncExtensionFunction {
+    : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("devtoolsPrivate.getDockingStateSizes",
                              DEVTOOLSPRIVATE_GETDOCKINGSTATESIZES)
@@ -20,13 +20,13 @@ class DevtoolsPrivateGetDockingStateSizesFunction
   ~DevtoolsPrivateGetDockingStateSizesFunction() override = default;
 
  private:
-  bool RunAsync() override;
+  ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(DevtoolsPrivateGetDockingStateSizesFunction);
 };
 
 class DevtoolsPrivateCloseDevtoolsFunction
-  : public ChromeAsyncExtensionFunction {
+  : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("devtoolsPrivate.closeDevtools",
   DEVTOOLSPRIVATE_CLOSEDEVTOOLS)
@@ -37,13 +37,13 @@ class DevtoolsPrivateCloseDevtoolsFunction
   ~DevtoolsPrivateCloseDevtoolsFunction() override = default;
 
  private:
-  bool RunAsync() override;
+  ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(DevtoolsPrivateCloseDevtoolsFunction);
 };
 
 class DevtoolsPrivateToggleDevtoolsFunction
-    : public ChromeAsyncExtensionFunction {
+    : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("devtoolsPrivate.toggleDevtools",
                              DEVTOOLSPRIVATE_TOGGLEDEVTOOLS)
@@ -52,7 +52,7 @@ class DevtoolsPrivateToggleDevtoolsFunction
  protected:
   ~DevtoolsPrivateToggleDevtoolsFunction() override = default;
   // ExtensionFunction:
-  bool RunAsync() override;
+  ResponseAction Run() override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(DevtoolsPrivateToggleDevtoolsFunction);

@@ -1,0 +1,31 @@
+import("//build/config/jumbo.gni")
+
+jumbo_source_set("adverse_adblocking") {
+  sources = [
+    "adverse_adblocking/adverse_ad_filter_list.cc",
+    "adverse_adblocking/adverse_ad_filter_list.h",
+    "adverse_adblocking/vivaldi_subresource_filter_throttle.cc",
+    "adverse_adblocking/vivaldi_subresource_filter_throttle.h",
+  ]
+  deps = [
+    "//components/subresource_filter/content/browser",
+    "//content/public/browser",
+    "//vivaldi/prefs:prefs_files_generated",
+  ]
+}
+
+jumbo_source_set("content_adverse_adblocking") {
+  sources = [
+    "adverse_adblocking/vivaldi_content_browser_client.cc",
+    "adverse_adblocking/vivaldi_content_browser_client.h",
+    "adverse_adblocking/vivaldi_subresource_filter_client.cc",
+    "adverse_adblocking/vivaldi_subresource_filter_client.h",
+  ]
+
+  deps = [
+    ":adverse_adblocking",
+    "//components/subresource_filter/content/browser",
+    "//content/public/browser",
+    "//vivaldi/prefs:prefs_files_generated",
+  ]
+}

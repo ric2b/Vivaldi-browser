@@ -204,6 +204,120 @@
           Do You Really Want To Close This Window?
         </message>
       </if>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_1" desc="The default name given to a newly created profile with the Landscape 1 avatar.">
+        Landscape 1
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_2" desc="The default name given to a newly created profile with the Landscape 2 avatar.">
+        Landscape 2
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_3" desc="The default name given to a newly created profile with the Landscape 3 avatar.">
+        Landscape 3
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_4" desc="The default name given to a newly created profile with the Landscape 4 avatar.">
+        Landscape 4
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_5" desc="The default name given to a newly created profile with the Landscape 5 avatar.">
+        Landscape 5
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_6" desc="The default name given to a newly created profile with the Landscape 6 avatar.">
+        Landscape 6
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_7" desc="The default name given to a newly created profile with the Landscape 7 avatar.">
+        Landscape 7
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_8" desc="The default name given to a newly created profile with the Landscape 8 avatar.">
+        Landscape 8
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_9" desc="The default name given to a newly created profile with the Landscape 9 avatar.">
+        Landscape 9
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_10" desc="The default name given to a newly created profile with the Landscape 10 avatar.">
+        Landscape 10
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_11" desc="The default name given to a newly created profile with the Landscape 11 avatar.">
+        Landscape 11
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_12" desc="The default name given to a newly created profile with the Landscape 12 avatar.">
+        Landscape 12
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_13" desc="The default name given to a newly created profile with the Landscape 13 avatar.">
+        Landscape 13
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_14" desc="The default name given to a newly created profile with the Landscape 14 avatar.">
+        Landscape 14
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_15" desc="The default name given to a newly created profile with the Landscape 15 avatar.">
+        Landscape 15
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_16" desc="The default name given to a newly created profile with the Landscape 16 avatar.">
+        Landscape 16
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_17" desc="The default name given to a newly created profile with the Landscape 17 avatar.">
+        Landscape 17
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_18" desc="The default name given to a newly created profile with the Landscape 18 avatar.">
+        Landscape 18
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_19" desc="The default name given to a newly created profile with the Monster 1 avatar.">
+        Monster 1
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_20" desc="The default name given to a newly created profile with the Monster 2 avatar.">
+        Monster 2
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_21" desc="The default name given to a newly created profile with the Monster 3 avatar.">
+        Monster 3
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_22" desc="The default name given to a newly created profile with the Monster 4 avatar.">
+        Monster 4
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_23" desc="The default name given to a newly created profile with the Monster 5 avatar.">
+        Monster 5
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_24" desc="The default name given to a newly created profile with the Monster 6 avatar.">
+        Monster 6
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_25" desc="The default name given to a newly created profile with the Monster 7 avatar.">
+        Monster 7
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_26" desc="The default name given to a newly created profile with the Monster 8 avatar.">
+        Monster 8
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_27" desc="The default name given to a newly created profile with the Monster 9 avatar.">
+        Monster 9
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_28" desc="The default name given to a newly created profile with the Monster 10 avatar.">
+        Monster 10
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_29" desc="The default name given to a newly created profile with the Animal 1 avatar.">
+        Animal 1
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_30" desc="The default name given to a newly created profile with the Animal 2 avatar.">
+        Animal 2
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_31" desc="The default name given to a newly created profile with the Animal 3 avatar.">
+        Animal 3
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_32" desc="The default name given to a newly created profile with the Animal 4 avatar.">
+        Animal 4
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_33" desc="The default name given to a newly created profile with the Animal 5 avatar.">
+        Animal 5
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_34" desc="The default name given to a newly created profile with the Animal 6 avatar.">
+        Animal 6
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_35" desc="The default name given to a newly created profile with the Animal 7 avatar.">
+        Animal 7
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_36" desc="The default name given to a newly created profile with the Animal 8 avatar.">
+        Animal 8
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_37" desc="The default name given to a newly created profile with the Animal 9 avatar.">
+        Animal 9
+      </message>
+      <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_38" desc="The default name given to a newly created profile with the generic avatar.">
+        Generic
+      </message>
 
       <part file="vivaldi_bookmark_strings.grdp" />
       <part file="vivaldi_context_menu_strings.grdp" />

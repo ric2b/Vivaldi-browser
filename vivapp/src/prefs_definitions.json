@@ -91,6 +91,11 @@
           "type": "boolean",
           "default": true,
           "syncable": true
+        },
+        "show_favicon": {
+          "type": "boolean",
+          "default": false,
+          "syncable": true
         }
       },
       "select_on_click": {
@@ -177,7 +182,7 @@
         "description": "Test if initializing can be made possible if false",
         "type": "boolean",
         "default": false,
-        "syncable": true
+        "syncable": false
       },
       "confirm_opening": {
         "description": "Ask before opening a number of bookmarks >= to  kBookmarksConfirmOpeningThreshold",
@@ -193,7 +198,7 @@
       "deleted_partners": {
         "type": "list",
         "default": [],
-        "syncable": true
+        "syncable": false
       },
       "language": {
         "description": "Set on first run. Upgrades will use this language when needed",
@@ -232,7 +237,7 @@
       "version": {
         "type": "string",
         "default": "",
-        "syncable": true
+        "syncable": false
       },
       "panel": {
         "sorting": {
@@ -242,11 +247,40 @@
         }
       }
     },
+    "biscuit": {
+      "load_bookmarks": {
+        "type": "boolean",
+        "default": false,
+        "syncable": true
+      },
+       "version": {
+        "type": "boolean",
+        "default": false,
+        "syncable": true
+      }
+    },
     "calendar": {
       "date_format": {
         "type": "string",
         "default": "",
         "syncable": false
+      },
+      "display_mode": {
+        "type": "enum",
+        "enum_values": {
+          "day": 0,
+          "week": 1,
+          "multiweek": 2,
+          "month": 3,
+          "agenda": 4
+        },
+        "default": "month",
+        "syncable": false
+      },
+      "show_day_sidebar": {
+        "type": "boolean",
+        "default": false,
+        "syncable": true
       }
     },
     "clear_private_data": {
@@ -431,6 +465,116 @@
         "syncable": true
       }
     },
+    "mail": {
+      "accounts": {
+        "description": "Mail account credentials for each set up account",
+        "type": "list",
+        "default": [],
+        "syncable": false
+      },
+      "check_interval": {
+        "description": "How often to check for new mail, in minutes or false for manually",
+        "type": "enum",
+        "enum_values": {
+          "one_minute": 0,
+          "fifteen_minutes": 1,
+          "manual": 2
+        },
+        "default": "fifteen_minutes",
+        "syncable": true
+      },
+      "compose_headers_hidden": {
+        "description": "What header fields are hidden in mail message header when composing",
+        "type": "list",
+        "default": [],
+        "syncable": true
+      },
+      "contact_default_action": {
+        "description": "Selecting a contact can either view all messages or compose a message",
+        "type": "enum",
+        "enum_values": {
+          "compose": 0,
+          "viewAllMessages": 1
+        },
+        "default": "viewAllMessages",
+        "syncable": true
+      },
+      "default_account": {
+        "description": "The one mail account that shall be the default account when sending mail",
+        "type": "string",
+        "default": "",
+        "syncable": false
+      },
+      "imap_logs_on": {
+        "description": "Are imap actions logged in debug console or not?",
+        "type": "boolean",
+        "default": false,
+        "syncable": false
+      },
+      "is_turned_off": {
+        "description": "Is mail client turned on or off?",
+        "type": "boolean",
+        "default": false,
+        "syncable": false
+      },
+      "last_sent_from": {
+        "description": "The mail account that was most recently used to send from",
+        "type": "string",
+        "default": "",
+        "syncable": false
+      },
+      "read_headers_hidden": {
+        "description": "What header fields are hidden in mail message header when reading",
+        "type": "list",
+        "default": [],
+        "syncable": true
+      },
+      "send_or_queue": {
+        "description": "Should button in Mail Composer Send directly or Queue to Outbox?",
+        "type": "enum",
+        "enum_values": {
+          "send": 0,
+          "queue": 1
+        },
+        "default": "send",
+        "syncable": true
+      },
+      "search_ascending": {
+        "description": "Is mail list ordered ascending or descending?",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "search_threading": {
+        "description": "Is mail listed according to discussion threads?",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "single_click_tabs": {
+        "description": "Open mail tabs with single click",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "view_layout": {
+        "description": "Layout of mail client",
+        "type": "enum",
+        "enum_values": {
+          "horizontal": 0,
+          "vertical": 1,
+          "vertical_wide": 2
+        },
+        "default": "vertical",
+        "syncable": true
+      },
+      "view_dimensions": {
+        "description": "Dimensions of mail list and detail view",
+        "type": "dictionary",
+        "default": {"width": 400, "width_wide": 600, "height": 240},
+        "syncable": true
+      }
+    },
     "mouse_gestures": {
       "alt_gestures_enabled": {
         "description": "Allow gestures using Alt key and left mouse button",
@@ -453,6 +597,13 @@
         "enabled": {
           "type": "boolean",
           "default": true,
+          "syncable": true
+        }
+      },
+      "double_click_menu": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
           "syncable": true
         }
       }
@@ -546,6 +697,13 @@
         "type": "boolean",
         "default": false,
         "syncable": true
+      },
+      "window": {
+        "show_unread": {
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        }
       }
     },
     "popups": {
@@ -572,7 +730,40 @@
           "default": true,
           "syncable": true
         }
+      },
+      "adverse_ad_block": {
+        "enabled": {
+          "description": "Enables update and loading of the block-list.",
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "last_update": {
+          "description": "Last time we did a successfull update of the block-list.",
+          "type": "string",
+          "default": "",
+          "syncable": false
+        },
+        "block_list_url": {
+          "description": "URL to the most recent block-list.",
+          "type": "string",
+          "default": "https://downloads.vivaldi.com/blocklist/current.json",
+          "syncable": false
+        },
+        "block_list_sha256_url": {
+          "description": "URL to a sha256 sum of the most recent block-list.",
+          "type": "string",
+          "default": "https://downloads.vivaldi.com/blocklist/current.sha256",
+          "syncable": false
+        },
+        "update_interval": {
+          "description": "Time between the block-list download refresh in hours.",
+          "type": "integer",
+          "default": 24,
+          "syncable": false
+        }
       }
+
     },
     "quick_commands": {
       "open_url_in_new_tab": {
@@ -589,6 +780,12 @@
       },
       "show_bookmarks": {
         "description": "Include bookmarks in QC search results",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "show_calculator": {
+        "description": "Include calculator in QC search results",
         "type": "boolean",
         "default": true,
         "syncable": true
@@ -707,7 +904,7 @@
         "columns": {
           "type": "integer",
           "default": 6,
-          "syncable": true
+          "syncable": false
         },
         "controls_visible": {
           "type": "boolean",
@@ -722,7 +919,7 @@
         "display_navigation": {
           "description": "Controls Speed Dial navigation display in other Start Page components",
           "type": "boolean",
-          "default": true,
+          "default": false,
           "syncable": true
         },
         "display_search": {
@@ -744,7 +941,7 @@
         "width": {
           "type": "integer",
           "default": 220,
-          "syncable": true
+          "syncable": false
         }
       }
     },
@@ -1102,6 +1299,14 @@
         }
       }
     },
+    "appearance": {
+      "css_ui_mods_directory": {
+        "type": "file_path",
+        "description": "CSS modifications directory where *.css files will be injected from.",
+        "default": "",
+        "syncable": false
+      }
+    },
     "theme": {
       "color_accent_saturation_limit": {
         "type": "double",
@@ -1355,13 +1560,6 @@
     },
 
     "system": {
-      "has_desktop_wallpaper_protocol": {
-        "type": "boolean",
-        "default": null,
-        "default_linux": false,
-        "default_mac": false,
-        "syncable": false
-      },
       "desktop_theme_color": {
         "type": "enum",
         "enum_values": {
@@ -1371,6 +1569,13 @@
         "default": "light",
         "default_linux": "light",
         "default_mac": "light",
+        "syncable": false
+      },
+      "has_desktop_wallpaper_protocol": {
+        "type": "boolean",
+        "default": null,
+        "default_linux": false,
+        "default_mac": false,
         "syncable": false
       },
       "show_exit_confirmation_dialog": {

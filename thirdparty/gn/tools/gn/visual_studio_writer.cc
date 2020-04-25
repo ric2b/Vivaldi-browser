@@ -72,12 +72,15 @@ struct SourceFileWriter {
 const char kToolsetVersionVs2013[] = "v120";               // Visual Studio 2013
 const char kToolsetVersionVs2015[] = "v140";               // Visual Studio 2015
 const char kToolsetVersionVs2017[] = "v141";               // Visual Studio 2017
+const char kToolsetVersionVs2019[] = "v142";               // Visual Studio 2019
 const char kProjectVersionVs2013[] = "12.0";               // Visual Studio 2013
 const char kProjectVersionVs2015[] = "14.0";               // Visual Studio 2015
 const char kProjectVersionVs2017[] = "15.0";               // Visual Studio 2017
+const char kProjectVersionVs2019[] = "16.0";               // Visual Studio 2019
 const char kVersionStringVs2013[] = "Visual Studio 2013";  // Visual Studio 2013
 const char kVersionStringVs2015[] = "Visual Studio 2015";  // Visual Studio 2015
 const char kVersionStringVs2017[] = "Visual Studio 2017";  // Visual Studio 2017
+const char kVersionStringVs2019[] = "Visual Studio 2019";  // Visual Studio 2019
 const char kWindowsKitsVersion[] = "10";                   // Windows 10 SDK
 const char kWindowsKitsDefaultVersion[] = "10.0.17134.0";  // Windows 10 SDK
 
@@ -299,6 +302,11 @@ VisualStudioWriter::VisualStudioWriter(const BuildSettings* build_settings,
       toolset_version_ = kToolsetVersionVs2017;
       version_string_ = kVersionStringVs2017;
       break;
+    case Version::Vs2019:
+      project_version_ = kProjectVersionVs2019;
+      toolset_version_ = kToolsetVersionVs2019;
+      version_string_ = kVersionStringVs2019;
+      break;
     default:
       NOTREACHED() << "Not a valid Visual Studio Version: " << version;
   }
@@ -517,13 +525,7 @@ bool VisualStudioWriter::WriteProjectFileContents(
   {
     std::unique_ptr<XmlElementWriter> properties =
         project.SubElement("PropertyGroup");
-    {
-      std::unique_ptr<XmlElementWriter> out_dir =
-          properties->SubElement("OutDir");
-      path_output.WriteDir(out_dir->StartContent(false),
-                           build_settings_->build_dir(),
-                           PathOutput::DIR_INCLUDE_LAST_SLASH);
-    }
+    properties->SubElement("OutDir")->Text("$(SolutionDir)");
     properties->SubElement("TargetName")->Text("$(ProjectName)");
     if (target->output_type() != Target::GROUP) {
       properties->SubElement("TargetPath")->Text("$(OutDir)\\" + ninja_target);

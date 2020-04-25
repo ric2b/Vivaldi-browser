@@ -171,6 +171,9 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
   // Used to expose the view to extensions, only popups now.
   std::unique_ptr<::vivaldi::VivaldiExtensionHost> extension_host_;
 
+  // Vivaldi added for devtools web contents ownership
+  void SetWebContentsIsOwnedByThis(bool is_owned);
+
  private:
   friend class WebViewPermissionHelper;
 
@@ -254,7 +257,7 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
                                   blink::MediaStreamType type) final;
   void CanDownload(const GURL& url,
                    const std::string& request_method,
-                   const base::Callback<void(bool)>& callback) override;
+                   base::OnceCallback<void(bool)> callback) override;
   content::JavaScriptDialogManager* GetJavaScriptDialogManager(
       content::WebContents* source) final;
   void AddNewContents(content::WebContents* source,

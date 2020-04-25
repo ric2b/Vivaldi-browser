@@ -154,6 +154,7 @@ Example .gn file contents
 namespace {
 
 const base::FilePath::CharType kGnFile[] = FILE_PATH_LITERAL(".gn");
+const char kDefaultArgsGn[] = "# Set build arguments here. See `gn buildargs`.";
 
 base::FilePath FindDotFile(const base::FilePath& current_dir) {
   base::FilePath try_this_file = current_dir.Append(kGnFile);
@@ -305,7 +306,8 @@ Setup::Setup()
       dotfile_settings_(&build_settings_, std::string()),
       dotfile_scope_(&dotfile_settings_),
       default_args_(nullptr),
-      fill_arguments_(true) {
+      fill_arguments_(true),
+      gen_empty_args_(false) {
   dotfile_settings_.set_toolchain_label(Label());
 
   build_settings_.set_item_defined_callback(
@@ -441,9 +443,18 @@ bool Setup::RunPostMessageLoop(const base::CommandLine& cmdline) {
 bool Setup::FillArguments(const base::CommandLine& cmdline) {
   // Use the args on the command line if specified, and save them. Do this even
   // if the list is empty (this means clear any defaults).
-  if (cmdline.HasSwitch(switches::kArgs)) {
-    if (!FillArgsFromCommandLine(cmdline.GetSwitchValueASCII(switches::kArgs)))
+  // If --args is not set, args.gn file does not exist and gen_empty_args
+  // is set, generate an empty args.gn file with default comments.
+
+  base::FilePath build_arg_file =
+      build_settings_.GetFullPath(GetBuildArgFile());
+  auto switch_value = cmdline.GetSwitchValueASCII(switches::kArgs);
+  if (cmdline.HasSwitch(switches::kArgs) ||
+      (gen_empty_args_ && !PathExists(build_arg_file))) {
+    if (!FillArgsFromCommandLine(switch_value.empty() ? kDefaultArgsGn
+                                                    : switch_value)) {
       return false;
+    }
     SaveArgsToFile();
     return true;
   }

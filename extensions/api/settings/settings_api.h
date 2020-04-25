@@ -7,16 +7,16 @@
 #include <string>
 
 #include "base/memory/singleton.h"
-#include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "content/public/browser/web_ui.h"
+#include "extensions/browser/extension_function.h"
 #include "extensions/schema/settings.h"
 
 namespace extensions {
 
-class SettingsSetContentSettingFunction : public ChromeAsyncExtensionFunction {
+class SettingsSetContentSettingFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("settings.setContentSetting",
                              SETTINGS_SET_CONTENTSETTING)
@@ -24,7 +24,7 @@ class SettingsSetContentSettingFunction : public ChromeAsyncExtensionFunction {
 
  private:
   ~SettingsSetContentSettingFunction() override;
-  bool RunAsync() override;
+  ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(SettingsSetContentSettingFunction);
 };

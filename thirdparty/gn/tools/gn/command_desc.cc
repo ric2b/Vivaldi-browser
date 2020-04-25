@@ -291,7 +291,8 @@ std::map<std::string, DescHandlerFunc> GetHandlers() {
           {variables::kDataKeys, DefaultHandler},
           {variables::kRebase, DefaultHandler},
           {variables::kWalkKeys, DefaultHandler},
-          {variables::kWriteOutputConversion, DefaultHandler}};
+          {variables::kWriteOutputConversion, DefaultHandler},
+          {"runtime_deps", DefaultHandler}};
 }
 
 void HandleProperty(const std::string& what,
@@ -444,8 +445,10 @@ const char kDesc[] = "desc";
 const char kDesc_HelpShort[] =
     "desc: Show lots of insightful information about a target or config.";
 const char kDesc_Help[] =
-    R"(gn desc <out_dir> <label or pattern> [<what to show>] [--blame] "
-[--format=json]
+    R"(gn desc
+
+  gn desc <out_dir> <label or pattern> [<what to show>] [--blame]
+          [--format=json]
 
   Displays information about a given target or config. The build parameters
   will be taken for the build in the given <out_dir>.

@@ -193,35 +193,46 @@ TEST_F(HeaderCheckerTest, CheckInclude) {
   scoped_refptr<HeaderChecker> checker(
       new HeaderChecker(setup_.build_settings(), targets_));
 
+  std::set<std::pair<const Target*, const Target*>> no_dependency_cache;
   // A file in target A can't include a header from D because A has no
   // dependency on D.
   std::vector<Err> errors;
-  checker->CheckInclude(&a_, input_file, d_header, range, &errors);
+  checker->CheckInclude(&a_, input_file, d_header, range, &no_dependency_cache,
+                        &errors);
   EXPECT_GT(errors.size(), 0);
 
   // A can include the public header in B.
   errors.clear();
-  checker->CheckInclude(&a_, input_file, b_public, range, &errors);
+  no_dependency_cache.clear();
+  checker->CheckInclude(&a_, input_file, b_public, range, &no_dependency_cache,
+                        &errors);
   EXPECT_EQ(errors.size(), 0);
 
   // Check A depending on the public and private headers in C.
   errors.clear();
-  checker->CheckInclude(&a_, input_file, c_public, range, &errors);
+  no_dependency_cache.clear();
+  checker->CheckInclude(&a_, input_file, c_public, range, &no_dependency_cache,
+                        &errors);
   EXPECT_EQ(errors.size(), 0);
   errors.clear();
-  checker->CheckInclude(&a_, input_file, c_private, range, &errors);
+  no_dependency_cache.clear();
+  checker->CheckInclude(&a_, input_file, c_private, range, &no_dependency_cache,
+                        &errors);
   EXPECT_GT(errors.size(), 0);
 
   // A can depend on a random file unknown to the build.
   errors.clear();
-  checker->CheckInclude(&a_, input_file, SourceFile("//random.h"),
-                                    range, &errors);
+  no_dependency_cache.clear();
+  checker->CheckInclude(&a_, input_file, SourceFile("//random.h"), range,
+                        &no_dependency_cache, &errors);
   EXPECT_EQ(errors.size(), 0);
 
   // A can depend on a file present only in another toolchain even with no
   // dependency path.
   errors.clear();
-  checker->CheckInclude(&a_, input_file, otc_header, range, &errors);
+  no_dependency_cache.clear();
+  checker->CheckInclude(&a_, input_file, otc_header, range,
+                        &no_dependency_cache, &errors);
   EXPECT_EQ(errors.size(), 0);
 }
 
@@ -285,7 +296,9 @@ TEST_F(HeaderCheckerTest, CheckIncludeAllowCircular) {
 
   // A depends on B. So B normally can't include headers from A.
   std::vector<Err> errors;
-  checker->CheckInclude(&b_, input_file, a_public, range, &errors);
+  std::set<std::pair<const Target*, const Target*>> no_dependency_cache;
+  checker->CheckInclude(&b_, input_file, a_public, range, &no_dependency_cache,
+                        &errors);
   EXPECT_GT(errors.size(), 0);
 
   // Add an allow_circular_includes_from on A that lists B.
@@ -293,7 +306,9 @@ TEST_F(HeaderCheckerTest, CheckIncludeAllowCircular) {
 
   // Now the include from B to A should be allowed.
   errors.clear();
-  checker->CheckInclude(&b_, input_file, a_public, range, &errors);
+  no_dependency_cache.clear();
+  checker->CheckInclude(&b_, input_file, a_public, range, &no_dependency_cache,
+                        &errors);
   EXPECT_EQ(errors.size(), 0);
 }
 
@@ -374,11 +389,15 @@ TEST_F(HeaderCheckerTest, Friend) {
 
   // B should not be allowed to include C's private header.
   std::vector<Err> errors;
-  checker->CheckInclude(&b_, input_file, c_private, range, &errors);
+  std::set<std::pair<const Target*, const Target*>> no_dependency_cache;
+  checker->CheckInclude(&b_, input_file, c_private, range, &no_dependency_cache,
+                        &errors);
   EXPECT_GT(errors.size(), 0);
 
   // A should be able to because of the friend declaration.
   errors.clear();
-  checker->CheckInclude(&a_, input_file, c_private, range, &errors);
+  no_dependency_cache.clear();
+  checker->CheckInclude(&a_, input_file, c_private, range, &no_dependency_cache,
+                        &errors);
   EXPECT_EQ(errors.size(), 0);
 }

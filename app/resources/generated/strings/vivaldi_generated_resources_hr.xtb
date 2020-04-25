@@ -23,8 +23,6 @@
 <translation id="1850508293116537636">Zakreni u &amp;smjeru kretanja kazaljke na satu</translation>
 <translation id="1886996562706621347">Dopusti web-lokacijama traženje dopuštenja da postanu zadani rukovatelji za protokole (preporučeno)</translation>
 <translation id="1901303067676059328">Odaberi &amp;sve</translation>
-<translation id="1989112275319619282">Pronađi datoteku ili mapu</translation>
-<translation id="1992397118740194946">Nije postavljeno</translation>
 <translation id="2087822576218954668">Ispis: <ph name="PRINT_NAME" /></translation>
 <translation id="2148892889047469596">Emitiraj karticu</translation>
 <translation id="2177950615300672361">Anonimna kartica: <ph name="TAB_NAME" /></translation>
@@ -46,7 +44,6 @@
 <translation id="2470702053775288986">Onemogućena su nepodržana proširenja</translation>
 <translation id="2476578072172137802">Postavke web-lokacije</translation>
 <translation id="2482878487686419369">Obavijesti</translation>
-<translation id="2501797496290880632">Upišite prečac</translation>
 <translation id="2550212893339833758">Zamijenjena memorija</translation>
 <translation id="26224892172169984">Ne dopusti nijednoj web-lokaciji rukovanje protokolima</translation>
 <translation id="2662876636500006917">Vivaldi web-trgovina</translation>
@@ -58,7 +55,6 @@
 <translation id="2850541429955027218">Dodaj temu</translation>
 <translation id="2861941300086904918">Sigurnosni upravitelj izvornog klijenta</translation>
 <translation id="2913331724188855103">Dopuštanje web-lokacijama da spremaju i čitaju podatke kolačića (preporučeno)</translation>
-<translation id="2916745397441987255">Pretraži proširenja</translation>
 <translation id="2932883381142163287">Prijavi zloupotrebu</translation>
 <translation id="2941112035454246133">Nizak</translation>
 <translation id="2972581237482394796">&amp;Vrati poništeno</translation>
@@ -75,16 +71,12 @@
 <translation id="3347086966102161372">K&amp;opiraj adresu slike</translation>
 <translation id="3378572629723696641">Ovo proširenje možda je oštećeno.</translation>
 <translation id="345693547134384690">Otvori &amp;sliku u novoj &amp;kartici</translation>
-<translation id="3467267818798281173">Traži prijedloge prijevoda od Google-a</translation>
 <translation id="3505030558724226696">Opoziv pristupa uređaju</translation>
 <translation id="3627588569887975815">Otvori vezu u anonimnom prozoru</translation>
 <translation id="3678156199662914018">Proširenje: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3744111561329211289">Pozadinska sinkronizacija</translation>
 <translation id="3797900183766075808">&amp;Traži pojam "<ph name="SEARCH_TERMS" />" pomoću tražilice <ph name="SEARCH_ENGINE" /></translation>
-<translation id="3798449238516105146">Verzija</translation>
 <translation id="3800806661949714323">Prikaži sve (preporučeno)</translation>
-<translation id="3855441664322950881">Zapakiraj proširenje</translation>
-<translation id="3866249974567520381">Opis</translation>
 <translation id="3905761538810670789">Popravi aplikaciju</translation>
 <translation id="3908501907586732282">Omogući proširenje</translation>
 <translation id="3909791450649380159">Iz&amp;reži</translation>
@@ -108,7 +100,6 @@
 <translation id="4384652540891215547">Aktiviranje proširenja</translation>
 <translation id="4394049700291259645">Onemogući</translation>
 <translation id="4423482519432579560">&amp;Provjera pravopisa</translation>
-<translation id="4522570452068850558">Detalji</translation>
 <translation id="4552089082226364758">Postavke za Flash</translation>
 <translation id="4579581181964204535">Ne može se emitirati <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Idi na <ph name="URL" /></translation>
@@ -137,7 +128,6 @@
 <translation id="5483785310822538350">Opozovi pristup datotekama i uređaju</translation>
 <translation id="5485102783864353244">Dodaj aplikaciju</translation>
 <translation id="5521078259930077036">Je li to početna stranica koju ste očekivali?</translation>
-<translation id="5532223876348815659">Globalno</translation>
 <translation id="5542132724887566711">Profil</translation>
 <translation id="5556459405103347317">Ponovno učitaj</translation>
 <translation id="5575473780076478375">Anonimno proširenje: <ph name="EXTENSION_NAME" /></translation>
@@ -148,7 +138,6 @@
 <translation id="5715711091495208045">Broker dodatka: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5764483294734785780">Sp&amp;remi zvučni zapis kao...</translation>
 <translation id="5780973441651030252">Prioritet obrade</translation>
-<translation id="5804241973901381774">Dozvole</translation>
 <translation id="583281660410589416">Nepoznato</translation>
 <translation id="5908769186679515905">Onemogući web-lokacijama pokretanje Flash-a</translation>
 <translation id="5956585768868398362">Je li to stranica pretraživanja koju ste očekivali?</translation>
@@ -159,11 +148,9 @@
 <translation id="6059925163896151826">USB uređaji</translation>
 <translation id="6101226222197207147">Dodana je nova aplikacija (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Internetskom vezom upravlja proširenje</translation>
-<translation id="6124650939968185064">O tom proširenju ovise sljedeća proširenja:</translation>
 <translation id="6156863943908443225">Predmemorija skripte</translation>
 <translation id="6169666352732958425">Emitiranje radne površine nije moguće.</translation>
 <translation id="6196854373336333322">Proširenje "<ph name="EXTENSION_NAME" />" preuzelo je kontrolu nad vašim postavkama proxyja, a to znači da može promijeniti, prekinuti ili prisluškivati sve što radite na mreži. Ako niste sigurni kako je došlo do te promjene, vjerojatno je ne želite.</translation>
-<translation id="6226777517901268232">Dodaj privatni ključ (neobavezno)</translation>
 <translation id="6239558157302047471">Ponovo učitaj okvir</translation>
 <translation id="6247802389331535091">Sustav: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="6251870443722440887">Rukuje GDI</translation>
@@ -181,8 +168,6 @@
 <translation id="6518014396551869914">Kop&amp;iraj sliku</translation>
 <translation id="6639554308659482635">SQLite memorija</translation>
 <translation id="6691936601825168937">&amp;Proslijedi</translation>
-<translation id="6786747875388722282">Proširenja</translation>
-<translation id="6787839852456839824">Tipkovnički prečaci</translation>
 <translation id="6798954102094737107">Dodatak: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Zadrži promjene</translation>
 <translation id="6817174620439930047">Pitaj kada web-lokacija želi upotrijebiti posebne sistemske poruke za pristup MIDI uređajima (preporučeno)</translation>
@@ -192,7 +177,6 @@
 <translation id="6900284862687837908">Aplikacija u pozadini: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Opozovi pristup datoteci</translation>
 <translation id="708060913198414444">K&amp;opiraj adresu audiozapisa</translation>
-<translation id="7084192839369222683">Pokreni samo važan sadržaj</translation>
 <translation id="7175353351958621980">Učitano s lokacije:</translation>
 <translation id="7270858098575133036">Pitaj kada web-lokacija želi upotrijebiti posebne sistemske poruke za pristup MIDI uređajima</translation>
 <translation id="7287143125007575591">Pristup je odbijen.</translation>
@@ -230,7 +214,6 @@ Ključnu datoteku čuvajte na sigurnom mjestu. Trebat će vam za stvaranje novih
 <translation id="8018313076035239964">Kontrolirajte koje informacije web-lokacije mogu upotrebljavati i koji vam sadržaj mogu prikazivati</translation>
 <translation id="8032244173881942855">Emitiranje kartice nije moguće.</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />KB</translation>
-<translation id="8188120771410500975">&amp;Provjeri pravopis tekstnih polja</translation>
 <translation id="8261378640211443080">To proširenje nije navedeno u trgovini <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> i možda je dodano bez vašeg znanja.</translation>
 <translation id="8270242299912238708">PDF dokumenti</translation>
 <translation id="8351419472474436977">To proširenje preuzelo je kontrolu nad vašim postavkama proxyja, a to znači da može promijeniti, prekinuti ili prisluškivati sve što radite na mreži. Ako niste sigurni kako je došlo do te promjene, vjerojatno je ne želite.</translation>

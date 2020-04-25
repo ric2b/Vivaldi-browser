@@ -5,7 +5,7 @@
 #ifndef UI_VIVALDI_MAIN_MENU_H_
 #define UI_VIVALDI_MAIN_MENU_H_
 
-#include "extensions/schema/show_menu.h"
+#include "extensions/schema/menubar.h"
 
 class Profile;
 
@@ -13,8 +13,8 @@ namespace vivaldi {
 
 void CreateVivaldiMainMenu(
     Profile* profile,
-    std::vector<extensions::vivaldi::show_menu::MenuItem>* items,
-    const std::string& mode);
+    std::vector<extensions::vivaldi::menubar::MenuItem>* items,
+    extensions::vivaldi::menubar::Mode mode);
 
 }  // namespace vivaldi
 

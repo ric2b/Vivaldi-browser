@@ -30,12 +30,6 @@
 #include "ui/views/win/scoped_fullscreen_visibility.h"
 #endif
 
-namespace vivaldi {
-void DispatchEvent(Profile* profile,
-                   const std::string& event_name,
-                   std::unique_ptr<base::ListValue> event_args);
-}
-
 class Browser;
 
 #if defined(OS_WIN)
@@ -316,7 +310,8 @@ class VivaldiBrowserWindow
       Profile* profile,
       content::WebContents* web_contents,
       const GURL& url,
-      const security_state::SecurityInfo& security_info,
+      security_state::SecurityLevel security_level,
+      const security_state::VisibleSecurityState& visible_security_state,
       gfx::Point pos) override;
   void CutCopyPaste(int command_id) override {}
   void SetTopControlsShownRatio(content::WebContents* web_contents,
@@ -334,7 +329,6 @@ class VivaldiBrowserWindow
   FindBar* CreateFindBar() override;
   web_modal::WebContentsModalDialogHost* GetWebContentsModalDialogHost()
       override;
-  int GetRenderViewHeightInsetWithDetachedBookmarkBar() override;
   void ExecuteExtensionCommand(const extensions::Extension* extension,
                                const extensions::Command& command) override;
   autofill::SaveCardBubbleView* ShowSaveCreditCardBubble(
@@ -432,7 +426,8 @@ class VivaldiBrowserWindow
   WindowType type() {
     return window_type_;
   }
-  PageActionIconContainer* GetPageActionIconContainer() override;
+  PageActionIconContainer* GetOmniboxPageActionIconContainer() override;
+  PageActionIconContainer* GetToolbarPageActionIconContainer() override;
   autofill::LocalCardMigrationBubble* ShowLocalCardMigrationBubble(
     content::WebContents* contents,
     autofill::LocalCardMigrationBubbleController* controller,
@@ -448,6 +443,17 @@ class VivaldiBrowserWindow
 #if BUILDFLAG(ENABLE_DESKTOP_IN_PRODUCT_HELP)
   // Shows in-product help for the given feature.
   void ShowInProductHelpPromo(InProductHelpFeature iph_feature) override {}
+#endif
+
+  void UpdateFrameColor() override {}
+
+#if !defined(OS_ANDROID)
+  void ShowIntentPickerBubble(
+    std::vector<apps::IntentPickerAppInfo> app_info,
+    bool show_stay_in_chrome,
+    bool show_remember_selection,
+    IntentPickerResponse callback) override {}
+  void SetIntentPickerViewVisibility(bool visible) override {}
 #endif
 
  protected:

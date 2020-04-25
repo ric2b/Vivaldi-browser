@@ -63,7 +63,7 @@ ContactPropertyNameEnum APIAddpropertyTypeToInternal(
 
 EmailAddress GetEmail(const contact::EmailAddressRow& row) {
   EmailAddress email;
-  email.id = base::Int64ToString(row.email_address_id());
+  email.id = base::NumberToString(row.email_address_id());
   email.email_address.reset(
       new std::string(base::UTF16ToUTF8(row.email_address())));
   email.type.reset(new std::string(row.type()));
@@ -75,7 +75,7 @@ EmailAddress GetEmail(const contact::EmailAddressRow& row) {
 
 Phonenumber GetPhonenumber(const contact::PhonenumberRow& row) {
   Phonenumber phonenumber;
-  phonenumber.id = base::Int64ToString(row.phonenumber_id());
+  phonenumber.id = base::NumberToString(row.phonenumber_id());
   phonenumber.phone_number.reset(new std::string(row.phonenumber()));
   phonenumber.type.reset(new std::string(row.type()));
 
@@ -84,7 +84,7 @@ Phonenumber GetPhonenumber(const contact::PhonenumberRow& row) {
 
 PostalAddress GetPostalAddress(const contact::PostalAddressRow& row) {
   PostalAddress postaladdress;
-  postaladdress.id = base::Int64ToString(row.postal_address_id());
+  postaladdress.id = base::NumberToString(row.postal_address_id());
   postaladdress.postal_address.reset(
       new std::string(base::UTF16ToUTF8(row.postal_address())));
   postaladdress.type.reset(new std::string(row.type()));
@@ -94,7 +94,7 @@ PostalAddress GetPostalAddress(const contact::PostalAddressRow& row) {
 
 Contact GetContact(const contact::ContactRow& row) {
   Contact contact;
-  contact.id = base::Int64ToString(row.contact_id());
+  contact.id = base::NumberToString(row.contact_id());
   contact.name.reset(new std::string(base::UTF16ToUTF8(row.name())));
   contact.birthday.reset(new double(MilliSecondsFromTime(row.birthday())));
   contact.note.reset(new std::string(base::UTF16ToUTF8(row.note())));
@@ -261,7 +261,7 @@ std::unique_ptr<Contact> CreateVivaldiContact(
     const contact::ContactResult& contact_res) {
   std::unique_ptr<Contact> contact(new Contact());
 
-  contact->id = base::Int64ToString(contact_res.contact_id());
+  contact->id = base::NumberToString(contact_res.contact_id());
   contact->name.reset(new std::string(base::UTF16ToUTF8(contact_res.name())));
   contact->birthday.reset(
       new double(MilliSecondsFromTime(contact_res.birthday())));

@@ -3,10 +3,10 @@
 #ifndef VIVALDI_PROFILE_SYNC_SERVICE_HARNESS_H_
 #define VIVALDI_PROFILE_SYNC_SERVICE_HARNESS_H_
 
-#include "sync/vivaldi_syncmanager_factory.h"
+#include "sync/vivaldi_profile_sync_service_factory.h"
 
 // Substitute these class and test names with Vivaldi ones
-#define ProfileSyncServiceFactory vivaldi::VivaldiSyncManagerFactory
+#define ProfileSyncServiceFactory vivaldi::VivaldiProfileSyncServiceFactory
 #define ProfileSyncServiceHarness VivaldiProfileSyncServiceHarness
 #define CHROME_BROWSER_SYNC_PROFILE_SYNC_SERVICE_FACTORY_H_
 

@@ -11,6 +11,7 @@
 #include "base/lazy_instance.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/values.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/history/top_sites_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -25,6 +26,7 @@
 #include "extensions/schema/bookmarks_private.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "ui/vivaldi_browser_window.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 using vivaldi::IsVivaldiApp;
 using vivaldi::kVivaldiReservedApiError;
@@ -35,6 +37,60 @@ using bookmarks::BookmarkNode;
 namespace extensions {
 
 namespace bookmarks_private = vivaldi::bookmarks_private;
+
+// Helper
+static void GetPartnerIds(const bookmarks::BookmarkNode* node,
+                          std::vector<std::string>* ids,
+                          bool include_children) {
+  std::string partner;
+  if (node->GetMetaInfo("Partner", &partner) && partner.length() > 0) {
+    ids->push_back(partner);
+  }
+  if (include_children) {
+    for (int i = 0; i < node->child_count(); i++) {
+      GetPartnerIds(node->GetChild(i), ids, true);
+    }
+  }
+}
+
+static void ResetParterId(BookmarkModel* model,
+                          const bookmarks::BookmarkNode* node,
+                          bool include_children) {
+  std::string partner;
+  if (node->GetMetaInfo("Partner", &partner) && partner.length() > 0) {
+    model->SetNodeMetaInfo(node, "Partner", "");
+  }
+  if (include_children) {
+    for (int i = 0; i < node->child_count(); i++) {
+      ResetParterId(model, node->GetChild(i), true);
+    }
+  }
+}
+
+static void ClearPartnerId(BookmarkModel* model, const BookmarkNode* node,
+                           content::BrowserContext* browser_context,
+                           bool update_model,
+                           bool include_children) {
+  std::vector<std::string> partners;
+  GetPartnerIds(node, &partners, include_children);
+  if (!partners.empty()) {
+    Profile* profile = Profile::FromBrowserContext(browser_context);
+    const base::ListValue* list = profile->GetPrefs()->GetList(
+        vivaldiprefs::kBookmarksDeletedPartners);
+    base::ListValue updated(list->GetList());
+    for (auto partner = partners.begin(); partner != partners.end();
+         partner++) {
+      auto it = std::find(list->begin(), list->end(), base::Value(*partner));
+      if (it == list->end()) {
+        updated.GetList().push_back(base::Value(*partner));
+      }
+    }
+    profile->GetPrefs()->Set(vivaldiprefs::kBookmarksDeletedPartners, updated);
+    if (update_model) {
+      ResetParterId(model, node, include_children);
+    }
+  }
+}
 
 VivaldiBookmarksEventRouter::VivaldiBookmarksEventRouter(Profile* profile)
     : browser_context_(profile) {}
@@ -53,7 +109,9 @@ void VivaldiBookmarksEventRouter::DispatchEvent(
 }
 
 VivaldiBookmarksAPI::VivaldiBookmarksAPI(content::BrowserContext* context)
-    : browser_context_(context), bookmark_model_(nullptr) {
+    : browser_context_(context),
+      bookmark_model_(nullptr),
+      partner_upgrade_active_(false) {
   bookmark_model_ = BookmarkModelFactory::GetForBrowserContext(context);
   DCHECK(bookmark_model_);
   bookmark_model_->AddObserver(this);
@@ -83,6 +141,10 @@ static base::LazyInstance<BrowserContextKeyedAPIFactory<VivaldiBookmarksAPI> >::
 BrowserContextKeyedAPIFactory<VivaldiBookmarksAPI>*
 VivaldiBookmarksAPI::GetFactoryInstance() {
   return g_factory_bookmark.Pointer();
+}
+
+void VivaldiBookmarksAPI::SetPartnerUpgradeActive(bool active) {
+  partner_upgrade_active_ = active;
 }
 
 namespace {
@@ -120,11 +182,24 @@ void VivaldiBookmarksAPI::BookmarkNodeRemoved(
     int old_index,
     const bookmarks::BookmarkNode* node,
     const std::set<GURL>& no_longer_bookmarked) {
+
+  // Register deleted partner node.
+  if (!partner_upgrade_active_) {
+    ClearPartnerId(model, node, browser_context_, false, true);
+  }
+
   // We're removing the bookmark (emptying the trash most likely),
   // remove the thumbnail.
 #if 0  // Re-enable with new code
   RemoveThumbnailForBookmarkNode(browser_context_, node);
 #endif
+}
+void VivaldiBookmarksAPI::BookmarkNodeChanged(BookmarkModel* model,
+                           const BookmarkNode* node) {
+  // Register modified partner node.
+  if (!partner_upgrade_active_) {
+    ClearPartnerId(model, node, browser_context_, true, false);
+  }
 }
 
 void VivaldiBookmarksAPI::BookmarkMetaInfoChanged(BookmarkModel* model,
@@ -144,7 +219,7 @@ void VivaldiBookmarksAPI::BookmarkMetaInfoChanged(BookmarkModel* model,
     event_router_->DispatchEvent(
         bookmarks_private::OnMetaInfoChanged::kEventName,
         bookmarks_private::OnMetaInfoChanged::Create(
-            base::Int64ToString(node->id()), change_info));
+            base::NumberToString(node->id()), change_info));
   }
 }
 
@@ -154,7 +229,7 @@ void VivaldiBookmarksAPI::BookmarkNodeFaviconChanged(BookmarkModel* model,
     event_router_->DispatchEvent(
         bookmarks_private::OnFaviconChanged::kEventName,
         bookmarks_private::OnFaviconChanged::Create(
-            base::Int64ToString(node->id())));
+            base::NumberToString(node->id())));
   }
 }
 
@@ -201,6 +276,11 @@ bool BookmarksPrivateEmptyTrashFunction::RunOnReady() {
   }
   results_ = vivaldi::bookmarks_private::EmptyTrash::Results::Create(success);
   return true;
+}
+
+bool BookmarksPrivateUpgradePartnerFunction::RunOnReady() {
+  ::vivaldi::SetPartnerUpgrade auto_set(GetProfile(), true);
+  return BookmarksUpdateFunction::RunOnReady();
 }
 
 }  // namespace extensions

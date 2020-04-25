@@ -24,5 +24,6 @@ index 624ce29870f3..e0007afa15d7 100644
    }
  #ifndef SQLITE_OMIT_CHECK
    if( pDest->pCheck && sqlite3ExprListCompare(pSrc->pCheck,pDest->pCheck,-1) ){
---
+-- 
 2.21.0.392.gf8f6787159e-goog
+

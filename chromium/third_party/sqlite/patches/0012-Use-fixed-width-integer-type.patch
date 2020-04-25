@@ -20,8 +20,9 @@ index c528bb1815fd..269cd4198d36 100644
    int rc;                             /* Return Code */
 -  int nFree;                          /* Initial number of pages on free-list */
 +  u32 nFree;                          /* Initial number of pages on free-list */
-
+ 
    assert( sqlite3_mutex_held(pBt->mutex) );
    assert( CORRUPT_DB || iPage>1 );
---
+-- 
 2.21.0.392.gf8f6787159e-goog
+

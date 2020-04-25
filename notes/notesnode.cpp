@@ -45,7 +45,7 @@ std::unique_ptr<base::Value> Notes_Node::Encode(
 
   std::unique_ptr<base::DictionaryValue> value(new base::DictionaryValue());
 
-  std::string node_id = base::Int64ToString(id_);
+  std::string node_id = base::NumberToString(id_);
   value->SetString("id", node_id);
   checksummer->UpdateChecksum(node_id);
 
@@ -77,7 +77,7 @@ std::unique_ptr<base::Value> Notes_Node::Encode(
   value->SetString("type", type);
   checksummer->UpdateChecksum(type);
 
-  std::string temp = base::Int64ToString(creation_time_.ToInternalValue());
+  std::string temp = base::NumberToString(creation_time_.ToInternalValue());
   value->SetString("date_added", temp);
 
   if (type_ == FOLDER || type_ == TRASH || type_ == OTHER) {
@@ -113,7 +113,7 @@ std::unique_ptr<base::Value> Notes_Node::Encode(
 
   if (sync_transaction_version() != kInvalidSyncTransactionVersion) {
     value->SetString(NotesCodec::kSyncTransactionVersion,
-                     base::Int64ToString(sync_transaction_version()));
+                     base::NumberToString(sync_transaction_version()));
   }
   return value;
 }

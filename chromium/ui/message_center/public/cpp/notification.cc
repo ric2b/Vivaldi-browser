@@ -17,6 +17,9 @@
 #include "ui/message_center/public/cpp/notification_delegate.h"
 #include "ui/message_center/public/cpp/notification_types.h"
 
+#include "app/vivaldi_apptools.h"
+#include "base/strings/utf_string_conversions.h"
+
 namespace message_center {
 
 namespace {
@@ -79,7 +82,10 @@ Notification::Notification(NotificationType type,
       title_(title),
       message_(message),
       icon_(icon),
-      display_source_(display_source),
+      display_source_(vivaldi::IsVivaldiRunning() &&
+          display_source == base::UTF8ToUTF16(
+              "mpognobbkildjkofajifpdfhcoklimli") ?
+                  base::UTF8ToUTF16("Vivaldi") : display_source),
       origin_url_(origin_url),
       notifier_id_(notifier_id),
       optional_fields_(optional_fields),

@@ -84,6 +84,10 @@ class Setup {
   // headers to be checked. Defaults to false.
   void set_check_public_headers(bool s) { check_public_headers_ = s; }
 
+  // Before DoSetup, setting this will generate an empty args.gn if
+  // it does not exist and set up correct dependencies for it.
+  void set_gen_empty_args(bool ge) { gen_empty_args_ = ge; }
+
   // Read from the .gn file, these are the targets to check. If the .gn file
   // does not specify anything, this will be null. If the .gn file specifies
   // the empty list, this will be non-null but empty.
@@ -169,6 +173,9 @@ class Setup {
   // Set to true when we should populate the build arguments from the command
   // line or build argument file. See setter above.
   bool fill_arguments_;
+
+  // Generate an empty args.gn file if it does not exists.
+  bool gen_empty_args_;
 
   // State for invoking the command line args. We specifically want to keep
   // this around for the entire run so that Values can blame to the command

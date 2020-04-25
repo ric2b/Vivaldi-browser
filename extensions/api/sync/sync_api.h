@@ -24,10 +24,6 @@ namespace content {
 class BrowserContext;
 }
 
-namespace vivaldi {
-class VivaldiSyncManager;
-}
-
 namespace extensions {
 
 // Observes SyncModel and then routes the notifications as events to

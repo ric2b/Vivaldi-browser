@@ -42,7 +42,6 @@
 #include "content/renderer/compositor/compositor_dependencies.h"
 #include "content/renderer/media/audio/audio_input_ipc_factory.h"
 #include "content/renderer/media/audio/audio_output_ipc_factory.h"
-#include "content/renderer/web_test_dependencies.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "ipc/ipc_sync_channel.h"
 #include "media/media_buildflags.h"
@@ -84,7 +83,6 @@ class Thread;
 
 namespace cc {
 class BeginFrameSource;
-class LayerTreeFrameSink;
 class SyntheticBeginFrameSource;
 class TaskGraphRunner;
 }
@@ -121,13 +119,11 @@ class Gpu;
 }  // namespace ws
 
 namespace content {
-
 class AecDumpMessageFilter;
 class AudioRendererMixerManager;
 class BrowserPluginManager;
 class CategorizedWorkerPool;
 class DomStorageDispatcher;
-class FrameSwapMessageQueue;
 class GpuVideoAcceleratorFactoriesImpl;
 class LowMemoryModeController;
 class P2PSocketDispatcher;
@@ -160,7 +156,6 @@ class StreamTextureFactory;
 class CONTENT_EXPORT RenderThreadImpl
     : public RenderThread,
       public ChildThreadImpl,
-      public blink::scheduler::WebRAILModeObserver,
       public mojom::Renderer,
       public viz::mojom::CompositingModeWatcher,
       public CompositorDependencies {
@@ -244,14 +239,20 @@ class CONTENT_EXPORT RenderThreadImpl
   cc::TaskGraphRunner* GetTaskGraphRunner() override;
   bool IsScrollAnimatorEnabled() override;
   std::unique_ptr<cc::UkmRecorderFactory> CreateUkmRecorderFactory() override;
+  void RequestNewLayerTreeFrameSink(
+      int widget_routing_id,
+      scoped_refptr<FrameSwapMessageQueue> frame_swap_message_queue,
+      const GURL& url,
+      LayerTreeFrameSinkCallback callback,
+      mojom::RenderFrameMetadataObserverClientRequest
+          render_frame_metadata_observer_client_request,
+      mojom::RenderFrameMetadataObserverPtr render_frame_metadata_observer_ptr,
+      const char* client_name) override;
 #ifdef OS_ANDROID
   bool UsingSynchronousCompositing() override;
 #endif
 
   bool IsThreadedAnimationEnabled();
-
-  // blink::scheduler::WebRAILModeObserver implementation.
-  void OnRAILModeChanged(v8::RAILMode rail_mode) override;
 
   // viz::mojom::CompositingModeWatcher implementation.
   void CompositingModeFallbackToSoftware() override;
@@ -272,39 +273,13 @@ class CONTENT_EXPORT RenderThreadImpl
 
   gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager();
 
-  using LayerTreeFrameSinkCallback =
-      base::OnceCallback<void(std::unique_ptr<cc::LayerTreeFrameSink>)>;
-  void RequestNewLayerTreeFrameSink(
-      int widget_routing_id,
-      scoped_refptr<FrameSwapMessageQueue> frame_swap_message_queue,
-      const GURL& url,
-      LayerTreeFrameSinkCallback callback,
-      mojom::RenderFrameMetadataObserverClientRequest
-          render_frame_metadata_observer_client_request,
-      mojom::RenderFrameMetadataObserverPtr render_frame_metadata_observer_ptr,
-      const char* client_name);
-
   blink::AssociatedInterfaceRegistry* GetAssociatedInterfaceRegistry();
-
-  std::unique_ptr<cc::SwapPromise> RequestCopyOfOutputForWebTest(
-      int32_t widget_routing_id,
-      std::unique_ptr<viz::CopyOutputRequest> request);
 
   // True if we are running web tests. This currently disables forwarding
   // various status messages to the console, skips network error pages, and
   // short circuits size update and focus events.
-  bool web_test_mode() const { return !!web_test_deps_; }
-  void set_web_test_dependencies(std::unique_ptr<WebTestDependencies> deps) {
-    web_test_deps_ = std::move(deps);
-  }
-  // Returns whether we are running web tests with display compositor for
-  // pixel dump enabled. It is meant to disable feature that require display
-  // compositor while it is not enabled by default.
-  // This should only be called if currently running in web tests.
-  bool WebTestModeUsesDisplayCompositorPixelDump() const {
-    DCHECK(web_test_deps_);
-    return web_test_deps_->UseDisplayCompositorPixelDump();
-  }
+  bool web_test_mode() const { return web_test_mode_; }
+  void enable_web_test_mode() { web_test_mode_ = true; }
 
   discardable_memory::ClientDiscardableSharedMemoryManager*
   GetDiscardableSharedMemoryManagerForTest() {
@@ -492,6 +467,8 @@ class CONTENT_EXPORT RenderThreadImpl
 
   bool NeedsToRecordFirstActivePaint(int metric_type) const;
 
+  void RecordMetricsForBackgroundedRendererPurge();
+
   // Sets the current pipeline rendering color space.
   void SetRenderingColorSpace(const gfx::ColorSpace& color_space);
 
@@ -562,7 +539,6 @@ class CONTENT_EXPORT RenderThreadImpl
   void PurgePluginListCache(bool reload_pages) override;
   void SetProcessState(mojom::RenderProcessState process_state) override;
   void SetSchedulerKeepActive(bool keep_active) override;
-  void ProcessPurgeAndSuspend() override;
   void SetIsLockedToSite() override;
   void EnableV8LowMemoryMode() override;
 
@@ -579,7 +555,7 @@ class CONTENT_EXPORT RenderThreadImpl
 
   void RecordMemoryUsageAfterBackgrounded(const char* suffix,
                                           int foregrounded_count);
-  void RecordPurgeAndSuspendMemoryGrowthMetrics(
+  void OnRecordMetricsForBackgroundedRendererPurgeTimerExpired(
       const char* suffix,
       int foregrounded_count_when_purged);
 
@@ -645,7 +621,7 @@ class CONTENT_EXPORT RenderThreadImpl
   blink::UserAgentMetadata user_agent_metadata_;
 
   // Used to control web test specific behavior.
-  std::unique_ptr<WebTestDependencies> web_test_deps_;
+  bool web_test_mode_ = false;
 
   // Sticky once true, indicates that compositing is done without Gpu, so
   // resources given to the compositor or to the viz service should be

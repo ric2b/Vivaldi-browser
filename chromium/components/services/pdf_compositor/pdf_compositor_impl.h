@@ -169,7 +169,7 @@ class PdfCompositorImpl : public mojom::PdfCompositor {
   // Keep track of all frames' information indexed by frame id.
   FrameMap frame_info_map_;
 
-  static std::vector<std::unique_ptr<RequestInfo>> requests_;
+  std::vector<std::unique_ptr<RequestInfo>> requests_;
 
   DISALLOW_COPY_AND_ASSIGN(PdfCompositorImpl);
 };

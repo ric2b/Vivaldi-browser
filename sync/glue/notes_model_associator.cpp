@@ -976,7 +976,7 @@ syncer::SyncError NotesModelAssociator::CheckModelSyncState(
     } else {
       UMA_HISTOGRAM_ENUMERATION("Sync.LocalModelOutOfSync",
                                 ModelTypeToHistogramInt(syncer::NOTES),
-                                static_cast<int>(syncer::MODEL_TYPE_COUNT));
+                                static_cast<int>(syncer::ModelType::NUM_ENTRIES));
 
       // Clear version on notes model so that we only report error once.
       notes_model_->SetNodeSyncTransactionVersion(

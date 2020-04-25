@@ -19,11 +19,10 @@ bool GuestViewInternalCreateGuestFunction::GetExternalWebContents(
     &GuestViewInternalCreateGuestFunction::CreateGuestCallback, this);
   content::WebContents* contents = nullptr;
 
-  std::string tab_id_as_string;
   std::string guest_id_str;
-  if (create_params->GetString("tab_id", &tab_id_as_string) ||
-      create_params->GetString("inspect_tab_id", &tab_id_as_string)) {
-    int tab_id = atoi(tab_id_as_string.c_str());
+  int tab_id;
+  if (create_params->GetInteger("tab_id", &tab_id) ||
+      create_params->GetInteger("inspect_tab_id", &tab_id)) {
     int tab_index = 0;
     bool include_incognito = true;
     Profile* profile = Profile::FromBrowserContext(context_);

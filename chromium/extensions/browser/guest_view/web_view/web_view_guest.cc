@@ -428,15 +428,14 @@ void WebViewGuest::CreateWebContents(const base::DictionaryValue& create_params,
   params.guest_delegate = this;
 
   WebContents* new_contents = nullptr;
-  std::string paramstr;
 
   Profile* profile = Profile::FromBrowserContext(context);
-  if (create_params.GetString("tab_id", &paramstr)) {
+  int tab_id;
+  if (create_params.GetInteger("tab_id", &tab_id)) {
     // If we created the WebContents through CreateNewWindow and created this
     // guest with InitWithWebContents we cannot delete the tabstrip contents,
     // and we don't need to recreate the webcontents either. Just use the
     // WebContents owned by the tab-strip.
-    int tab_id = atoi(paramstr.c_str());
     content::WebContents* tabstrip_contents = NULL;
     bool include_incognito = true;
     Browser* browser;
@@ -482,10 +481,9 @@ void WebViewGuest::CreateWebContents(const base::DictionaryValue& create_params,
       params.guest_delegate = this;
       new_contents = WebContents::Create(params).release();
     }
-  } else if (create_params.GetString("inspect_tab_id", &paramstr)) {
+  } else if (create_params.GetInteger("inspect_tab_id", &tab_id)) {
     // We want to attach this guest view to the already existing WebContents
     // currently used for DevTools.
-    int tab_id = atoi(paramstr.c_str());;
     if (inspecting_tab_id_ == 0 || inspecting_tab_id_ != tab_id) {
       content::WebContents* inspected_contents =
         ::vivaldi::ui_tools::GetWebContentsFromTabStrip(
@@ -510,6 +508,7 @@ void WebViewGuest::CreateWebContents(const base::DictionaryValue& create_params,
         // wich is required for undocked dev tools or to the
         // |main_web_contents_| when docked. Each guest view will be reattached
         // after docking state was changed.
+        std::string paramstr;
         DevToolsWindow* devWindow =
             DevToolsWindow::GetInstanceForInspectedWebContents(
                 inspected_contents);
@@ -621,14 +620,6 @@ void WebViewGuest::DidAttachToEmbedder() {
     NavigateGuest(*delayed_open_url_.get(), false);
     delayed_open_url_.reset(nullptr);
 
-  } else {
-    // NOTE(andre@vivaldi.com): Temporary fix for MimeHandlerViewGuest being
-    // destroyed when being detached. The WebContents object owned by the
-    // MimeHandlerViewGuest is destroyed so we need to reload it. This is on par
-    // with the old behaviour.
-    if (web_contents()->GetContentsMimeType() == kPDFMimeType) {
-      Reload();
-    }
   }
 
   LoadTabContentsIfNecessary();
@@ -1379,12 +1370,12 @@ bool WebViewGuest::CheckMediaAccessPermission(
       render_frame_host, security_origin, type);
 }
 
-void WebViewGuest::CanDownload(
-    const GURL& url,
-    const std::string& request_method,
-    const base::Callback<void(bool)>& callback) {
+void WebViewGuest::CanDownload(const GURL& url,
+                               const std::string& request_method,
+                               base::OnceCallback<void(bool)> callback) {
   web_view_permission_helper_->SetDownloadInformation(download_info_);
-  web_view_permission_helper_->CanDownload(url, request_method, callback);
+  web_view_permission_helper_->CanDownload(url, request_method,
+                                           std::move(callback));
 }
 
 void WebViewGuest::RequestPointerLockPermission(
@@ -2080,6 +2071,11 @@ void WebViewGuest::SetFullscreenState(bool is_fullscreen) {
       ->GetRenderViewHost()
       ->GetWidget()
       ->SynchronizeVisualProperties();
+}
+
+void WebViewGuest::SetWebContentsIsOwnedByThis(bool is_owned) {
+  // Used by vivaldi devtools window to let webviewguest know about ownership
+  web_contents_is_owned_by_this_ = is_owned;
 }
 
 }  // namespace extensions

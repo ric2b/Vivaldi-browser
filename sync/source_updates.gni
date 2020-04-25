@@ -11,7 +11,7 @@ if(!is_android) {
   }
 }
 
-update_template_instance("//components/sync:sync") {
+update_template_instance("//components/sync:base") {
   sources += [
     "//vivaldi/sync/vivaldi_hash_util.h",
     "//vivaldi/sync/vivaldi_prefs_names.cc",
@@ -23,5 +23,6 @@ update_template_instance("//components/sync:sync") {
 update_target("//components/sync_sessions:sync_sessions") {
   sources += [
     "//vivaldi/sync/glue/vivaldi_synced_tab_delegate.cc",
+    "//vivaldi/sync/vivaldi_session_sync_prefs.cc",
   ]
 }

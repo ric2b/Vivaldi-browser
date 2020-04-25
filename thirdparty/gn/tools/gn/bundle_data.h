@@ -44,11 +44,16 @@ class BundleData {
   void GetSourceFiles(SourceFiles* sources) const;
 
   // Returns the list of outputs.
-  void GetOutputFiles(const Settings* settings, OutputFiles* outputs) const;
+  bool GetOutputFiles(const Settings* settings,
+                      const Target* target,
+                      OutputFiles* outputs,
+                      Err* err) const;
 
   // Returns the list of outputs as SourceFile.
-  void GetOutputsAsSourceFiles(const Settings* settings,
-                               SourceFiles* outputs_as_source) const;
+  bool GetOutputsAsSourceFiles(const Settings* settings,
+                               const Target* target,
+                               SourceFiles* outputs_as_source,
+                               Err* err) const;
 
   // Returns the path to the compiled asset catalog. Only valid if
   // assets_catalog_sources() is not empty.
@@ -94,9 +99,6 @@ class BundleData {
 
   SourceDir& executable_dir() { return executable_dir_; }
   const SourceDir& executable_dir() const { return executable_dir_; }
-
-  SourceDir& plugins_dir() { return plugins_dir_; }
-  const SourceDir& plugins_dir() const { return plugins_dir_; }
 
   std::map<std::string, std::string>& xcode_extra_attributes() {
     return xcode_extra_attributes_;
@@ -165,7 +167,6 @@ class BundleData {
   SourceDir contents_dir_;
   SourceDir resources_dir_;
   SourceDir executable_dir_;
-  SourceDir plugins_dir_;
 
   // The specified attributes will append to the build settings of the generated
   // Xcode target.

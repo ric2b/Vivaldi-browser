@@ -662,8 +662,6 @@ class TargetDescBuilder : public BaseDescBuilder {
                                   RenderValue(bundle_data.resources_dir()));
     data->SetWithoutPathExpansion("executable_dir",
                                   RenderValue(bundle_data.executable_dir()));
-    data->SetWithoutPathExpansion("plugins_dir",
-                                  RenderValue(bundle_data.plugins_dir()));
     data->SetKey("product_type", base::Value(bundle_data.product_type()));
     data->SetWithoutPathExpansion(
         "partial_info_plist", RenderValue(bundle_data.partial_info_plist()));
@@ -685,9 +683,12 @@ class TargetDescBuilder : public BaseDescBuilder {
       res->SetWithoutPathExpansion(variables::kOutputs, std::move(list));
     } else if (target_->output_type() == Target::CREATE_BUNDLE ||
                target_->output_type() == Target::GENERATED_FILE) {
+      Err err;
       std::vector<SourceFile> output_files;
-      target_->bundle_data().GetOutputsAsSourceFiles(target_->settings(),
-                                                     &output_files);
+      if (!target_->bundle_data().GetOutputsAsSourceFiles(
+              target_->settings(), target_, &output_files, &err)) {
+        err.PrintToStdout();
+      }
       res->SetWithoutPathExpansion(variables::kOutputs,
                                    RenderValue(output_files));
     } else if (target_->output_type() == Target::ACTION_FOREACH ||

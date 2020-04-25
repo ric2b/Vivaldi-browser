@@ -22,10 +22,6 @@
 
 namespace printing {
 
-  /*static */
-std::vector<std::unique_ptr<PdfCompositorImpl::RequestInfo>>
-    PdfCompositorImpl::requests_;
-
 PdfCompositorImpl::PdfCompositorImpl(
     std::unique_ptr<service_manager::ServiceContextRef> service_ref)
     : service_ref_(std::move(service_ref)) {}

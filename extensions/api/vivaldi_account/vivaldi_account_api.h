@@ -12,6 +12,7 @@
 #include "extensions/browser/event_router.h"
 #include "vivaldi_account/vivaldi_account_manager.h"
 #include "vivaldi_account/vivaldi_account_manager_factory.h"
+#include "vivaldi_account/vivaldi_account_password_handler.h"
 
 class VivaldiSyncModel;
 
@@ -22,7 +23,8 @@ class BrowserContext;
 namespace extensions {
 
 class VivaldiAccountEventRouter
-    : public ::vivaldi::VivaldiAccountManager::Observer {
+    : public ::vivaldi::VivaldiAccountManager::Observer,
+      public ::vivaldi::VivaldiAccountPasswordHandler::Observer {
  public:
   explicit VivaldiAccountEventRouter(Profile* profile);
   ~VivaldiAccountEventRouter() override;
@@ -33,6 +35,9 @@ class VivaldiAccountEventRouter
   void OnTokenFetchFailed() override;
   void OnAccountInfoFetchFailed() override;
   void OnVivaldiAccountShutdown() override;
+
+  // VivaldiAccountPasswordHandler::Observer implementation.
+  void OnAccountPasswordStateChanged() override;
 
  private:
   Profile* profile_;

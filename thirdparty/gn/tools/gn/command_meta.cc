@@ -19,8 +19,10 @@ namespace commands {
 const char kMeta[] = "meta";
 const char kMeta_HelpShort[] = "meta: List target metadata collection results.";
 const char kMeta_Help[] =
-    R"(gn meta <out_dir> <target>* --data=<key>[,<key>*]* [--walk=<key>[,<key>*]*]
-       [--rebase=<dest dir>]
+    R"(gn meta
+
+  gn meta <out_dir> <target>* --data=<key>[,<key>*]* [--walk=<key>[,<key>*]*]
+          [--rebase=<dest dir>]
 
   Lists collected metaresults of all given targets for the given data key(s),
   collecting metadata dependencies as specified by the given walk key(s).

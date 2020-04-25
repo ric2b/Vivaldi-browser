@@ -28,17 +28,12 @@
 <translation id="1698122934742150150">Aplicar somente durante a sessão privada atual</translation>
 <translation id="1706625117072057435">Níveis de zoom</translation>
 <translation id="1708338024780164500">(inativa)</translation>
-<translation id="1708713382908678956"><ph name="NAME_PH" /> (ID: <ph name="ID_PH" />)</translation>
 <translation id="1723824996674794290">Nova &amp;janela</translation>
 <translation id="1744108098763830590">Página de fundo</translation>
-<translation id="1805822111539868586">Inspecionar</translation>
 <translation id="1886996562706621347">Permitir que os sites peçam para se tornar manipuladores padrão de protocolos (recomendado)</translation>
-<translation id="1890674179660343635">&lt;span&gt;ID: &lt;/span&gt;<ph name="EXTENSION_ID" /></translation>
 <translation id="1901303067676059328">Selecionar &amp;tudo</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1963227389609234879">Excluir Tudo</translation>
-<translation id="1989112275319619282">Procurar</translation>
-<translation id="1992397118740194946">Não definido</translation>
 <translation id="1994173015038366702">URL do site</translation>
 <translation id="2050339315714019657">Retrato</translation>
 <translation id="2087822576218954668">Impressão: <ph name="PRINT_NAME" /></translation>
@@ -67,7 +62,6 @@
 <translation id="2445081178310039857">O diretório raiz da extensão é obrigatório.</translation>
 <translation id="2476578072172137802">Configurações de conteúdo</translation>
 <translation id="2482878487686419369">Notificações</translation>
-<translation id="2501797496290880632">Digite um atalho</translation>
 <translation id="253557089021624350">Manutenção de atividade</translation>
 <translation id="2550212893339833758">Memória de swap</translation>
 <translation id="2580924999637585241">Total: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
@@ -79,7 +73,6 @@
 <translation id="2861941300086904918">Gerenciador de segurança do Cliente Nativo</translation>
 <translation id="2904456025988372123">Perguntar quando um site tentar fazer download de arquivos automaticamente após o primeiro arquivo</translation>
 <translation id="2913331724188855103">Permitir que os sites salvem e leiam cookies (recomendado)</translation>
-<translation id="2916745397441987255">Pesquisar extensões</translation>
 <translation id="2932883381142163287">Denunciar abuso</translation>
 <translation id="2941112035454246133">Baixa</translation>
 <translation id="2972581237482394796">Refa&amp;zer</translation>
@@ -108,7 +101,6 @@
 <translation id="3432227430032737297">Excluir Cookies Pesquisados</translation>
 <translation id="3440761377721825626">Perguntar quando um site quiser usar um plugin para acessar seu computador</translation>
 <translation id="345693547134384690">Abrir imagem em nova &amp;guia</translation>
-<translation id="3467267818798281173">&amp;Obter sugestões da Google</translation>
 <translation id="3494769164076977169">Perguntar quando um site tentar fazer download de arquivos automaticamente após o primeiro arquivo (recomendado)</translation>
 <translation id="3523642406908660543">Perguntar quando um site quiser usar um plugin para acessar seu computador (recomendado)</translation>
 <translation id="3587482841069643663">Todas</translation>
@@ -120,11 +112,8 @@
 <translation id="3727187387656390258">Inspecionar popup</translation>
 <translation id="3744111561329211289">Sincronização em segundo plano</translation>
 <translation id="3797900183766075808">&amp;Pesquisar por “<ph name="SEARCH_TERMS" />” no <ph name="SEARCH_ENGINE" /></translation>
-<translation id="3798449238516105146">Versão</translation>
 <translation id="3800806661949714323">Exibir imagens (recomendado)</translation>
 <translation id="383891835335927981">Nenhum site teve o zoom modificado</translation>
-<translation id="3855441664322950881">Compactar Extensão</translation>
-<translation id="3866249974567520381">Descrição</translation>
 <translation id="3909791450649380159">&amp;Recortar</translation>
 <translation id="3936390757709632190">Abrir áudio em nova &amp;guia</translation>
 <translation id="3943582379552582368">&amp;Voltar</translation>
@@ -149,7 +138,6 @@
 <translation id="4409697491990005945">Margens</translation>
 <translation id="4423482519432579560">&amp;Verificação ortográfica</translation>
 <translation id="4434045419905280838">Popups e redirecionamentos</translation>
-<translation id="4522570452068850558">Detalhes</translation>
 <translation id="4552089082226364758">Flash</translation>
 <translation id="4579581181964204535">Não foi possível transmitir <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Acessar <ph name="URL" /></translation>
@@ -167,7 +155,6 @@
 <translation id="5039804452771397117">Permitir</translation>
 <translation id="5063480226653192405">Uso</translation>
 <translation id="5068918910148307423">Não permitir que sites fechados recentemente concluam o envio e o recebimento de dados</translation>
-<translation id="5087249366037322692">Adicionada por outro programa</translation>
 <translation id="5233019165164992427">Porta de depuração do NaCl</translation>
 <translation id="5233231016133573565">ID do processo</translation>
 <translation id="5233736638227740678">Co&amp;lar</translation>
@@ -177,8 +164,6 @@
 <translation id="5370819323174483825">Atualiza&amp;r</translation>
 <translation id="5431318178759467895">Colorido</translation>
 <translation id="5487521232677179737">Excluir Dados</translation>
-<translation id="5488468185303821006">Permitir em navegação privada</translation>
-<translation id="5532223876348815659">Global</translation>
 <translation id="5542132724887566711">Perfil</translation>
 <translation id="5556459405103347317">Recarregar</translation>
 <translation id="5575473780076478375">Extensão Privada: <ph name="EXTENSION_NAME" /></translation>
@@ -203,12 +188,10 @@
 <translation id="6040143037577758943">Fechar</translation>
 <translation id="6059925163896151826">Dispositivos USB</translation>
 <translation id="6086846494333236931">Instalada pelo administrador</translation>
-<translation id="6124650939968185064">As extensões a seguir dependem desta extensão:</translation>
 <translation id="6147020289383635445">A visualização da impressão falhou.</translation>
 <translation id="6156863943908443225">Cache de script</translation>
 <translation id="6169666352732958425">Não foi possível transmitir a área de trabalho.</translation>
 <translation id="6196640612572343990">Bloquear cookies de terceiros</translation>
-<translation id="6226777517901268232">Chave privada (opcional)</translation>
 <translation id="6239558157302047471">Atualiza&amp;r frame</translation>
 <translation id="6247802389331535091">Sistema: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="6251870443722440887">Handles do GDI</translation>
@@ -226,11 +209,7 @@
 <translation id="6612358246767739896">Conteúdo protegido (DRM)</translation>
 <translation id="6639554308659482635">Memória SQLite</translation>
 <translation id="6691936601825168937">&amp;Avançar</translation>
-<translation id="6706210727756204531">Escopo</translation>
 <translation id="6782111308708962316">Impedir que sites de terceiros salvem e leiam cookies</translation>
-<translation id="6786747875388722282">Extensões</translation>
-<translation id="6787839852456839824">Atalhos de teclado</translation>
-<translation id="6788210894632713004">Extensão descompactada</translation>
 <translation id="6798954102094737107">Plugin: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6817174620439930047">Perguntar quando um site desejar usar mensagens exclusivas do sistema para acessar dispositivos MIDI (recomendado)</translation>
 <translation id="682123305478866682">Transmitir área de trabalho</translation>
@@ -241,8 +220,6 @@
 <translation id="7006634003215061422">Margem inferior</translation>
 <translation id="7053983685419859001">Bloquear</translation>
 <translation id="708060913198414444">&amp;Copiar endereço do áudio</translation>
-<translation id="7084192839369222683">Executar apenas conteúdos importantes ou necessários</translation>
-<translation id="7152478047064750137">Esta extensão não requer permissões especiais</translation>
 <translation id="7175353351958621980">Carregada de:</translation>
 <translation id="7270858098575133036">Perguntar quando um site desejar usar mensagens exclusivas do sistema para acessar dispositivos MIDI</translation>
 <translation id="7287143125007575591">Acesso negado.</translation>
@@ -287,12 +264,9 @@ Mantenha o seu arquivo de chave privada em um local seguro. Você precisará del
 <translation id="8032244173881942855">Não foi possível transmitir a guia.</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> KB</translation>
 <translation id="8180239481735238521">página</translation>
-<translation id="8188120771410500975">&amp;Verificar ortografia em campos de texto</translation>
 <translation id="8270242299912238708">Documentos PDF</translation>
-<translation id="8294431847097064396">Origem da instalação</translation>
 <translation id="8339059274628563283">Dados armazenados por <ph name="SITE" /></translation>
 <translation id="8413385045638830869">Perguntar antes (recomendado)</translation>
-<translation id="8523849605371521713">Adicionada por uma política administrativa</translation>
 <translation id="8546306075665861288">Cache de imagem</translation>
 <translation id="857943718398505171">Permitido (recomendado)</translation>
 <translation id="8584280235376696778">Abrir vídeo em nova &amp;guia</translation>
@@ -302,7 +276,6 @@ Mantenha o seu arquivo de chave privada em um local seguro. Você precisará del
 <translation id="8664389313780386848">Exibir código &amp;fonte da página</translation>
 <translation id="8708000541097332489">Excluir ao sair</translation>
 <translation id="8757090071857742562">Não foi possível transmitir a área de trabalho. Verifique se você confirmou a solicitação para iniciar a compartilhar sua tela.</translation>
-<translation id="8770406935328356739">Diretório raiz da extensão</translation>
 <translation id="8774934320277480003">Margem superior</translation>
 <translation id="8798099450830957504">Padrão</translation>
 <translation id="8813811964357448561">folha de papel</translation>

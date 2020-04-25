@@ -12,6 +12,7 @@
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extensions_browser_client.h"
+#include "extensions/schema/prefs.h"
 #include "prefs/native_settings_observer.h"
 
 namespace extensions {

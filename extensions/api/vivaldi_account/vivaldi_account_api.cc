@@ -52,6 +52,8 @@ vivaldi::vivaldi_account::State GetState(Profile* profile) {
   state.account_info.username = account_info.username;
   state.account_info.account_id = account_info.account_id;
   state.account_info.picture_url = account_info.picture_url;
+  state.has_saved_password =
+      !account_manager->password_handler()->password().empty();
 
   state.last_token_fetch_error =
       ToVivaldiAccountAPIFetchError(account_manager->last_token_fetch_error());
@@ -70,43 +72,59 @@ vivaldi::vivaldi_account::State GetState(Profile* profile) {
 
 VivaldiAccountEventRouter::VivaldiAccountEventRouter(Profile* profile)
     : profile_(profile) {
-  ::vivaldi::VivaldiAccountManagerFactory::GetForProfile(profile_)->AddObserver(
-      this);
+  auto* account_manager =
+      ::vivaldi::VivaldiAccountManagerFactory::GetForProfile(profile_);
+  account_manager->AddObserver(this);
+  account_manager->password_handler()->AddObserver(this);
 }
 
 VivaldiAccountEventRouter::~VivaldiAccountEventRouter() {}
 
 void VivaldiAccountEventRouter::OnVivaldiAccountUpdated() {
-  ::vivaldi::BroadcastEvent(vivaldi::vivaldi_account::OnAccountStateChanged::kEventName,
-                 vivaldi::vivaldi_account::OnAccountStateChanged::Create(
-                     GetState(profile_)),
-                 profile_);
+  ::vivaldi::BroadcastEvent(
+      vivaldi::vivaldi_account::OnAccountStateChanged::kEventName,
+      vivaldi::vivaldi_account::OnAccountStateChanged::Create(
+          GetState(profile_)),
+      profile_);
 }
 
 void VivaldiAccountEventRouter::OnTokenFetchSucceeded() {
-  ::vivaldi::BroadcastEvent(vivaldi::vivaldi_account::OnAccountStateChanged::kEventName,
-                 vivaldi::vivaldi_account::OnAccountStateChanged::Create(
-                     GetState(profile_)),
-                 profile_);
+  ::vivaldi::BroadcastEvent(
+      vivaldi::vivaldi_account::OnAccountStateChanged::kEventName,
+      vivaldi::vivaldi_account::OnAccountStateChanged::Create(
+          GetState(profile_)),
+      profile_);
 }
 
 void VivaldiAccountEventRouter::OnTokenFetchFailed() {
-  ::vivaldi::BroadcastEvent(vivaldi::vivaldi_account::OnAccountStateChanged::kEventName,
-                 vivaldi::vivaldi_account::OnAccountStateChanged::Create(
-                     GetState(profile_)),
-                 profile_);
+  ::vivaldi::BroadcastEvent(
+      vivaldi::vivaldi_account::OnAccountStateChanged::kEventName,
+      vivaldi::vivaldi_account::OnAccountStateChanged::Create(
+          GetState(profile_)),
+      profile_);
 }
 
 void VivaldiAccountEventRouter::OnAccountInfoFetchFailed() {
-  ::vivaldi::BroadcastEvent(vivaldi::vivaldi_account::OnAccountStateChanged::kEventName,
-                 vivaldi::vivaldi_account::OnAccountStateChanged::Create(
-                     GetState(profile_)),
-                 profile_);
+  ::vivaldi::BroadcastEvent(
+      vivaldi::vivaldi_account::OnAccountStateChanged::kEventName,
+      vivaldi::vivaldi_account::OnAccountStateChanged::Create(
+          GetState(profile_)),
+      profile_);
+}
+
+void VivaldiAccountEventRouter::OnAccountPasswordStateChanged() {
+  ::vivaldi::BroadcastEvent(
+      vivaldi::vivaldi_account::OnAccountStateChanged::kEventName,
+      vivaldi::vivaldi_account::OnAccountStateChanged::Create(
+          GetState(profile_)),
+      profile_);
 }
 
 void VivaldiAccountEventRouter::OnVivaldiAccountShutdown() {
-  ::vivaldi::VivaldiAccountManagerFactory::GetForProfile(profile_)
-      ->RemoveObserver(this);
+  auto* account_manager =
+      ::vivaldi::VivaldiAccountManagerFactory::GetForProfile(profile_);
+  account_manager->RemoveObserver(this);
+  account_manager->password_handler()->RemoveObserver(this);
 }
 
 static base::LazyInstance<BrowserContextKeyedAPIFactory<VivaldiAccountAPI>>::

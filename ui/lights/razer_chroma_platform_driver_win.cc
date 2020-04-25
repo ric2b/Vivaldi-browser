@@ -188,6 +188,8 @@ void RazerChromaPlatformDriverWin::GenerateDeviceListFromPrefs(
           device_list.push_back(RazerChromaDevice::CHROMA_DEVICE_MOUSE);
         } else if (device == "mousemat") {
           device_list.push_back(RazerChromaDevice::CHROMA_DEVICE_MOUSEMAT);
+        } else if (device == "headset") {
+          device_list.push_back(RazerChromaDevice::CHROMA_DEVICE_HEADSET);
         }
       }
     }
@@ -232,6 +234,11 @@ void RazerChromaPlatformDriverWin::SetColors(RazerChromaColors& colors) {
         ChromaSDK::Mousepad::STATIC_EFFECT_TYPE effect = {};
         effect.Color = color;
         pCreateMousematEffect(ChromaSDK::Mousepad::CHROMA_STATIC, &effect,
+          &frames[0]);
+      } else if (device == RazerChromaDevice::CHROMA_DEVICE_HEADSET) {
+        ChromaSDK::Headset::STATIC_EFFECT_TYPE effect = {};
+        effect.Color = color;
+        pCreateHeadsetEffect(ChromaSDK::Headset::CHROMA_STATIC, &effect,
           &frames[0]);
       }
       AddToGroup(effect_id, frames[0], kEffectFrameDelay);

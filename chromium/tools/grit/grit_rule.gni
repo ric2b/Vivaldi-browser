@@ -2,8 +2,12 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-# Instantiate grit. This will produce a script target to run grit, and a
-# static library that compiles the .cc files.
+# Instantiate grit. This will produce a script target to run grit (named
+# ${target_name}_grit), and a static library that compiles the .cc files.
+#
+# In general, code should depend on the static library. However, if the
+# generated files are only processed by other actions to generate other
+# files, it is possible to depend on the script target directly.
 #
 # Parameters
 #

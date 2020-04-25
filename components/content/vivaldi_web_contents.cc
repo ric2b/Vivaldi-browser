@@ -73,4 +73,20 @@ void WebContentsImpl::DetachFromOuter() {
   node_.OnFrameTreeNodeDestroyed(node_.OuterContentsFrameTreeNode());
 }
 
+bool WebContentsImpl::RemoveChildFromOuter() {
+  WebContentsImpl* outermost = GetOutermostWebContents();
+  // If we are attached to another webcontents disconnect.
+  if (outermost) {
+    RenderFrameHostImpl* rfhi = outermost->GetMainFrame();
+    for (size_t index = 0; index < rfhi->child_count(); ++index) {
+      if (rfhi->child_at(index)->frame_tree_node_id() ==
+        GetOuterDelegateFrameTreeNodeId()) {
+        rfhi->RemoveChild(rfhi->child_at(index));
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 }  // namespace content

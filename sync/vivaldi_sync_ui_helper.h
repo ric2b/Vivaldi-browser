@@ -4,30 +4,26 @@
 #define SYNC_VIVALDI_SYNC_UI_HELPER_H_
 
 #include "chrome/browser/profiles/profile.h"
-#include "components/password_manager/core/browser/password_store_consumer.h"
 #include "components/sync/driver/sync_service_observer.h"
 
 namespace vivaldi {
 
-class VivaldiSyncManager;
+class VivaldiProfileSyncService;
 
-class VivaldiSyncUIHelper : public syncer::SyncServiceObserver,
-                            public password_manager::PasswordStoreConsumer {
+class VivaldiSyncUIHelper : public syncer::SyncServiceObserver {
  public:
-  VivaldiSyncUIHelper(Profile* profile, VivaldiSyncManager* sync_manager);
+  VivaldiSyncUIHelper(Profile* profile, VivaldiProfileSyncService* sync_manager);
   ~VivaldiSyncUIHelper() override;
+
+  bool SetEncryptionPassword(const std::string& password);
 
   // syncer::SyncServiceObserver implementation.
   void OnStateChanged(syncer::SyncService* sync) override;
   void OnSyncShutdown(syncer::SyncService* sync) override;
 
-  // Implementing password_manager::PasswordStoreConsumer
-  void OnGetPasswordStoreResults(
-      std::vector<std::unique_ptr<autofill::PasswordForm>> results) override;
-
  private:
   Profile* profile_;
-  VivaldiSyncManager* sync_manager_;
+  VivaldiProfileSyncService* sync_manager_;
 
   bool tried_decrypt_ = false;
 };

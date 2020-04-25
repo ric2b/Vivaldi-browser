@@ -25,6 +25,8 @@ class SessionSyncPrefs {
   std::string GetSyncSessionsGUID() const;
   void SetSyncSessionsGUID(const std::string& guid);
 
+  std::string GetSessionNameOverride() const;
+
  private:
   PrefService* const pref_service_;
 

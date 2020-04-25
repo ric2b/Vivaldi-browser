@@ -29,7 +29,8 @@ index 35f625d2c03a..efb9155f545d 100644
 +        memset(pNew+pageSize, 0, 8);
 +      }
      }
-
+ 
      if( rc==SQLITE_OK ){
---
+-- 
 2.21.0.392.gf8f6787159e-goog
+

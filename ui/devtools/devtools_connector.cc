@@ -17,6 +17,7 @@
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/schema/devtools_private.h"
+#include "extensions/tools/vivaldi_tools.h"
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_ui_utils.h"
 
@@ -67,20 +68,29 @@ void DevtoolsConnectorAPI::RemoveDevtoolsConnectorItem(int tab_id) {
   }
 }
 
-void DevtoolsConnectorAPI::CloseAllDevtools() {
-  CloseDevtoolsForBrowser(nullptr);
+// static
+void DevtoolsConnectorAPI::CloseAllDevtools(
+    content::BrowserContext* browser_context) {
+  CloseDevtoolsForBrowser(browser_context, nullptr);
 }
 
-void DevtoolsConnectorAPI::CloseDevtoolsForBrowser(Browser* closing_browser) {
-  Profile* profile = Profile::FromBrowserContext(browser_context_);
+// static
+void DevtoolsConnectorAPI::CloseDevtoolsForBrowser(
+    content::BrowserContext* browser_context,
+    Browser* closing_browser) {
+  DevtoolsConnectorAPI* api = GetFactoryInstance()->Get(browser_context);
+  DCHECK(api);
+  if (!api)
+    return;
   content::WebContents* tabstrip_contents = nullptr;
   Browser* browser;
   int tab_index;
 
-  std::vector<DevtoolsConnectorItem*>::iterator it = connector_items_.begin();
-  while (it != connector_items_.end()) {
+  std::vector<DevtoolsConnectorItem*>::iterator it =
+      api->connector_items_.begin();
+  while (it != api->connector_items_.end()) {
     if (extensions::ExtensionTabUtil::GetTabById(
-            (*it)->tab_id(), profile, true, &browser, nullptr,
+            (*it)->tab_id(), browser_context, true, &browser, nullptr,
             &tabstrip_contents, &tab_index)) {
       if (closing_browser == nullptr || closing_browser == browser) {
         DevToolsWindow* window =
@@ -89,7 +99,7 @@ void DevtoolsConnectorAPI::CloseDevtoolsForBrowser(Browser* closing_browser) {
         if (window) {
           // This call removes the element from connector_items_.
           window->ForceCloseWindow();
-          it = connector_items_.begin();
+          it = api->connector_items_.begin();
         }
       } else {
         it++;
@@ -100,12 +110,13 @@ void DevtoolsConnectorAPI::CloseDevtoolsForBrowser(Browser* closing_browser) {
   }
 }
 
+// static
 void DevtoolsConnectorAPI::SendOnUndockedEvent(
-    content::BrowserContext* context,
+    content::BrowserContext* browser_context,
     int tab_id, bool show_window) {
   extensions::vivaldi::devtools_private::DevtoolsWindowParams params;
   bool need_defaults = true;
-  Profile* profile = Profile::FromBrowserContext(context);
+  Profile* profile = Profile::FromBrowserContext(browser_context);
   PrefService* prefs = profile->GetPrefs();
   if (prefs->GetDictionary(prefs::kAppWindowPlacement)->
       HasKey(DevToolsWindow::kDevToolsApp)) {
@@ -138,26 +149,31 @@ void DevtoolsConnectorAPI::SendOnUndockedEvent(
     wp_prefs->Set(DevToolsWindow::kDevToolsApp, std::move(dev_tools_defaults));
   }
 
-  std::unique_ptr<base::ListValue> args =
-    vivaldi::devtools_private::
-      OnDevtoolsUndocked::Create(tab_id, show_window, params);
-
-  extensions::DevtoolsConnectorAPI::BroadcastEvent(
-    vivaldi::devtools_private::OnDevtoolsUndocked::kEventName,
-    std::move(args), context);
+  ::vivaldi::BroadcastEvent(
+      vivaldi::devtools_private::OnDevtoolsUndocked::kEventName,
+      vivaldi::devtools_private::OnDevtoolsUndocked::Create(tab_id, show_window,
+                                                            params),
+      browser_context);
 }
 
-/* static */
-void DevtoolsConnectorAPI::BroadcastEvent(const std::string& eventname,
-                                          std::unique_ptr<base::ListValue> args,
-                                          content::BrowserContext* context) {
-  std::unique_ptr<Event> event(
-      new Event(events::VIVALDI_EXTENSION_EVENT, eventname, std::move(args),
-                context));
-  EventRouter* event_router = EventRouter::Get(context);
-  if (event_router) {
-    event_router->BroadcastEvent(std::move(event));
-  }
+// static
+void DevtoolsConnectorAPI::SendDockingStateChanged(
+    content::BrowserContext* browser_context,
+    int tab_id,
+    const std::string& docking_state) {
+  ::vivaldi::BroadcastEvent(
+      vivaldi::devtools_private::OnDockingStateChanged::kEventName,
+      vivaldi::devtools_private::OnDockingStateChanged::Create(tab_id,
+                                                               docking_state),
+      browser_context);
+}
+
+// static
+void DevtoolsConnectorAPI::SendClosed(content::BrowserContext* browser_context,
+                                      int tab_id) {
+  ::vivaldi::BroadcastEvent(
+      vivaldi::devtools_private::OnClosed::kEventName,
+      vivaldi::devtools_private::OnClosed::Create(tab_id), browser_context);
 }
 
 DevtoolsConnectorItem::DevtoolsConnectorItem(int tab_id,
@@ -373,22 +389,14 @@ void UIBindingsDelegate::ActivateWindow() {
 
 void UIBindingsDelegate::NotifyUpdateBounds() {
   // Notify the js side to update bounds.
-  std::unique_ptr<base::ListValue> args =
-    vivaldi::devtools_private::OnDockingSizesChanged::Create(tab_id());
-
-  DevtoolsConnectorAPI::BroadcastEvent(
+  ::vivaldi::BroadcastEvent(
     vivaldi::devtools_private::OnDockingSizesChanged::kEventName,
-    std::move(args), Profile::FromBrowserContext(browser_context_));
+    vivaldi::devtools_private::OnDockingSizesChanged::Create(tab_id()),
+    browser_context_);
 }
 
 void UIBindingsDelegate::CloseWindow() {
-  Profile* profile = Profile::FromBrowserContext(browser_context_);
-  std::unique_ptr<base::ListValue> args =
-      vivaldi::devtools_private::OnClosed::Create(tab_id());
-
-  DevtoolsConnectorAPI::BroadcastEvent(
-      vivaldi::devtools_private::OnClosed::kEventName, std::move(args),
-      profile);
+  DevtoolsConnectorAPI::SendClosed(browser_context_, tab_id());
 
   // We need to let VivaldiBrowserWindow for this tab know that we've closed
   // devtools now.
@@ -399,7 +407,7 @@ void UIBindingsDelegate::CloseWindow() {
   int tab_index;
 
   if (extensions::ExtensionTabUtil::GetTabById(
-      tab_id(), profile, include_incognito, &browser, NULL,
+      tab_id(), browser_context_, include_incognito, &browser, NULL,
       &tabstrip_contents, &tab_index)) {
     VivaldiBrowserWindow* window =
         static_cast<VivaldiBrowserWindow*>(browser->window());

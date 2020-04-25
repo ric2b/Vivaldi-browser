@@ -112,20 +112,29 @@ void BundleData::GetSourceFiles(SourceFiles* sources) const {
   }
 }
 
-void BundleData::GetOutputFiles(const Settings* settings,
-                                OutputFiles* outputs) const {
+bool BundleData::GetOutputFiles(const Settings* settings,
+                                const Target* target,
+                                OutputFiles* outputs,
+                                Err* err) const {
   SourceFiles outputs_as_sources;
-  GetOutputsAsSourceFiles(settings, &outputs_as_sources);
+  if (!GetOutputsAsSourceFiles(settings, target, &outputs_as_sources, err))
+    return false;
   for (const SourceFile& source_file : outputs_as_sources)
     outputs->push_back(OutputFile(settings->build_settings(), source_file));
+  return true;
 }
 
-void BundleData::GetOutputsAsSourceFiles(const Settings* settings,
-                                         SourceFiles* outputs_as_source) const {
+bool BundleData::GetOutputsAsSourceFiles(const Settings* settings,
+                                         const Target* target,
+                                         SourceFiles* outputs_as_source,
+                                         Err* err) const {
   for (const BundleFileRule& file_rule : file_rules_) {
     for (const SourceFile& source : file_rule.sources()) {
-      outputs_as_source->push_back(
-          file_rule.ApplyPatternToSource(settings, *this, source));
+      SourceFile expanded_source_file;
+      if (!file_rule.ApplyPatternToSource(settings, target, *this, source,
+                                          &expanded_source_file, err))
+        return false;
+      outputs_as_source->push_back(expanded_source_file);
     }
   }
 
@@ -146,6 +155,8 @@ void BundleData::GetOutputsAsSourceFiles(const Settings* settings,
 
   if (!root_dir_.is_null())
     outputs_as_source->push_back(GetBundleRootDirOutput(settings));
+
+  return true;
 }
 
 SourceFile BundleData::GetCompiledAssetCatalogPath() const {

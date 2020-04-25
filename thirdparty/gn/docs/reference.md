@@ -90,7 +90,6 @@
     *   [bundle_contents_dir: Expansion of {{bundle_contents_dir}} in create_bundle.](#var_bundle_contents_dir)
     *   [bundle_deps_filter: [label list] A list of labels that are filtered out.](#var_bundle_deps_filter)
     *   [bundle_executable_dir: Expansion of {{bundle_executable_dir}} in create_bundle](#var_bundle_executable_dir)
-    *   [bundle_plugins_dir: Expansion of {{bundle_plugins_dir}} in create_bundle.](#var_bundle_plugins_dir)
     *   [bundle_resources_dir: Expansion of {{bundle_resources_dir}} in create_bundle.](#var_bundle_resources_dir)
     *   [bundle_root_dir: Expansion of {{bundle_root_dir}} in create_bundle.](#var_bundle_root_dir)
     *   [cflags: [string list] Flags passed to all C compiler variants.](#var_cflags)
@@ -321,7 +320,7 @@
     given arguments set (which may affect the values of other
     arguments).
 ```
-### <a name="cmd_check"></a>**gn check &lt;out_dir&gt; [&lt;label_pattern&gt;] [\--force]**
+### <a name="cmd_check"></a>**gn check &lt;out_dir&gt; [&lt;label_pattern&gt;] [\--force] [\--check-generated]**
 
 ```
   GN's include header checker validates that the includes for C-like source
@@ -342,6 +341,11 @@
   --force
       Ignores specifications of "check_includes = false" and checks all
       target's files that match the target label.
+
+  --check-generated
+      Generated files are normally not checked since they do not exist
+      until after a build. With this flag, those generated files that
+      can be found on disk are also checked.
 ```
 
 #### **What gets checked**
@@ -358,6 +362,9 @@
 
     - GN opens all C-like source files in the targets to be checked and scans
       the top for includes.
+
+    - Generated files (that might not exist yet) are ignored unless
+      the --check-generated flag is provided.
 
     - Includes with a "nogncheck" annotation are skipped (see
       "gn help nogncheck").
@@ -442,10 +449,12 @@
   Deletes the contents of the output directory except for args.gn and
   creates a Ninja build environment sufficient to regenerate the build.
 ```
-### <a name="cmd_desc"></a>**gn desc &lt;out_dir&gt; &lt;label or pattern&gt; [&lt;what to show&gt;] [\--blame] "**
-#### **[\--format=json]**
+### <a name="cmd_desc"></a>**gn desc**
 
 ```
+  gn desc <out_dir> <label or pattern> [<what to show>] [--blame]
+          [--format=json]
+
   Displays information about a given target or config. The build parameters
   will be taken for the build in the given <out_dir>.
 
@@ -679,6 +688,7 @@
       "vs2013" - Visual Studio 2013 project/solution files.
       "vs2015" - Visual Studio 2015 project/solution files.
       "vs2017" - Visual Studio 2017 project/solution files.
+      "vs2019" - Visual Studio 2019 project/solution files.
       "xcode" - Xcode workspace/solution files.
       "qtcreator" - QtCreator project files.
       "json" - JSON file containing target information
@@ -874,9 +884,11 @@
       Lists all variants of the target //base:base (it may be referenced
       in multiple toolchains).
 ```
-### <a name="cmd_meta"></a>**gn meta &lt;out_dir&gt; &lt;target&gt;* \--data=&lt;key&gt;[,&lt;key&gt;*]* [\--walk=&lt;key&gt;[,&lt;key&gt;*]*]**
+### <a name="cmd_meta"></a>**gn meta**
+
 ```
-       [--rebase=<dest dir>]
+  gn meta <out_dir> <target>* --data=<key>[,<key>*]* [--walk=<key>[,<key>*]*]
+          [--rebase=<dest dir>]
 
   Lists collected metaresults of all given targets for the given data key(s),
   collecting metadata dependencies as specified by the given walk key(s).
@@ -974,9 +986,11 @@
 ```
   gn path out/Default //base //tools/gn
 ```
-### <a name="cmd_refs"></a>**gn refs &lt;out_dir&gt; (&lt;label_pattern&gt;|&lt;label&gt;|&lt;file&gt;|@&lt;response_file&gt;)***
+### <a name="cmd_refs"></a>**gn refs**
+
 ```
-        [--all] [--all-toolchains] [--as=...] [--testonly=...] [--type=...]
+  gn refs <out_dir> (<label_pattern>|<label>|<file>|@<response_file>)*
+          [--all] [--all-toolchains] [--as=...] [--testonly=...] [--type=...]
 
   Finds reverse dependencies (which targets reference something). The input is
   a list containing:
@@ -1375,8 +1389,9 @@
   are computed from all "bundle_data" target this one depends on transitively
   (the recursion stops at "create_bundle" targets).
 
-  The "bundle_*_dir" properties must be defined. They will be used for the
-  expansion of {{bundle_*_dir}} rules in "bundle_data" outputs.
+  The "bundle_*_dir" are be used for the expansion of {{bundle_*_dir}} rules in
+  "bundle_data" outputs. The properties are optional but must be defined if any
+  of the "bundle_data" target use them.
 
   This target can be used on all platforms though it is designed only to
   generate iOS or macOS bundle. In cross-platform projects, it is advised to put
@@ -1410,13 +1425,11 @@
 #### **Variables**
 
 ```
-  bundle_root_dir*, bundle_contents_dir*, bundle_resources_dir*,
-  bundle_executable_dir*, bundle_plugins_dir*, bundle_deps_filter, deps,
-  data_deps, public_deps, visibility, product_type, code_signing_args,
-  code_signing_script, code_signing_sources, code_signing_outputs,
-  xcode_extra_attributes, xcode_test_application_name, partial_info_plist,
-  metadata
-  * = required
+  bundle_root_dir, bundle_contents_dir, bundle_resources_dir,
+  bundle_executable_dir, bundle_deps_filter, deps, data_deps, public_deps,
+  visibility, product_type, code_signing_args, code_signing_script,
+  code_signing_sources, code_signing_outputs, xcode_extra_attributes,
+  xcode_test_application_name, partial_info_plist, metadata
 ```
 
 #### **Example**
@@ -1443,7 +1456,7 @@
       }
 
       bundle_data("${app_name}_bundle_info_plist") {
-        deps = [ ":${app_name}_generate_info_plist" ]
+        public_deps = [ ":${app_name}_generate_info_plist" ]
         sources = [ "$gen_path/Info.plist" ]
         outputs = [ "{{bundle_contents_dir}}/Info.plist" ]
       }
@@ -1460,34 +1473,32 @@
       code_signing =
           defined(invoker.code_signing) && invoker.code_signing
 
-      if (is_ios && !code_signing) {
+      if (!is_ios || !code_signing) {
         bundle_data("${app_name}_bundle_executable") {
-          deps = [ ":${app_name}_generate_executable" ]
+          public_deps = [ ":${app_name}_generate_executable" ]
           sources = [ "$gen_path/$app_name" ]
           outputs = [ "{{bundle_executable_dir}}/$app_name" ]
         }
       }
 
-      create_bundle("${app_name}.app") {
+      create_bundle("$app_name.app") {
         product_type = "com.apple.product-type.application"
 
         if (is_ios) {
-          bundle_root_dir = "${root_build_dir}/$target_name"
+          bundle_root_dir = "$root_build_dir/$target_name"
           bundle_contents_dir = bundle_root_dir
           bundle_resources_dir = bundle_contents_dir
           bundle_executable_dir = bundle_contents_dir
-          bundle_plugins_dir = "${bundle_contents_dir}/Plugins"
 
           extra_attributes = {
             ONLY_ACTIVE_ARCH = "YES"
             DEBUG_INFORMATION_FORMAT = "dwarf"
           }
         } else {
-          bundle_root_dir = "${root_build_dir}/target_name"
-          bundle_contents_dir  = "${bundle_root_dir}/Contents"
-          bundle_resources_dir = "${bundle_contents_dir}/Resources"
-          bundle_executable_dir = "${bundle_contents_dir}/MacOS"
-          bundle_plugins_dir = "${bundle_contents_dir}/Plugins"
+          bundle_root_dir = "$root_build_dir/$target_name"
+          bundle_contents_dir  = "$bundle_root_dir/Contents"
+          bundle_resources_dir = "$bundle_contents_dir/Resources"
+          bundle_executable_dir = "$bundle_contents_dir/MacOS"
         }
         deps = [ ":${app_name}_bundle_info_plist" ]
         if (is_ios && code_signing) {
@@ -1869,7 +1880,26 @@
       tree in the order that the targets appear in "deps".
 ```
 
+#### **More background**
+
+```
+  Configs solve a problem where the build system needs to have a higher-level
+  understanding of various compiler settings. For example, some compiler flags
+  have to appear in a certain order relative to each other, some settings like
+  defines and flags logically go together, and the build system needs to
+  de-duplicate flags even though raw command-line parameters can't always be
+  operated on in that way.
+
+  The config gives a name to a group of settings that can then be reasoned
+  about by GN. GN can know that configs with the same label are the same thing
+  so can be de-duplicated. It allows related settings to be grouped so they
+  are added or removed as a unit. And it allows targets to refer to settings
+  with conceptual names ("no_rtti", "enable_exceptions", etc.) rather than
+  having to hard-coding every compiler's flags each time they are referred to.
+```
+
 #### **Variables valid in a config definition**
+
 ```
   Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
          asmflags, defines, include_dirs, inputs, ldflags, lib_dirs,
@@ -2374,7 +2404,7 @@
   # result will be "//foo/bar"
 
   # Extract the source-absolute directory name,
-  result = get_path_info(get_path_info(path, "dir"), "abspath"
+  result = get_path_info(get_path_info(path, "dir"), "abspath")
 ```
 ### <a name="func_get_target_outputs"></a>**get_target_outputs**: [file list] Get the list of outputs from a target.
 
@@ -4485,9 +4515,11 @@
     ]
   }
 ```
-### <a name="var_bundle_executable_dir"></a>**bundle_executable_dir**: Expansion of {{bundle_executable_dir}} in
+### <a name="var_bundle_executable_dir"></a>**bundle_executable_dir**
+
 ```
-                              create_bundle.
+  bundle_executable_dir: Expansion of {{bundle_executable_dir}} in
+                         create_bundle.
 
   A string corresponding to a path in $root_build_dir.
 
@@ -4497,20 +4529,11 @@
 
   See "gn help bundle_root_dir" for examples.
 ```
-### <a name="var_bundle_plugins_dir"></a>**bundle_plugins_dir**: Expansion of {{bundle_plugins_dir}} in create_bundle.
+### <a name="var_bundle_resources_dir"></a>**bundle_resources_dir**
 
 ```
-  A string corresponding to a path in $root_build_dir.
-
-  This string is used by the "create_bundle" target to expand the
-  {{bundle_plugins_dir}} of the "bundle_data" target it depends on. This must
-  correspond to a path under "bundle_root_dir".
-
-  See "gn help bundle_root_dir" for examples.
-```
-### <a name="var_bundle_resources_dir"></a>**bundle_resources_dir**: Expansion of {{bundle_resources_dir}} in
-```
-                             create_bundle.
+  bundle_resources_dir: Expansion of {{bundle_resources_dir}} in
+                        create_bundle.
 
   A string corresponding to a path in $root_build_dir.
 
@@ -4544,7 +4567,6 @@
     bundle_contents_dir = "${bundle_root_dir}/Contents"
     bundle_resources_dir = "${bundle_contents_dir}/Resources"
     bundle_executable_dir = "${bundle_contents_dir}/MacOS"
-    bundle_plugins_dir = "${bundle_contents_dir}/PlugIns"
   }
 ```
 ### <a name="var_cflags"></a>**cflags***: Flags passed to the C compiler.

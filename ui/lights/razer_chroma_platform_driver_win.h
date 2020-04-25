@@ -51,6 +51,7 @@ public:
     CHROMA_DEVICE_MOUSE,
     CHROMA_DEVICE_MOUSEMAT,
     CHROMA_DEVICE_LINK,
+    CHROMA_DEVICE_HEADSET,
   };
   void RunEffectsOnThread(std::vector<RZEFFECTID> effect_ids, int num_effects);
   void DeleteEffectImpl(RZEFFECTID effect_id);

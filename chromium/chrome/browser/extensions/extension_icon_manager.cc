@@ -27,6 +27,7 @@
 #include "ui/native_theme/common_theme.h"
 #include "ui/native_theme/native_theme.h"
 
+#include "app/vivaldi_apptools.h"
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 
 ExtensionIconManager::ExtensionIconManager() {}
@@ -84,19 +85,9 @@ void ExtensionIconManager::OnImageLoaded(const std::string& extension_id,
     }
     icons_[extension_id] = modified_image;
 
-    // Vivaldi specific below.
-    if (context_) {
-      extensions::vivaldi::extension_action_utils::ExtensionInfo info;
-
-      info.id = extension_id;
-      info.badge_icon.reset(
-          extensions::ExtensionActionUtil::EncodeBitmapToPng(image.ToSkBitmap()));
-      std::unique_ptr<base::ListValue> args =
-          extensions::vivaldi::extension_action_utils::OnIconLoaded::Create(info);
-
-      extensions::ExtensionActionUtil::BroadcastEvent(
-          extensions::vivaldi::extension_action_utils::OnIconLoaded::kEventName,
-          std::move(args), context_);
+    if (::vivaldi::IsVivaldiRunning() && context_) {
+      extensions::ExtensionActionUtil::SendIconLoaded(context_, extension_id,
+                                                      image);
     }
   }
 

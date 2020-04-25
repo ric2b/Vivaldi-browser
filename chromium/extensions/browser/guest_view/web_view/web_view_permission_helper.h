@@ -77,7 +77,7 @@ class WebViewPermissionHelper
                                   blink::MediaStreamType type);
   virtual void CanDownload(const GURL& url,
                    const std::string& request_method,
-                   const base::Callback<void(bool)>& callback);
+                   base::OnceCallback<void(bool)> callback);
   virtual void RequestPointerLockPermission(bool user_gesture,
                                     bool last_unlocked_by_target,
                                     const base::Callback<void(bool)>& callback);

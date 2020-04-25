@@ -104,6 +104,19 @@ class CalendarService : public KeyedService {
   typedef base::Callback<void(std::shared_ptr<DeleteCalendarResult>)>
       DeleteCalendarCallback;
 
+
+  typedef base::Callback<void(std::shared_ptr<EventTypeRows>)>
+    GetALLEventTypesCallback;
+
+  typedef base::Callback<void(std::shared_ptr<CreateEventTypeResult>)>
+    CreateEventTypeCallback;
+
+  typedef base::Callback<void(std::shared_ptr<UpdateEventTypeResult>)>
+    UpdateEventTypeCallback;
+
+  typedef base::Callback<void(std::shared_ptr<DeleteEventTypeResult>)>
+    DeleteEventTypeCallback;
+
   base::CancelableTaskTracker::TaskId GetAllEvents(
       const QueryCalendarCallback& callback,
       base::CancelableTaskTracker* tracker);
@@ -154,6 +167,26 @@ class CalendarService : public KeyedService {
       const DeleteCalendarCallback& callback,
       base::CancelableTaskTracker* tracker);
 
+
+  base::CancelableTaskTracker::TaskId GetAllEventTypes(
+    const GetALLEventTypesCallback& callback,
+    base::CancelableTaskTracker* tracker);
+
+  base::CancelableTaskTracker::TaskId CreateEventType(
+    EventTypeRow ev,
+    const CreateEventTypeCallback& callback,
+    base::CancelableTaskTracker* tracker);
+
+  base::CancelableTaskTracker::TaskId UpdateEventType(EventTypeID event_type_id,
+    EventType ev,
+    const UpdateEventTypeCallback& callback,
+    base::CancelableTaskTracker* tracker);
+
+  base::CancelableTaskTracker::TaskId DeleteEventType(
+    EventTypeID event_type_id,
+    const DeleteEventTypeCallback& callback,
+    base::CancelableTaskTracker* tracker);
+
  private:
   class CalendarBackendDelegate;
   friend class base::RefCountedThreadSafe<CalendarService>;
@@ -178,6 +211,10 @@ class CalendarService : public KeyedService {
   void OnCalendarCreated(const CalendarRow& row);
   void OnCalendarDeleted(const CalendarRow& row);
   void OnCalendarChanged(const CalendarRow& row);
+
+  void OnEventTypeCreated(const EventTypeRow& row);
+  void OnEventTypeDeleted(const EventTypeRow& row);
+  void OnEventTypeChanged(const EventTypeRow& row);
 
   void Cleanup();
 

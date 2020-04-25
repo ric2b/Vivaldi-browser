@@ -210,51 +210,9 @@
             ]
           }
         ]
-      },
-      {
-        "name": "setupMainMenu",
-        "type": "function",
-        "description": "Setup application's main menu",
-        "parameters": [
-          {
-            "name": "items",
-            "type": "array",
-            "items": {"$ref": "MenuItem"},
-            "description": "Menu items with string label."
-          },
-          {
-            "name": "mode",
-            "type": "string",
-            "description": "Menu mode. 'context' or 'menubar'"
-          }
-        ]
       }
     ],
     "events": [
-      {
-        "name": "onMainMenuCommand",
-        "type": "function",
-        "description": "Fired when a main menu command is selected.",
-        "parameters": [
-           {
-            "type": "integer",
-            "name": "windowId",
-            "minimum": 0,
-            "description": "id of window where command was executed"
-          },
-          {
-            "type": "integer",
-            "name": "commandId",
-            "minimum": 0,
-            "description": "id of the command selected."
-          },
-          {
-            "type": "string",
-            "name": "parameter",
-            "description": "Free format parameter to commandId. Can be empty"
-          }
-        ]
-      },
       {
         "name": "onOpen",
         "type": "function",

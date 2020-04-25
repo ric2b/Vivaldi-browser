@@ -20,7 +20,6 @@
 <translation id="1828901632669367785">Imprimeix fent servir el Diàleg del Sistema...</translation>
 <translation id="1850508293116537636">Gira en el sentit de les &amp;agulles del rellotge</translation>
 <translation id="1901303067676059328">Selecciona-ho &amp;tot</translation>
-<translation id="1992397118740194946">No establerta</translation>
 <translation id="2087822576218954668">Impressió: <ph name="PRINT_NAME" /></translation>
 <translation id="2177950615300672361">Pestanya d'incògnit: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Mòdul de client nadiu: <ph name="NEXE_NAME" /></translation>
@@ -40,7 +39,6 @@
 <translation id="2445081178310039857">El directori arrel de l'extensió és obligatori.</translation>
 <translation id="2470702053775288986">Extensions no compatibles desactivades</translation>
 <translation id="2476578072172137802">Configuració del lloc</translation>
-<translation id="2501797496290880632">Escriviu una drecera</translation>
 <translation id="2550212893339833758">Memòria intercanviada</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Torna a activar</translation>
@@ -67,12 +65,9 @@
 <translation id="3347086966102161372">C&amp;opia l'adreça de la imatge</translation>
 <translation id="3378572629723696641">És possible que aquesta extensió estigui malmesa.</translation>
 <translation id="345693547134384690">Obre la &amp;imatge en una pestanya nova</translation>
-<translation id="3467267818798281173">Demana suggeriments a Google</translation>
 <translation id="3505030558724226696">Revoca l'accés als dispositius</translation>
 <translation id="3627588569887975815">Obre l'enllaç en una finestra d'inco&amp;gnito</translation>
 <translation id="3678156199662914018">Extensió: <ph name="EXTENSION_NAME" /></translation>
-<translation id="3798449238516105146">Versió</translation>
-<translation id="3866249974567520381">Descripció</translation>
 <translation id="3905761538810670789">Repara l'aplicació</translation>
 <translation id="3908501907586732282">Activa l'extensió</translation>
 <translation id="3909791450649380159">Re&amp;talla</translation>
@@ -107,7 +102,6 @@
 <translation id="4989966318180235467">Inspecciona la &amp;pàgina de fons</translation>
 <translation id="5027562294707732951">Afegeix l'extensió</translation>
 <translation id="5039804452771397117">Permet</translation>
-<translation id="5087249366037322692">Afegida per tercers</translation>
 <translation id="5143374789336132547">L'extensió <ph name="EXTENSION_NAME" /> ha canviat la pàgina que es mostra quan feu clic al botó d'inici.</translation>
 <translation id="5233019165164992427">Port de depuració NaCI</translation>
 <translation id="5233231016133573565">ID de procés</translation>
@@ -120,7 +114,6 @@
 <translation id="5483785310822538350">Revoca l'accés al dispositiu i al fitxer</translation>
 <translation id="5485102783864353244">Afegeix l'aplicació</translation>
 <translation id="5521078259930077036">Aquesta pàgina d'inici és la que esperàveu?</translation>
-<translation id="5532223876348815659">General</translation>
 <translation id="5542132724887566711">Perfil</translation>
 <translation id="5556459405103347317">Torna a carregar</translation>
 <translation id="5575473780076478375">Extensió d'incògnit: <ph name="EXTENSION_NAME" /></translation>
@@ -135,10 +128,8 @@
 <translation id="5965661248935608907">També controla la pàgina que es mostra quan feu clic al botó d'inici o quan feu una cerca des de l'omnibox.</translation>
 <translation id="6101226222197207147">S'ha afegit una aplicació nova (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">La vostra connexió a Internet s'està controlant</translation>
-<translation id="6124650939968185064">D'aquesta extensió en depenen les extensions següents:</translation>
 <translation id="6156863943908443225">Memòria cau d'scripts</translation>
 <translation id="6196854373336333322">L'extensió <ph name="EXTENSION_NAME" /> ha passat a controlar la configuració del servidor intermediari. Això vol dir que pot modificar, desfer o espiar qualsevol acció que feu en línia. Si no esteu segur del motiu d'aquest canvi, és possible que no el vulgueu aplicar.</translation>
-<translation id="6220413761270491930">Error carregant l'extensió</translation>
 <translation id="6239558157302047471">Torna a carregar el &amp;marc</translation>
 <translation id="6247802389331535091">Sistema: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="6251870443722440887">Controls GDI</translation>
@@ -153,9 +144,6 @@
 <translation id="6518014396551869914">Copia&amp; la imatge</translation>
 <translation id="6639554308659482635">Memòria SQLite</translation>
 <translation id="6691936601825168937">&amp;Reenvia</translation>
-<translation id="6706210727756204531">Abast</translation>
-<translation id="6786747875388722282">Extensions</translation>
-<translation id="6787839852456839824">Tecles de drecera</translation>
 <translation id="6798954102094737107">Connector: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Mantén els canvis</translation>
 <translation id="6886871292305414135">Obre l'enllaç en una pes&amp;tanya nova</translation>
@@ -192,11 +180,8 @@ Deseu el fitxer de clau en una ubicació segura. El necessitareu per crear versi
 <translation id="8004582292198964060">Navegador</translation>
 <translation id="8018313076035239964">Controla quina informació poden utilitzar i quin contingut et poden mostrar els llocs web</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />.000</translation>
-<translation id="8188120771410500975">&amp;Revisa l'ortografia dels camps de text</translation>
 <translation id="8261378640211443080">Aquesta extensió no apareix a <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> i és possible que s'hagi afegit sense que ho sapigueu.</translation>
-<translation id="8294431847097064396">Font</translation>
 <translation id="8351419472474436977">Aquesta extensió ha passat a controlar la configuració del servidor intermediari. Això vol dir que pot modificar, desfer o espiar qualsevol acció que feu en línia. Si no esteu segur del motiu d'aquest canvi, és possible que no el vulgueu aplicar.</translation>
-<translation id="8523849605371521713">Afegida per política</translation>
 <translation id="8546306075665861288">Memòria cau d'imatges</translation>
 <translation id="8584280235376696778">O&amp;bre el vídeo en una pestanya nova</translation>
 <translation id="8615618338313291042">Aplicació d'incògnit: <ph name="APP_NAME" /></translation>

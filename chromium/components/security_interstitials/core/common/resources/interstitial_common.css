@@ -29,11 +29,11 @@ button {
 .pdf button,
 .ssl button,
 .safe-browsing-billing button {
-  background: var(--google-blue-600);
+  background: #656565;
 }
 
 button:active {
-  background: var(--google-blue-700);
+  background: #333333;
   outline: 0;
 }
 

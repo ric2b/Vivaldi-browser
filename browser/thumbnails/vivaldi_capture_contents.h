@@ -81,7 +81,7 @@ class ThumbnailCaptureContents
   bool ShouldFocusPageAfterCrash() override;
   void CanDownload(const GURL& url,
                    const std::string& request_method,
-                   const base::RepeatingCallback<void(bool)>& callback) override;
+                   base::OnceCallback<void(bool)> callback) override;
   bool HandleContextMenu(content::RenderFrameHost* render_frame_host,
                          const content::ContextMenuParams& params) override;
   content::KeyboardEventProcessingResult PreHandleKeyboardEvent(

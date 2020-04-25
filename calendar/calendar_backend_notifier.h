@@ -38,6 +38,15 @@ class CalendarBackendNotifier {
 
   // Sends notification that |calendar| was deleted
   virtual void NotifyCalendarDeleted(const CalendarRow& row) = 0;
+
+  // Sends notification that |event type| was created
+  virtual void NotifyEventTypeCreated(const EventTypeRow& row) = 0;
+
+  // Sends notification that |event type| has been changed
+  virtual void NotifyEventTypeModified(const EventTypeRow& row) = 0;
+
+  // Sends notification that |event type| was deleted
+  virtual void NotifyEventTypeDeleted(const EventTypeRow& row) = 0;
 };
 
 }  // namespace calendar

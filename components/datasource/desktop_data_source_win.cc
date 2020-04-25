@@ -12,12 +12,17 @@
 #include "content/public/browser/browser_thread.h"
 #include "skia/ext/skia_utils_win.h"
 
-DesktopWallpaperDataClassHandlerWin::DesktopWallpaperDataClassHandlerWin() {}
+DesktopWallpaperDataClassHandlerWin::DesktopWallpaperDataClassHandlerWin() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+}
 
-DesktopWallpaperDataClassHandlerWin::~DesktopWallpaperDataClassHandlerWin() {}
+DesktopWallpaperDataClassHandlerWin::~DesktopWallpaperDataClassHandlerWin() {
+  // See comments in VivaldiDataSource::~VivaldiDataSource why there is no race
+  // with GetData method.
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+}
 
 bool DesktopWallpaperDataClassHandlerWin::GetData(
-    Profile* profile,
     const std::string& data_id,
     const content::URLDataSource::GotDataCallback& callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
@@ -61,13 +66,12 @@ bool DesktopWallpaperDataClassHandlerWin::GetData(
           base::File file(f, base::File::FLAG_READ | base::File::FLAG_OPEN);
           int64_t len = file.GetLength();
           if (len > 0) {
-            std::unique_ptr<char[]> buffer(new char[len]);
-            int read_len = file.Read(0, buffer.get(), len);
+            std::vector<unsigned char> buffer(len);
+            int read_len =
+              file.Read(0, reinterpret_cast<char*>(&buffer[0]), len);
             if (read_len == len) {
               scoped_refptr<base::RefCountedMemory> image_data(
-                new base::RefCountedBytes(
-                  reinterpret_cast<unsigned char*>(buffer.get()),
-                  (size_t)len));
+                base::RefCountedBytes::TakeVector(&buffer));
               cached_image_data_ = image_data;
               previous_path_ = file_path.get();
               callback.Run(image_data);

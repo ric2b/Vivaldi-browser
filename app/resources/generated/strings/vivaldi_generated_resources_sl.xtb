@@ -35,20 +35,15 @@
 <translation id="1698122934742150150">Samo za trenutno sejo brez beleženja zgodovine</translation>
 <translation id="1706625117072057435">Ravni povečave</translation>
 <translation id="1708338024780164500">(Nеaktivno)</translation>
-<translation id="1708713382908678956"><ph name="NAME_PH" /> (ID: <ph name="ID_PH" />)</translation>
 <translation id="1723824996674794290">&amp;Novo okno</translation>
 <translation id="1729533290416704613">Določa tudi, katera stran je prikazana, ko iščete v naslovni vrstici.</translation>
 <translation id="1744108098763830590">stran v ozadju</translation>
-<translation id="1805822111539868586">Preveri poglede</translation>
 <translation id="1828901632669367785">Natisni v sistemskem pogovornem oknu...</translation>
 <translation id="1850508293116537636">&amp;Zasukaj v smeri urinega kazalca</translation>
 <translation id="1886996562706621347">Dovoli spletnim mestom, da zahtevajo, da postanejo privzete rutine za obravnavo protokolov (priporočeno)</translation>
-<translation id="1890674179660343635">&lt;span&gt;ID: &lt;/span&gt;<ph name="EXTENSION_ID" /></translation>
 <translation id="1901303067676059328">Izberi &amp;vse</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1963227389609234879">Odstrani vse</translation>
-<translation id="1989112275319619282">Brskaj</translation>
-<translation id="1992397118740194946">Ni nastavljeno</translation>
 <translation id="1994173015038366702">URL spletnega mesta</translation>
 <translation id="2050339315714019657">Pokončno</translation>
 <translation id="2076269580855484719">Skrij vtičnik</translation>
@@ -85,7 +80,6 @@
 <translation id="2470702053775288986">Nepodprte razširitve onemogočene</translation>
 <translation id="2476578072172137802">Nastavitve spletnega mesta</translation>
 <translation id="2482878487686419369">Obvestila</translation>
-<translation id="2501797496290880632">Vnesite bližnjico</translation>
 <translation id="2509495747794740764">Vrednost za prilagajanje velikosti mora biti število med 10 in 200.</translation>
 <translation id="253557089021624350">Štetje ohranjanja dejavnosti</translation>
 <translation id="2550212893339833758">Zamenjan pomnilnik</translation>
@@ -104,7 +98,6 @@
 <translation id="2902127500170292085">Komunikacija razširitve <ph name="EXTENSION_NAME" /> s tem tiskalnikom ni bila mogoča. Poskrbite, da je tiskalnik priključen, in poskusite znova.</translation>
 <translation id="2904456025988372123">Vprašaj, če poskuša spletno mesto po prvi datoteki samodejno prenesti še druge</translation>
 <translation id="2913331724188855103">Dovoli spletnim mestom shranjevanje in branje podatkov piškotkov (priporočljivo)</translation>
-<translation id="2916745397441987255">Iskanje razširitev</translation>
 <translation id="2932883381142163287">Prijavite zlorabo</translation>
 <translation id="2941112035454246133">Nizka</translation>
 <translation id="2972581237482394796">&amp;Uveljavi</translation>
@@ -138,11 +131,10 @@
 <translation id="3360297538363969800">Tiskanje ni uspelo. Preverite tiskalnik in poskusite znova.</translation>
 <translation id="3378503599595235699">Ohrani lokalne podatke do zaprtja brskalnika</translation>
 <translation id="3378572629723696641">Ta razširitev je morda poškodovana.</translation>
+<translation id="3387614642886316601">Uporabi izboljšano preverjanje črkovanja</translation>
 <translation id="3432227430032737297">Odstrani vse prikazane</translation>
-<translation id="3435896845095436175">Omogoči</translation>
 <translation id="3440761377721825626">Vprašaj, ko želi spletno mesto z vtičnikom dostopati do računalnika</translation>
 <translation id="345693547134384690">Odpri &amp;sliko v novem zavihku</translation>
-<translation id="3467267818798281173">Vprašaj Google za predloge</translation>
 <translation id="3494769164076977169">Vprašaj, če poskuša spletno mesto po prvi datoteki samodejno prenesti še druge (priporočeno)</translation>
 <translation id="3505030558724226696">Umakni dostop do naprav</translation>
 <translation id="3523642406908660543">Vprašaj, ko želi spletno mesto z vtičnikom dostopati do računalnika (priporočeno)</translation>
@@ -158,13 +150,11 @@
 <translation id="3727187387656390258">Preveri pojavna okna</translation>
 <translation id="3744111561329211289">Sinhroniziranje v ozadju</translation>
 <translation id="3797900183766075808">&amp;V iskalniku <ph name="SEARCH_ENGINE" /> poišči »<ph name="SEARCH_TERMS" />«</translation>
-<translation id="3798449238516105146">Različica</translation>
 <translation id="3800806661949714323">Pokaži vse (priporočeno)</translation>
 <translation id="3810973564298564668">Upravljanje</translation>
+<translation id="3838085852053358637">Razširitve ni bilo mogoče naložiti</translation>
 <translation id="383891835335927981">Nobeno spletno mesto ni povečano ali pomanjšano</translation>
 <translation id="385051799172605136">Nazaj</translation>
-<translation id="3855441664322950881">Zapakiraj razširitev</translation>
-<translation id="3866249974567520381">Opis</translation>
 <translation id="3899879303189199559">Brez povezave več kot eno leto</translation>
 <translation id="3905761538810670789">Popravi aplikacijo</translation>
 <translation id="3908501907586732282">Omogoči razširitev</translation>
@@ -200,7 +190,6 @@
 <translation id="4409697491990005945">Robovi</translation>
 <translation id="4423482519432579560">&amp;Črkovalnik</translation>
 <translation id="4434045419905280838">Pojavna okna in preusmeritve</translation>
-<translation id="4522570452068850558">Podrobnosti</translation>
 <translation id="4552089082226364758">Flash</translation>
 <translation id="4579581181964204535">Ni mogoče predvajati <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Pojdi na <ph name="URL" /></translation>
@@ -229,7 +218,6 @@
 <translation id="5057110919553308744">Ko kliknete razširitev</translation>
 <translation id="5063480226653192405">Uporaba</translation>
 <translation id="5068918910148307423">Nedavno zaprtim spletnim mestom ne dovoli dokončanje pošiljanja in prejemanja podatkov</translation>
-<translation id="5087249366037322692">Dodano od tretje strani</translation>
 <translation id="5143374789336132547">Zaradi razširitve <ph name="EXTENSION_NAME" /> se je spremenila stran, ki je prikazana, ko kliknete gumb za začetno stran.</translation>
 <translation id="5154108062446123722">Dodatne nastavitve za: <ph name="PRINTING_DESTINATION" /></translation>
 <translation id="5233019165164992427">Vrata za odpravljanje napak NaCl</translation>
@@ -249,9 +237,7 @@
 <translation id="5483785310822538350">Umakni dostop do datotek in naprav</translation>
 <translation id="5485102783864353244">Dodaj aplikacijo</translation>
 <translation id="5487521232677179737">Počisti podatke</translation>
-<translation id="5488468185303821006">Omogoči v načinu brez beleženja zgodovine</translation>
 <translation id="5521078259930077036">Ali je to domača stran, ki ste jo pričakovali?</translation>
-<translation id="5532223876348815659">Globalno</translation>
 <translation id="5542132724887566711">Profil</translation>
 <translation id="5556459405103347317">Ponovno naloži</translation>
 <translation id="5575473780076478375">Razširitev brez beleženja zgodovine: <ph name="EXTENSION_NAME" /></translation>
@@ -274,11 +260,13 @@
 <translation id="5828633471261496623">Tiskanje...</translation>
 <translation id="583281660410589416">Neznano</translation>
 <translation id="5838456317242088717">Trenutna seja brez beleženja zgodovine</translation>
+<translation id="5860491529813859533">Vklopi</translation>
 <translation id="5877584842898320529">Izbrani tiskalnik ni na voljo ali ni pravilno nameščen. <ph name="BR" /> Preverite tiskalnik ali izberite drugega.</translation>
 <translation id="5908769186679515905">Mestom prepreči izvajanje Flasha</translation>
 <translation id="5956585768868398362">Ali je to iskalna stran, ki ste jo pričakovali?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (največ <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="5965661248935608907">Določa tudi, katera stran je prikazana, ko kliknete gumb za domačo stran ali iščete v naslovni vrstici.</translation>
+<translation id="5978277834170881274">&amp;Uporabi osnovno preverjanje črkovanja</translation>
 <translation id="5979421442488174909">&amp;Prevedi v <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">Brisanje podatkov spletnih mest</translation>
 <translation id="6040143037577758943">Zapri</translation>
@@ -288,14 +276,11 @@
 <translation id="6086846494333236931">Namesti skrbnik</translation>
 <translation id="6101226222197207147">Nova aplikacija je dodana (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Vaša povezava z internetom je nadzorovana</translation>
-<translation id="6124650939968185064">Od te razširitve so odvisne naslednje razširitve:</translation>
 <translation id="6147020289383635445">Predogled tiskanja ni uspel.</translation>
 <translation id="6156863943908443225">Predpomnilnik skriptov</translation>
 <translation id="6169666352732958425">Namizja ni mogoče predvajati.</translation>
 <translation id="6196640612572343990">Blokiraj piškotke drugih spletnih mest</translation>
 <translation id="6196854373336333322">Razširitev »<ph name="EXTENSION_NAME" />« je prevzela nadzor nad nastavitvami strežnika proxy, kar pomeni, da lahko spremeni, prekine ali nadzoruje vse, kar počnete v spletu. Če ne veste, zakaj je prišlo do te spremembe, je verjetno nezaželena.</translation>
-<translation id="6220413761270491930">Napaka pri nalaganju razširitve</translation>
-<translation id="6226777517901268232">Datoteka zasebnega ključa (neobvezno)</translation>
 <translation id="6239558157302047471">Znova naloži &amp;okvir</translation>
 <translation id="6247802389331535091">Sistem: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="6248988683584659830">Iskanje nastavitev</translation>
@@ -321,12 +306,8 @@
 <translation id="6639554308659482635">Pomnilnik SQLite</translation>
 <translation id="6686817083349815241">Shranite geslo</translation>
 <translation id="6691936601825168937">&amp;Posreduj</translation>
-<translation id="6706210727756204531">Področje</translation>
 <translation id="6723354935081862304">Tiskajte v Google Dokumentih in drugih ciljih v oblaku. Če želite tiskati z Google Tiskanjem v oblaku, <ph name="BEGIN_LINK" />se prijavite<ph name="END_LINK" />.</translation>
 <translation id="6782111308708962316">Drugim spletnim mestom prepreči shranjevanje in branje podatkov piškotkov</translation>
-<translation id="6786747875388722282">Razširitve</translation>
-<translation id="6787839852456839824">Bližnjične tipke</translation>
-<translation id="6788210894632713004">Razpakirana razširitev</translation>
 <translation id="6798954102094737107">Vtičnik: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Ohrani spremembe</translation>
 <translation id="6817174620439930047">Vprašaj, ko spletno mesto želi uporabljati ekskluzivna sporočila sistema za dostop do MIDI naprav (priporočeno)</translation>
@@ -342,8 +323,6 @@
 <translation id="7006634003215061422">Spodnji rob</translation>
 <translation id="7053983685419859001">Blokiraj</translation>
 <translation id="708060913198414444">Kopiraj naslov zvoka</translation>
-<translation id="7084192839369222683">Zaženi samo pomembno vsebino</translation>
-<translation id="7152478047064750137">Za to razširitev niso potrebna posebna dovoljenja</translation>
 <translation id="7175353351958621980">Naloženo iz:</translation>
 <translation id="7270858098575133036">Vprašaj, ko spletno mesto želi uporabljati ekskluzivna sporočila sistema za dostop do MIDI naprav</translation>
 <translation id="7287143125007575591">Dostop zavrnjen.</translation>
@@ -361,6 +340,7 @@
 <translation id="7564847347806291057">Končaj proces</translation>
 <translation id="7576690715254076113">Zbiraj</translation>
 <translation id="7629827748548208700">Zavihek: <ph name="TAB_NAME" /></translation>
+<translation id="7658239707568436148">Prekliči</translation>
 <translation id="7661259717474717992">Spletnim mestom dovoli shranjevanje in branje podatkov piškotkov</translation>
 <translation id="7663719505383602579">Sprejemnik: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7685049629764448582">Pomnilnik za JavaScript</translation>
@@ -373,7 +353,6 @@
 <translation id="7771452384635174008">Postavitev</translation>
 <translation id="7782102568078991263">Ni več Googlovih predlogov</translation>
 <translation id="7791543448312431591">Dodaj</translation>
-<translation id="780301667611848630">Ne, hvala</translation>
 <translation id="7814458197256864873">&amp;Kopiraj</translation>
 <translation id="7818135753970109980">Nova tema je dodana (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="782057141565633384">Kopiraj naslov videoposnetka</translation>
@@ -398,17 +377,14 @@ Datoteko s ključem shranite na varnem. Potrebovali jo boste za izdelavo novih r
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> KB</translation>
 <translation id="8137559199583651773">Upravljajte razširitve</translation>
 <translation id="8180239481735238521">stran</translation>
-<translation id="8188120771410500975">&amp;Preveri črkovanje besedilnih polj</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{Poteka prenos}one{Poteka prenos}two{Potekata prenosa}few{Potekajo prenosi}other{Potekajo prenosi}}</translation>
 <translation id="8230134520748321204">Shranim geslo za <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080">Ta razširitev ni navedena v storitvi <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> in je bila morda dodana brez vaše vednosti.</translation>
 <translation id="8270242299912238708">PDF dokumenti</translation>
-<translation id="8294431847097064396">Vir</translation>
 <translation id="8339059274628563283">Lokalno shranjeni podatki za <ph name="SITE" /></translation>
 <translation id="8351419472474436977">Ta razširitev je prevzela nadzor nad nastavitvami strežnika proxy, kar pomeni, da lahko spremeni, prekine ali nadzoruje vse, kar počnete v spletu. Če ne veste, zakaj je prišlo do te spremembe, je verjetno nezaželena.</translation>
 <translation id="8382913212082956454">Kopiraj &amp;e-poštni naslov</translation>
 <translation id="8413385045638830869">Najprej vprašaj (priporočeno)</translation>
-<translation id="8523849605371521713">Dodano s pravilnikom</translation>
 <translation id="8546306075665861288">Predpomnilnik slik</translation>
 <translation id="8569682776816196752">Najti ni bilo mogoče nobenega cilja</translation>
 <translation id="857943718398505171">Dovoljeno (priporočeno)</translation>
@@ -421,7 +397,6 @@ Datoteko s ključem shranite na varnem. Potrebovali jo boste za izdelavo novih r
 <translation id="8714838604780058252">Grafika v ozadju</translation>
 <translation id="8725066075913043281">Poskusite znova</translation>
 <translation id="8757090071857742562">Namizja ni mogoče predvajati.  Preverite, ali ste potrdili poziv za začetek skupne rabe zaslona.</translation>
-<translation id="8770406935328356739">Korenski imenik razširitve</translation>
 <translation id="8774934320277480003">Zgornji rob</translation>
 <translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; želi z vami souporabljati tiskalnik &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt;.</translation>
 <translation id="8798099450830957504">Privzeto</translation>

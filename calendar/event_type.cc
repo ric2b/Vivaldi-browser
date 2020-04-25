@@ -9,9 +9,9 @@
 #include "calendar/event_type.h"
 
 #include <limits>
+
 #include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
-
 #include "calendar_type.h"
 
 namespace calendar {
@@ -38,6 +38,7 @@ CalendarEvent::CalendarEvent(const CalendarEvent& event)
       etag(event.etag),
       href(event.href),
       uid(event.uid),
+      event_type_id(event.event_type_id),
       updateFields(event.updateFields) {}
 
 CalendarEvent::~CalendarEvent() {}
@@ -60,7 +61,8 @@ EventRow::EventRow(EventID id,
                    EventRecurrence recurrence,
                    std::string etag,
                    std::string href,
-                   std::string uid)
+                   std::string uid,
+                   EventTypeID event_type_id)
     : id_(id),
       calendar_id_(calendar_id),
       alarm_id_(alarm_id),
@@ -77,7 +79,8 @@ EventRow::EventRow(EventID id,
       recurrence_(recurrence),
       etag_(etag),
       href_(href),
-      uid_(uid) {}
+      uid_(uid),
+      event_type_id_(event_type_id) {}
 
 EventRow::~EventRow() {}
 
@@ -98,6 +101,7 @@ void EventRow::Swap(EventRow* other) {
   std::swap(etag_, other->etag_);
   std::swap(href_, other->href_);
   std::swap(uid_, other->uid_);
+  std::swap(event_type_id_, other->event_type_id_);
 }
 
 EventRow::EventRow(const EventRow& other) = default;
@@ -119,7 +123,8 @@ EventRow::EventRow(const EventRow&& other) noexcept
       recurrence_(other.recurrence_),
       etag_(other.etag_),
       href_(other.href_),
-      uid_(other.uid_) {}
+      uid_(other.uid_),
+      event_type_id_(other.event_type_id_) {}
 
 EventResult::EventResult() {}
 
@@ -147,5 +152,19 @@ CreateEventResult::CreateEventResult() {}
 UpdateEventResult::UpdateEventResult() {}
 
 DeleteEventResult::DeleteEventResult() {}
+
+UpdateEventTypeResult::UpdateEventTypeResult() {}
+
+EventType::EventType()
+    : name(base::ASCIIToUTF16("")), color(""), iconindex(0), updateFields(0) {}
+
+EventType::EventType(const EventType& event_type)
+    : event_type_id(event_type.event_type_id),
+      name(event_type.name),
+      color(event_type.color),
+      iconindex(event_type.iconindex),
+      updateFields(event_type.updateFields) {}
+
+EventType::~EventType() {}
 
 }  // namespace calendar
