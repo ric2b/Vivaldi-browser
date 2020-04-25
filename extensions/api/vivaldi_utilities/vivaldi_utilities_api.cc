@@ -14,6 +14,7 @@
 #include "app/vivaldi_constants.h"
 #include "app/vivaldi_version_info.h"
 #include "base/command_line.h"
+#include "base/environment.h"
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
@@ -23,6 +24,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "base/values.h"
+#include "base/vivaldi_switches.h"
 #include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -114,27 +116,26 @@ VivaldiUtilitiesAPI::VivaldiUtilitiesAPI(content::BrowserContext* context)
 
   base::PowerMonitor::AddObserver(this);
 
-  Profile* profile = Profile::FromBrowserContext(browser_context_);
-  content::DownloadManager* manager =
-      content::BrowserContext::GetDownloadManager(
-          profile->GetOriginalProfile());
-  manager->AddObserver(this);
-
   if (VivaldiRuntimeFeatures::IsEnabled(context, "razer_chroma_support")) {
     razer_chroma_handler_.reset(
         new RazerChromaHandler(Profile::FromBrowserContext(context)));
   }
 }
 
+void VivaldiUtilitiesAPI::PostProfileSetup() {
+  // This call requires that ProfileKey::GetProtoDatabaseProvider() has
+  // been initialized. That does not happen until *after*
+  // the constructor of this object has been called.
+  Profile* profile = Profile::FromBrowserContext(browser_context_);
+  content::DownloadManager* manager =
+      content::BrowserContext::GetDownloadManager(
+          profile->GetOriginalProfile());
+  manager->AddObserver(this);
+}
+
 VivaldiUtilitiesAPI::~VivaldiUtilitiesAPI() {}
 
 void VivaldiUtilitiesAPI::Shutdown() {
-  Profile* profile = Profile::FromBrowserContext(browser_context_);
-  content::DownloadManager* manager =
-    content::BrowserContext::GetDownloadManager(
-      profile->GetOriginalProfile());
-  manager->RemoveObserver(this);
-
   for (auto it : key_to_values_map_) {
     // Get rid of the allocated items
     delete it.second;
@@ -239,22 +240,6 @@ gfx::Rect VivaldiUtilitiesAPI::GetDialogPosition(int window_id,
 }
 
 // static
-void VivaldiUtilitiesAPI::CloseAllThumbnailWindows(
-    content::BrowserContext* browser_context) {
-
-  // This will close all app windows currently generating thumbnails.
-  AppWindowRegistry::AppWindowList windows =
-      AppWindowRegistry::Get(browser_context)
-          ->GetAppWindowsForApp(::vivaldi::kVivaldiAppId);
-
-  for (auto* window : windows) {
-    if (window->thumbnail_window()) {
-      window->CloseWindow();
-    }
-  }
-}
-
-// static
 bool VivaldiUtilitiesAPI::AuthenticateUser(
     content::BrowserContext* browser_context,
     content::WebContents* web_contents) {
@@ -325,6 +310,11 @@ void VivaldiUtilitiesAPI::OnManagerInitialized() {
   ::vivaldi::BroadcastEvent(
       vivaldi::utilities::OnDownloadManagerReady::kEventName,
       vivaldi::utilities::OnDownloadManagerReady::Create(), browser_context_);
+}
+
+// DownloadManager::Observer implementation
+void VivaldiUtilitiesAPI::ManagerGoingDown(content::DownloadManager* manager) {
+  manager->RemoveObserver(this);
 }
 
 void VivaldiUtilitiesAPI::OnPasswordIconStatusChanged(int window_id,
@@ -402,10 +392,9 @@ ExtensionFunction::ResponseAction UtilitiesGetUniqueUserIdFunction::Run() {
     // Run this as task as this may do blocking IO like reading a file or a
     // platform registry.
     base::PostTaskWithTraits(
-        FROM_HERE, { base::MayBlock() },
-        base::BindOnce(
-            &UtilitiesGetUniqueUserIdFunction::GetUniqueUserIdTask,
-            this, params->legacy_user_id));
+        FROM_HERE, {base::ThreadPool(), base::MayBlock()},
+        base::BindOnce(&UtilitiesGetUniqueUserIdFunction::GetUniqueUserIdTask,
+                       this, params->legacy_user_id));
     return RespondLater();
   } else {
     RespondOnUIThread(user_id, false);
@@ -712,6 +701,30 @@ ExtensionFunction::ResponseAction UtilitiesSelectLocalImageFunction::Run() {
   std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
+  int64_t bookmark_id = 0;
+  int preference_index = -1;
+  if (!!params->params.thumbnail_bookmark_id ==
+      !!params->params.preference_path) {
+    return RespondNow(Error(
+        "Exactly one of preferencePath and thumbnailBookmarkId must be given"));
+  }
+  if (params->params.thumbnail_bookmark_id) {
+    if (!base::StringToInt64(*params->params.thumbnail_bookmark_id,
+                             &bookmark_id) ||
+        bookmark_id <= 0) {
+      return RespondNow(
+          Error("thumbnailBookmarkId is not a valid positive integer - " +
+                *params->params.thumbnail_bookmark_id));
+    }
+  } else {
+    preference_index = VivaldiDataSourcesAPI::FindMappingPreference(
+        *params->params.preference_path);
+    if (preference_index < 0) {
+      return RespondNow(
+          Error("preference " + *params->params.preference_path +
+                " is not a preference that stores data mapping URL"));
+    }
+  }
   FileSelectionOptions options;
   options.SetTitle(params->params.title);
   options.type = ui::SelectFileDialog::SELECT_OPEN_FILE;
@@ -720,34 +733,34 @@ ExtensionFunction::ResponseAction UtilitiesSelectLocalImageFunction::Run() {
   content::WebContents* web_contents = dispatcher()->GetAssociatedWebContents();
   FileSelectionRunner::Start(
       web_contents, options,
-      base::BindOnce(&UtilitiesSelectLocalImageFunction::OnFileSelected, this));
+      base::BindOnce(&UtilitiesSelectLocalImageFunction::OnFileSelected, this,
+                     bookmark_id, preference_index));
 
   return RespondLater();
 }
 
 void UtilitiesSelectLocalImageFunction::OnFileSelected(
+    int64_t bookmark_id,
+    int preference_index,
     base::FilePath path) {
   namespace Results = vivaldi::utilities::SelectLocalImage::Results;
 
   std::string result;
   if (path.empty()) {
-    Respond(ArgumentList(Results::Create(std::string())));
+    SendResult(false);
     return;
   }
 
-  VivaldiDataSourcesAPI::AddMapping(
-      browser_context(), std::move(path),
-      base::BindOnce(&UtilitiesSelectLocalImageFunction::OnAddMappingFinished,
-                     this));
+  VivaldiDataSourcesAPI::UpdateMapping(
+      browser_context(), bookmark_id, preference_index, std::move(path),
+      base::BindOnce(
+          &UtilitiesSelectLocalImageFunction::SendResult, this));
 }
 
-void UtilitiesSelectLocalImageFunction::OnAddMappingFinished(
-    Profile* profile,
-    bool success,
-    std::string data_mapping_url) {
+void UtilitiesSelectLocalImageFunction::SendResult(bool success) {
   namespace Results = vivaldi::utilities::SelectLocalImage::Results;
 
-  Respond(ArgumentList(Results::Create(data_mapping_url)));
+  Respond(ArgumentList(Results::Create(success)));
 }
 
 ExtensionFunction::ResponseAction UtilitiesGetVersionFunction::Run() {
@@ -755,6 +768,21 @@ ExtensionFunction::ResponseAction UtilitiesGetVersionFunction::Run() {
 
   return RespondNow(ArgumentList(Results::Create(
       ::vivaldi::GetVivaldiVersionString(), version_info::GetVersionNumber())));
+}
+
+ExtensionFunction::ResponseAction UtilitiesGetFFMPEGStateFunction::Run() {
+  namespace Results = vivaldi::utilities::GetFFMPEGState::Results;
+#if defined(OS_LINUX)
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
+  if (!command_line.HasSwitch(switches::kAutoTestMode)) {
+    std::unique_ptr<base::Environment> env(base::Environment::Create());
+    std::string value;
+    bool is_set = env->GetVar("VIVALDI_FFMPEG_FOUND", &value) && value == "NO";
+    return RespondNow(ArgumentList(Results::Create(is_set)));
+  }
+#endif
+  return RespondNow(ArgumentList(Results::Create(false)));
 }
 
 ExtensionFunction::ResponseAction UtilitiesSetSharedDataFunction::Run() {
@@ -894,6 +922,15 @@ UtilitiesIsVivaldiDefaultBrowserFunction::
 
 ExtensionFunction::ResponseAction
 UtilitiesIsVivaldiDefaultBrowserFunction::Run() {
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
+  namespace Results = vivaldi::utilities::IsVivaldiDefaultBrowser::Results;
+  if (command_line.HasSwitch(switches::kNoDefaultBrowserCheck)) {
+    // Pretend we are default already which will surpress the dialog
+    // on startup.
+    return RespondNow(ArgumentList(Results::Create(true)));
+  }
+
   auto default_browser_worker =
       base::MakeRefCounted<shell_integration::DefaultBrowserWorker>(
           base::BindRepeating(&UtilitiesIsVivaldiDefaultBrowserFunction::
@@ -1229,6 +1266,51 @@ UtilitiesIsDownloadManagerReadyFunction::Run() {
 
   bool initialized = manager->IsManagerInitialized();
   return RespondNow(ArgumentList(Results::Create(initialized)));
+}
+
+ExtensionFunction::ResponseAction UtilitiesSetContentSettingsFunction::Run() {
+  using vivaldi::utilities::SetContentSettings::Params;
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+  std::string primary_pattern_string = params->details.primary_pattern;
+  std::string secondary_pattern_string;
+  if (params->details.secondary_pattern) {
+    secondary_pattern_string = *params->details.secondary_pattern;
+  }
+  std::string type = params->details.type;
+  std::string value = params->details.value;
+  bool incognito = false;
+  if (params->details.incognito) {
+    incognito = *params->details.incognito;
+  }
+
+  ContentSettingsType content_type =
+      site_settings::ContentSettingsTypeFromGroupName(type);
+  ContentSetting setting;
+  CHECK(content_settings::ContentSettingFromString(value, &setting));
+
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  if (incognito) {
+    if (!profile->HasOffTheRecordProfile()) {
+      return RespondNow(NoArguments());
+    }
+    profile = profile->GetOffTheRecordProfile();
+  }
+
+  HostContentSettingsMap* map =
+      HostContentSettingsMapFactory::GetForProfile(profile);
+
+  ContentSettingsPattern primary_pattern =
+      ContentSettingsPattern::FromString(primary_pattern_string);
+  ContentSettingsPattern secondary_pattern =
+      secondary_pattern_string.empty()
+          ? ContentSettingsPattern::Wildcard()
+          : ContentSettingsPattern::FromString(secondary_pattern_string);
+
+  map->SetContentSettingCustomScope(primary_pattern, secondary_pattern,
+                                    content_type, "", setting);
+
+  return RespondNow(NoArguments());
 }
 
 }  // namespace extensions

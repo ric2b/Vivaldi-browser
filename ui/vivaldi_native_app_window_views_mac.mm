@@ -173,7 +173,6 @@ gfx::Rect VivaldiNativeAppWindowViewsMac::GetRestoredBounds() const {
 }
 
 void VivaldiNativeAppWindowViewsMac::Show() {
-  UnhideWithoutActivation();
   [GetNativeWindow().GetNativeNSWindow()
       makeFirstResponder:web_view()
                              ->web_contents()
@@ -181,18 +180,6 @@ void VivaldiNativeAppWindowViewsMac::Show() {
                              ->GetNativeView()
                              .GetNativeNSView()];
   VivaldiNativeAppWindowViews::Show();
-}
-
-void VivaldiNativeAppWindowViewsMac::ShowInactive() {
-  if (is_hidden_with_app_)
-    return;
-
-  VivaldiNativeAppWindowViews::ShowInactive();
-}
-
-void VivaldiNativeAppWindowViewsMac::Activate() {
-  UnhideWithoutActivation();
-  VivaldiNativeAppWindowViews::Activate();
 }
 
 void VivaldiNativeAppWindowViewsMac::Maximize() {
@@ -242,25 +229,6 @@ void VivaldiNativeAppWindowViewsMac::DeleteDelegate() {
   VivaldiNativeAppWindowViews::DeleteDelegate();
   // Call base class function with the sole purpose to reset the widget pointer.
   VivaldiNativeAppWindowViews::OnWidgetDestroyed(GetWidget());
-}
-
-void VivaldiNativeAppWindowViewsMac::ShowWithApp() {
-  is_hidden_with_app_ = false;
-  if (!window()->is_hidden())
-    ShowInactive();
-}
-
-void VivaldiNativeAppWindowViewsMac::HideWithApp() {
-  is_hidden_with_app_ = true;
-  VivaldiNativeAppWindowViews::Hide();
-}
-
-void VivaldiNativeAppWindowViewsMac::UnhideWithoutActivation() {
-  if (is_hidden_with_app_) {
-    /*apps::ExtensionAppShimHandler::Get()->UnhideWithoutActivationForWindow(
-        app_window());*/
-    is_hidden_with_app_ = false;
-  }
 }
 
 void VivaldiNativeAppWindowViewsMac::DispatchFullscreenMenubarChangedEvent(

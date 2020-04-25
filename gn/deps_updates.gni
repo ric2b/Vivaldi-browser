@@ -152,3 +152,9 @@ if (is_mac) {
     ]
   }
 }
+
+if (is_win || is_mac) {
+  update_target("//chrome/test:unit_tests") {
+    deps -= ["//chrome/updater:updater_tests"]
+  }
+}

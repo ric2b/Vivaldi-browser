@@ -21,7 +21,6 @@
 #include "content/public/browser/invalidate_type.h"
 #include "content/public/browser/media_stream_request.h"
 #include "content/public/browser/serial_chooser.h"
-#include "content/public/browser/sms_dialog.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/previews_state.h"
 #include "content/public/common/window_container_type.mojom-forward.h"
@@ -430,8 +429,12 @@ class CONTENT_EXPORT WebContentsDelegate {
       RenderFrameHost* frame,
       const BluetoothChooser::EventHandler& event_handler);
 
-  // Creates a dialog for the user to control the receiving of the SMS.
-  virtual std::unique_ptr<SmsDialog> CreateSmsDialog();
+  // Creates an info bar for the user to control the receiving of the SMS.
+  virtual void CreateSmsPrompt(RenderFrameHost*,
+                               const url::Origin&,
+                               const std::string& one_time_code,
+                               base::OnceCallback<void()> on_confirm,
+                               base::OnceCallback<void()> on_cancel);
 
   // Shows a prompt for the user to allow/block Bluetooth scanning. The
   // observer must live at least as long as the returned prompt object.
@@ -703,13 +706,6 @@ class CONTENT_EXPORT WebContentsDelegate {
   // eviction and displayed until a new frame is generated. If false, a white
   // solid color is displayed instead.
   virtual bool ShouldShowStaleContentOnEviction(WebContents* source);
-
-  // NOTE(andre@vivaldi.com) : This was added to allow WebViewGuests override
-  // the ownership of WebContents in subframes. The TabStripModel owns
-  // WebContents in Vivaldi, but when OOPIF was introduced the
-  // WebContentsImpl::WebContentsTreeNode would take over ownership and delete
-  // the WebContents if a WebView-element was removed.
-  virtual bool HasOwnerShipOfContents();
 
   void SetDownloadInformation(const content::DownloadInformation& info);
   content::DownloadInformation* GetDownloadInformation() {

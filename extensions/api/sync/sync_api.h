@@ -78,7 +78,7 @@ class SyncAPI : public BrowserContextKeyedAPI, public EventRouter::Observer {
   std::unique_ptr<syncer::SyncSetupInProgressHandle> sync_setup_handle_;
 };
 
-class SyncStartFunction : public UIThreadExtensionFunction {
+class SyncStartFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("sync.start", SYNC_START)
   SyncStartFunction() = default;
@@ -91,7 +91,7 @@ class SyncStartFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(SyncStartFunction);
 };
 
-class SyncStopFunction : public UIThreadExtensionFunction {
+class SyncStopFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("sync.stop", SYNC_STOP)
   SyncStopFunction() = default;
@@ -104,7 +104,7 @@ class SyncStopFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(SyncStopFunction);
 };
 
-class SyncSetEncryptionPasswordFunction : public UIThreadExtensionFunction {
+class SyncSetEncryptionPasswordFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("sync.setEncryptionPassword",
                              SYNC_SET_ENCRYPTION_PASSWORD)
@@ -118,7 +118,7 @@ class SyncSetEncryptionPasswordFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(SyncSetEncryptionPasswordFunction);
 };
 
-class SyncGetDefaultSessionNameFunction : public UIThreadExtensionFunction {
+class SyncGetDefaultSessionNameFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("sync.getDefaultSessionName",
                              SYNC_GET_DEFAULT_SESSION_NAME)
@@ -134,7 +134,7 @@ class SyncGetDefaultSessionNameFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(SyncGetDefaultSessionNameFunction);
 };
 
-class SyncSetTypesFunction : public UIThreadExtensionFunction {
+class SyncSetTypesFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("sync.setTypes", SYNC_SET_TYPES)
   SyncSetTypesFunction() = default;
@@ -147,7 +147,7 @@ class SyncSetTypesFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(SyncSetTypesFunction);
 };
 
-class SyncGetEngineStateFunction : public UIThreadExtensionFunction {
+class SyncGetEngineStateFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("sync.getEngineState", SYNC_GET_ENGINE_STATE)
   SyncGetEngineStateFunction() = default;
@@ -160,7 +160,7 @@ class SyncGetEngineStateFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(SyncGetEngineStateFunction);
 };
 
-class SyncGetLastCycleStateFunction : public UIThreadExtensionFunction {
+class SyncGetLastCycleStateFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("sync.getLastCycleState",
                              SYNC_GET_LAST_CYCLE_STATE)
@@ -174,7 +174,7 @@ class SyncGetLastCycleStateFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(SyncGetLastCycleStateFunction);
 };
 
-class SyncSetupCompleteFunction : public UIThreadExtensionFunction {
+class SyncSetupCompleteFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("sync.setupComplete", SYNC_SETUP_COMPLETE)
   SyncSetupCompleteFunction() = default;
@@ -187,7 +187,7 @@ class SyncSetupCompleteFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(SyncSetupCompleteFunction);
 };
 
-class SyncClearDataFunction : public UIThreadExtensionFunction {
+class SyncClearDataFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("sync.clearData", SYNC_CLEAR_DATA)
   SyncClearDataFunction() = default;
@@ -200,8 +200,7 @@ class SyncClearDataFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(SyncClearDataFunction);
 };
 
-class SyncUpdateNotificationClientStatusFunction
-    : public UIThreadExtensionFunction {
+class SyncUpdateNotificationClientStatusFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("sync.updateNotificationClientStatus",
                              SYNC_UPDATE_NOTIFICATION_CLIENT_STATUS)
@@ -215,7 +214,7 @@ class SyncUpdateNotificationClientStatusFunction
   DISALLOW_COPY_AND_ASSIGN(SyncUpdateNotificationClientStatusFunction);
 };
 
-class SyncNotificationReceivedFunction : public UIThreadExtensionFunction {
+class SyncNotificationReceivedFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("sync.notificationReceived",
                              SYNC_NOTIFICATION_RECEIVED)

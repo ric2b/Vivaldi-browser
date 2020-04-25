@@ -10,24 +10,50 @@
 #include "base/memory/shared_memory_handle.h"
 #include "browser/thumbnails/capture_page.h"
 #include "components/datasource/vivaldi_data_source_api.h"
+#include "content/public/common/drop_data.h"
 #include "extensions/browser/extension_function.h"
 #include "extensions/common/api/extension_types.h"
 #include "extensions/schema/thumbnails.h"
 
 namespace content {
+class RenderWidgetHostView;
 class WebContents;
-}
-
-namespace gfx {
-class Rect;
-class Size;
 }
 
 using extensions::api::extension_types::ImageFormat;
 
 namespace extensions {
 
-class ThumbnailsCaptureUIFunction : public UIThreadExtensionFunction {
+// Start capturing the given area of the window corresponding to the given
+// WebContents and send the result to the callback. The callback can be called
+// either synchronously or asynchronously on the original thread. The area is
+// specified in the UI coordinates. The size of the captured bitmap matches the
+// number of physical pixels that covers the area. device_scale_factor gives
+// the scaling from device-independent pixels to physical ones.
+using UICaptureCallback = base::OnceCallback<
+    void(bool success, float device_scale_factor, const SkBitmap& bitmap)>;
+void StartUICapture(content::WebContents* web_contents,
+                    float x,
+                    float y,
+                    float width,
+                    float height,
+                    UICaptureCallback callback);
+
+struct CaptureFormat {
+  CaptureFormat();
+  ~CaptureFormat();
+  ImageFormat image_format = ImageFormat::IMAGE_FORMAT_PNG;
+  int encode_quality = 90;
+  bool show_file_in_path = false;
+  bool copy_to_clipboard = false;
+  bool save_to_disk = false;
+  std::string save_folder;
+  std::string save_file_pattern;
+  GURL url;
+  std::string title;
+};
+
+class ThumbnailsCaptureUIFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("thumbnails.captureUI", THUMBNAILS_CAPTUREUI)
 
@@ -35,31 +61,23 @@ class ThumbnailsCaptureUIFunction : public UIThreadExtensionFunction {
 
  private:
   ~ThumbnailsCaptureUIFunction() override;
-  void CaptureAsync(content::RenderWidgetHostView* view,
-                    const gfx::Rect& capture_area);
-  void OnCaptureSuccess(const SkBitmap& bitmap);
-  void CopyFromBackingStoreComplete(const SkBitmap& bitmap);
-  std::string CaptureError(base::StringPiece details = base::StringPiece());
+  void OnCaptureDone(bool success,
+                     float device_scale_factor,
+                     const SkBitmap& bitmap);
+  void ProcessImageOnWorkerThread(SkBitmap bitmap);
+  void SendResult(bool success);
 
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  ImageFormat image_format_ = ImageFormat::IMAGE_FORMAT_PNG;
-  int encode_quality_ = 90;
-  bool show_file_in_path_ = false;
-  bool encode_to_data_url_ = false;
-  bool copy_to_clipboard_ = false;
+  CaptureFormat format_;
+  std::string image_data_;
   base::FilePath file_path_;
-  bool save_to_disk_ = false;
-  std::string save_folder_;
-  std::string save_file_pattern_;
-  GURL url_;
-  std::string title_;
 
   DISALLOW_COPY_AND_ASSIGN(ThumbnailsCaptureUIFunction);
 };
 
-class ThumbnailsCaptureTabFunction : public UIThreadExtensionFunction {
+class ThumbnailsCaptureTabFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("thumbnails.captureTab", THUMBNAILS_CAPTURETAB)
 
@@ -72,28 +90,20 @@ class ThumbnailsCaptureTabFunction : public UIThreadExtensionFunction {
 
   void ConvertImageOnWorkerThread(::vivaldi::CapturePage::Result captured);
 
-  void OnImageConverted(const SkBitmap& bitmap,
-                        const std::string& image_data,
-                        bool success);
+  void OnImageConverted(bool success);
 
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  ImageFormat image_format_ = ImageFormat::IMAGE_FORMAT_PNG;
-  int encode_quality_ = 90;
-  bool show_file_in_path_ = false;
-  bool copy_to_clipboard_ = false;
-  bool save_to_disk_ = false;
+  CaptureFormat format_;
+  SkBitmap bitmap_;
+  std::string image_data_;
   base::FilePath file_path_;
-  std::string save_folder_;
-  std::string save_file_pattern_;
-  GURL url_;
-  std::string title_;
 
   DISALLOW_COPY_AND_ASSIGN(ThumbnailsCaptureTabFunction);
 };
 
-class ThumbnailsCaptureUrlFunction : public UIThreadExtensionFunction {
+class ThumbnailsCaptureUrlFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("thumbnails.captureUrl", THUMBNAILS_CAPTUREURL)
   ThumbnailsCaptureUrlFunction();

@@ -64,7 +64,6 @@
 
   // WebContentsDelegate
   void ShowRepostFormWarningDialog(content::WebContents* source) override;
-  bool HasOwnerShipOfContents() override;
   content::PictureInPictureResult EnterPictureInPicture(
       content::WebContents* web_contents,
       const viz::SurfaceId&,
@@ -145,8 +144,6 @@
 #endif  // USE_AURA
 
  private:
-  content::RenderWidgetHost::MouseEventCallback mouseevent_callback_;
-
   int inspecting_tab_id_ = 0;
 
 // };

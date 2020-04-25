@@ -37,6 +37,7 @@
 #include "calendar/calendar_database.h"
 #include "calendar/calendar_database_params.h"
 #include "calendar/event_type.h"
+#include "calendar/recurrence_exception_type.h"
 #include "sql/error_delegate_util.h"
 
 using base::Time;
@@ -160,9 +161,11 @@ void CalendarBackend::InitImpl(
 void CalendarBackend::GetAllEvents(std::shared_ptr<EventQueryResults> results) {
   EventRows rows;
   RecurrenceRows recurrenceRows;
+  RecurrenceExceptionRows recurrence_exception_rows;
 
   db_->GetAllCalendarEvents(&rows);
   db_->GetAllRecurrences(&recurrenceRows);
+  db_->GetAllRecurrenceExceptions(&recurrence_exception_rows);
 
   // Now add them and the URL rows to the results.
   for (size_t i = 0; i < rows.size(); i++) {
@@ -187,6 +190,24 @@ void CalendarBackend::GetAllEvents(std::shared_ptr<EventQueryResults> results) {
       }
     }
 
+    std::set<RecurrenceExceptionID> events_with_exceptions;
+    for (auto& exception_row : recurrence_exception_rows) {
+      events_with_exceptions.insert(exception_row.parent_event_id);
+    }
+
+    const bool has_exception = events_with_exceptions.find(eventRow.id()) !=
+                               events_with_exceptions.end();
+
+    if (has_exception) {
+      RecurrenceExceptionRows exception_rows;
+      for (auto& exception : recurrence_exception_rows) {
+        if (exception.parent_event_id == eventRow.id()) {
+          exception_rows.push_back(exception);
+        }
+      }
+      eventRow.set_recurrence_exceptions(exception_rows);
+    }
+
     EventResult result(eventRow);
     results->AppendEventBySwapping(&result);
   }
@@ -208,19 +229,19 @@ void CalendarBackend::CreateCalendarEvents(
     if (id) {
       ev.set_id(id);
 
-      RecurrenceRow recurrence_row;
-      recurrence_row.set_event_id(id);
-
-      recurrence_row.set_recurrence_frequency(ev.recurrence().frequency);
-      recurrence_row.set_number_of_ocurrences(
-          ev.recurrence().number_of_occurrences);
-      recurrence_row.set_interval(ev.recurrence().interval);
-      recurrence_row.set_day_of_week(ev.recurrence().day_of_week);
-      recurrence_row.set_week_of_month(ev.recurrence().week_of_month);
-      recurrence_row.set_day_of_month(ev.recurrence().day_of_month);
-      recurrence_row.set_month_of_year(ev.recurrence().month_of_year);
-
-      db_->CreateRecurrenceEvent(recurrence_row);
+      if (ev.recurrence().frequency != RecurrenceFrequency::NONE) {
+        RecurrenceRow recurrence_row;
+        recurrence_row.set_event_id(id);
+        recurrence_row.set_recurrence_frequency(ev.recurrence().frequency);
+        recurrence_row.set_number_of_ocurrences(
+            ev.recurrence().number_of_occurrences);
+        recurrence_row.set_interval(ev.recurrence().interval);
+        recurrence_row.set_day_of_week(ev.recurrence().day_of_week);
+        recurrence_row.set_week_of_month(ev.recurrence().week_of_month);
+        recurrence_row.set_day_of_month(ev.recurrence().day_of_month);
+        recurrence_row.set_month_of_year(ev.recurrence().month_of_year);
+        db_->CreateRecurrenceEvent(recurrence_row);
+      }
 
       success_counter++;
     } else {
@@ -248,23 +269,54 @@ void CalendarBackend::CreateCalendarEvent(
   if (id) {
     ev.set_id(id);
 
-    RecurrenceRow recurrence_row;
-    recurrence_row.set_event_id(id);
+    if (ev.recurrence().frequency != RecurrenceFrequency::NONE) {
+      RecurrenceRow recurrence_row;
+      recurrence_row.set_event_id(id);
 
-    recurrence_row.set_recurrence_frequency(ev.recurrence().frequency);
-    recurrence_row.set_number_of_ocurrences(
-        ev.recurrence().number_of_occurrences);
-    recurrence_row.set_interval(ev.recurrence().interval);
-    recurrence_row.set_day_of_week(ev.recurrence().day_of_week);
-    recurrence_row.set_week_of_month(ev.recurrence().week_of_month);
-    recurrence_row.set_day_of_month(ev.recurrence().day_of_month);
-    recurrence_row.set_month_of_year(ev.recurrence().month_of_year);
+      recurrence_row.set_recurrence_frequency(ev.recurrence().frequency);
+      recurrence_row.set_number_of_ocurrences(
+          ev.recurrence().number_of_occurrences);
+      recurrence_row.set_interval(ev.recurrence().interval);
+      recurrence_row.set_day_of_week(ev.recurrence().day_of_week);
+      recurrence_row.set_week_of_month(ev.recurrence().week_of_month);
+      recurrence_row.set_day_of_month(ev.recurrence().day_of_month);
+      recurrence_row.set_month_of_year(ev.recurrence().month_of_year);
 
-    db_->CreateRecurrenceEvent(recurrence_row);
+      db_->CreateRecurrenceEvent(recurrence_row);
+    }
 
     result->success = true;
     result->createdRow = ev;
     NotifyEventCreated(ev);
+  } else {
+    result->success = false;
+  }
+}
+
+void CalendarBackend::CreateRecurrenceException(
+    RecurrenceExceptionRow row,
+    std::shared_ptr<CreateRecurrenceExceptionResult> result) {
+  if (!db_->DoesEventIdExist(row.parent_event_id)) {
+    result->success = false;
+    result->message = "Event does not exist.";
+    return;
+  }
+
+  RecurrenceID id = db_->CreateRecurrenceException(row);
+  EventID parent_event_id = row.parent_event_id;
+
+  if (id) {
+    row.id = id;
+    RecurrenceExceptionRows exception_rows;
+    db_->GetAllRecurrenceExceptionsForEvent(parent_event_id, &exception_rows);
+
+    EventRow event_row;
+    if (db_->GetRowForEvent(parent_event_id, &event_row)) {
+      event_row.set_recurrence_exceptions(exception_rows);
+      NotifyEventModified(event_row);
+    }
+    result->success = true;
+    result->createdRow = row;
   } else {
     result->success = false;
   }
@@ -363,6 +415,14 @@ void CalendarBackend::UpdateEvent(EventID event_id,
       event_row.set_trash(event.trash);
     }
 
+    if (event.updateFields & calendar::SEQUENCE) {
+      event_row.set_sequence(event.sequence);
+    }
+
+    if (event.updateFields & calendar::ICAL) {
+      event_row.set_ical(event.ical);
+    }
+
     if (event.updateFields & calendar::RECURRENCE) {
       RecurrenceRow recurrence_row;
       db_->GetRecurrenceRow(event_id, &recurrence_row);
@@ -398,9 +458,25 @@ void CalendarBackend::UpdateEvent(EventID event_id,
         recurrence_row.set_month_of_year(event.recurrence.month_of_year);
       }
 
-      db_->UpdateRecurrenceRow(recurrence_row);
-    }
+      if (db_->DoesRecurrenceRowExistForEvent(event_id)) {
+        if (!db_->UpdateRecurrenceRow(recurrence_row)) {
+          result->success = false;
+          result->message = "Updating recurrence failed";
+          NOTREACHED() << "Updating recurrence failed";
+          return;
+        }
+      } else {
 
+        if (event.recurrence.frequency != RecurrenceFrequency::NONE) {
+          if (!db_->CreateRecurrenceEvent(recurrence_row)) {
+            result->success = false;
+            result->message = "Creating recurrence failed";
+            NOTREACHED() << "Creating recurrence failed";
+            return;
+          }
+        }
+      }
+    }
     result->success = db_->UpdateEventRow(event_row);
 
     if (result->success) {
@@ -411,6 +487,7 @@ void CalendarBackend::UpdateEvent(EventID event_id,
     }
   } else {
     result->success = false;
+    result->message = "Could not find event row in DB";
     NOTREACHED() << "Could not find event row in DB";
     return;
   }
@@ -490,6 +567,26 @@ void CalendarBackend::DeleteEvent(EventID event_id,
 
   EventRow event_row;
   if (db_->GetRowForEvent(event_id, &event_row)) {
+    if (db_->DoesRecurrenceExceptionExistForEvent(event_id)) {
+      EventIDs event_ids;
+
+      if (db_->GetAllEventExceptionIds(event_id, &event_ids)) {
+        for (auto it = event_ids.begin(); it != event_ids.end(); ++it) {
+          if (!db_->DeleteEvent(*it)) {
+            result->success = false;
+            return;
+          }
+        }
+      }
+      if (!db_->DeleteRecurrenceExceptions(event_id)) {
+        result->success = false;
+        return;
+      }
+    }
+    if (!db_->DeleteRecurrenceForEvent(event_id)) {
+      result->success = false;
+      return;
+    }
     result->success = db_->DeleteEvent(event_id);
     NotifyEventDeleted(event_row);
   } else {

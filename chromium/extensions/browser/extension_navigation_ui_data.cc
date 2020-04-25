@@ -74,7 +74,8 @@ ExtensionNavigationUIData::ExtensionNavigationUIData(
                   window_id,
                   // The RenderFrameHost may not have an associated WebContents
                   // in cases such as interstitial pages.
-                  web_contents ? web_contents->GetLastCommittedURL() : GURL()) {
+                  web_contents ? web_contents->GetLastCommittedURL() : GURL(),
+                  base::nullopt /* pending_main_frame_url */) {
   WebViewGuest* web_view = WebViewGuest::FromWebContents(web_contents);
   // NOTE(andre@vivaldi.com) : Vivaldi uses WebContents from the tabstrip in
   // WebViewGuests and chrome.webRequest will look for webview specific filters
@@ -82,7 +83,7 @@ ExtensionNavigationUIData::ExtensionNavigationUIData(
   Browser* browser =
       chrome::FindBrowserWithWebContents(web_contents);
   bool id_as_webview =
-      !(vivaldi::IsVivaldiRunning() && browser && browser->is_type_tabbed());
+      !(vivaldi::IsVivaldiRunning() && browser && browser->is_type_normal());
   if (web_view && id_as_webview) {
     is_web_view_ = true;
     web_view_instance_id_ = web_view->view_instance_id();

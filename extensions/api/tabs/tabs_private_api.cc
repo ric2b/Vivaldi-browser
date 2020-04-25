@@ -42,9 +42,9 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
-#include "content/public/common/drop_data.h"
 #include "extensions/api/access_keys/access_keys_api.h"
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
+#include "extensions/api/thumbnails/thumbnails_api.h"
 #include "extensions/browser/app_window/native_app_window.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extensions_browser_client.h"
@@ -1233,7 +1233,7 @@ VivaldiPrivateTabObserver* VivaldiPrivateTabObserver::FromTabId(
 namespace {
 
 content::RenderViewHost *GetFocusedRenderViewHost(
-    UIThreadExtensionFunction* function,
+    ExtensionFunction* function,
     int tab_id,
     std::string* error) {
   content::WebContents* tabstrip_contents =
@@ -1328,84 +1328,79 @@ ExtensionFunction::ResponseAction TabsPrivateInsertTextFunction::Run() {
   return RespondNow(NoArguments());
 }
 
+TabsPrivateStartDragFunction::TabsPrivateStartDragFunction() = default;
+TabsPrivateStartDragFunction::~TabsPrivateStartDragFunction() = default;
+
 ExtensionFunction::ResponseAction TabsPrivateStartDragFunction::Run() {
   using tabs_private::StartDrag::Params;
 
   std::unique_ptr<Params> params = Params::Create(*args_);
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
-  SkBitmap bitmap;
-  gfx::Vector2d image_offset;
-  if (params->drag_image.get()) {
-    std::string string_data;
-    if (base::Base64Decode(params->drag_image->image, &string_data)) {
-      const unsigned char* data =
-          reinterpret_cast<const unsigned char*>(string_data.c_str());
-      // Try PNG first.
-      if (!gfx::PNGCodec::Decode(data, string_data.length(), &bitmap)) {
-        // Try JPEG.
-        std::unique_ptr<SkBitmap> decoded_jpeg(
-            gfx::JPEGCodec::Decode(data, string_data.length()));
-        if (decoded_jpeg) {
-          bitmap = *decoded_jpeg;
-        } else {
-          LOG(WARNING) << "Error decoding png or jpg image data";
-        }
-      }
-    } else {
-      LOG(WARNING) << "Error decoding base64 image data";
-    }
-    image_offset.set_x(params->drag_image->cursor_x);
-    image_offset.set_y(params->drag_image->cursor_y);
-  }
-  content::RenderViewHostImpl* rvh = nullptr;
-  Browser* browser = BrowserList::GetInstance()->GetLastActive();
-  DCHECK(browser);
-  if (browser) {
-    VivaldiBrowserWindow* window =
-        static_cast<VivaldiBrowserWindow*>(browser->window());
-    DCHECK(window);
-    if (window) {
-      rvh = static_cast<content::RenderViewHostImpl*>(
-          window->web_contents()->GetRenderViewHost());
-    }
-  }
-  DCHECK(rvh);
-  if (!rvh)
-    return RespondNow(Error("RenderViewHostImpl is null"));
-
-  content::RenderViewHostDelegateView* view =
-      rvh->GetDelegate()->GetDelegateView();
-
-  content::DropData drop_data;
   const base::string16 identifier(
       base::UTF8ToUTF16(params->drag_data.mime_type));
   const base::string16 custom_data(
       base::UTF8ToUTF16(params->drag_data.custom_data));
 
-  drop_data.custom_data.insert(std::make_pair(identifier, custom_data));
+  drop_data_.custom_data.emplace(identifier, custom_data);
 
-  drop_data.url = GURL(params->drag_data.url);
-  drop_data.url_title = base::UTF8ToUTF16(params->drag_data.title);
+  drop_data_.url = GURL(params->drag_data.url);
+  drop_data_.url_title = base::UTF8ToUTF16(params->drag_data.title);
 
-  blink::WebDragOperationsMask allowed_ops =
-      static_cast<blink::WebDragOperationsMask>(
-          blink::WebDragOperation::kWebDragOperationMove);
-
-  gfx::ImageSkia image(gfx::ImageSkiaRep(bitmap, 1));
-  content::DragEventSourceInfo event_info;
-
-  event_info.event_source =
-      params->is_from_touch.get() && *params->is_from_touch.get()
+  event_info_.event_source =
+      (params->drag_data.is_from_touch && *params->drag_data.is_from_touch)
           ? ui::DragDropTypes::DRAG_EVENT_SOURCE_TOUCH
           : ui::DragDropTypes::DRAG_EVENT_SOURCE_MOUSE;
-  event_info.event_location =
+  event_info_.event_location =
       display::Screen::GetScreen()->GetCursorScreenPoint();
 
-  ::vivaldi::SetTabDragInProgress(true);
-  view->StartDragging(drop_data, allowed_ops, image, image_offset,
-                      event_info, rvh->GetWidget());
-  return RespondNow(NoArguments());
+  image_offset_.set_x(params->drag_data.cursor_x);
+  image_offset_.set_y(params->drag_data.cursor_y);
+
+  StartUICapture(
+      GetSenderWebContents(), params->drag_data.pos_x, params->drag_data.pos_y,
+      params->drag_data.width, params->drag_data.height,
+      base::BindOnce(&TabsPrivateStartDragFunction::OnCaptureDone, this));
+  return did_respond() ? AlreadyResponded() : RespondLater();
+}
+
+void TabsPrivateStartDragFunction::OnCaptureDone(bool success,
+                                                 float device_scale_factor,
+                                                 const SkBitmap& bitmap) {
+  do {
+    if (!success)
+      break;
+
+    content::WebContents* web_contents = GetSenderWebContents();
+    if (!web_contents) {
+      // The capture finished after the user closed the browser window.
+      LOG(ERROR) << "WebContents is null";
+      break;
+    }
+
+    content::RenderViewHostImpl* rvh =
+        static_cast<content::RenderViewHostImpl*>(
+            web_contents->GetRenderViewHost());
+    if (!rvh) {
+      LOG(ERROR) << "RenderViewHostImpl is null";
+      break;
+    }
+
+    content::RenderViewHostDelegateView* view =
+        rvh->GetDelegate()->GetDelegateView();
+    blink::WebDragOperationsMask allowed_ops =
+        static_cast<blink::WebDragOperationsMask>(
+            blink::WebDragOperation::kWebDragOperationMove);
+    gfx::ImageSkia image(gfx::ImageSkiaRep(bitmap, device_scale_factor));
+
+    // On Linux and Windows StartDragging is synchronous, so enable tab dragging
+    // mode before calling it.
+    ::vivaldi::SetTabDragInProgress(true);
+    view->StartDragging(drop_data_, allowed_ops, image, image_offset_,
+                        event_info_, rvh->GetWidget());
+  } while (false);
+
+  Respond(NoArguments());
 }
 
 ExtensionFunction::ResponseAction TabsPrivateScrollPageFunction::Run() {

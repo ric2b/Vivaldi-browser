@@ -21,14 +21,14 @@
 
 using notes_helper::AddFolder;
 using notes_helper::AddNote;
-using notes_helper::CountNotesWithTitlesMatching;
+using notes_helper::CountNotesWithContentMatching;
 using notes_helper::GetNotesModel;
 using notes_helper::GetNotesTopNode;
 using notes_helper::ModelMatchesVerifier;
 using notes_helper::Move;
 using notes_helper::Remove;
 using notes_helper::RemoveAll;
-using notes_helper::SetTitle;
+using notes_helper::SetContent;
 
 class SingleClientNotesSyncTest : public NotesSyncTest {
  public:
@@ -120,8 +120,9 @@ IN_PROC_BROWSER_TEST_F(SingleClientNotesSyncTest, Sanity) {
 
   ASSERT_EQ(1, tier1_a_url0->parent()->GetIndexOf(tier1_a_url0));
   Move(0, tier1_a_url0, top, top->children().size());
-  const Notes_Node* boa = AddNote(0, top, top->children().size(), "Bank of America",
-                                  GURL("https://www.bankofamerica.com"));
+  const Notes_Node* boa =
+      AddNote(0, top, top->children().size(), "Bank of America",
+              GURL("https://www.bankofamerica.com"));
   ASSERT_TRUE(boa != NULL);
   const Notes_Node* bubble =
       AddNote(0, top, top->children().size(), "Seattle Bubble",
@@ -133,14 +134,15 @@ IN_PROC_BROWSER_TEST_F(SingleClientNotesSyncTest, Sanity) {
   const Notes_Node* tier2_b = AddFolder(0, tier1_b, 0, "tier2_b");
   Move(0, tier1_b_url0, tier2_b, 0);
   Move(0, porsche, top, 0);
-  SetTitle(0, wired, "News Wired");
-  SetTitle(0, porsche, "ICanHazPorsche?");
+  SetContent(0, wired, "News Wired");
+  SetContent(0, porsche, "ICanHazPorsche?");
 
   // Wait for the title change to sync.
   ASSERT_TRUE(UpdatedProgressMarkerChecker(GetSyncService(0)).Wait());
   ASSERT_TRUE(ModelMatchesVerifier(0));
 
-  ASSERT_EQ(tier1_a_url0->id(), top->children()[top->children().size() - 1]->id());
+  ASSERT_EQ(tier1_a_url0->id(),
+            top->children()[top->children().size() - 1]->id());
   Remove(0, top, top->children().size() - 1);
   Move(0, wired, tier1_b, 0);
   Move(0, porsche, top, 3);
@@ -180,19 +182,20 @@ IN_PROC_BROWSER_TEST_F(SingleClientNotesSyncTest, Sanity) {
 }
 
 IN_PROC_BROWSER_TEST_F(SingleClientNotesSyncTest, InjectedNote) {
-  std::string title = "Montreal Canadiens";
+  std::string content = "Montreal Canadiens";
   fake_server::EntityBuilderFactory entity_builder_factory;
+  // Entities can't have an empty title. A single space character represents
+  // an empty title instead.
   fake_server::NotesEntityBuilder notes_builder =
-      entity_builder_factory
-          .NewNotesEntityBuilder(title, GURL("http://canadiens.nhl.com"),
-                                 std::string());
+      entity_builder_factory.NewNotesEntityBuilder(
+          " ", GURL("http://canadiens.nhl.com"), content);
   fake_server_->InjectEntity(notes_builder.Build());
 
   DisableVerifier();
   ASSERT_TRUE(SetupClients());
   ASSERT_TRUE(SetupSync());
 
-  ASSERT_EQ(1, CountNotesWithTitlesMatching(0, title));
+  ASSERT_EQ(1, CountNotesWithContentMatching(0, content));
 }
 
 IN_PROC_BROWSER_TEST_F(SingleClientNotesSyncTest, NotesAllNodesRemovedEvent) {

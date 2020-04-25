@@ -3,18 +3,6 @@ import("product.gni")
 import("//build/toolchain/cc_wrapper.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 
-config("enable_disabled_tests") {
-  # Turns off the disabling of unittests performed by
-  # testing/disable_unittests.cpp
-  defines = [ "DONT_DISABLE_UNITTESTS" ]
-}
-
-config("enable_permanently_disabled_tests") {
-  # Turns off the permanent disabling of unittests performed by
-  # testing/disable_unittests.cpp
-  defines = [ "DONT_PERMANENTLY_DISABLE_UNITTESTS" ]
-}
-
 config("features") {
   defines = [
     "VIVALDI_BUILD",

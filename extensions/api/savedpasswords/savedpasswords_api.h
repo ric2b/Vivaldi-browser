@@ -19,7 +19,7 @@
 namespace extensions {
 
 class SavedpasswordsGetListFunction
-    : public UIThreadExtensionFunction,
+    : public ExtensionFunction,
       public password_manager::PasswordStoreConsumer {
  public:
   DECLARE_EXTENSION_FUNCTION("savedpasswords.getList", SAVEDPASSWORDS_GETLIST)
@@ -39,7 +39,7 @@ class SavedpasswordsGetListFunction
 };
 
 class SavedpasswordsRemoveFunction
-    : public UIThreadExtensionFunction,
+    : public ExtensionFunction,
       public password_manager::PasswordStoreConsumer {
  public:
   DECLARE_EXTENSION_FUNCTION("savedpasswords.remove", SAVEDPASSWORDS_REMOVE)
@@ -61,7 +61,7 @@ class SavedpasswordsRemoveFunction
   DISALLOW_COPY_AND_ASSIGN(SavedpasswordsRemoveFunction);
 };
 
-class SavedpasswordsAddFunction : public UIThreadExtensionFunction {
+class SavedpasswordsAddFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("savedpasswords.add", SAVEDPASSWORDS_ADD)
   SavedpasswordsAddFunction() = default;
@@ -75,7 +75,7 @@ class SavedpasswordsAddFunction : public UIThreadExtensionFunction {
 };
 
 class SavedpasswordsGetFunction
-    : public UIThreadExtensionFunction,
+    : public ExtensionFunction,
       public password_manager::PasswordStoreConsumer {
  public:
   DECLARE_EXTENSION_FUNCTION("savedpasswords.get", SAVEDPASSWORDS_GET)
@@ -94,7 +94,7 @@ class SavedpasswordsGetFunction
   DISALLOW_COPY_AND_ASSIGN(SavedpasswordsGetFunction);
 };
 
-class SavedpasswordsDeleteFunction : public UIThreadExtensionFunction {
+class SavedpasswordsDeleteFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("savedpasswords.delete", SAVEDPASSWORDS_DELETE)
   SavedpasswordsDeleteFunction() = default;
@@ -107,7 +107,7 @@ class SavedpasswordsDeleteFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(SavedpasswordsDeleteFunction);
 };
 
-class SavedpasswordsAuthenticateFunction : public UIThreadExtensionFunction {
+class SavedpasswordsAuthenticateFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("savedpasswords.authenticate",
                              SAVEDPASSWORDS_AUTHENTICATE)

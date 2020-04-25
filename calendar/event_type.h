@@ -23,6 +23,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "calendar/calendar_typedefs.h"
+#include "calendar/recurrence_exception_type.h"
 #include "calendar/recurrence_type.h"
 #include "calendar_type.h"
 #include "url/gurl.h"
@@ -51,7 +52,9 @@ enum UpdateEventFields {
   EVENT_TYPE_ID = 1 << 16,
   TASK = 1 << 17,
   COMPLETE = 1 << 18,
-  TRASH = 1 << 18,
+  TRASH = 1 << 19,
+  SEQUENCE = 1 << 20,
+  ICAL = 1 << 21,
 };
 
 // Represents a simplified version of a event.
@@ -80,6 +83,8 @@ struct CalendarEvent {
   bool complete;
   bool trash;
   base::Time trash_time;
+  int sequence;
+  base::string16 ical;
   int updateFields;
 };
 
@@ -109,7 +114,10 @@ class EventRow {
            EventTypeID event_type_id,
            bool task,
            bool complete,
-           bool trash);
+           bool trash,
+           base::Time trash_time,
+           int sequence,
+           base::string16 ical);
   ~EventRow();
 
   EventRow(const EventRow& row);
@@ -175,6 +183,14 @@ class EventRow {
   EventRecurrence recurrence() const { return recurrence_; }
   void set_recurrence(EventRecurrence recurrence) { recurrence_ = recurrence; }
 
+  RecurrenceExceptionRows recurrence_exceptions() const {
+    return recurrence_exceptions_;
+  }
+  void set_recurrence_exceptions(
+      RecurrenceExceptionRows recurrence_exceptions) {
+    recurrence_exceptions_ = recurrence_exceptions;
+  }
+
   EventTypeID event_type_id() const { return event_type_id_; }
   void set_event_type_id(EventTypeID event_type_id) {
     event_type_id_ = event_type_id;
@@ -192,6 +208,12 @@ class EventRow {
   base::Time trash_time() const { return trash_time_; }
   void set_trash_time(base::Time trash_time) { trash_time_ = trash_time; }
 
+  int sequence() const { return sequence_; }
+  void set_sequence(int sequence) { sequence_ = sequence; }
+
+  base::string16 ical() const { return ical_; }
+  void set_ical(base::string16 ical) { ical_ = ical; }
+
   EventID id_;
   CalendarID calendar_id_;
   AlarmID alarm_id_ = 0;
@@ -206,6 +228,7 @@ class EventRow {
   base::string16 location_;
   base::string16 url_;
   EventRecurrence recurrence_;
+  RecurrenceExceptionRows recurrence_exceptions_;
   std::string etag_;
   std::string href_;
   std::string uid_;
@@ -214,12 +237,15 @@ class EventRow {
   bool complete_;
   bool trash_ = false;
   base::Time trash_time_;
+  int sequence_;
+  base::string16 ical_;
 
  protected:
   void Swap(EventRow* other);
 };
 
 typedef std::vector<EventRow> EventRows;
+typedef std::vector<EventID> EventIDs;
 
 class EventResult : public EventRow {
  public:
@@ -298,6 +324,7 @@ class UpdateEventResult {
  public:
   UpdateEventResult();
   bool success;
+  std::string message;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(UpdateEventResult);

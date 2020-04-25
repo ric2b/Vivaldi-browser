@@ -81,6 +81,8 @@ void NotesSyncTest::VerifyNotesModelMatchesFakeServer(int index) {
   // Verify that all local notes titles exist once on the server.
   std::vector<Notes_Model::URLAndTitle>::const_iterator it;
   for (it = local_notes.begin(); it != local_notes.end(); ++it) {
+    if (it->title.empty())
+      continue;
     ASSERT_TRUE(fake_server_verifier.VerifyEntityCountByTypeAndName(
         1, syncer::NOTES, base::UTF16ToUTF8(it->title)));
   }

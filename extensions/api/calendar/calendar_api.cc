@@ -45,10 +45,13 @@ bool GetStdStringAsInt64(const std::string& id_string, int64_t* id) {
 namespace extensions {
 
 using calendar::EventTypeRow;
+using calendar::RecurrenceExceptionRow;
+using calendar::RecurrenceExceptionRows;
 using vivaldi::calendar::Calendar;
 using vivaldi::calendar::CreateEventsResults;
 using vivaldi::calendar::EventType;
 using vivaldi::calendar::OccurrenceFrequency;
+using vivaldi::calendar::RecurrenceException;
 using vivaldi::calendar::RecurrencePattern;
 
 namespace OnEventCreated = vivaldi::calendar::OnEventCreated;
@@ -66,6 +69,8 @@ namespace OnCalendarChanged = vivaldi::calendar::OnCalendarChanged;
 typedef std::vector<vivaldi::calendar::CalendarEvent> EventList;
 typedef std::vector<vivaldi::calendar::Calendar> CalendarList;
 typedef std::vector<vivaldi::calendar::EventType> EventTypeList;
+typedef std::vector<vivaldi::calendar::RecurrenceException>
+    RecurrenceExceptions;
 
 // static
 RecurrenceFrequency UiOccurrenceToEventOccurrence(
@@ -85,17 +90,44 @@ RecurrenceFrequency UiOccurrenceToEventOccurrence(
   return RecurrenceFrequency::NONE;
 }
 
+RecurrenceException CreateException(const RecurrenceExceptionRow& row) {
+  RecurrenceException exception;
+  exception.cancelled.reset(new bool(row.cancelled));
+  exception.date.reset(new double(MilliSecondsFromTime(row.exception_day)));
+  exception.exception_event_id.reset(
+      new std::string(base::NumberToString(row.exception_event_id)));
+  exception.parent_event_id.reset(
+      new std::string(base::NumberToString(row.parent_event_id)));
+
+  return exception;
+}
+
+std::unique_ptr<std::vector<RecurrenceException>> CreateRecurrenceException(
+    const RecurrenceExceptionRows& exceptions) {
+  auto new_exceptions = std::make_unique<std::vector<RecurrenceException>>();
+  for (const auto& exception : exceptions) {
+    new_exceptions->push_back(CreateException(exception));
+  }
+
+  return new_exceptions;
+}
+
 CalendarEvent GetEventItem(const calendar::EventRow& row) {
   CalendarEvent event_item;
   event_item.id = base::NumberToString(row.id());
   event_item.calendar_id = base::NumberToString(row.calendar_id());
   event_item.description.reset(
       new std::string(base::UTF16ToUTF8(row.description())));
-  event_item.title.reset(new std::string(base::UTF16ToUTF8(row.title())));
+  event_item.title = base::UTF16ToUTF8(row.title());
   event_item.start.reset(new double(MilliSecondsFromTime(row.start())));
   event_item.end.reset(new double(MilliSecondsFromTime(row.end())));
   event_item.event_type_id.reset(
       new std::string(base::NumberToString(row.event_type_id())));
+  event_item.uid.reset(new std::string(row.uid()));
+  event_item.href.reset(new std::string(row.href()));
+  event_item.recurrence_exceptions =
+      CreateRecurrenceException(row.recurrence_exceptions());
+
   return event_item;
 }
 
@@ -345,7 +377,7 @@ std::unique_ptr<CalendarEvent> CreateVivaldiEvent(
   cal_event->alarm_id.reset(
       new std::string(base::NumberToString(event.alarm_id())));
 
-  cal_event->title.reset(new std::string(base::UTF16ToUTF8(event.title())));
+  cal_event->title = base::UTF16ToUTF8(event.title());
   cal_event->description.reset(
       new std::string(base::UTF16ToUTF8(event.description())));
   cal_event->start.reset(new double(MilliSecondsFromTime(event.start())));
@@ -368,7 +400,9 @@ std::unique_ptr<CalendarEvent> CreateVivaldiEvent(
   cal_event->complete.reset(new bool(event.complete()));
   cal_event->trash.reset(new bool(event.trash()));
   cal_event->trash_time.reset(
-    new double(MilliSecondsFromTime(event.trash_time())));
+      new double(MilliSecondsFromTime(event.trash_time())));
+  cal_event->sequence.reset(new int(event.sequence()));
+  cal_event->ical.reset(new std::string(base::UTF16ToUTF8(event.ical())));
 
   RecurrencePattern* pattern = new RecurrencePattern();
   pattern->frequency = RecurrenceToUiRecurrence(event.recurrence().frequency);
@@ -381,6 +415,8 @@ std::unique_ptr<CalendarEvent> CreateVivaldiEvent(
   pattern->month_of_year.reset(new int(event.recurrence().month_of_year));
 
   cal_event->recurrence.reset(pattern);
+  cal_event->recurrence_exceptions =
+      CreateRecurrenceException(event.recurrence_exceptions());
 
   return cal_event;
 }
@@ -490,6 +526,21 @@ calendar::EventRow GetEventRow(const vivaldi::calendar::CreateDetails& event) {
 
   if (event.complete.get()) {
     row.set_complete(*event.complete);
+  }
+
+  if (event.sequence.get()) {
+    row.set_sequence(*event.sequence);
+  }
+
+  if (event.ical.get()) {
+    row.set_ical(base::UTF8ToUTF16(*event.ical));
+  }
+
+  if (event.event_type_id.get()) {
+    calendar::EventTypeID event_type_id;
+    if (GetStdStringAsInt64(*event.event_type_id, &event_type_id)) {
+      row.set_event_type_id(event_type_id);
+    }
   }
 
   return row;
@@ -683,6 +734,16 @@ ExtensionFunction::ResponseAction CalendarUpdateEventFunction::Run() {
   if (params->changes.trash.get()) {
     updatedEvent.trash = *params->changes.trash;
     updatedEvent.updateFields |= calendar::TRASH;
+  }
+
+  if (params->changes.sequence.get()) {
+    updatedEvent.sequence = *params->changes.sequence;
+    updatedEvent.updateFields |= calendar::SEQUENCE;
+  }
+
+  if (params->changes.ical.get()) {
+    updatedEvent.ical = base::UTF8ToUTF16(*params->changes.ical);
+    updatedEvent.updateFields |= calendar::ICAL;
   }
 
   if (params->changes.event_type_id.get()) {
@@ -1131,6 +1192,55 @@ void CalendarDeleteEventTypeFunction::DeleteEventTypeComplete(
     std::shared_ptr<calendar::DeleteEventTypeResult> result) {
   if (!result->success) {
     Respond(Error("Error deleting event type"));
+  } else {
+    Respond(NoArguments());
+  }
+}
+
+ExtensionFunction::ResponseAction CalendarCreateEventExceptionFunction::Run() {
+  std::unique_ptr<vivaldi::calendar::CreateEventException::Params> params(
+      vivaldi::calendar::CreateEventException::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  base::string16 id;
+  id = base::UTF8ToUTF16(params->parent_event_id);
+  calendar::EventID parent_event_id;
+
+  if (!GetIdAsInt64(id, &parent_event_id)) {
+    return RespondNow(Error("Error. Invalid parent event id"));
+  }
+
+  RecurrenceExceptionRow row;
+  row.parent_event_id = parent_event_id;
+  row.exception_day = GetTime(*params->date.get());
+  row.cancelled = params->cancelled;
+
+  if (params->exception_event_id.get()) {
+    std::string ex_id = *params->exception_event_id;
+    if (ex_id.length() > 0) {
+      calendar::EventID exception_event_id;
+      if (!GetStdStringAsInt64(ex_id, &exception_event_id)) {
+        return RespondNow(Error("Error. Invalid exception event id"));
+      }
+      row.exception_event_id = exception_event_id;
+    }
+  }
+
+  CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
+  model->CreateRecurrenceException(
+      row,
+      base::Bind(
+          &CalendarCreateEventExceptionFunction::CreateEventExceptionComplete,
+          this),
+      &task_tracker_);
+
+  return RespondLater();
+}
+
+void CalendarCreateEventExceptionFunction::CreateEventExceptionComplete(
+    std::shared_ptr<calendar::CreateRecurrenceExceptionResult> results) {
+  if (!results->success) {
+    Respond(Error("Error creating event exception"));
   } else {
     Respond(NoArguments());
   }

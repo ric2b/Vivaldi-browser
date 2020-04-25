@@ -6,5 +6,6 @@ source_set("notes") {
     "notes_contenthelper.h",
   ]
   deps = [
+    "//base:logging_buildflags"
   ]
 }

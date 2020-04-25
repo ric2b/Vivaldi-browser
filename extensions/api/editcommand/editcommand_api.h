@@ -8,7 +8,7 @@
 
 namespace extensions {
 
-class EditcommandExecuteFunction : public UIThreadExtensionFunction {
+class EditcommandExecuteFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("editcommand.execute", EDITCOMMAND_EXECUTE)
   EditcommandExecuteFunction() = default;

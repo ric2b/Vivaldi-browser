@@ -51,6 +51,32 @@
             "description": "Which month of the year event takes place. 1,2,3,..12. Negative numbers from end of year"
           }
         }
+      }, {
+        "id": "RecurrenceException",
+        "type": "object",
+        "description": "A object describing how an instance of event recurrence is changed",
+        "properties": {
+          "cancelled": {
+            "type": "boolean",
+            "optional": true,
+            "description": "If a certain instance of recurring event is cancelled "
+          },
+          "date": {
+            "type": "number",
+            "optional": true,
+            "description": "The date of a recurring event that an exception should be added to. In milliseconds since the epoch"
+          },
+          "exception_event_id": {
+            "type": "string",
+            "optional": true,
+            "description": "The id of the event that serves as exception to the event in a recurrence series"
+          },
+          "parent_event_id": {
+            "type": "string",
+            "optional": true,
+            "description": "The id of the event that is parent to all the others events in the recurrence series"
+          }
+        }
       },
       {
         "id": "CalendarEvent",
@@ -73,7 +99,7 @@
           },
           "title": {
             "type": "string",
-            "optional": true,
+            "optional": false,
             "description": "Title of event."
           },
           "description": {
@@ -170,6 +196,24 @@
             "description": "When this event was trashed, in milliseconds since the epoch",
             "type": "number",
             "optional": true
+          },
+          "sequence": {
+            "description": "iCal sequence field according to: https://tools.ietf.org/html/rfc5545#section-3.8.7.4",
+            "type": "integer",
+            "optional": true
+          },
+          "ical": {
+            "type": "string",
+            "optional": true,
+            "description": "The original ical message"
+          },
+          "recurrenceExceptions": {
+            "description": "List of recurrence exceptions.",
+            "type": "array",
+            "optional": true,
+            "items": {
+              "$ref": "RecurrenceException"
+            }
           }
         }
       },
@@ -260,6 +304,21 @@
             "type": "boolean",
             "optional": true,
             "description": "If this event is a task type you can mark it as complete."
+          },
+          "sequence": {
+            "description": "iCal sequence field according to: https://tools.ietf.org/html/rfc5545#section-3.8.7.4",
+            "type": "integer",
+            "optional": true
+          },
+          "ical": {
+            "type": "string",
+            "optional": true,
+            "description": "The original ical message"
+          },
+          "eventTypeId": {
+            "type": "string",
+            "optional": true,
+            "description": "The event type id of the event."
           }
         }
       },
@@ -676,8 +735,34 @@
                 "type": "boolean",
                 "optional": true,
                 "description": "Is this event trashed."
+              },
+              "sequence": {
+                "description": "iCal sequence field according to: https://tools.ietf.org/html/rfc5545#section-3.8.7.4",
+                "type": "integer",
+                "optional": true
+              },
+              "ical": {
+                "type": "string",
+                "optional": true,
+                "description": "The original ical message"
               }
             }
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "result",
+                "$ref": "CalendarEvent"
+              },
+              {
+                "name": "res",
+                "type": "string",
+                "optional": true
+              }
+            ]
           }
         ]
       },
@@ -875,6 +960,46 @@
           {
             "type": "string",
             "name": "id"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "result",
+                "type": "boolean"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "createEventException",
+        "type": "function",
+        "description": "Creates an exception to event instance in recurring series.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "parent_event_id",
+            "description": "The parent id of the event in the recurrence series."
+          },
+          {
+            "type": "string",
+            "name": "exception_event_id",
+            "description": "The id of the event that serves as exception to the event in a recurrence series",
+            "optional":  true
+          },
+          {
+            "type": "boolean",
+            "name": "cancelled",
+            "description": "Cancel this instance of recurring event"
+          },
+          {
+            "name": "date",
+            "type": "number",
+            "optional": true,
+            "description": "When the exception should happen. In milliseconds since the epoch."
           },
           {
             "type": "function",

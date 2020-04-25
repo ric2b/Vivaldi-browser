@@ -20,7 +20,7 @@ for the most part it's empty.
 */
 class VivaldiLocationBar : public LocationBar {
  public:
-  VivaldiLocationBar(Profile* profile, Browser* browser);
+  VivaldiLocationBar(Profile* profile);
   ~VivaldiLocationBar() override;
 
   // The details necessary to open the user's desired omnibox match.
@@ -49,8 +49,6 @@ class VivaldiLocationBar : public LocationBar {
   LocationBarTesting* GetLocationBarForTesting() override;
 
  protected:
-  Browser* browser_;
-
   DISALLOW_COPY_AND_ASSIGN(VivaldiLocationBar);
 };
 

@@ -61,8 +61,6 @@
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/skbitmap_operations.h"
 
-#include "app/vivaldi_apptools.h"
-
 namespace extensions {
 
 namespace developer = api::developer_private;
@@ -477,10 +475,6 @@ void ExtensionInfoGenerator::CreateExtensionInfoHelper(
     developer::ExtensionState state) {
   std::unique_ptr<developer::ExtensionInfo> info(
       new developer::ExtensionInfo());
-
-  info->action_button_hidden =
-      !extension_action_api_->GetBrowserActionVisibility(extension.id()) &&
-      vivaldi::IsVivaldiRunning();
 
   // Blacklist text.
   int blacklist_text = -1;

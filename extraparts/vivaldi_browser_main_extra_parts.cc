@@ -146,6 +146,10 @@ void VivaldiBrowserMainExtraParts::PostProfileInit(Profile* profile) {
       contact::ContactServiceFactory::GetForProfile(profile);
   contact_service->AddObserver(new contact::ContactModelLoadedObserver());
 
+  extensions::VivaldiUtilitiesAPI::GetFactoryInstance()
+      ->Get(profile)
+      ->PostProfileSetup();
+
   if (!vivaldi::IsVivaldiRunning())
     return;
 

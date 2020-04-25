@@ -219,13 +219,17 @@ stage_install_common() {
   fi
 
   # Don't deploy the widevine stub, link to Google Chrome's.
-  ln -s "/opt/google/chrome/libwidevinecdm.so" \
-    "${STAGEDIR}/${INSTALLDIR}/libwidevinecdm.so"
+  ln -s "/opt/google/chrome/WidevineCdm" \
+    "${STAGEDIR}/${INSTALLDIR}/WidevineCdm"
 
   # Widevine CDM.
-  if [ -f "${BUILDDIR}/libwidevinecdm.so" ]; then
+  if [ -d "${BUILDDIR}/WidevineCdm" ]; then
     # No need to strip; libwidevinecdm.so starts out stripped.
-    install -m ${SHLIB_PERMS} "${BUILDDIR}/libwidevinecdm.so" "${STAGEDIR}/${INSTALLDIR}/"
+    cp -a "${BUILDDIR}/WidevineCdm" "${STAGEDIR}/${INSTALLDIR}/"
+    find "${STAGEDIR}/${INSTALLDIR}/WidevineCdm" -type d -exec chmod 755 '{}' \;
+    find "${STAGEDIR}/${INSTALLDIR}/WidevineCdm" -type f -exec chmod 644 '{}' \;
+    find "${STAGEDIR}/${INSTALLDIR}/WidevineCdm" -name libwidevinecdm.so \
+      -exec chmod ${SHLIB_PERMS} '{}' \;
   fi
 
   # ANGLE
@@ -306,6 +310,11 @@ stage_install_common() {
   process_template "${BUILDDIR}/installer/common/update-widevine" \
     "${STAGEDIR}/${INSTALLDIR}/update-widevine"
   chmod 755 "${STAGEDIR}/${INSTALLDIR}/update-widevine"
+
+  # Proprietary media update script
+  process_template "${BUILDDIR}/installer/common/update-ffmpeg" \
+    "${STAGEDIR}/${INSTALLDIR}/update-ffmpeg"
+  chmod 755 "${STAGEDIR}/${INSTALLDIR}/update-ffmpeg"
 
   # app icons
   local icon_regex=".*product_logo_[0-9]\+\."
@@ -401,7 +410,7 @@ stage_install_common() {
         # Relative symlink.
         local expect_exists="$(dirname "${file}")/$(readlink "${file}")"
       fi
-      if [ ! -f "${expect_exists}" ] && [[ "${file}" != *"libwidevinecdm.so" ]]; then
+      if [ ! -f "${expect_exists}" ] && [[ "${file}" != *"WidevineCdm" ]]; then
         echo "Broken symlink: ${file}" 1>&2
         exit 1
       fi

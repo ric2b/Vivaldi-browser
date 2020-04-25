@@ -7,15 +7,17 @@
 #include "base/base64.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
+#include "build/branding_buildflags.h"
 #include "components/os_crypt/libsecret_util_linux.h"
 
 #ifdef VIVALDI_BUILD
-#define GOOGLE_CHROME_BUILD
+#undef BUILDFLAG_INTERNAL_GOOGLE_CHROME_BRANDING
+#define BUILDFLAG_INTERNAL_GOOGLE_CHROME_BRANDING() (1)
 #endif  // VIVALDI_BUILD
 
 namespace {
 
-#if defined(GOOGLE_CHROME_BUILD)
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
 const char kApplicationName[] = "chrome";
 #else
 const char kApplicationName[] = "chromium";
@@ -156,6 +158,6 @@ std::string KeyStorageLibsecret::Migrate() {
   return password;
 }
 
-#ifndef GOOGLE_CHROME_BUILD
-#error GOOGLE_CHROME_BUILD must be set for Vivaldi builds
+#if !BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#error BUILDFLAG(GOOGLE_CHROME_BRANDING) must be set for Vivaldi builds
 #endif

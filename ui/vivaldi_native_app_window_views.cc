@@ -186,10 +186,8 @@ void VivaldiNativeAppWindowViews::InitializeDefaultWindow(
   init_params.visible_on_all_workspaces =
     create_params.visible_on_all_workspaces;
 
-  init_params.thumbnail_window = create_params.thumbnail_window;
-
   OnBeforeWidgetInit(create_params, &init_params, widget());
-  widget()->Init(init_params);
+  widget()->Init(std::move(init_params));
 
   // Stow a pointer to the browser's profile onto the window handle so that we
   // can get it later when all we have is a native view.
@@ -292,7 +290,7 @@ void VivaldiNativeAppWindowViews::InitializePanelWindow(
 
   params.bounds = gfx::Rect(preferred_size);
   OnBeforePanelWidgetInit(&params, widget());
-  widget()->Init(params);
+  widget()->Init(std::move(params));
   widget()->set_focus_on_creation(create_params.focused);
 }
 
@@ -457,6 +455,10 @@ void VivaldiNativeAppWindowViews::SetBounds(const gfx::Rect& bounds) {
 
 void VivaldiNativeAppWindowViews::FlashFrame(bool flash) {
   widget_->FlashFrame(flash);
+}
+
+gfx::NativeView VivaldiNativeAppWindowViews::GetNativeView() {
+  return widget_->GetNativeView();
 }
 
 gfx::NativeView VivaldiNativeAppWindowViews::GetHostView() const {
@@ -886,12 +888,6 @@ gfx::Insets VivaldiNativeAppWindowViews::GetFrameInsets() const {
   return window_bounds.InsetsFrom(client_bounds);
 }
 
-void VivaldiNativeAppWindowViews::HideWithApp() {
-}
-
-void VivaldiNativeAppWindowViews::ShowWithApp() {
-}
-
 gfx::Size VivaldiNativeAppWindowViews::GetContentMinimumSize() const {
   return size_constraints_.GetMinimumSize();
 }
@@ -921,14 +917,6 @@ void VivaldiNativeAppWindowViews::SetActivateOnPointer(
     bool activate_on_pointer) {}
 
 void VivaldiNativeAppWindowViews::Close() {
-  // NOTE(pettern): This will abort the currently open thumbnail
-  // generating windows, but if this is not the last window,
-  // the rest will continue.  This is not ideal, but avoids
-  // lingering processes until AppWindows are no longer used
-  // for thumbnail generation. See VB-38712.
-  extensions::VivaldiUtilitiesAPI::CloseAllThumbnailWindows(
-      window_->GetProfile());
-
   extensions::DevtoolsConnectorAPI::CloseDevtoolsForBrowser(
       window_->GetProfile(), window_->browser());
 
@@ -1002,15 +990,14 @@ bool VivaldiAppWindowClientView::CanClose() {
       extensions::VivaldiWindowsAPI::IsWindowClosingBecauseProfileClose(
           browser);
 
-  int tabbed_windows_cnt = vivaldi::GetBrowserCountOfType(Browser::TYPE_TABBED);
+  int tabbed_windows_cnt = vivaldi::GetBrowserCountOfType(Browser::TYPE_NORMAL);
   const PrefService* prefs = window_->GetProfile()->GetPrefs();
   // Don't show exit dialog if the user explicitly selected exit
   // from the menu.
   if (!browser_shutdown::IsTryingToQuit() &&
       !window_->GetProfile()->IsGuestSession()) {
     if (prefs->GetBoolean(vivaldiprefs::kSystemShowExitConfirmationDialog)) {
-      if (!quit_dialog_shown_ &&
-          browser->type() == Browser::TYPE_TABBED &&
+      if (!quit_dialog_shown_ && browser->type() == Browser::TYPE_NORMAL &&
           tabbed_windows_cnt == 1) {
         if (window_->IsMinimized()) {
           // Dialog is not visible if the window is minimized, so restore it
@@ -1034,7 +1021,7 @@ bool VivaldiAppWindowClientView::CanClose() {
     if (prefs->GetBoolean(
             vivaldiprefs::kWindowsShowWindowCloseConfirmationDialog)) {
       if (!close_dialog_shown_ && !browser_shutdown::IsTryingToQuit() &&
-          browser->type() == Browser::TYPE_TABBED && tabbed_windows_cnt > 1) {
+          browser->type() == Browser::TYPE_NORMAL && tabbed_windows_cnt > 1) {
         if (window_->IsMinimized()) {
           // Dialog is not visible if the window is minimized, so restore it
           // now.
@@ -1050,14 +1037,15 @@ bool VivaldiAppWindowClientView::CanClose() {
     }
   }
 #endif  // !defined(OS_MAC)
-  // This adds a quick hide code path to avoid VB-33480, but
-  // must be removed when beforeunload dialogs are implemented.
+  bool should_close = browser->ShouldCloseWindow();
+
+  // This adds a quick hide code path to avoid VB-33480
   int count;
-  if (browser->OkToCloseWithInProgressDownloads(&count) ==
-    Browser::DOWNLOAD_CLOSE_OK) {
+  if (should_close && browser->OkToCloseWithInProgressDownloads(&count) ==
+                          Browser::DownloadCloseType::kOk) {
     window_->Hide();
   }
-  if (!browser->ShouldCloseWindow()) {
+  if (!should_close) {
     return false;
   }
   if (!browser->tab_strip_model()->empty()) {

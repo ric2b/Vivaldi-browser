@@ -41,6 +41,11 @@
     "dependencies": [ "permission:calendar" ],
     "contexts": [ "blessed_extension" ]
   },
+  "contextMenu": {
+    "vivaldi": true,
+    "dependencies": [ "permission:contextMenu" ],
+    "contexts": [ "blessed_extension" ]
+  },
   "contacts": {
     "vivaldi": true,
     "dependencies": [ "permission:contacts" ],
@@ -118,11 +123,6 @@
   "settings": {
     "vivaldi": true,
     "dependencies": [ "permission:settings" ],
-    "contexts": [ "blessed_extension" ]
-  },
-  "showMenu": {
-    "vivaldi": true,
-    "dependencies": [ "permission:showMenu" ],
     "contexts": [ "blessed_extension" ]
   },
   "sync": {

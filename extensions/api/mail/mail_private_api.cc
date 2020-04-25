@@ -130,7 +130,8 @@ ExtensionFunction::ResponseAction MailPrivateGetPathsFunction::Run() {
   }
 
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      FROM_HERE,
+      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::Bind(&FindMailFiles, file_path),
       base::Bind(&MailPrivateGetPathsFunction::OnFinished, this));
 
@@ -229,7 +230,8 @@ ExtensionFunction::ResponseAction MailPrivateSaveFunction::Run() {
   base::FilePath file_path = profile->GetPath();
 
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      FROM_HERE,
+      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::Bind(&Save, file_path, string_paths, file_name, data),
       base::Bind(&MailPrivateSaveFunction::OnFinished, this));
 
@@ -258,7 +260,8 @@ ExtensionFunction::ResponseAction MailPrivateSaveBufferFunction::Run() {
   base::FilePath file_path = profile->GetPath();
 
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      FROM_HERE,
+      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::Bind(&SaveBuffer, file_path, string_paths, file_name, params->raw),
       base::Bind(&MailPrivateSaveBufferFunction::OnFinished, this));
 
@@ -296,7 +299,8 @@ ExtensionFunction::ResponseAction MailPrivateDeleteFunction::Run() {
   }
 
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      FROM_HERE,
+      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::Bind(&Delete, file_path, file_name),
       base::Bind(&MailPrivateDeleteFunction::OnFinished, this));
 
@@ -354,7 +358,8 @@ ExtensionFunction::ResponseAction MailPrivateReadFunction::Run() {
   }
 
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      FROM_HERE,
+      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::Bind(&Read, file_path),
       base::Bind(&MailPrivateReadFunction::OnFinished, this));
 
@@ -393,7 +398,8 @@ ExtensionFunction::ResponseAction MailPrivateReadBufferFunction::Run() {
   }
 
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      FROM_HERE,
+      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::Bind(&Read, file_path),
       base::Bind(&MailPrivateReadBufferFunction::OnFinished, this));
 
@@ -419,7 +425,8 @@ ExtensionFunction::ResponseAction MailPrivateReadFileFunction::Run() {
   base::FilePath file_path = base_path.AppendASCII(path);
 
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      FROM_HERE,
+      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::Bind(&Read, file_path),
       base::Bind(&MailPrivateReadFileFunction::OnFinished, this));
 
@@ -466,7 +473,8 @@ ExtensionFunction::ResponseAction MailPrivateGetDataDirectoryFunction::Run() {
   file_path = file_path.Append(hashed_account_id);
 
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      FROM_HERE,
+      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::Bind(&GetDataDirectory, file_path),
       base::Bind(&MailPrivateGetDataDirectoryFunction::OnFinished, this));
 
@@ -496,7 +504,8 @@ MailPrivateCreateDataDirectoryFunction::Run() {
   base::FilePath file_path = profile->GetPath();
 
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      FROM_HERE,
+      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::Bind(&CreateDirectory, file_path, hashed_account_id),
       base::Bind(&MailPrivateCreateDataDirectoryFunction::OnFinished, this));
 
@@ -540,7 +549,8 @@ ExtensionFunction::ResponseAction MailPrivateRenameFunction::Run() {
   }
 
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      FROM_HERE,
+      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::Bind(&Rename, file_path, file_name, new_file_name),
       base::Bind(&MailPrivateRenameFunction::OnFinished, this));
 

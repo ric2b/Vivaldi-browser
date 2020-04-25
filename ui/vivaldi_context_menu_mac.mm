@@ -18,7 +18,7 @@
 #include "content/public/browser/web_contents.h"
 #include "ui/base/models/simple_menu_model.h"
 #import "ui/base/cocoa/menu_controller.h"
-#include "ui/views/vivaldi_bookmark_menu_views.h"
+#include "ui/views/vivaldi_context_menu_views.h"
 
 using content::WebContents;
 
@@ -55,35 +55,13 @@ namespace vivaldi {
 VivaldiContextMenu* CreateVivaldiContextMenu(
     content::WebContents* web_contents,
     ui::SimpleMenuModel* menu_model,
-    const content::ContextMenuParams& params) {
-  return new VivaldiContextMenuMac(web_contents, menu_model, params);
-}
-
-void ConvertContainerRectToScreen(
-    content::WebContents* web_contents,
-    vivaldi::BookmarkMenuContainer& container) {
-
-views::Widget* widget = views::Widget::GetTopLevelWidgetForNativeView(
-      VivaldiBookmarkMenuViews::GetActiveNativeViewFromWebContents(
-          web_contents));
-  gfx::Point screen_loc;
-  views::View::ConvertPointToScreen(widget->GetContentsView(), &screen_loc);
-  // Adjust for the button positions within content area.
-  for (::vivaldi::BookmarkMenuContainerEntry& e: container.siblings) {
-    gfx::Point point(e.rect.origin());
-    point.Offset(screen_loc.x(), screen_loc.y());
-    e.rect.set_origin(point);
+    const gfx::Rect& rect,
+    bool force_views) {
+  if (force_views) {
+    return new VivaldiContextMenuViews(web_contents, menu_model, rect);
+  } else {
+    return new VivaldiContextMenuMac(web_contents, menu_model, rect);
   }
-}
-
-VivaldiBookmarkMenu* CreateVivaldiBookmarkMenu(
-    content::WebContents* web_contents,
-    const BookmarkMenuContainer* container,
-    const bookmarks::BookmarkNode* node,
-    int offset,
-    const gfx::Rect& button_rect) {
-  return new VivaldiBookmarkMenuViews(web_contents, container, node, offset,
-                                      button_rect);
 }
 
 }  // vivialdi
@@ -91,10 +69,10 @@ VivaldiBookmarkMenu* CreateVivaldiBookmarkMenu(
 VivaldiContextMenuMac::VivaldiContextMenuMac(
     content::WebContents* web_contents,
     ui::SimpleMenuModel* menu_model,
-    const content::ContextMenuParams& params)
+    const gfx::Rect& rect)
   :web_contents_(web_contents),
    menu_model_(menu_model),
-   params_(params) {
+   rect_(rect) {
 }
 
 VivaldiContextMenuMac::~VivaldiContextMenuMac() {
@@ -111,7 +89,7 @@ void VivaldiContextMenuMac::Show() {
 
   // Synthesize an event for the click, as there is no certainty that
   // [NSApp currentEvent] will return a valid event.
-  gfx::Point params_position(params_.x, params_.y);
+  gfx::Point params_position(rect_.bottom_left());
   NSEvent* currentEvent = [NSApp currentEvent];
   NSWindow* window = [parent_view window];
   NSPoint position =

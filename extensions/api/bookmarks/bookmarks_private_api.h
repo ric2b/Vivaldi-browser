@@ -36,6 +36,10 @@ class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
 
   static std::string GetThumbnailUrl(const bookmarks::BookmarkNode* node);
 
+  static bool SetBookmarkThumbnail(content::BrowserContext* browser_context,
+                                   int64_t bookmark_id,
+                                   const std::string& url);
+
  private:
   // bookmarks::BookmarkModelObserver
   void BookmarkNodeMoved(BookmarkModel* model,
@@ -90,7 +94,7 @@ class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
 };
 
 class BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction
-    : public UIThreadExtensionFunction {
+    : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION(
       "bookmarksPrivate.updateSpeedDialsForWindowsJumplist",

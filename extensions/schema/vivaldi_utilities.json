@@ -121,8 +121,18 @@
           "title": {
             "type": "string",
             "description": "Title for the file selection dialog."
+          },
+          "preferencePath": {
+            "type": "string",
+              "optional": true,
+              "description": "The preference where to place the result."
+            },
+            "thumbnailBookmarkId": {
+              "type": "string",
+              "optional": true,
+              "description": "The bookmark id where to store the selected local path."
+            }
           }
-        }
       },
       {
         "id": "SharedDataValue",
@@ -333,7 +343,7 @@
       {
         "name": "selectLocalImage",
         "type": "function",
-        "description": "Ask the user to select an image file and return as a data mapping URL",
+        "description": "Ask the user to select an image file and store its path as a data mapping URL in a bookmark or a preference.",
         "parameters": [
           {
             "name": "params",
@@ -342,11 +352,12 @@
           {
             "type": "function",
             "name": "callback",
+            "optional": true,
             "parameters": [
               {
-                "name": "url",
-                "type": "string",
-                "description": "data mapping url for the selected image or empty if the user canceled the selection."
+                "name": "success",
+                "type": "boolean",
+                "description": "True when an image path was selected and successfully stored."
               }
             ]
           }
@@ -370,6 +381,24 @@
                 "name": "chromiumVer",
                 "type": "string",
                 "description": "The Chromium version as a string."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "getFFMPEGState",
+        "type": "function",
+        "description": "Helper function for Linux. Reads the env. variable VIVALDI_FFMPEG_FOUND and returns the result",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "value",
+                "type": "boolean",
+                "description": "True if env. variable is set to YES, otherwise False (also if variable does not exists)."
               }
             ]
           }
@@ -864,6 +893,41 @@
                 "description": "true if the download manager is ready, otherwise false."
               }
             ]
+          }
+        ]
+      },
+      {
+        "name": "setContentSettings",
+        "type": "function",
+        "description": "Set a contentsetting for a pattern .",
+        "parameters": [
+          {
+            "name": "details",
+            "type": "object",
+            "properties": {
+              "primaryPattern": {
+                "type": "string",
+                "description": "The pattern for the primary URL. For details on the format of a pattern, see <a href='contentSettings#patterns'>Content Setting Patterns</a>."
+              },
+              "secondaryPattern": {
+                "type": "string",
+                "description": "The pattern for the secondary URL. Defaults to matching all URLs. For details on the format of a pattern, see <a href='contentSettings#patterns'>Content Setting Patterns</a>.",
+                "optional": true
+              },
+              "type": {
+                "type": "string",
+                "description": "The resource identifier for the content type."
+              },
+              "value": {
+                "type": "string",
+                "description": "The setting applied by this rule. See the description of the individual ContentSetting objects for the possible values."
+              },
+              "incognito": {
+                "type": "boolean",
+                "optional": true,
+                "description": "Where to set the setting (default: regular)."
+              }
+            }
           }
         ]
       }

@@ -22,6 +22,7 @@
 #include "chrome/browser/ui/views/page_info/page_info_hover_button.h"
 #include "chrome/browser/ui/views/page_info/permission_selector_row.h"
 #include "chrome/browser/ui/views/page_info/permission_selector_row_observer.h"
+#include "components/safe_browsing/buildflags.h"
 #include "components/security_state/core/security_state.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/views/controls/button/button.h"
@@ -114,8 +115,12 @@ class PageInfoBubbleView : public PageInfoBubbleViewBase,
           Browser* browser,
           gfx::NativeView parent);
 
+ protected:
+  const base::string16 details_text() const { return details_text_; }
+
  private:
   friend class PageInfoBubbleViewBrowserTest;
+  friend class PageInfoBubbleViewSyncBrowserTest;
   friend class test::PageInfoBubbleViewTestApi;
 
   PageInfoBubbleView(
@@ -166,10 +171,9 @@ class PageInfoBubbleView : public PageInfoBubbleViewBase,
   // WebContentsObserver:
   void DidChangeVisibleSecurityState() override;
 
-#if defined(FULL_SAFE_BROWSING)
+#if BUILDFLAG(FULL_SAFE_BROWSING)
   std::unique_ptr<PageInfoUI::SecurityDescription>
-  CreateSecurityDescriptionForPasswordReuse(
-      bool is_enterprise_password) const override;
+  CreateSecurityDescriptionForPasswordReuse() const override;
 #endif
 
   // Creates the contents of the |site_settings_view_|. The ownership of the
@@ -191,6 +195,9 @@ class PageInfoBubbleView : public PageInfoBubbleViewBase,
 
   // The header section (containing security-related information).
   BubbleHeaderView* header_ = nullptr;
+
+  // The raw details of the status of the identity check for this site.
+  base::string16 details_text_ = base::string16();
 
   // The view that contains the certificate, cookie, and permissions sections.
   views::View* site_settings_view_ = nullptr;
@@ -222,13 +229,5 @@ class PageInfoBubbleView : public PageInfoBubbleViewBase,
 
   DISALLOW_COPY_AND_ASSIGN(PageInfoBubbleView);
 };
-
-// Creates and returns a safety tip bubble. Used in unit tests.
-PageInfoBubbleViewBase* CreateSafetyTipBubbleForTesting(
-    gfx::NativeView parent_view,
-    content::WebContents* web_contents,
-    safety_tips::SafetyTipType type,
-    const GURL& virtual_url,
-    const GURL& safe_url);
 
 #endif  // CHROME_BROWSER_UI_VIEWS_PAGE_INFO_PAGE_INFO_BUBBLE_VIEW_H_

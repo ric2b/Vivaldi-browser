@@ -10,13 +10,10 @@
 #include "browser/menus/bookmark_support.h"
 #include "extensions/schema/bookmark_context_menu.h"
 
-namespace bookmarks {
-class BookmarkNode;
-}
+class Browser;
 
 namespace content {
 class WebContents;
-struct ContextMenuParams;
 }
 
 namespace gfx {
@@ -27,6 +24,11 @@ class Rect;
 namespace ui {
 class Accelerator;
 class SimpleMenuModel;
+class MenuModel;
+}
+
+namespace views {
+class Widget;
 }
 
 namespace vivaldi {
@@ -48,11 +50,15 @@ struct MenubarMenuEntry {
 struct MenubarMenuParams {
   class Delegate {
    public:
-    virtual void PopulateModel(int menu_id, ui::SimpleMenuModel** menu_model) {}
+    virtual void PopulateModel(int menu_id, bool dark_text_color,
+                               ui::MenuModel** menu_model) {}
+    virtual void PopulateSubmodel(int menu_id, bool dark_text_color,
+                                  ui::MenuModel* menu_model) {}
     virtual void OnMenuOpened(int menu_id) {}
     virtual void OnMenuClosed() {}
     virtual void OnAction(int id, int state) {}
     virtual bool IsBookmarkMenu(int menu_id);
+    virtual int GetSelectedMenuId();
     virtual bool IsItemChecked(int id);
     virtual bool IsItemPersistent(int id);
     virtual bool GetAccelerator(int id,
@@ -109,7 +115,8 @@ struct BookmarkMenuContainer {
 VivaldiContextMenu* CreateVivaldiContextMenu(
     content::WebContents* web_contents,
     ui::SimpleMenuModel* menu_model,
-    const content::ContextMenuParams& params);
+    const gfx::Rect& rect,
+    bool force_views);
 
 VivaldiBookmarkMenu* CreateVivaldiBookmarkMenu(
     content::WebContents* web_contents,
@@ -117,6 +124,11 @@ VivaldiBookmarkMenu* CreateVivaldiBookmarkMenu(
     const bookmarks::BookmarkNode* node,
     int offset,
     const gfx::Rect& button_rect);
+
+VivaldiMenubarMenu* CreateVivaldiMenubarMenu(
+    content::WebContents* web_contents,
+    MenubarMenuParams& params,
+    int id);
 
 void ConvertMenubarButtonRectToScreen(
     content::WebContents* web_contents,
@@ -126,10 +138,6 @@ void ConvertContainerRectToScreen(
     content::WebContents* web_contents,
     vivaldi::BookmarkMenuContainer& container);
 
-VivaldiMenubarMenu* CreateVivaldiMenubarMenu(
-    content::WebContents* web_contents,
-    MenubarMenuParams& params,
-    int id);
 
 class VivaldiBookmarkMenuObserver {
  public:
@@ -138,17 +146,26 @@ class VivaldiBookmarkMenuObserver {
   virtual ~VivaldiBookmarkMenuObserver() {}
 };
 
-class VivaldiContextMenu {
+class VivaldiMenu {
+  public:
+    static gfx::NativeView GetActiveNativeViewFromWebContents(
+      content::WebContents* web_contents);
+    static views::Widget* GetTopLevelWidgetFromWebContents(
+      content::WebContents* web_contents);
+    static Browser* GetBrowserFromWebContents(
+      content::WebContents* web_contents);
+};
+
+class VivaldiContextMenu : public VivaldiMenu {
  public:
   virtual ~VivaldiContextMenu() {}
 
   virtual void Show() = 0;
   virtual void SetIcon(const gfx::Image& icon, int id) {}
-  virtual void SetSelectedItem(int id) {}
   virtual void UpdateMenu(ui::SimpleMenuModel* menu_model, int id) {}
 };
 
-class VivaldiBookmarkMenu {
+class VivaldiBookmarkMenu : public VivaldiMenu {
  public:
   virtual ~VivaldiBookmarkMenu() {}
   virtual bool CanShow() = 0;
@@ -156,7 +173,7 @@ class VivaldiBookmarkMenu {
   virtual void set_observer(VivaldiBookmarkMenuObserver* observer) {}
 };
 
-class VivaldiMenubarMenu {
+class VivaldiMenubarMenu : public VivaldiMenu {
  public:
   virtual ~VivaldiMenubarMenu() {}
   virtual bool CanShow() = 0;

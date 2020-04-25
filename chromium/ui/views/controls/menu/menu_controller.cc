@@ -71,6 +71,38 @@ namespace views {
 
 namespace {
 
+#if defined(OS_MACOSX)
+bool AcceleratorShouldCancelMenu(const ui::Accelerator& accelerator) {
+  // Since AcceleratorShouldCancelMenu() is called quite early in key
+  // event handling, it is actually invoked for modifier keys themselves
+  // changing. In that case, the key code reflects that the modifier key is
+  // being pressed/released. We should never treat those presses as
+  // accelerators, so bail out here.
+  //
+  // Also, we have to check for VKEY_SHIFT here even though we don't check
+  // IsShiftDown() - otherwise this sequence of keypresses will dismiss the
+  // menu:
+  //   Press Cmd
+  //   Press Shift
+  // Which makes it impossible to use menus that have Cmd-Shift accelerators.
+  if (accelerator.key_code() == ui::VKEY_CONTROL ||
+      accelerator.key_code() == ui::VKEY_MENU ||  // aka Alt
+      accelerator.key_code() == ui::VKEY_COMMAND ||
+      accelerator.key_code() == ui::VKEY_SHIFT) {
+    return false;
+  }
+
+  // Using an accelerator on Mac closes any open menu. Note that Mac behavior is
+  // different between context menus (which block use of accelerators) and other
+  // types of menus, which close when an accelerator is sent and do repost the
+  // accelerator. In MacViews, this happens naturally because context menus are
+  // (modal) Cocoa menus and other menus are Views menus, which will go through
+  // this code path.
+  return accelerator.IsCtrlDown() || accelerator.IsAltDown() ||
+         accelerator.IsCmdDown();
+}
+#endif
+
 // When showing context menu on mouse down, the user might accidentally select
 // the menu item on the subsequent mouse up. To prevent this, we add the
 // following delay before the user is able to select an item.
@@ -1180,7 +1212,8 @@ ui::PostDispatchAction MenuController::OnWillDispatchKeyEvent(
     if (!IsEditableCombobox() && !event->stopped_propagation()) {
       // Do not check mnemonics if the Alt or Ctrl modifiers are pressed. For
       // example Ctrl+<T> is an accelerator, but <T> only is a mnemonic.
-      const int kKeyFlagsMask = ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN;
+      const int kKeyFlagsMask =
+          ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN;
       const int flags = event->flags();
       if (exit_type() == ExitType::kNone && (flags & kKeyFlagsMask) == 0) {
         base::char16 c = event->GetCharacter();
@@ -1195,6 +1228,14 @@ ui::PostDispatchAction MenuController::OnWillDispatchKeyEvent(
   }
 
   ui::Accelerator accelerator(*event);
+
+#if defined(OS_MACOSX)
+  if (AcceleratorShouldCancelMenu(accelerator)) {
+    Cancel(ExitType::kAll);
+    return ui::POST_DISPATCH_PERFORM_DEFAULT;
+  }
+#endif
+
   ViewsDelegate::ProcessMenuAcceleratorResult result =
       ViewsDelegate::GetInstance()->ProcessAcceleratorWhileMenuShowing(
           accelerator);
@@ -1203,6 +1244,7 @@ ui::PostDispatchAction MenuController::OnWillDispatchKeyEvent(
     event->StopPropagation();
     return ui::POST_DISPATCH_NONE;
   }
+
   if (result == ViewsDelegate::ProcessMenuAcceleratorResult::CLOSE_MENU) {
     Cancel(ExitType::kAll);
     event->StopPropagation();
@@ -1616,6 +1658,22 @@ bool MenuController::OnKeyPressed(ui::KeyboardCode key_code) {
     default:
       break;
   }
+
+#if defined(OS_LINUX)
+  if (vivaldi::IsVivaldiRunning()) {
+    // We want Alt to close the Vivaldi menu as under Windows. For consistency
+    // we enable it for all menus. VB-39080
+    switch (key_code) {
+      case ui::VKEY_MENU:
+      case ui::VKEY_F10:
+        Cancel(ExitType::kAll);
+        break;
+      default:
+        break;
+    }
+  }
+#endif
+
   return handled_key_code;
 }
 
@@ -2283,6 +2341,7 @@ gfx::Rect MenuController::CalculateMenuBounds(MenuItemView* item,
       menu_bounds.set_x(left_of_parent);
     }
   } else {
+    using MenuPosition = MenuItemView::MenuPosition;
     // First item, align top left corner of menu with bottom left corner of
     // anchor bounds.
     menu_bounds.set_x(anchor_bounds.x());
@@ -2305,7 +2364,7 @@ gfx::Rect MenuController::CalculateMenuBounds(MenuItemView* item,
         menu_bounds.set_y(anchor_bounds.y() + kTouchYPadding);
     }
 
-    if (item->actual_menu_position() == MenuItemView::POSITION_ABOVE_BOUNDS) {
+    if (item->actual_menu_position() == MenuPosition::kAboveBounds) {
       // Menu has already been drawn above, put it above the anchor bounds.
       menu_bounds.set_y(above_anchor);
     }
@@ -2319,8 +2378,8 @@ gfx::Rect MenuController::CalculateMenuBounds(MenuItemView* item,
     //   1.) Below the anchor bounds
     //   2.) Above the anchor bounds
     //   3.) At the bottom of the monitor and off the side of the anchor bounds
-    if (item->actual_menu_position() == MenuItemView::POSITION_BELOW_BOUNDS ||
-        item->actual_menu_position() == MenuItemView::POSITION_ABOVE_BOUNDS) {
+    if (item->actual_menu_position() == MenuPosition::kBelowBounds ||
+        item->actual_menu_position() == MenuPosition::kAboveBounds) {
       // Menu has been drawn below/above the anchor bounds, make sure it fits
       // on the screen in its current location.
       const int drawn_width = menu_bounds.width();
@@ -2333,11 +2392,11 @@ gfx::Rect MenuController::CalculateMenuBounds(MenuItemView* item,
       menu_bounds.set_width(drawn_width);
     } else if (menu_bounds.bottom() <= monitor_bounds.bottom()) {
       // Menu fits below anchor bounds.
-      item->set_actual_menu_position(MenuItemView::POSITION_BELOW_BOUNDS);
+      item->set_actual_menu_position(MenuPosition::kBelowBounds);
     } else if (above_anchor >= monitor_bounds.y()) {
       // Menu fits above anchor bounds.
       menu_bounds.set_y(above_anchor);
-      item->set_actual_menu_position(MenuItemView::POSITION_ABOVE_BOUNDS);
+      item->set_actual_menu_position(MenuPosition::kAboveBounds);
     } else if (item->GetDelegate()->ShouldTryPositioningBesideAnchor()) {
       const int left_of_anchor = anchor_bounds.x() - menu_bounds.width();
       const int right_of_anchor = anchor_bounds.right();
@@ -2356,6 +2415,9 @@ gfx::Rect MenuController::CalculateMenuBounds(MenuItemView* item,
         if (menu_bounds.x() < monitor_bounds.x())
           menu_bounds.set_x(right_of_anchor);
       }
+    } else if (item->GetDelegate()->VivaldiShouldTryPositioningInMenuBar()) {
+      VivaldiAdjustMenubarMenuGeometry(&menu_bounds, monitor_bounds,
+                                       anchor_bounds);
     } else {
       // The delegate doesn't want the menu repositioned to the side, and it
       // doesn't fit on the screen in any orientation - just clip the menu to
@@ -2816,11 +2878,11 @@ void MenuController::RepostEventAndCancel(SubmenuView* source,
       exit_type = ExitType::kOutermost;
   }
 #if defined(OS_MACOSX)
-  SubmenuView* target = exit_type == ExitType::kAll
-                            ? source
-                            : state_.item->GetRootMenuItem()->GetSubmenu();
+  // When doing a menu closure animation, target the deepest submenu - that way
+  // MenuClosureAnimationMac will fade out all the menus in sync, rather than
+  // the shallowest menu only.
   menu_closure_animation_ = std::make_unique<MenuClosureAnimationMac>(
-      nullptr, target,
+      nullptr, state_.item->GetSubmenu(),
       base::BindOnce(&MenuController::Cancel, base::Unretained(this),
                      exit_type));
   menu_closure_animation_->Start();

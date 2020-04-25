@@ -240,6 +240,10 @@ class VIEWS_EXPORT MenuDelegate {
   // rather than directly above or below it, when the menu is too tall to fit
   // within the screen.
   virtual bool ShouldTryPositioningBesideAnchor() const;
+
+  // Added by Vivaldi. To be used when menu does not fit the screen or would
+  // overlap the menu bar button.
+  virtual bool VivaldiShouldTryPositioningInMenuBar() const;
 };
 
 }  // namespace views

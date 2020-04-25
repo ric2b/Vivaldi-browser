@@ -11,16 +11,8 @@
 
 class BookmarkMenuController;
 
-namespace aura {
-class Window;
-}
-
 namespace bookmarks {
 class BookmarkNode;
-}
-
-namespace gfx {
-class Point;
 }
 
 namespace views {
@@ -28,36 +20,35 @@ class MenuItemView;
 class Widget;
 }
 
-class VivaldiBookmarkMenuViews : public vivaldi::VivaldiBookmarkMenu,
+namespace vivaldi {
+
+class VivaldiBookmarkMenuViews : public VivaldiBookmarkMenu,
                                  public BookmarkMenuControllerObserver {
  public:
   ~VivaldiBookmarkMenuViews() override;
   VivaldiBookmarkMenuViews(content::WebContents* web_contents,
-                           const vivaldi::BookmarkMenuContainer* container,
+                           const BookmarkMenuContainer* container,
                            const bookmarks::BookmarkNode* node,
                            int offset,
                            const gfx::Rect& button_rect);
   bool CanShow() override;
   void Show() override;
 
-  void set_observer(vivaldi::VivaldiBookmarkMenuObserver* observer) override;
-
-  static gfx::NativeView GetActiveNativeViewFromWebContents(
-      content::WebContents* web_contents);
+  void set_observer(VivaldiBookmarkMenuObserver* observer) override;
 
   // BookmarkMenuControllerObserver
   void BookmarkMenuControllerDeleted(
       BookmarkMenuController* controller) override;
 
  private:
-  views::Widget* GetTopLevelWidget();
-  Browser* GetBrowser();
   content::WebContents* web_contents_;
   gfx::Rect button_rect_;
   BookmarkMenuController* controller_;  // Deletes iself
-  vivaldi::VivaldiBookmarkMenuObserver* observer_;
+  VivaldiBookmarkMenuObserver* observer_;
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiBookmarkMenuViews);
 };
+
+}  // namespace vivaldi
 
 #endif  // UI_VIEWS_VIVALDI_BOOKMARK_MENU_VIEWS_H_

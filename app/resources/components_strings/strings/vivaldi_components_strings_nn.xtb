@@ -151,7 +151,6 @@
 <translation id="6328639280570009161">Prøv å slå av nettverksforslag</translation>
 <translation id="6328786501058569169">Denne nettstaden er sviksam</translation>
 <translation id="6358450015545214790">Kva betyr desse?</translation>
-<translation id="6417515091412812850">Klarer ikkje å sjekka om sertifikatet er blitt trekt attende.</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> nekta å kopla seg til.</translation>
 <translation id="6447842834002726250">Informasjonskapslar</translation>
 <translation id="6451458296329894277">Stadfest ny sending av skjemaet</translation>
@@ -206,7 +205,6 @@
 <translation id="8332188693563227489">Fekk ikkje tilgang til <ph name="HOST_NAME" /></translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> brukte for lang tid til å svara.</translation>
 <translation id="8503813439785031346">Brukarnamn</translation>
-<translation id="859285277496340001">Sertifikatet fortel ikkje om det nyttar ein metode for å sjekka om det er blitt trekt attende.</translation>
 <translation id="8703575177326907206">Tilkoplinga di til <ph name="DOMAIN" /> er ikkje kryptert.</translation>
 <translation id="8740359287975076522">Fann ikkje <ph name="HOST_NAME" /> si &lt;abbr id="dnsDefinition"&gt;DNS-adresse&lt;/abbr&gt;. Feilsøkjer problemet.</translation>
 <translation id="9001074447101275817">Mellomtenaren <ph name="DOMAIN" /> krev eit brukarnamn og passord.</translation>

@@ -65,7 +65,7 @@ VivaldiQuitConfirmationDialog::VivaldiQuitConfirmationDialog(
   views::Widget* widget = new views::Widget;
   views::Widget::InitParams params =
       GetDialogWidgetInitParams(this, window, view, gfx::Rect());
-  widget->Init(params);
+  widget->Init(std::move(params));
   widget->Show();
 }
 

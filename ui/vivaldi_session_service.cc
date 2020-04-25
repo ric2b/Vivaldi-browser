@@ -174,7 +174,7 @@ bool VivaldiSessionService::ShouldTrackWindow(Browser* browser,
   // Skip windows not opened with the same profile.
   if (browser->profile() != profile)
     return false;
-  if (browser->is_app() && browser->is_type_popup() &&
+  if (browser->is_type_app() && browser->is_type_popup() &&
       !browser->is_trusted_source()) {
     return false;
   }
@@ -508,12 +508,12 @@ Browser* VivaldiSessionService::ProcessSessionWindows(
   for (auto i = windows->begin(); i != windows->end(); ++i) {
     Browser* browser = nullptr;
     if (!has_tabbed_browser &&
-        (*i)->type == sessions::SessionWindow::TYPE_TABBED) {
+        (*i)->type == sessions::SessionWindow::TYPE_NORMAL) {
       has_tabbed_browser = true;
     }
     if (i == windows->begin() && !opts_.openInNewWindow_ &&
-        (*i)->type == sessions::SessionWindow::TYPE_TABBED && browser_ &&
-        browser_->is_type_tabbed() && !browser_->profile()->IsOffTheRecord()) {
+        (*i)->type == sessions::SessionWindow::TYPE_NORMAL && browser_ &&
+        browser_->is_type_normal() && !browser_->profile()->IsOffTheRecord()) {
       // The first set of tabs is added to the existing browser.
       browser = browser_;
     } else {
@@ -526,7 +526,7 @@ Browser* VivaldiSessionService::ProcessSessionWindows(
       browser = CreateRestoredBrowser(BrowserTypeForWindowType((*i)->type),
                                       (*i)->bounds, show_state, (*i)->app_name);
     }
-    if ((*i)->type == sessions::SessionWindow::TYPE_TABBED) {
+    if ((*i)->type == sessions::SessionWindow::TYPE_NORMAL) {
       last_browser = browser;
     }
     int initial_tab_count = browser->tab_strip_model()->count();
@@ -545,7 +545,7 @@ Browser* VivaldiSessionService::ProcessSessionWindows(
     NotifySessionServiceOfRestoredTabs(browser, initial_tab_count);
   }
 
-  if (browser_to_activate && browser_to_activate->is_type_tabbed())
+  if (browser_to_activate && browser_to_activate->is_type_normal())
     last_browser = browser_to_activate;
 
   if (browser_to_activate)
@@ -565,7 +565,7 @@ void VivaldiSessionService::RemoveUnusedRestoreWindows(
   auto i = window_list->begin();
   while (i != window_list->end()) {
     sessions::SessionWindow* window = i->get();
-    if (window->type != sessions::SessionWindow::TYPE_TABBED) {
+    if (window->type != sessions::SessionWindow::TYPE_NORMAL) {
       delete window;
       i = window_list->erase(i);
     } else {

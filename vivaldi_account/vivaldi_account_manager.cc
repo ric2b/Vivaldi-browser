@@ -6,6 +6,7 @@
 #include "base/i18n/case_conversion.h"
 #include "base/json/json_reader.h"
 #include "base/rand_util.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
@@ -62,7 +63,7 @@ base::Optional<base::DictionaryValue> ParseServerResponse(
 
   base::Optional<base::Value> value = base::JSONReader::Read(*data);
   if (!value || value->type() != base::Value::Type::DICTIONARY)
-    value.reset();
+    return base::nullopt;
 
   base::DictionaryValue* dict_value = nullptr;
   if (!value.value().GetAsDictionary(&dict_value))
@@ -184,9 +185,11 @@ void VivaldiAccountManager::OnAccountPasswordStateChanged() {
   Login(account_info_.username, std::string(), false);
 }
 
-void VivaldiAccountManager::Login(const std::string& username,
+void VivaldiAccountManager::Login(const std::string& untrimmed_username,
                                   const std::string& password,
                                   bool save_password) {
+  std::string username(
+      base::TrimWhitespaceASCII(untrimmed_username, base::TRIM_ALL));
   DCHECK(!username.empty());
 
   if (!password.empty() || username != account_info_.username) {

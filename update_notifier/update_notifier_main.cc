@@ -48,7 +48,7 @@ void EnableHighDPISupport() {
 
 int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE prev, wchar_t*, int) {
   base::AtExitManager at_exit;
-  base::MessageLoop message_loop(base::MessageLoop::TYPE_UI);
+  base::MessageLoop message_loop(base::MessagePumpType::UI);
 
   install_static::InitializeProductDetailsForPrimaryModule();
   EnableHighDPISupport();

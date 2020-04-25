@@ -255,6 +255,8 @@ update_target("//media:media") {
        "//vivaldi/platform_media/renderer/decoders/mac/core_audio_demuxer.h",
        "//vivaldi/platform_media/renderer/decoders/mac/core_audio_demuxer_stream.cc",
        "//vivaldi/platform_media/renderer/decoders/mac/core_audio_demuxer_stream.h",
+       "//vivaldi/platform_media/renderer/decoders/mac/viv_video_decoder.h",
+       "//vivaldi/platform_media/renderer/decoders/mac/viv_video_decoder.mm",
       ]
    }
 

@@ -15,7 +15,7 @@
 #include "components/account_id/account_id.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/scoped_user_manager.h"
-#include "content/public/test/test_browser_thread_bundle.h"
+#include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace chromeos {
@@ -93,6 +93,27 @@ TEST_F(ReleaseNotesStorageTest, ShouldShowReleaseNotesGoogler) {
                                         -1);
 
   EXPECT_EQ(true, release_notes_storage->ShouldNotify());
+}
+
+// Tests that when kReleaseNotesSuggestionChipTimesLeftToShow is greater than 0,
+// ReleaseNotesStorage::ShouldShowSuggestionChip returns true, and when the
+// value is 0 the method returns false.
+TEST_F(ReleaseNotesStorageTest, ShowReleaseNotesSuggestionChip) {
+  std::unique_ptr<Profile> profile = CreateProfile("test@gmail.com");
+
+  profile->GetProfilePolicyConnector()->OverrideIsManagedForTesting(true);
+  std::unique_ptr<ReleaseNotesStorage> release_notes_storage =
+      std::make_unique<ReleaseNotesStorage>(profile.get());
+
+  profile.get()->GetPrefs()->SetInteger(
+      prefs::kReleaseNotesSuggestionChipTimesLeftToShow, 1);
+  EXPECT_EQ(true, release_notes_storage->ShouldShowSuggestionChip());
+
+  release_notes_storage->DecreaseTimesLeftToShowSuggestionChip();
+
+  EXPECT_EQ(0, profile.get()->GetPrefs()->GetInteger(
+                   prefs::kReleaseNotesSuggestionChipTimesLeftToShow));
+  EXPECT_EQ(false, release_notes_storage->ShouldShowSuggestionChip());
 }
 
 }  // namespace chromeos

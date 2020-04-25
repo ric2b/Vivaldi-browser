@@ -50,10 +50,11 @@ class Menubar : public views::MenuDelegate {
     return (run_types_ & views::MenuRunner::FOR_DROP) != 0;
   }
 
-  bool ShouldExecuteCommandWithoutClosingMenu(int id, const ui::Event& e) override;
   // MenuDelegate overrides:
+  bool ShouldExecuteCommandWithoutClosingMenu(int id, const ui::Event& e) override;
+  bool ShouldTryPositioningBesideAnchor() const override;
+  bool VivaldiShouldTryPositioningInMenuBar() const  override;
   void ExecuteCommand(int id, int mouse_event_flags) override;
-  //void ExecuteCommand(int id) override;
   bool IsItemChecked(int id) const override;
   bool GetAccelerator(int id, ui::Accelerator* accelerator) const override;
 
@@ -76,7 +77,9 @@ class Menubar : public views::MenuDelegate {
 
  private:
   typedef std::map<int, views::MenuItemView*> IdToMenuMap;
+  typedef std::map<int, ui::MenuModel*> IdToMenuModelMap;
 
+  bool IsDarkTextColor(views::MenuItemView* menu);
   void Populate(int id);
   void PopulateBookmarks();
   void PopulateMenu(views::MenuItemView* parent, ui::MenuModel* model);
@@ -94,8 +97,6 @@ class Menubar : public views::MenuDelegate {
   views::MenuItemView*  bookmark_menu_ = nullptr;
   std::unique_ptr<BookmarkMenuDelegate> bookmark_menu_delegate_;
 
-  // The views menu. Owned by menu_runner_.
-  //views::MenuItemView* root_ = nullptr;
   std::unique_ptr<views::MenuRunner> menu_runner_;
   Browser* browser_;
   MenubarMenuParams* params_;
@@ -104,6 +105,8 @@ class Menubar : public views::MenuDelegate {
   int run_types_;
   int active_menu_id_ = -1;
   IdToMenuMap id_to_menu_map_;
+  IdToMenuModelMap id_to_menumodel_map_;
+  bool has_been_shown_ = false;
 };
 
 }  // vivaldi

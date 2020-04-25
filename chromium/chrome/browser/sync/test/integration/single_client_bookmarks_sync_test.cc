@@ -18,6 +18,7 @@
 #include "components/bookmarks/browser/url_and_title.h"
 #include "components/sync/driver/profile_sync_service.h"
 #include "components/sync/driver/sync_driver_switches.h"
+#include "components/sync/engine_impl/loopback_server/loopback_server_entity.h"
 #include "components/sync/test/fake_server/bookmark_entity_builder.h"
 #include "components/sync/test/fake_server/entity_builder_factory.h"
 #include "components/sync/test/fake_server/fake_server_verifier.h"
@@ -54,6 +55,10 @@ namespace {
 // SyncTest and using it in all single client tests.
 const int kSingleProfileIndex = 0;
 }
+
+// An arbitrary GUID, to be used for injecting the same bookmark entity to the
+// fake server across PRE_MyTest and MyTest.
+const char kBookmarkGuid[] = "e397ed62-9532-4dbf-ae55-200236eba15c";
 
 class SingleClientBookmarksSyncTest : public FeatureToggler, public SyncTest {
  public:
@@ -780,6 +785,8 @@ IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTest,
   fake_server::EntityBuilderFactory entity_builder_factory;
   fake_server::BookmarkEntityBuilder bookmark_builder =
       entity_builder_factory.NewBookmarkEntityBuilder(title);
+  bookmark_builder.SetId(
+      syncer::LoopbackServerEntity::CreateId(syncer::BOOKMARKS, kBookmarkGuid));
   fake_server_->InjectEntity(bookmark_builder.BuildFolder());
 
   base::HistogramTester histogram_tester;
@@ -797,6 +804,8 @@ IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTest,
   fake_server::EntityBuilderFactory entity_builder_factory;
   fake_server::BookmarkEntityBuilder bookmark_builder =
       entity_builder_factory.NewBookmarkEntityBuilder(title);
+  bookmark_builder.SetId(
+      syncer::LoopbackServerEntity::CreateId(syncer::BOOKMARKS, kBookmarkGuid));
   fake_server_->InjectEntity(bookmark_builder.BuildFolder());
 
   base::HistogramTester histogram_tester;
@@ -814,6 +823,7 @@ IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTest,
   // Once a sync request happened (e.g. by a poll), that snapshot is populated.
   // We use the following checker to simply wait for an non-empty snapshot.
   EXPECT_TRUE(UpdatedProgressMarkerChecker(GetSyncService(0)).Wait());
+  ASSERT_EQ(1u, GetBookmarkBarNode(kSingleProfileIndex)->children().size());
 
   EXPECT_EQ(
       0, histogram_tester.GetBucketCount("Sync.ModelTypeEntityChange3.BOOKMARK",

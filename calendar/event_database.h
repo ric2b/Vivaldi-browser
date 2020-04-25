@@ -44,10 +44,12 @@ class EventDatabase {
   bool UpdateEventRow(const EventRow& event);
   bool DeleteEvent(EventID event_id);
   bool DeleteEventsForCalendar(CalendarID calendar_id);
+  bool DoesEventIdExist(EventID event_id);
 
  protected:
   virtual sql::Database& GetDB() = 0;
   void FillEventRow(sql::Statement& statement, EventRow* event);
+  bool MigrateEventsWithoutSequenceAndIcalColumns();
 
  private:
   DISALLOW_COPY_AND_ASSIGN(EventDatabase);
@@ -60,7 +62,7 @@ class EventDatabase {
 #define CALENDAR_EVENT_ROW_FIELDS                                            \
   " id, calendar_id, alarm_id, title, description, start, end, all_day, "    \
   "is_recurring, start_recurring, end_recurring, location, url, etag, href," \
-  " uid, event_type_id, task, complete, trash, trash_time "
+  " uid, event_type_id, task, complete, trash, trash_time, sequence, ical "
 
 }  // namespace calendar
 

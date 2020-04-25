@@ -152,7 +152,6 @@
 <translation id="6328639280570009161">ネットワーク予測を無効にしてみてください</translation>
 <translation id="6328786501058569169">これは詐欺サイトです</translation>
 <translation id="6358450015545214790">ヘルプ</translation>
-<translation id="6417515091412812850">証明書が失効しているかを確認できません。</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" />で接続が拒否されました。</translation>
 <translation id="6447842834002726250">Cookie</translation>
 <translation id="6451458296329894277">フォーム再送信の確認</translation>
@@ -207,7 +206,6 @@
 <translation id="8332188693563227489"><ph name="HOST_NAME" />へのアクセスが拒否されました</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" />からの応答時間が長すぎます。</translation>
 <translation id="8503813439785031346">ユーザー名</translation>
-<translation id="859285277496340001">この証明書には、失効を確認する方法が指定されていません。</translation>
 <translation id="8703575177326907206"><ph name="DOMAIN" /> への接続は暗号化されていません。</translation>
 <translation id="8740359287975076522"><ph name="HOST_NAME" />の&lt;abbr id="dnsDefinition"&gt;DNSアドレス&lt;/abbr&gt;が見つかりませんでした。問題を診断しています。</translation>
 <translation id="9001074447101275817">プロキシ <ph name="DOMAIN" />にはユーザー名とパスワードが必要です。</translation>

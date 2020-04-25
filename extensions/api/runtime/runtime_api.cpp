@@ -18,6 +18,7 @@
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
@@ -108,7 +109,8 @@ void VivaldiRuntimeFeatures::LoadRuntimeFeatures() {
     store_ = new JsonPrefStore(path,
                                std::unique_ptr<PrefFilter>(),
                                base::CreateSequencedTaskRunnerWithTraits(
-                                  { base::MayBlock()}) .get());
+                                   {base::ThreadPool(), base::MayBlock()})
+                                   .get());
     store_->ReadPrefs();
 
     if (!GetFlags(&flags_)) {
@@ -329,8 +331,6 @@ void VivaldiRuntimeFeaturesFactory::OnProfileIsOmittedChanged(
 ExtensionFunction::ResponseAction RuntimePrivateExitFunction::Run() {
   // Free any open devtools if the user selects Exit from the menu.
   DevtoolsConnectorAPI::CloseAllDevtools(browser_context());
-
-  VivaldiUtilitiesAPI::CloseAllThumbnailWindows(browser_context());
 
   chrome::CloseAllBrowsersAndQuit();
 
@@ -809,6 +809,17 @@ RuntimePrivateDeleteProfileFunction::Run() {
 
   base::FilePath profile_path =
     base::FilePath::FromUTF8Unsafe(params->profile_path);
+
+  ProfileManager* profile_manager = g_browser_process->profile_manager();
+  Profile* profile = profile_manager->GetProfile(profile_path);
+  DCHECK(profile);
+  if (profile) {
+    // Deleting a profile will also close all its windows, so make sure
+    // we mark it as being from a profile close/delete so we can avoid
+    // any confirmation dialogs that might allow the user to abort
+    // the window close.
+    extensions::VivaldiWindowsAPI::WindowsForProfileClosing(profile);
+  }
 
   g_browser_process->profile_manager()->MaybeScheduleProfileForDeletion(
       profile_path,

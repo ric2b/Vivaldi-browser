@@ -788,17 +788,14 @@ void TabLifecycleUnitSource::TabLifecycleUnit::FinishDiscard(
             ->render_manager();
 
     if (rfh_manager->IsMainFrameForInnerDelegate()) {
-      // This will eventually destroy the webcontents.
       rfh_manager->RemoveOuterDelegateFrame();
     }
-    old_contents_deleter.release();
-  } else {
+  }
   // Discard the old tab's renderer.
   // TODO(jamescook): This breaks script connections with other tabs. Find a
   // different approach that doesn't do that, perhaps based on
   // RenderFrameProxyHosts.
   old_contents_deleter.reset();
-  }
 
   SetState(LifecycleUnitState::DISCARDED,
            DiscardReasonToStateChangeReason(discard_reason));
@@ -996,6 +993,13 @@ void TabLifecycleUnitSource::TabLifecycleUnit::CheckIfTabIsUsedInBackground(
   if (DevToolsWindow::GetInstanceForInspectedWebContents(web_contents())) {
     decision_details->AddReason(
         DecisionFailureReason::LIVE_STATE_DEVTOOLS_OPEN);
+  }
+
+  // Do not freeze or discard tabs that are connected to at least one bluetooth
+  // device.
+  if (web_contents()->IsConnectedToBluetoothDevice()) {
+    decision_details->AddReason(
+        DecisionFailureReason::LIVE_STATE_USING_BLUETOOTH);
   }
 }
 

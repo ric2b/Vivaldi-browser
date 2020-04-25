@@ -13,7 +13,6 @@
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_menu_bridge.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/prefs/pref_service.h"
-#include "extensions/api/show_menu/show_menu_api.h"
 #include "prefs/vivaldi_gen_prefs.h"
 #include "ui/base/l10n/l10n_util.h"
 

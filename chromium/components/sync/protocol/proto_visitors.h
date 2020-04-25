@@ -229,6 +229,7 @@ VISIT_PROTO_FIELDS(const sync_pb::ClientConfigParams& proto) {
 
 VISIT_PROTO_FIELDS(const sync_pb::ClientStatus& proto) {
   VISIT(hierarchy_conflict_detected);
+  VISIT(is_sync_feature_enabled);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::ClientToServerMessage& proto) {
@@ -644,8 +645,8 @@ VISIT_PROTO_FIELDS(const sync_pb::NigoriModel& proto) {
   VISIT(custom_passphrase_time);
   VISIT(custom_passphrase_key_derivation_params);
   VISIT(encrypt_everything);
-  VISIT_REP(encrypted_types_specifics_field_numbers);
-  VISIT_REP(keystore_keys);
+  VISIT_REP(encrypted_types_specifics_field_number);
+  VISIT_REP(keystore_key);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::NigoriLocalData& proto) {
@@ -866,6 +867,7 @@ VISIT_PROTO_FIELDS(const sync_pb::SyncedNotificationSpecifics& proto) {}
 
 VISIT_PROTO_FIELDS(const sync_pb::SecurityEventSpecifics& proto) {
   VISIT(gaia_password_reuse_event);
+  VISIT(event_time_usec);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::GaiaPasswordReuse& proto) {
@@ -1076,6 +1078,7 @@ VISIT_PROTO_FIELDS(const sync_pb::CloudTokenData& proto) {
   VISIT(exp_month);
   VISIT(exp_year);
   VISIT(art_fife_url);
+  VISIT(instrument_token);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::WalletMaskedCreditCard& proto) {

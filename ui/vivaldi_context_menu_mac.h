@@ -15,7 +15,6 @@
 #import <Cocoa/Cocoa.h>
 
 #include "base/mac/scoped_nsobject.h"
-#include "chromium/content/public/common/context_menu_params.h"
 #include "ui/vivaldi_context_menu.h"
 
 class ToolkitDelegateMac;
@@ -30,7 +29,7 @@ class VivaldiContextMenuMac : public vivaldi::VivaldiContextMenu {
   ~VivaldiContextMenuMac() override;
   VivaldiContextMenuMac(content::WebContents* web_contents,
                         ui::SimpleMenuModel* menu_model,
-                        const content::ContextMenuParams& params);
+                        const gfx::Rect& rect);
   void Show() override;
   void SetIcon(const gfx::Image& icon, int id) override;
 
@@ -40,7 +39,7 @@ class VivaldiContextMenuMac : public vivaldi::VivaldiContextMenu {
   base::scoped_nsobject<MenuControllerCocoa> menu_controller_;
   content::WebContents* web_contents_;
   ui::SimpleMenuModel* menu_model_;
-  content::ContextMenuParams params_;
+  gfx::Rect rect_;
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiContextMenuMac);
 };

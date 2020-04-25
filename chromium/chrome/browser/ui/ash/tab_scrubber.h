@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/ui/views/tabs/tab_strip_observer.h"
@@ -23,7 +24,7 @@ namespace gfx {
 class Point;
 }
 
-// Class to enable quick tab switching via horizontal 3 finger swipes.
+// Class to enable quick tab switching via horizontal 4 finger swipes.
 class TabScrubber : public ui::EventHandler,
                     public BrowserListObserver,
                     public TabStripObserver {
@@ -75,6 +76,9 @@ class TabScrubber : public ui::EventHandler,
 
   void UpdateHighlightedTab(Tab* new_tab, int new_index);
 
+  // The required number of fingers to perform tab scrubbing, which can be
+  // affected by some Virtual Desks flags.
+  const int required_finger_count_;
   // Are we currently scrubbing?.
   bool scrubbing_ = false;
   // The last browser we used for scrubbing, NULL if |scrubbing_| is false and
@@ -97,6 +101,9 @@ class TabScrubber : public ui::EventHandler,
   bool use_default_activation_delay_ = true;
   // Forces the tabs to be revealed if we are in immersive fullscreen.
   std::unique_ptr<ImmersiveRevealedLock> immersive_reveal_lock_;
+  // The time at which scrubbing started. Needed for UMA reporting of scrubbing
+  // duration.
+  base::TimeTicks scrubbing_start_time_;
 
   DISALLOW_COPY_AND_ASSIGN(TabScrubber);
 };

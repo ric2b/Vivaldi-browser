@@ -53,7 +53,7 @@ git clone --depth=1 https://github.com/ric2b/Vivaldi-browser w
 
 wget https://vivaldi.com/source/vivaldi-source-2.0...tar.xz
 tar --xz -xf ... && mv vivaldi-source v0 && ls -la
-ls -ld v0/.git
+ls -ld {w,v0}/.git
 # rm -rf v0/.git
 
 cp -r w/{.git,README.md} v0
@@ -72,7 +72,7 @@ cd ..
 ```
 wget https://vivaldi.com/source/vivaldi-source-2.1...tar.xz
 tar --xz -xf ... && mv vivaldi-source v1 && ls -la
-ls -ld v1/.git
+ls -ld v{0,1}/.git
 # rm -rf v1/.git
 
 cp -r v0/{.git,README.md} v1

@@ -1,4 +1,4 @@
-// Copyright 2015-2017 Vivaldi Technologies AS. All rights reserved.
+// Copyright 2015-2019 Vivaldi Technologies AS. All rights reserved.
 
 // This class is just a proxy for emitting events from the Chrome ui for
 // browserAction and pageAction badges.
@@ -20,6 +20,7 @@
 #include "chrome/browser/extensions/extension_action.h"
 #include "chrome/browser/extensions/extension_action_manager.h"
 #include "chrome/browser/extensions/extension_action_runner.h"
+#include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/extension_uninstall_dialog.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ui/browser.h"
@@ -27,11 +28,11 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
 #include "chrome/common/extensions/api/commands/commands_handler.h"
 #include "chrome/common/extensions/api/extension_action/action_info.h"
 #include "chrome/common/extensions/command.h"
 #include "chrome/grit/theme_resources.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "extensions/api/tabs/tabs_private_api.h"
@@ -53,15 +54,11 @@
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/vivaldi_ui_utils.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 using vivaldi::ui_tools::EncodeBitmap;
 
 namespace extensions {
-
-const char* const kBetaChromecastExtensionId =
-    "dliochdbjfkdbacpmhlcpmleaejidimm";
-const char* const kStableChromecastExtensionId =
-    "boadgeojelhgndaghljhdicfkmllpafd";
 
 namespace {
 
@@ -129,8 +126,7 @@ gfx::ImageSkiaRep ScaleImageSkiaRep(const gfx::ImageSkiaRep& rep,
 
 void FillBitmapForTabId(vivaldi::extension_action_utils::ExtensionInfo* info,
                         ExtensionAction* action,
-                        int tab_id,
-                        content::BrowserContext* browser_context) {
+                        int tab_id) {
   // Icon precedence:
   //   3. default
   //   2. declarative
@@ -175,44 +171,6 @@ void FillBitmapForTabId(vivaldi::extension_action_utils::ExtensionInfo* info,
   } else {
     info->badge_icon.reset(new std::string(""));
   }
-}
-
-
-void FillInfoForTabId(vivaldi::extension_action_utils::ExtensionInfo* info,
-                      ExtensionAction* action,
-                      int tab_id,
-                      content::BrowserContext* browser_context) {
-  info->keyboard_shortcut.reset(
-      new std::string(GetShortcutTextForExtensionAction(
-          action, browser_context)));
-
-  info->id = action->extension_id();
-
-  // Note, all getters return default values if no explicit value has been set.
-  info->badge_tooltip.reset(new std::string(action->GetTitle(tab_id)));
-
-  info->badge_text.reset(new std::string(action->GetBadgeText(tab_id)));
-
-  info->badge_background_color.reset(new std::string(
-      SkColorToRGBAString(action->GetBadgeBackgroundColor(tab_id))));
-
-  info->badge_text_color.reset(
-      new std::string(SkColorToRGBAString(action->GetBadgeTextColor(tab_id))));
-
-  info->action_type = action->action_type() == ActionInfo::TYPE_BROWSER
-                          ? vivaldi::extension_action_utils::ACTION_TYPE_BROWSER
-                          : vivaldi::extension_action_utils::ACTION_TYPE_PAGE;
-
-  info->visible.reset(new bool(action->GetIsVisible(tab_id)));
-
-  info->allow_in_incognito.reset(new bool(util::IsIncognitoEnabled(
-      action->extension_id(), browser_context)));
-
-  info->action_is_hidden.reset(
-      new bool(!ExtensionActionAPI::Get(browser_context)
-                    ->GetBrowserActionVisibility(action->extension_id())));
-
-  FillBitmapForTabId(info, action, tab_id, browser_context);
 }
 
 void FillInfoFromManifest(vivaldi::extension_action_utils::ExtensionInfo* info,
@@ -283,7 +241,7 @@ void ExtensionActionUtil::SendIconLoaded(
   if (image.IsEmpty())
     return;
 
-  extensions::vivaldi::extension_action_utils::ExtensionInfo info;
+  vivaldi::extension_action_utils::ExtensionInfo info;
   const Extension* extension =
       ExtensionRegistry::Get(browser_context)
           ->GetExtensionById(extension_id,
@@ -293,7 +251,7 @@ void ExtensionActionUtil::SendIconLoaded(
   ExtensionAction* action = manager->GetExtensionAction(*extension);
 
   if (action) {
-    FillBitmapForTabId(&info, action, -1, browser_context);
+    FillBitmapForTabId(&info, action, ExtensionAction::kDefaultTabId);
     info.id = extension_id;
 
     ::vivaldi::BroadcastEvent(
@@ -308,9 +266,64 @@ ExtensionActionUtil::ExtensionActionUtil(Profile* profile)
   ExtensionRegistry::Get(profile_)->AddObserver(this);
   ExtensionActionAPI::Get(profile)->AddObserver(this);
   CommandService::Get(profile_)->AddObserver(this);
+
+  prefs_registrar_ = std::make_unique<PrefChangeRegistrar>();
+  prefs_registrar_->Init(profile->GetPrefs());
+
+  prefs_registrar_->Add(vivaldiprefs::kAddressBarExtensionsHiddenExtensions,
+    base::BindRepeating(
+      &ExtensionActionUtil::PrefsChange, base::Unretained(this)));
+
+  PrefsChange();
+}
+void ExtensionActionUtil::PrefsChange() {
+  const base::Value* hidden_extensions = profile_->GetPrefs()->GetList(
+    vivaldiprefs::kAddressBarExtensionsHiddenExtensions);
+
+  user_hidden_extensions_.reset(
+    new base::ListValue(hidden_extensions->GetList()));
 }
 
 ExtensionActionUtil::~ExtensionActionUtil() {}
+
+void ExtensionActionUtil::FillInfoForTabId(
+    vivaldi::extension_action_utils::ExtensionInfo* info,
+    ExtensionAction* action,
+    int tab_id) {
+  info->keyboard_shortcut.reset(
+    new std::string(GetShortcutTextForExtensionAction(
+      action, profile_)));
+
+  info->id = action->extension_id();
+
+  // Note, all getters return default values if no explicit value has been set.
+  info->badge_tooltip.reset(new std::string(action->GetTitle(tab_id)));
+
+  info->badge_text.reset(
+    new std::string(action->GetExplicitlySetBadgeText(tab_id)));
+
+  info->badge_background_color.reset(new std::string(
+    SkColorToRGBAString(action->GetBadgeBackgroundColor(tab_id))));
+
+  info->badge_text_color.reset(
+    new std::string(SkColorToRGBAString(action->GetBadgeTextColor(tab_id))));
+
+  info->action_type = action->action_type() == ActionInfo::TYPE_BROWSER
+    ? vivaldi::extension_action_utils::ACTION_TYPE_BROWSER
+    : vivaldi::extension_action_utils::ACTION_TYPE_PAGE;
+
+  info->visible.reset(new bool(action->GetIsVisible(tab_id)));
+
+  info->allow_in_incognito.reset(
+      new bool(util::IsIncognitoEnabled(action->extension_id(), profile_)));
+
+  bool is_user_hidden =
+    Contains(*user_hidden_extensions_, base::Value(action->extension_id()));
+
+  info->action_is_hidden.reset(new bool(is_user_hidden));
+
+  FillBitmapForTabId(info, action, tab_id);
+}
 
 void ExtensionActionUtil::Shutdown() {
   ExtensionRegistry::Get(profile_)->RemoveObserver(this);
@@ -352,7 +365,7 @@ void ExtensionActionUtil::OnExtensionActionUpdated(
   // TODO(igor@vivaldi.com): Shall we use the passed browser_context here,
   // not stored profile_? See VB-52519.
 
-  FillInfoForTabId(&info, extension_action, tab_id, profile_);
+  FillInfoForTabId(&info, extension_action, tab_id);
 
   const Extension* extension =
       extensions::ExtensionRegistry::Get(profile_)->GetExtensionById(
@@ -380,7 +393,7 @@ void ExtensionActionUtil::OnExtensionUninstalled(
   ExtensionAction* action = action_manager->GetExtensionAction(*extension);
   if (action) {
     vivaldi::extension_action_utils::ExtensionInfo info;
-    FillInfoForTabId(&info, action, ExtensionAction::kDefaultTabId, profile_);
+    FillInfoForTabId(&info, action, ExtensionAction::kDefaultTabId);
 
     ::vivaldi::BroadcastEvent(
         vivaldi::extension_action_utils::OnRemoved::kEventName,
@@ -406,7 +419,7 @@ void ExtensionActionUtil::OnExtensionLoaded(
   int tab_id = ExtensionAction::kDefaultTabId;
   int icon_size = extension_misc::EXTENSION_ICON_MEDIUM;
 
-  FillInfoForTabId(&info, action, tab_id, profile_);
+  FillInfoForTabId(&info, action, tab_id);
 
   FillInfoFromManifest(&info, extension);
 
@@ -574,8 +587,11 @@ ExtensionActionUtilsGetToolbarExtensionsFunction::Run() {
         !extensions::Manifest::IsComponentLocation(extension->location())) {
       vivaldi::extension_action_utils::ExtensionInfo info;
 
-      FillInfoForTabId(
-          &info, action, ExtensionAction::kDefaultTabId, browser_context());
+      ExtensionActionUtil* utils =
+        ExtensionActionUtilFactory::GetForBrowserContext(
+          browser_context());
+
+      utils->FillInfoForTabId(&info, action, ExtensionAction::kDefaultTabId);
       info.name.reset(new std::string(extension->name()));
 
       std::string manifest_string;
@@ -650,20 +666,34 @@ ExtensionActionUtilsToggleBrowserActionVisibilityFunction::Run() {
       extensions::ExtensionRegistry::Get(browser_context())
           ->GetExtensionById(params->extension_id,
                              extensions::ExtensionRegistry::ENABLED);
-  if (!extension)
+  if (!extension) {
     return RespondNow(Error(NoSuchExtension(params->extension_id)));
+  }
 
   extensions::ExtensionActionManager* action_manager =
       extensions::ExtensionActionManager::Get(browser_context());
   ExtensionAction* action = action_manager->GetExtensionAction(*extension);
-  if (!action)
+  if (!action) {
     return RespondNow(Error(NoExtensionAction(params->extension_id)));
+  }
 
-  ExtensionActionAPI* api = ExtensionActionAPI::Get(browser_context());
-  bool toggled_visibility =
-      !api->GetBrowserActionVisibility(params->extension_id);
-  api->SetBrowserActionVisibility(params->extension_id, toggled_visibility);
-  api->NotifyChange(action, nullptr, browser_context());
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  const base::Value* hidden_extensions = profile->GetPrefs()->GetList(
+      vivaldiprefs::kAddressBarExtensionsHiddenExtensions);
+
+  base::ListValue updated_hidden_extensions(hidden_extensions->GetList());
+
+  if (Contains(updated_hidden_extensions, base::Value(params->extension_id))) {
+    updated_hidden_extensions.Remove(base::Value(params->extension_id),
+                                     nullptr);
+  } else {
+    updated_hidden_extensions.AppendString(params->extension_id);
+  }
+  profile->GetPrefs()->Set(vivaldiprefs::kAddressBarExtensionsHiddenExtensions,
+                           updated_hidden_extensions);
+
+  ExtensionActionAPI::Get(browser_context())
+      ->NotifyChange(action, nullptr, browser_context());
   return RespondNow(NoArguments());
 }
 

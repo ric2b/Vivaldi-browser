@@ -248,8 +248,6 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   bool focused = true;
   std::string tab_url;
   std::string ext_data;
-  vivaldi::window_private::WindowType type =
-      vivaldi::window_private::WindowType::WINDOW_TYPE_NORMAL;
 
   if (params->options.incognito.get()) {
     incognito = *params->options.incognito.get();
@@ -263,7 +261,6 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   if (params->options.ext_data.get()) {
     ext_data = *params->options.ext_data.get();
   }
-  type = params->type;
   Profile* profile = Profile::FromBrowserContext(browser_context());
   if (incognito) {
     profile = profile->GetOffTheRecordProfile();
@@ -272,12 +269,10 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   }
   gfx::Rect bounds(left, top, params->options.bounds.width,
                    params->options.bounds.height);
-  Browser::CreateParams create_params(Browser::TYPE_POPUP, profile, false);
 
   // App window specific parameters
   extensions::AppWindow::CreateParams app_params;
 
-  app_params.creator_process_id = render_frame_host()->GetProcess()->GetID();
   app_params.focused = focused;
   if (params->options.window_decoration.get()) {
     bool window_decoration = *params->options.window_decoration.get();
@@ -293,6 +288,7 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   }
   app_params.content_spec.bounds = bounds;
   app_params.content_spec.minimum_size = gfx::Size(min_width, min_height);
+  app_params.state = ui::SHOW_STATE_DEFAULT;
 
   if (profile->IsGuestSession() && !incognito) {
     // Opening a new window from a guest session is only allowed for
@@ -302,24 +298,19 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
         Error("New guest window can only be opened from incognito window"));
   }
 
-  VivaldiBrowserWindow* window =
-      VivaldiBrowserWindow::CreateVivaldiBrowserWindow(nullptr, params->url,
-                                                       app_params);
+  VivaldiBrowserWindow* window = new VivaldiBrowserWindow();
+  window->set_type(ConvertToVivaldiWindowType(params->type));
 
+  Browser::CreateParams create_params(Browser::TYPE_POPUP, profile, false);
   create_params.initial_bounds = bounds;
-  create_params.initial_show_state = ui::SHOW_STATE_DEFAULT;
   create_params.is_session_restore = false;
   create_params.is_vivaldi = true;
   create_params.window = window;
   create_params.ext_data = ext_data;
 
-  Browser* browser = new Browser(create_params);
-
-  window->set_browser(browser);
-  window->set_type(ConvertToVivaldiWindowType(type));
-
-  // Create the document now.
-  window->CreateWebContents(render_frame_host());
+  window->SetBrowser(std::make_unique<Browser>(create_params));
+  window->CreateWebContents(app_params, render_frame_host());
+  window->LoadContents(params->url);
 
   if (tab_url.empty()) {
     tab_url = "about:blank";
@@ -327,12 +318,13 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   content::OpenURLParams urlparams(GURL(tab_url), content::Referrer(),
                                    WindowOpenDisposition::NEW_FOREGROUND_TAB,
                                    ui::PAGE_TRANSITION_AUTO_TOPLEVEL, false);
-  browser->OpenURL(urlparams);
+  window->browser()->OpenURL(urlparams);
 
   // TODO(pettern): If we ever need to open unfocused windows, we need to
   // add a new method for open delayed and unfocused.
   //  window->Show(focused ? AppWindow::SHOW_ACTIVE : AppWindow::SHOW_INACTIVE);
-  return RespondNow(ArgumentList(Results::Create(browser->session_id().id())));
+  int window_id = window->browser()->session_id().id();
+  return RespondNow(ArgumentList(Results::Create(window_id)));
 }
 
 ExtensionFunction::ResponseAction WindowPrivateGetCurrentIdFunction::Run() {

@@ -80,7 +80,7 @@ class VivaldiPrefsApiNotification : public KeyedService {
   DISALLOW_COPY_AND_ASSIGN(VivaldiPrefsApiNotification);
 };
 
-class PrefsGetFunction : public UIThreadExtensionFunction {
+class PrefsGetFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("prefs.get", PREFS_GET)
   PrefsGetFunction() = default;
@@ -92,7 +92,7 @@ class PrefsGetFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(PrefsGetFunction);
 };
 
-class PrefsSetFunction : public UIThreadExtensionFunction {
+class PrefsSetFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("prefs.set", PREFS_SET)
   PrefsSetFunction() = default;
@@ -104,7 +104,7 @@ class PrefsSetFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(PrefsSetFunction);
 };
 
-class PrefsResetFunction : public UIThreadExtensionFunction {
+class PrefsResetFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("prefs.reset", PREFS_RESET)
   PrefsResetFunction() = default;
@@ -116,7 +116,7 @@ class PrefsResetFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(PrefsResetFunction);
 };
 
-class PrefsGetForCacheFunction : public UIThreadExtensionFunction {
+class PrefsGetForCacheFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("prefs.getForCache", PREFS_GET_FOR_CACHE)
   PrefsGetForCacheFunction() = default;

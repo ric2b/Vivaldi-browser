@@ -121,6 +121,8 @@ const char* GetPrefNameForType(UserSelectableType type) {
 #endif
     case UserSelectableType::kTabs:
       return prefs::kSyncTabs;
+    case UserSelectableType::kWifiConfigurations:
+      return prefs::kSyncWifiConfigurations;
     case UserSelectableType::kNotes:
       return prefs::kSyncNotes;
   }
@@ -130,7 +132,7 @@ const char* GetPrefNameForType(UserSelectableType type) {
 
 // Gets an offset to add noise to the birth year. If not present in prefs, the
 // offset will be randomly generated within the offset range and cached in
-// prefs.
+// syncable prefs.
 int GetBirthYearOffset(PrefService* pref_service) {
   int offset =
       pref_service->GetInteger(prefs::kSyncDemographicsBirthYearOffset);
@@ -298,7 +300,8 @@ void SyncPrefs::RegisterProfilePrefs(
       user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
   registry->RegisterIntegerPref(
       prefs::kSyncDemographicsBirthYearOffset,
-      kUserDemographicsBirthYearNoiseOffsetDefaultValue);
+      kUserDemographicsBirthYearNoiseOffsetDefaultValue,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 
   // Obsolete prefs that will be removed after a grace period.
   RegisterObsoleteUserTypePrefs(registry);

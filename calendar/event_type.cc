@@ -21,6 +21,7 @@ CalendarEvent::CalendarEvent()
       description(base::ASCIIToUTF16("")),
       all_day(false),
       trash(false),
+      sequence(0),
       updateFields(0) {}
 
 CalendarEvent::CalendarEvent(const CalendarEvent& event)
@@ -44,6 +45,8 @@ CalendarEvent::CalendarEvent(const CalendarEvent& event)
       complete(event.complete),
       trash(event.trash),
       trash_time(event.trash_time),
+      sequence(event.sequence),
+      ical(event.ical),
       updateFields(event.updateFields) {}
 
 CalendarEvent::~CalendarEvent() {}
@@ -70,7 +73,10 @@ EventRow::EventRow(EventID id,
                    EventTypeID event_type_id,
                    bool task,
                    bool complete,
-                   bool trash)
+                   bool trash,
+                   base::Time trash_time,
+                   int sequence,
+                   base::string16 ical)
     : id_(id),
       calendar_id_(calendar_id),
       alarm_id_(alarm_id),
@@ -91,7 +97,10 @@ EventRow::EventRow(EventID id,
       event_type_id_(event_type_id),
       task_(task),
       complete_(complete),
-      trash_(trash) {}
+      trash_(trash),
+      trash_time_(trash_time),
+      sequence_(sequence),
+      ical_(ical) {}
 
 EventRow::~EventRow() {}
 
@@ -109,6 +118,7 @@ void EventRow::Swap(EventRow* other) {
   std::swap(location_, other->location_);
   std::swap(url_, other->url_);
   std::swap(recurrence_, other->recurrence_);
+  std::swap(recurrence_exceptions_, other->recurrence_exceptions_);
   std::swap(etag_, other->etag_);
   std::swap(href_, other->href_);
   std::swap(uid_, other->uid_);
@@ -117,6 +127,8 @@ void EventRow::Swap(EventRow* other) {
   std::swap(complete_, other->complete_);
   std::swap(trash_, other->trash_);
   std::swap(trash_time_, other->trash_time_);
+  std::swap(sequence_, other->sequence_);
+  std::swap(ical_, other->ical_);
 }
 
 EventRow::EventRow(const EventRow& other) = default;
@@ -136,6 +148,7 @@ EventRow::EventRow(const EventRow&& other) noexcept
       end_recurring_(other.end_recurring_),
       location_(other.location_),
       recurrence_(other.recurrence_),
+      recurrence_exceptions_(other.recurrence_exceptions_),
       etag_(other.etag_),
       href_(other.href_),
       uid_(other.uid_),
@@ -143,7 +156,9 @@ EventRow::EventRow(const EventRow&& other) noexcept
       task_(other.task_),
       complete_(other.complete_),
       trash_(other.trash_),
-      trash_time_(other.trash_time_) {}
+      trash_time_(other.trash_time_),
+      sequence_(other.sequence_),
+      ical_(other.ical_) {}
 
 EventResult::EventResult() {}
 

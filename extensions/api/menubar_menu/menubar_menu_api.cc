@@ -207,12 +207,12 @@ ExtensionFunction::ResponseAction MenubarMenuShowFunction::Run() {
 	using vivaldi::menubar_menu::Show::Params;
   namespace Results = vivaldi::menubar_menu::Show::Results;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  params_ = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params_.get());
 
   // Set up needed information for the menu bar to request menus on demand.
-  menuParams_.siblings.reserve(params->properties.siblings.size());
-  for (const vivaldi::menubar_menu::Menu& m: params->properties.siblings) {
+  menuParams_.siblings.reserve(params_->properties.siblings.size());
+  for (const vivaldi::menubar_menu::Menu& m: params_->properties.siblings) {
     menuParams_.siblings.emplace_back();
     ::vivaldi::MenubarMenuEntry* entry = &menuParams_.siblings.back();
     entry->id = m.id;
@@ -226,7 +226,7 @@ ExtensionFunction::ResponseAction MenubarMenuShowFunction::Run() {
 
   // We have not yet created any menu content. This will be done on a per menu
   // basis when and if the menu is needed.
-  std::string error = Open(params->properties.id);
+  std::string error = Open(params_->properties.id);
   if (!error.empty()) {
     return RespondNow(Error(error));
   }
@@ -267,6 +267,7 @@ std::string MenubarMenuShowFunction::Open(int id) {
 std::string MenubarMenuShowFunction::PopulateModel(
     vivaldi::menubar_menu::Show::Params* params,
     int menu_id,
+    bool dark_text_color,
     const std::vector<vivaldi::menubar_menu::Element>& list,
     ui::SimpleMenuModel* menu_model) {
   for (const vivaldi::menubar_menu::Element& child: list) {
@@ -274,10 +275,19 @@ std::string MenubarMenuShowFunction::PopulateModel(
       int id = child.item->id + IDC_EXTENSIONS_CONTEXT_CUSTOM_FIRST + 1;
       const base::string16 label = base::UTF8ToUTF16(child.item->label);
       if (child.children) {
+        // We create the SimpleMenuModel sub menu but do not populate it. That
+        // will be done in PopulateSubmodel() by the calling menu code when and
+        // if this sub menu will be shown to the user.
+        if (child.item->selected && *child.item->selected) {
+          if (selected_menu_id_ != -1) {
+            return "Only one menu item can be selected";
+          }
+          selected_menu_id_ = id;
+        }
         ui::SimpleMenuModel* child_menu_model = new ui::SimpleMenuModel(nullptr);
         models_.push_back(base::WrapUnique(child_menu_model));
         menu_model->AddSubMenu(id, label, child_menu_model);
-        PopulateModel(params, menu_id, *child.children, child_menu_model);
+        id_to_elementvector_map_[id] = child.children.get();
       } else {
         if (child.item->type == vivaldi::menubar_menu::ITEM_TYPE_CHECKBOX) {
           menu_model->AddCheckItem(id, label);
@@ -296,21 +306,28 @@ std::string MenubarMenuShowFunction::PopulateModel(
           id_to_accelerator_map_[id] = ::vivaldi::ParseShortcut(
               *child.item->shortcut, true);
         }
-
-        if (child.item->icon && child.item->icon->length() > 0) {
-          std::string png_data;
-          if (base::Base64Decode(*child.item->icon, &png_data)) {
-            gfx::Image img = gfx::Image::CreateFrom1xPNGBytes(
-                reinterpret_cast<const unsigned char*>(png_data.c_str()),
-                png_data.length());
-            menu_model->SetIcon(menu_model->GetIndexOfCommandId(id), img);
-          }
-        }
         if (child.item->url && child.item->url->length() > 0) {
           id_to_url_map_[id] = *child.item->url;
         }
         if (child.item->persistent && *child.item->persistent == true) {
           id_to_persistent_map_[id] = true;
+        }
+      }
+      if (child.item->icons) {
+        if (child.item->icons->size() != 2) {
+          return "Wrong number of icons";
+        } else {
+          const std::string* icon = &child.item->icons->at(
+              dark_text_color ? 0 : 1);
+          if (icon->length() > 0) {
+            std::string png_data;
+            if (base::Base64Decode(*icon, &png_data)) {
+              gfx::Image img = gfx::Image::CreateFrom1xPNGBytes(
+                reinterpret_cast<const unsigned char*>(png_data.c_str()),
+                png_data.length());
+              menu_model->SetIcon(menu_model->GetIndexOfCommandId(id), img);
+            }
+          }
         }
       }
     } else if (child.separator) {
@@ -387,24 +404,50 @@ std::string MenubarMenuShowFunction::PopulateModel(
   return "";
 }
 
+// Called by menu code to populate the top level of a menu model
 void MenubarMenuShowFunction::PopulateModel(int menu_id,
-                                            ui::SimpleMenuModel** menu_model) {
+                                            bool dark_text_color,
+                                            ui::MenuModel** menu_model) {
   using vivaldi::menubar_menu::Show::Params;
 
-  *menu_model = new ui::SimpleMenuModel(nullptr);
-  models_.push_back(base::WrapUnique(*menu_model)); // We own the model.
+  ui::SimpleMenuModel* simple_menu_model = new ui::SimpleMenuModel(nullptr);
+  models_.push_back(base::WrapUnique(simple_menu_model)); // We own the model.
+  *menu_model = simple_menu_model;
 
-  std::unique_ptr<Params> params = Params::Create(*args_);
-  std::vector<vivaldi::menubar_menu::Menu>& list = params->properties.siblings;
+  std::vector<vivaldi::menubar_menu::Menu>& list = params_->properties.siblings;
   for (const vivaldi::menubar_menu::Menu& sibling: list) {
     if (sibling.id == menu_id) {
-      std::string error = PopulateModel(params.get(), sibling.id,
-          sibling.children, *menu_model);
+      std::string error = PopulateModel(params_.get(), sibling.id,
+          dark_text_color, sibling.children, simple_menu_model);
       if (!error.empty()) {
          MenubarMenuAPI::SendError(browser_context(), error);
       }
       break;
     }
+  }
+}
+
+// Called by menu code to populate a sub menu model of an existing menu model
+void MenubarMenuShowFunction::PopulateSubmodel(
+    int menu_id,
+    bool dark_text_color,
+    ui::MenuModel* menu_model) {
+  using vivaldi::menubar_menu::Show::Params;
+
+  // Avoids a static_cast and takes no time
+  ui::SimpleMenuModel* simple_menu_model = nullptr;
+  for (std::unique_ptr<ui::SimpleMenuModel>& model: models_) {
+    if (model.get() == menu_model) {
+      simple_menu_model = model.get();
+      break;
+    }
+  }
+  DCHECK(simple_menu_model);
+
+  std::string error = PopulateModel(params_.get(), menu_id, dark_text_color,
+      *id_to_elementvector_map_[menu_id], simple_menu_model);
+  if (!error.empty()) {
+    MenubarMenuAPI::SendError(browser_context(), error);
   }
 }
 
@@ -449,6 +492,10 @@ void MenubarMenuShowFunction::OnBookmarkAction(int64_t bookmark_id,
 
 bool MenubarMenuShowFunction::IsBookmarkMenu(int menu_id) {
   return bookmark_menu_id_ == menu_id;
+}
+
+int MenubarMenuShowFunction::GetSelectedMenuId() {
+  return selected_menu_id_;
 }
 
 bool MenubarMenuShowFunction::IsItemChecked(int id) {

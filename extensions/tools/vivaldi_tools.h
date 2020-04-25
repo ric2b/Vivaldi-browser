@@ -9,6 +9,7 @@
 #include "base/strings/string16.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "third_party/blink/public/platform/web_float_point.h"
+#include "third_party/blink/public/platform/web_float_rect.h"
 #include "ui/events/keycodes/keyboard_code_conversion.h"
 
 class Browser;
@@ -21,6 +22,10 @@ class WebContents;
 namespace base {
 class ListValue;
 class Time;
+}
+
+namespace gfx {
+class RectF;
 }
 
 namespace ui {
@@ -59,6 +64,9 @@ base::Time GetTime(double ms_from_epoch);
 
 blink::WebFloatPoint FromUICoordinates(content::WebContents* web_contents,
                                        blink::WebFloatPoint p);
+
+void FromUICoordinates(content::WebContents* web_contents,
+                       gfx::RectF* rect);
 
 blink::WebFloatPoint ToUICoordinates(content::WebContents* web_contents,
                                      blink::WebFloatPoint p);

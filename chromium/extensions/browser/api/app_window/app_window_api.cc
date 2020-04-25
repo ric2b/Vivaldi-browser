@@ -166,9 +166,6 @@ ExtensionFunction::ResponseAction AppWindowCreateFunction::Run() {
   AppWindow::CreateParams create_params;
   app_window::CreateWindowOptions* options = params->options.get();
   if (options) {
-    if (options->thumbnail_window.get()) {
-      create_params.thumbnail_window = *options->thumbnail_window;
-    }
     if (options->avoid_cached_positions.get()) {
       create_params.avoid_cached_positions = *options->avoid_cached_positions;
     }
@@ -215,9 +212,9 @@ ExtensionFunction::ResponseAction AppWindowCreateFunction::Run() {
           // We should not return the window until that window is properly
           // initialized. Hence, adding a callback for window first navigation
           // completion.
-          if (existing_window->DidFinishFirstNavigation()) 
+          if (existing_window->DidFinishFirstNavigation())
             return RespondNow(OneArgument(std::move(result)));
-          
+
           existing_window->AddOnDidFinishFirstNavigationCallback(
             base::BindOnce(&AppWindowCreateFunction::
                            OnAppWindowFinishedFirstNavigationOrClosed,

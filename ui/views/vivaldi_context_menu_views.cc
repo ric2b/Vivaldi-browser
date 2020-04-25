@@ -1,100 +1,39 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
-//
 // Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved.
-//
 
 #include "ui/views/vivaldi_context_menu_views.h"
 
 #include "base/command_line.h"
-#include "browser/vivaldi_browser_finder.h"
-#include "chrome/browser/ui/views/renderer_context_menu/render_view_context_menu_views.h"
+#include "base/message_loop/message_loop.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/renderer_context_menu/views/toolkit_delegate_views.h"
-#include "content/public/browser/render_view_host.h"
-#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
-#include "extensions/tools/vivaldi_tools.h"
-#include "ui/aura/client/screen_position_client.h"
-#include "ui/aura/window.h"
-#include "ui/views/controls/menu/menu_controller.h"
-#include "ui/views/vivaldi_bookmark_menu_views.h"
-#include "ui/views/vivaldi_menubar_menu_views.h"
+#include "ui/views/controls/menu/menu_item_view.h"
 #include "ui/views/widget/widget.h"
 
 namespace vivaldi {
+
+
+// Mac uses both a native version and the views version depening menu location
+// A separate CreateVivaldiContextMenu exists on the mac implementation.
+#if !defined(OS_MACOSX)
+
 VivaldiContextMenu* CreateVivaldiContextMenu(
     content::WebContents* web_contents,
     ui::SimpleMenuModel* menu_model,
-    const content::ContextMenuParams& params) {
-  return new VivaldiContextMenuViews(web_contents, menu_model, params);
+    const gfx::Rect& rect,
+    bool force_views /* ignored here*/)  {
+  return new VivaldiContextMenuViews(web_contents, menu_model, rect);
 }
 
-// TODO - combine this with ConvertBookmarkButtonRectToScreen
-void ConvertMenubarButtonRectToScreen(
-    content::WebContents* web_contents,
-    vivaldi::MenubarMenuParams& params) {
-  aura::Window* target_window =
-    VivaldiBookmarkMenuViews::GetActiveNativeViewFromWebContents(
-        web_contents);
-  aura::Window* root_window = target_window->GetRootWindow();
-  aura::client::ScreenPositionClient* screen_position_client =
-      aura::client::GetScreenPositionClient(root_window);
-  if (screen_position_client) {
-    for (::vivaldi::MenubarMenuEntry& e: params.siblings) {
-      gfx::Point point(e.rect.origin());
-      screen_position_client->ConvertPointToScreen(target_window, &point);
-      e.rect.set_origin(point);
-    }
-  }
-}
-
-// TODO - combine this with ConvertBookmarkButtonRectToScreen
-void ConvertContainerRectToScreen(
-    content::WebContents* web_contents,
-    vivaldi::BookmarkMenuContainer& container) {
-  aura::Window* target_window =
-    VivaldiBookmarkMenuViews::GetActiveNativeViewFromWebContents(
-        web_contents);
-  aura::Window* root_window = target_window->GetRootWindow();
-  aura::client::ScreenPositionClient* screen_position_client =
-      aura::client::GetScreenPositionClient(root_window);
-  if (screen_position_client) {
-    for (::vivaldi::BookmarkMenuContainerEntry& e: container.siblings) {
-      gfx::Point point(e.rect.origin());
-      screen_position_client->ConvertPointToScreen(target_window, &point);
-      e.rect.set_origin(point);
-    }
-  }
-}
-
-VivaldiBookmarkMenu* CreateVivaldiBookmarkMenu(
-    content::WebContents* web_contents,
-    const BookmarkMenuContainer* container,
-    const bookmarks::BookmarkNode* node,
-    int offset,
-    const gfx::Rect& button_rect) {
-  return new VivaldiBookmarkMenuViews(web_contents, container, node, offset,
-                                      button_rect);
-}
-
-VivaldiMenubarMenu* CreateVivaldiMenubarMenu(
-    content::WebContents* web_contents,
-    vivaldi::MenubarMenuParams& params,
-    int id) {
-  return new VivaldiMenubarMenuViews(web_contents, params, id);
-}
-
-}  // vivialdi
+#endif
 
 VivaldiContextMenuViews::VivaldiContextMenuViews(
     content::WebContents* web_contents,
     ui::SimpleMenuModel* menu_model,
-    const content::ContextMenuParams& params)
+    const gfx::Rect& rect)
     : web_contents_(web_contents),
       menu_model_(menu_model),
-      params_(params) {
+      rect_(rect) {
   toolkit_delegate_.reset(new ToolkitDelegateViews);
   menu_view_ = toolkit_delegate_->VivaldiInit(menu_model_);
 }
@@ -102,10 +41,10 @@ VivaldiContextMenuViews::VivaldiContextMenuViews(
 VivaldiContextMenuViews::~VivaldiContextMenuViews() {}
 
 void VivaldiContextMenuViews::RunMenuAt(views::Widget* parent,
-                                        const gfx::Point& point,
+                                        const gfx::Rect& rect,
                                         ui::MenuSourceType type) {
   static_cast<ToolkitDelegateViews*>(toolkit_delegate_.get())
-      ->RunMenuAt(parent, point, type);
+      ->VivaldiRunMenuAt(parent, rect, type);
 }
 
 void VivaldiContextMenuViews::Show() {
@@ -114,52 +53,30 @@ void VivaldiContextMenuViews::Show() {
 
   // Menus need a Widget to work. If we're not the active tab we won't
   // necessarily be in a widget.
-  views::Widget* top_level_widget = GetTopLevelWidget();
-  if (!top_level_widget)
+  views::Widget* widget = GetTopLevelWidgetFromWebContents(web_contents_);
+  if (!widget)
     return;
 
   // Don't show empty menus.
   if (menu_model_->GetItemCount() == 0)
     return;
 
-  // Convert from target window coordinates to root window coordinates.
-  gfx::Point screen_point(params_.x, params_.y);
-  aura::Window* target_window = GetActiveNativeView();
-  aura::Window* root_window = target_window->GetRootWindow();
-  aura::client::ScreenPositionClient* screen_position_client =
-      aura::client::GetScreenPositionClient(root_window);
-  if (screen_position_client) {
-    screen_position_client->ConvertPointToScreen(target_window, &screen_point);
-  }
+  // Modify position to become global
+  gfx::Point screen_loc;
+  views::View::ConvertPointToScreen(widget->GetContentsView(), &screen_loc);
+  gfx::Point point(rect_.origin());
+  point.Offset(screen_loc.x(), screen_loc.y());
+  gfx::Rect rect = gfx::Rect(point, rect_.size());
+
   // Enable recursive tasks on the message loop so we can get updates while
   // the context menu is being displayed.
   base::MessageLoopCurrent::ScopedNestableTaskAllower allow;
-  RunMenuAt(top_level_widget, screen_point, params_.source_type);
-}
-
-views::Widget* VivaldiContextMenuViews::GetTopLevelWidget() {
-  return views::Widget::GetTopLevelWidgetForNativeView(GetActiveNativeView());
-}
-
-aura::Window* VivaldiContextMenuViews::GetActiveNativeView() {
-  return web_contents_->GetFullscreenRenderWidgetHostView()
-             ? web_contents_->GetFullscreenRenderWidgetHostView()
-                   ->GetNativeView()
-             : web_contents_->GetNativeView();
+  RunMenuAt(widget, rect, ui::MENU_SOURCE_NONE);
 }
 
 void VivaldiContextMenuViews::SetIcon(const gfx::Image& icon, int id) {
   if (menu_view_->GetMenuItemByID(id)) {
     menu_view_->SetIcon(*icon.ToImageSkia(), id);
-  }
-}
-
-void VivaldiContextMenuViews::SetSelectedItem(int id) {
-  views::MenuItemView* item = menu_view_->GetMenuItemByID(id);
-  if (item && views::MenuController::GetActiveInstance()) {
-    views::MenuController::GetActiveInstance()->SetSelection(
-        item, views::MenuController::SELECTION_OPEN_SUBMENU |
-                  views::MenuController::SELECTION_UPDATE_IMMEDIATELY);
   }
 }
 
@@ -169,3 +86,5 @@ void VivaldiContextMenuViews::UpdateMenu(ui::SimpleMenuModel* menu_model,
   if (view)
     toolkit_delegate_->VivaldiUpdateMenu(view, menu_model);
 }
+
+}  // namespace vivialdi

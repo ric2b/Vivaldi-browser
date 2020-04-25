@@ -39,8 +39,7 @@ class VTVideoDecodeAccelerator : public VideoDecodeAccelerator,
                                  public base::trace_event::MemoryDumpProvider {
  public:
   VTVideoDecodeAccelerator(const BindGLImageCallback& bind_image_cb,
-                           MediaLog* media_log,
-                           bool force_software_vivaldi);
+                           MediaLog* media_log);
 
   ~VTVideoDecodeAccelerator() override;
 
@@ -279,8 +278,6 @@ class VTVideoDecodeAccelerator : public VideoDecodeAccelerator,
   scoped_refptr<base::SingleThreadTaskRunner> gpu_task_runner_;
   base::WeakPtr<VTVideoDecodeAccelerator> weak_this_;
   base::Thread decoder_thread_;
-
-  bool force_software_vivaldi_;
 
   // Declared last to ensure that all weak pointers are invalidated before
   // other destructors run.

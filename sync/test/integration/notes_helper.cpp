@@ -16,23 +16,6 @@ using vivaldi::NotesModelFactory;
 
 namespace {
 
-// Returns the number of nodes of node type |node_type| in |model| whose
-// titles match the string |title|.
-int CountNodesWithTitlesMatching(Notes_Model* model,
-                                 Notes_Node::Type node_type,
-                                 const base::string16& title) {
-  ui::TreeNodeIterator<const Notes_Node> iterator(model->root_node());
-  // Walk through the model tree looking for notes nodes of node type
-  // |node_type| whose titles match |title|.
-  int count = 0;
-  while (iterator.has_next()) {
-    const Notes_Node* node = iterator.Next();
-    if ((node->type() == node_type) && (node->GetTitle() == title))
-      ++count;
-  }
-  return count;
-}
-
 // Does a deep comparison of Notes_Node fields in |model_a| and |model_b|.
 // Returns true if they are all equal.
 bool NodesMatch(const Notes_Node* node_a, const Notes_Node* node_b) {
@@ -148,35 +131,47 @@ Notes_Model* GetVerifierNotesModel() {
 }
 
 const Notes_Node* AddNote(int profile,
+                          const std::string& content,
+                          const GURL& url) {
+  return AddNote(profile, GetNotesTopNode(profile), 0, content, "", url);
+}
+
+const Notes_Node* AddNote(int profile,
+                          const std::string& content,
                           const std::string& title,
                           const GURL& url) {
-  return AddNote(profile, GetNotesTopNode(profile), 0, title, url,
-                 CreateAutoIndexedContent());
+  return AddNote(profile, GetNotesTopNode(profile), 0, content, title, url);
 }
 
 const Notes_Node* AddNote(int profile,
                           int index,
+                          const std::string& content,
+                          const GURL& url) {
+  return AddNote(profile, GetNotesTopNode(profile), index, content, "", url);
+}
+
+const Notes_Node* AddNote(int profile,
+                          int index,
+                          const std::string& content,
                           const std::string& title,
                           const GURL& url) {
-  return AddNote(profile, GetNotesTopNode(profile), index, title, url,
-                 CreateAutoIndexedContent());
+  return AddNote(profile, GetNotesTopNode(profile), index, content, title, url);
 }
 
 const Notes_Node* AddNote(int profile,
                           const Notes_Node* parent,
                           int index,
-                          const std::string& title,
+                          const std::string& content,
                           const GURL& url) {
-  return AddNote(profile, parent, index, title, url,
-                 CreateAutoIndexedContent());
+  return AddNote(profile, parent, index, content, "", url);
 }
 
 const Notes_Node* AddNote(int profile,
                           const Notes_Node* parent,
                           int index,
+                          const std::string& content,
                           const std::string& title,
-                          const GURL& url,
-                          const std::string& content) {
+                          const GURL& url) {
   Notes_Model* model = GetNotesModel(profile);
   if (GetNotesNodeByID(model, parent->id()) != parent) {
     LOG(ERROR) << "Node " << parent->GetTitle() << " does not belong to "
@@ -262,6 +257,21 @@ void SetTitle(int profile,
   model->SetTitle(node, base::UTF8ToUTF16(new_title));
 }
 
+void SetContent(int profile,
+                const Notes_Node* node,
+                const std::string& new_content) {
+  Notes_Model* model = GetNotesModel(profile);
+  ASSERT_EQ(GetNotesNodeByID(model, node->id()), node)
+      << "Node " << node->GetTitle() << " does not belong to "
+      << "Profile " << profile;
+  if (sync_datatype_helper::test()->use_verifier()) {
+    const Notes_Node* v_node = NULL;
+    FindNodeInVerifier(model, node, &v_node);
+    GetVerifierNotesModel()->SetContent(v_node, base::UTF8ToUTF16(new_content));
+  }
+  model->SetContent(node, base::UTF8ToUTF16(new_content));
+}
+
 const Notes_Node* SetURL(int profile,
                          const Notes_Node* node,
                          const GURL& new_url) {
@@ -308,7 +318,8 @@ void Remove(int profile, const Notes_Node* parent, int index) {
   if (sync_datatype_helper::test()->use_verifier()) {
     const Notes_Node* v_parent = NULL;
     FindNodeInVerifier(model, parent, &v_parent);
-    ASSERT_TRUE(NodesMatch(parent->children()[index].get(), v_parent->children()[index].get()));
+    ASSERT_TRUE(NodesMatch(parent->children()[index].get(),
+                           v_parent->children()[index].get()));
     GetVerifierNotesModel()->Remove(v_parent->children()[index].get());
   }
   model->Remove(parent->children()[index].get());
@@ -317,7 +328,7 @@ void Remove(int profile, const Notes_Node* parent, int index) {
 void RemoveAll(int profile) {
   if (sync_datatype_helper::test()->use_verifier()) {
     const Notes_Node* root_node = GetVerifierNotesModel()->root_node();
-    for (auto& it_root: root_node->children()) {
+    for (auto& it_root : root_node->children()) {
       for (int j = it_root->children().size() - 1; j >= 0; --j) {
         GetVerifierNotesModel()->Remove(it_root->children()[j].get());
       }
@@ -456,14 +467,36 @@ const Notes_Node* GetUniqueNodeByURL(int profile, const GURL& url) {
   return nodes[0];
 }
 
-int CountNotesWithTitlesMatching(int profile, const std::string& title) {
-  return CountNodesWithTitlesMatching(GetNotesModel(profile), Notes_Node::NOTE,
-                                      base::UTF8ToUTF16(title));
+int CountNotesWithContentMatching(int profile, const std::string& content) {
+  auto utf16_content = base::UTF8ToUTF16(content);
+  ui::TreeNodeIterator<const Notes_Node> iterator(
+      GetNotesModel(profile)->root_node());
+  // Walk through the model tree looking for notes nodes of node type
+  // note whose content match |content|.
+  int count = 0;
+  while (iterator.has_next()) {
+    const Notes_Node* node = iterator.Next();
+    if ((node->type() == Notes_Node::NOTE) &&
+        (node->GetContent() == utf16_content))
+      ++count;
+  }
+  return count;
 }
 
 int CountFoldersWithTitlesMatching(int profile, const std::string& title) {
-  return CountNodesWithTitlesMatching(
-      GetNotesModel(profile), Notes_Node::FOLDER, base::UTF8ToUTF16(title));
+  auto utf16_title = base::UTF8ToUTF16(title);
+  ui::TreeNodeIterator<const Notes_Node> iterator(
+      GetNotesModel(profile)->root_node());
+  // Walk through the model tree looking for notes nodes of node type
+  // folder whose titles match |title|.
+  int count = 0;
+  while (iterator.has_next()) {
+    const Notes_Node* node = iterator.Next();
+    if ((node->type() == Notes_Node::FOLDER) &&
+        (node->GetTitle() == utf16_title))
+      ++count;
+  }
+  return count;
 }
 
 }  // namespace notes_helper

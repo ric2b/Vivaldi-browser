@@ -15,6 +15,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool/thread_pool_instance.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/browser_sync/browser_sync_switches.h"
 #include "components/invalidation/public/invalidator_state.h"
@@ -342,7 +343,9 @@ vivaldi::sync::EngineData GetEngineData(Profile* profile) {
     // Skip the model types that don't make sense for us to synchronize.
     if (data_type == syncer::UserSelectableType::kThemes ||
         data_type == syncer::UserSelectableType::kApps ||
-        // Syncing typedUrls already syncs sessions anyway. For now we group
+        //This type is only for Chrome OS.
+        data_type == syncer::UserSelectableType::kWifiConfigurations ||
+        // Syncing typedUrls already syncsø sessions anyway. For now we group
         // both in our UI
         data_type == syncer::UserSelectableType::kTabs) {
       continue;
@@ -480,7 +483,8 @@ SyncGetDefaultSessionNameFunction::~SyncGetDefaultSessionNameFunction() =
 ExtensionFunction::ResponseAction SyncGetDefaultSessionNameFunction::Run() {
   base::PostTaskAndReplyWithResult(
       base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+          {base::ThreadPool(), base::MayBlock(),
+           base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})
           .get(),
       FROM_HERE, base::Bind(&syncer::GetSessionNameBlocking),

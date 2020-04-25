@@ -29,10 +29,6 @@ bool BASE_EXPORT ForcedVivaldiRunning();
 bool BASE_EXPORT IsTabDragInProgress();
 void BASE_EXPORT SetTabDragInProgress(bool tab_drag_in_progress);
 
-#if defined(OS_MACOSX)
-bool BASE_EXPORT ShouldForceGpuDecodeOnMac();
-#endif
-
 void BASE_EXPORT CommandLineAppendSwitchNoDup(base::CommandLine* const cmd_line,
                                               const std::string& switch_string);
 inline void

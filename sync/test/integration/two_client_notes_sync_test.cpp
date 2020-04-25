@@ -17,29 +17,32 @@
 
 using notes_helper::AddFolder;
 using notes_helper::AddNote;
-using notes_helper::CountNotesWithTitlesMatching;
+using notes_helper::AllModelsMatch;
+using notes_helper::AllModelsMatchVerifier;
+using notes_helper::ContainsDuplicateNotes;
+using notes_helper::CountNotesWithContentMatching;
+using notes_helper::CreateAutoIndexedContent;
 using notes_helper::GetNotesModel;
 using notes_helper::GetNotesTopNode;
-using notes_helper::HasNodeWithURL;
-using notes_helper::ModelMatchesVerifier;
-using notes_helper::AllModelsMatchVerifier;
-using notes_helper::AllModelsMatch;
-using notes_helper::Move;
-using notes_helper::Remove;
-using notes_helper::RemoveAll;
-using notes_helper::SetTitle;
-using notes_helper::SetURL;
 using notes_helper::GetUniqueNodeByURL;
-using notes_helper::SortChildren;
-using notes_helper::ReverseChildOrder;
-using notes_helper::IndexedURL;
-using notes_helper::IndexedURLTitle;
+using notes_helper::HasNodeWithURL;
 using notes_helper::IndexedFolderName;
 using notes_helper::IndexedSubfolderName;
 using notes_helper::IndexedSubsubfolderName;
-using notes_helper::ContainsDuplicateNotes;
+using notes_helper::IndexedURL;
+using notes_helper::IndexedURLTitle;
+using notes_helper::ModelMatchesVerifier;
+using notes_helper::Move;
+using notes_helper::Remove;
+using notes_helper::RemoveAll;
+using notes_helper::ReverseChildOrder;
+using notes_helper::SetContent;
+using notes_helper::SetTitle;
+using notes_helper::SetURL;
+using notes_helper::SortChildren;
 
 static const char kGenericURL[] = "http://www.host.ext:1234/path/filename";
+static const char kGenericURLContent[] = "URL\ncontent";
 static const char kGenericURLTitle[] = "URL Title";
 static const char kGenericFolderName[] = "Folder Name";
 static const char kGenericSubfolderName[] = "Subfolder Name";
@@ -66,31 +69,67 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, Sanity) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
-  GURL google_url("http://www.google.com");
-  ASSERT_TRUE(AddNote(0, "Google", google_url) != NULL);
+  GURL vivaldi_url = GURL("https://en.wikipedia.org/wiki/Antonio_Vivaldi");
+  ASSERT_TRUE(
+      AddNote(0,
+              "Antonio Lucio Vivaldi was an Italian Baroque musical composer",
+              "Vivaldi", vivaldi_url) != NULL);
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
-  ASSERT_TRUE(AddNote(1, "Yahoo", GURL("http://www.yahoo.com")) != NULL);
+  ASSERT_TRUE(
+      AddNote(
+          1,
+          "The Four Seasons is a group of four violin concerti by Italian "
+          "composer Antonio Vivaldi",
+          "The Four Seasons",
+          GURL("https://en.wikipedia.org/wiki/The_Four_Seasons_(Vivaldi)")) !=
+      NULL);
   ASSERT_TRUE(GetClient(1)->AwaitMutualSyncCycleCompletion(GetClient(0)));
   ASSERT_TRUE(AllModelsMatchVerifier());
 
   Notes_Node* trash_node_0 = GetNotesModel(0)->trash_node();
   Notes_Node* trash_node_1 = GetNotesModel(1)->trash_node();
-  ASSERT_TRUE(AddNote(0, trash_node_0, 0, "trash_1_url0",
-                      GURL("http://www.microsoft.com")));
+  ASSERT_TRUE(AddNote(0, trash_node_0, 0,
+                      "Venice is a city in northeastern Italy and the capital "
+                      "of the Veneto region.",
+                      "Venice", GURL("https://en.wikipedia.org/wiki/Venice")));
   ASSERT_EQ(1u, trash_node_0->children().size());
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_EQ(1u, trash_node_1->children().size());
   ASSERT_TRUE(AllModelsMatchVerifier());
 
   const Notes_Node* new_folder = AddFolder(0, 2, "New Folder");
-  Move(0, GetUniqueNodeByURL(0, google_url), new_folder, 0);
-  SetTitle(0, GetNotesTopNode(0)->children()[0].get(), "Yahoo!!");
-  ASSERT_TRUE(AddNote(0, GetNotesTopNode(0), 1, "CNN",
-                      GURL("http://www.cnn.com")) != NULL);
+  Move(0, GetUniqueNodeByURL(0, vivaldi_url), new_folder, 0);
+  SetContent(0, GetNotesTopNode(0)->children()[0].get(),
+             "The Four Seasons is the best known of Vivaldi's works.");
+  SetTitle(0, GetNotesTopNode(0)->children()[0].get(),
+           "The Four Seasons (Vivaldi)");
+  ASSERT_TRUE(AddNote(0, GetNotesTopNode(0), 1,
+                      "Baroque music is a period or style of Western art music "
+                      "composed from approximately 1600 to 1750."
+                      "Baroque Music",
+                      GURL("https://en.wikipedia.org/wiki/Baroque_music")) !=
+              NULL);
+  ASSERT_TRUE(AddNote(0, GetNotesTopNode(0), 1,
+                      "Eggs,\nmilk,\nflour,\n,butter"
+                      "Shopping list",
+                      GURL()) != NULL);
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
 
-  ASSERT_TRUE(AddNote(1, "Facebook", GURL("http://www.facebook.com")) != NULL);
+  ASSERT_TRUE(
+      AddNote(1,
+              "A concerto is a musical composition generally composed of three "
+              "movements, in which, usually, one solo instrument is "
+              "accompanied by an orchestra or concert band.",
+              "Concerto",
+              GURL("https://en.wikipedia.org/wiki/Concerto")) != NULL);
+  ASSERT_TRUE(
+      AddNote(1,
+              "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin "
+              "tincidunt feugiat erat sit amet hendrerit. Vestibulum porttitor "
+              "magna et risus cursus facilisis. Morbi sit amet erat ac ex "
+              "pulvinar euismod eget a massa.",
+              GURL()) != NULL);
   ASSERT_TRUE(GetClient(1)->AwaitMutualSyncCycleCompletion(GetClient(0)));
   ASSERT_TRUE(AllModelsMatchVerifier());
 
@@ -105,8 +144,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, Sanity) {
   ASSERT_TRUE(AllModelsMatchVerifier());
 
   DisableVerifier();
-  SetTitle(0, GetUniqueNodeByURL(0, google_url), "Google++");
-  SetTitle(1, GetUniqueNodeByURL(1, google_url), "Google--");
+  SetTitle(0, GetUniqueNodeByURL(0, vivaldi_url), "Vivaldi++");
+  SetTitle(1, GetUniqueNodeByURL(1, vivaldi_url), "Vivaldi--");
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(AllModelsMatch());
 }
@@ -115,12 +154,13 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SimultaneousURLChanges) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
-  GURL initial_url("http://www.google.com");
-  GURL second_url("http://www.google.com/abc");
-  GURL third_url("http://www.google.com/def");
-  std::string title = "Google";
+  GURL initial_url("http://www.elg.no");
+  GURL second_url("http://www.elg.no/ulv");
+  GURL third_url("http://www.elg.no/sau");
+  std::string content =
+      "Elger er gromme dyr.\nElgkalvene er mat for bl.a. ulv.";
 
-  ASSERT_TRUE(AddNote(0, title, initial_url) != NULL);
+  ASSERT_TRUE(AddNote(0, content, initial_url) != NULL);
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
 
   DisableVerifier();
@@ -130,7 +170,10 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SimultaneousURLChanges) {
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(AllModelsMatch());
 
-  SetTitle(0, GetNotesTopNode(0)->children()[0].get(), "Google1");
+  SetTitle(0, GetNotesTopNode(0)->children()[0].get(), "Elg");
+  SetContent(0, GetNotesTopNode(0)->children()[0].get(),
+             "Elg er et spesielt stort hjortedyr som trives i temperert klima "
+             "i det store boreale barskogbeltet som finnes i Nordeuropa.");
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatch());
 }
@@ -146,98 +189,82 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_AddFirstFolder) {
 }
 
 // Test Scribe ID - 370559.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_AddFirstBMWithoutFavicon) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_AddFirstNote) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
-  ASSERT_TRUE(AddNote(0, kGenericURLTitle, GURL(kGenericURL)) != NULL);
-  ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
-  ASSERT_TRUE(AllModelsMatchVerifier());
-}
-
-// Test Scribe ID - 370489.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_AddFirstBMWithFavicon) {
-  ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
-  ASSERT_TRUE(AllModelsMatchVerifier());
-
-  const GURL page_url(kGenericURL);
-
-  const Notes_Node* note = AddNote(0, kGenericURLTitle, page_url);
-
-  ASSERT_TRUE(note != NULL);
-  ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
+  ASSERT_TRUE(AddNote(0, kGenericURLContent, GURL(kGenericURL)) != NULL);
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
 }
 
 // Test Scribe ID - 370560.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_AddNonHTTPBMs) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_AddNonHTTPNote) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
-  ASSERT_TRUE(AddNote(0, "FTP URL",
+  ASSERT_TRUE(AddNote(0, "Content from FTP",
                       GURL("ftp://user:password@host:1234/path")) != NULL);
-  ASSERT_TRUE(AddNote(0, "File URL", GURL("file://host/path")) != NULL);
-  ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
-  ASSERT_TRUE(AllModelsMatchVerifier());
-}
-
-// Test Scribe ID - 370561.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_AddFirstBMUnderFolder) {
-  ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
-  ASSERT_TRUE(AllModelsMatchVerifier());
-
-  const Notes_Node* folder = AddFolder(0, kGenericFolderName);
-  ASSERT_TRUE(folder != NULL);
-  ASSERT_TRUE(AddNote(0, folder, 0, kGenericURLTitle, GURL(kGenericURL)) !=
+  ASSERT_TRUE(AddNote(0, "Content from a file", GURL("file://host/path")) !=
               NULL);
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
 }
 
+// Test Scribe ID - 370561.
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_AddFirstNoteUnderFolder) {
+  ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
+  ASSERT_TRUE(AllModelsMatchVerifier());
+
+  const Notes_Node* folder = AddFolder(0, kGenericFolderName);
+  ASSERT_TRUE(folder != NULL);
+  ASSERT_TRUE(AddNote(0, folder, 0, kGenericURLContent, kGenericURLTitle,
+                      GURL(kGenericURL)) != NULL);
+  ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
+  ASSERT_TRUE(AllModelsMatchVerifier());
+}
+
 // Test Scribe ID - 370562.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_AddSeveralBMsUnderBMBarAndOtherBM) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_AddSeveralNotes) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
   for (int i = 0; i < 20; ++i) {
-    std::string title = IndexedURLTitle(i);
+    std::string content = CreateAutoIndexedContent(i);
     GURL url = GURL(IndexedURL(i));
-    ASSERT_TRUE(AddNote(0, i, title, url) != NULL);
-    ASSERT_TRUE(AddNote(0, GetNotesTopNode(0), i, title, url) != NULL);
+    ASSERT_TRUE(AddNote(0, i, content, url) != NULL);
   }
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
 }
 
 // Test Scribe ID - 370563.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_AddSeveralBMsAndFolders) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_AddSeveralNotesAndFolders) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
   for (int i = 0; i < 15; ++i) {
     if (base::RandDouble() > 0.6) {
-      std::string title = IndexedURLTitle(i);
+      std::string content = CreateAutoIndexedContent(i);
       GURL url = GURL(IndexedURL(i));
-      ASSERT_TRUE(AddNote(0, i, title, url) != NULL);
+      ASSERT_TRUE(AddNote(0, i, content, url) != NULL);
     } else {
       std::string title = IndexedFolderName(i);
       const Notes_Node* folder = AddFolder(0, i, title);
       ASSERT_TRUE(folder != NULL);
       if (base::RandDouble() > 0.4) {
         for (int i = 0; i < 20; ++i) {
-          std::string title = IndexedURLTitle(i);
+          std::string content = CreateAutoIndexedContent(i);
           GURL url = GURL(IndexedURL(i));
-          ASSERT_TRUE(AddNote(0, folder, i, title, url) != NULL);
+          ASSERT_TRUE(AddNote(0, folder, i, content, url) != NULL);
         }
       }
     }
   }
   for (int i = 0; i < 10; i++) {
-    std::string title = IndexedURLTitle(i);
+    std::string content = CreateAutoIndexedContent(i);
     GURL url = GURL(IndexedURL(i));
-    ASSERT_TRUE(AddNote(0, GetNotesTopNode(0), i, title, url) != NULL);
+    ASSERT_TRUE(AddNote(0, GetNotesTopNode(0), i, content, url) != NULL);
   }
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
@@ -245,14 +272,14 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_AddSeveralBMsAndFolders) {
 
 // Test Scribe ID - 370641.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_DuplicateBMWithDifferentURLSameName) {
+                       SC_DuplicateNotesWithDifferentURLSameContent) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
   GURL url0 = GURL(IndexedURL(0));
   GURL url1 = GURL(IndexedURL(1));
-  ASSERT_TRUE(AddNote(0, kGenericURLTitle, url0) != NULL);
-  ASSERT_TRUE(AddNote(0, kGenericURLTitle, url1) != NULL);
+  ASSERT_TRUE(AddNote(0, kGenericURLContent, url0) != NULL);
+  ASSERT_TRUE(AddNote(0, kGenericURLContent, url1) != NULL);
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
 }
@@ -262,21 +289,21 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_DuplicateNotesWithSameURL) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
-  std::string title0 = IndexedURLTitle(0);
-  std::string title1 = IndexedURLTitle(1);
-  ASSERT_TRUE(AddNote(0, title0, GURL(kGenericURL)) != NULL);
-  ASSERT_TRUE(AddNote(0, title1, GURL(kGenericURL)) != NULL);
+  std::string content0 = CreateAutoIndexedContent(0);
+  std::string content1 = CreateAutoIndexedContent(1);
+  ASSERT_TRUE(AddNote(0, content0, GURL(kGenericURL)) != NULL);
+  ASSERT_TRUE(AddNote(0, content1, GURL(kGenericURL)) != NULL);
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
 }
 
 // Test Scribe ID - 371817.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_RenameBMName) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_RenameNoteName) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
-  std::string title = IndexedURLTitle(1);
-  const Notes_Node* note = AddNote(0, title, GURL(kGenericURL));
+  std::string content = CreateAutoIndexedContent(1);
+  const Notes_Node* note = AddNote(0, content, GURL(kGenericURL));
   ASSERT_TRUE(note != NULL);
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
@@ -287,13 +314,29 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_RenameBMName) {
   ASSERT_TRUE(AllModelsMatchVerifier());
 }
 
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_ChangeNoteContent) {
+  ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
+  ASSERT_TRUE(AllModelsMatchVerifier());
+
+  std::string content = CreateAutoIndexedContent(1);
+  const Notes_Node* note = AddNote(0, content, GURL(kGenericURL));
+  ASSERT_TRUE(note != NULL);
+  ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
+  ASSERT_TRUE(AllModelsMatchVerifier());
+
+  std::string new_content = CreateAutoIndexedContent(2);
+  SetContent(0, note, new_content);
+  ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
+  ASSERT_TRUE(AllModelsMatchVerifier());
+}
+
 // Test Scribe ID - 371822.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_RenameBMURL) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_ChangeNoteURL) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
   GURL url = GURL(IndexedURL(1));
-  const Notes_Node* note = AddNote(0, kGenericURLTitle, url);
+  const Notes_Node* note = AddNote(0, kGenericURLContent, url);
   ASSERT_TRUE(note != NULL);
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
@@ -310,7 +353,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_TwiceRenamingNoteName) {
   ASSERT_TRUE(AllModelsMatchVerifier());
 
   std::string title = IndexedURLTitle(1);
-  const Notes_Node* note = AddNote(0, title, GURL(kGenericURL));
+  const Notes_Node* note =
+      AddNote(0, kGenericURLContent, title, GURL(kGenericURL));
   ASSERT_TRUE(note != NULL);
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
@@ -325,13 +369,33 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_TwiceRenamingNoteName) {
   ASSERT_TRUE(AllModelsMatchVerifier());
 }
 
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_TwiceChangingNoteContent) {
+  ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
+  ASSERT_TRUE(AllModelsMatchVerifier());
+
+  std::string content = CreateAutoIndexedContent(1);
+  const Notes_Node* note = AddNote(0, content, GURL(kGenericURL));
+  ASSERT_TRUE(note != NULL);
+  ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
+  ASSERT_TRUE(AllModelsMatchVerifier());
+
+  std::string new_content = CreateAutoIndexedContent(2);
+  SetContent(0, note, new_content);
+  ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
+  ASSERT_TRUE(AllModelsMatchVerifier());
+
+  SetContent(0, note, content);
+  ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
+  ASSERT_TRUE(AllModelsMatchVerifier());
+}
+
 // Test Scribe ID - 371823 - Renaming the same note URL twice.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_TwiceRenamingNoteURL) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
   GURL url = GURL(IndexedURL(1));
-  const Notes_Node* note = AddNote(0, kGenericURLTitle, url);
+  const Notes_Node* note = AddNote(0, kGenericURLContent, url);
   ASSERT_TRUE(note != NULL);
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
@@ -347,13 +411,13 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_TwiceRenamingNoteURL) {
 }
 
 // Test Scribe ID - 371824.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_RenameBMFolder) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_RenameNotesFolder) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
   std::string title = IndexedFolderName(1);
   const Notes_Node* folder = AddFolder(0, title);
-  ASSERT_TRUE(AddNote(0, folder, 0, kGenericURLTitle, GURL(kGenericURL)) !=
+  ASSERT_TRUE(AddNote(0, folder, 0, kGenericURLContent, GURL(kGenericURL)) !=
               NULL);
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
@@ -365,7 +429,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_RenameBMFolder) {
 }
 
 // Test Scribe ID - 371825.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_RenameEmptyBMFolder) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_RenameEmptyNotesFolder) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
@@ -382,7 +446,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_RenameEmptyBMFolder) {
 
 // Test Scribe ID - 371826.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_RenameBMFolderWithLongHierarchy) {
+                       SC_RenameNotesFolderWithLongHierarchy) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
@@ -391,9 +455,9 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
   ASSERT_TRUE(folder != NULL);
   for (int i = 0; i < 120; ++i) {
     if (base::RandDouble() > 0.15) {
-      std::string title = IndexedURLTitle(i);
+      std::string content = CreateAutoIndexedContent(i);
       GURL url = GURL(IndexedURL(i));
-      ASSERT_TRUE(AddNote(0, folder, i, title, url) != NULL);
+      ASSERT_TRUE(AddNote(0, folder, i, content, url) != NULL);
     } else {
       std::string title = IndexedSubfolderName(i);
       ASSERT_TRUE(AddFolder(0, folder, i, title) != NULL);
@@ -410,24 +474,24 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 371827.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_RenameBMFolderThatHasParentAndChildren) {
+                       SC_RenameNotesFolderThatHasParentAndChildren) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
   const Notes_Node* folder = AddFolder(0, kGenericFolderName);
   ASSERT_TRUE(folder != NULL);
   for (int i = 1; i < 15; ++i) {
-    std::string title = IndexedURLTitle(i);
+    std::string content = CreateAutoIndexedContent(i);
     GURL url = GURL(IndexedURL(i));
-    ASSERT_TRUE(AddNote(0, i, title, url) != NULL);
+    ASSERT_TRUE(AddNote(0, i, content, url) != NULL);
   }
   std::string title = IndexedSubfolderName(1);
   const Notes_Node* subfolder = AddFolder(0, folder, 0, title);
   for (int i = 0; i < 120; ++i) {
     if (base::RandDouble() > 0.15) {
-      std::string title = IndexedURLTitle(i);
+      std::string content = CreateAutoIndexedContent(i);
       GURL url = GURL(IndexedURL(i));
-      ASSERT_TRUE(AddNote(0, subfolder, i, title, url) != NULL);
+      ASSERT_TRUE(AddNote(0, subfolder, i, content, url) != NULL);
     } else {
       std::string title = IndexedSubsubfolderName(i);
       ASSERT_TRUE(AddFolder(0, subfolder, i, title) != NULL);
@@ -443,33 +507,37 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 }
 
 // Test Scribe ID - 371828.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_RenameBMNameAndURL) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
+                       SC_RenameNoteNameAndContentAndURL) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
   GURL url = GURL(IndexedURL(1));
+  std::string content = CreateAutoIndexedContent(1);
   std::string title = IndexedURLTitle(1);
-  const Notes_Node* note = AddNote(0, title, url);
+  const Notes_Node* note = AddNote(0, content, title, url);
   ASSERT_TRUE(note != NULL);
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
 
   GURL new_url = GURL(IndexedURL(2));
+  std::string new_content = CreateAutoIndexedContent(2);
   std::string new_title = IndexedURLTitle(2);
   note = SetURL(0, note, new_url);
   ASSERT_TRUE(note != NULL);
   SetTitle(0, note, new_title);
+  SetContent(0, note, new_content);
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
 }
 
 // Test Scribe ID - 371832.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_DeleteBMEmptyAccountAfterwards) {
+                       SC_DeleteNoteEmptyAccountAfterwards) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
-  ASSERT_TRUE(AddNote(0, kGenericURLTitle, GURL(kGenericURL)) != NULL);
+  ASSERT_TRUE(AddNote(0, kGenericURLContent, GURL(kGenericURL)) != NULL);
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
 
@@ -480,14 +548,14 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 371833.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_DelBMNonEmptyAccountAfterwards) {
+                       SC_DelNoteNonEmptyAccountAfterwards) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
   for (int i = 0; i < 20; ++i) {
-    std::string title = IndexedURLTitle(i);
+    std::string content = CreateAutoIndexedContent(i);
     GURL url = GURL(IndexedURL(i));
-    ASSERT_TRUE(AddNote(0, i, title, url) != NULL);
+    ASSERT_TRUE(AddNote(0, i, content, url) != NULL);
   }
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
@@ -499,16 +567,16 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 371835.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_DelFirstBMUnderBMFoldNonEmptyFoldAfterwards) {
+                       SC_DelFirstNoteUnderNotesFoldNonEmptyFoldAfterwards) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
   const Notes_Node* folder = AddFolder(0, kGenericFolderName);
   ASSERT_TRUE(folder != NULL);
   for (int i = 0; i < 10; ++i) {
-    std::string title = IndexedURLTitle(i);
+    std::string content = CreateAutoIndexedContent(i);
     GURL url = GURL(IndexedURL(i));
-    ASSERT_TRUE(AddNote(0, folder, i, title, url) != NULL);
+    ASSERT_TRUE(AddNote(0, folder, i, content, url) != NULL);
   }
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
@@ -520,16 +588,16 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 371836.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_DelLastBMUnderBMFoldNonEmptyFoldAfterwards) {
+                       SC_DelLastNoteUnderNotesFoldNonEmptyFoldAfterwards) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
   const Notes_Node* folder = AddFolder(0, kGenericFolderName);
   ASSERT_TRUE(folder != NULL);
   for (int i = 0; i < 10; ++i) {
-    std::string title = IndexedURLTitle(i);
+    std::string content = CreateAutoIndexedContent(i);
     GURL url = GURL(IndexedURL(i));
-    ASSERT_TRUE(AddNote(0, folder, i, title, url) != NULL);
+    ASSERT_TRUE(AddNote(0, folder, i, content, url) != NULL);
   }
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
@@ -541,16 +609,16 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 371856.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_DelMiddleBMUnderBMFoldNonEmptyFoldAfterwards) {
+                       SC_DelMiddleNoteUnderNotesFoldNonEmptyFoldAfterwards) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
   const Notes_Node* folder = AddFolder(0, kGenericFolderName);
   ASSERT_TRUE(folder != NULL);
   for (int i = 0; i < 10; ++i) {
-    std::string title = IndexedURLTitle(i);
+    std::string content = CreateAutoIndexedContent(i);
     GURL url = GURL(IndexedURL(i));
-    ASSERT_TRUE(AddNote(0, folder, i, title, url) != NULL);
+    ASSERT_TRUE(AddNote(0, folder, i, content, url) != NULL);
   }
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
@@ -562,16 +630,16 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 371857.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_DelBMsUnderBMFoldEmptyFolderAfterwards) {
+                       SC_DelNotessUnderNotesFoldEmptyFolderAfterwards) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
   const Notes_Node* folder = AddFolder(0, kGenericFolderName);
   ASSERT_TRUE(folder != NULL);
   for (int i = 0; i < 10; ++i) {
-    std::string title = IndexedURLTitle(i);
+    std::string content = CreateAutoIndexedContent(i);
     GURL url = GURL(IndexedURL(i));
-    ASSERT_TRUE(AddNote(0, folder, i, title, url) != NULL);
+    ASSERT_TRUE(AddNote(0, folder, i, content, url) != NULL);
   }
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
@@ -586,7 +654,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 371858.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_DelEmptyBMFoldEmptyAccountAfterwards) {
+                       SC_DelEmptyNotesFoldEmptyAccountAfterwards) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
@@ -601,16 +669,16 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 371869.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_DelEmptyBMFoldNonEmptyAccountAfterwards) {
+                       SC_DelEmptyNotesFoldNonEmptyAccountAfterwards) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
   ASSERT_TRUE(AddFolder(0, kGenericFolderName) != NULL);
   for (int i = 1; i < 15; ++i) {
     if (base::RandDouble() > 0.6) {
-      std::string title = IndexedURLTitle(i);
+      std::string content = CreateAutoIndexedContent(i);
       GURL url = GURL(IndexedURL(i));
-      ASSERT_TRUE(AddNote(0, i, title, url) != NULL);
+      ASSERT_TRUE(AddNote(0, i, content, url) != NULL);
     } else {
       std::string title = IndexedFolderName(i);
       ASSERT_TRUE(AddFolder(0, i, title) != NULL);
@@ -626,7 +694,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 371879.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_DelBMFoldWithBMsNonEmptyAccountAfterwards) {
+                       SC_DelNotesFoldWithNotesNonEmptyAccountAfterwards) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
@@ -635,9 +703,9 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
   ASSERT_TRUE(folder != NULL);
   for (int i = 2; i < 10; ++i) {
     if (base::RandDouble() > 0.6) {
-      std::string title = IndexedURLTitle(i);
+      std::string content = CreateAutoIndexedContent(i);
       GURL url = GURL(IndexedURL(i));
-      ASSERT_TRUE(AddNote(0, i, title, url) != NULL);
+      ASSERT_TRUE(AddNote(0, i, content, url) != NULL);
     } else {
       std::string title = IndexedFolderName(i);
       ASSERT_TRUE(AddFolder(0, i, title) != NULL);
@@ -657,8 +725,9 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 }
 
 // Test Scribe ID - 371880.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_DelBMFoldWithBMsAndBMFoldsNonEmptyACAfterwards) {
+IN_PROC_BROWSER_TEST_F(
+    TwoClientNotesSyncTest,
+    SC_DelNotesFoldWithNotesAndNotesFoldsNonEmptyACAfterwards) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
@@ -667,9 +736,9 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
   ASSERT_TRUE(folder != NULL);
   for (int i = 2; i < 10; ++i) {
     if (base::RandDouble() > 0.6) {
-      std::string title = IndexedURLTitle(i);
+      std::string content = CreateAutoIndexedContent(i);
       GURL url = GURL(IndexedURL(i));
-      ASSERT_TRUE(AddNote(0, i, title, url) != NULL);
+      ASSERT_TRUE(AddNote(0, i, content, url) != NULL);
     } else {
       std::string title = IndexedFolderName(i);
       ASSERT_TRUE(AddFolder(0, i, title) != NULL);
@@ -677,9 +746,9 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
   }
   for (int i = 0; i < 10; ++i) {
     if (base::RandDouble() > 0.6) {
-      std::string title = IndexedURLTitle(i);
+      std::string content = CreateAutoIndexedContent(i);
       GURL url = GURL(IndexedURL(i));
-      ASSERT_TRUE(AddNote(0, folder, i, title, url) != NULL);
+      ASSERT_TRUE(AddNote(0, folder, i, content, url) != NULL);
     } else {
       std::string title = IndexedSubfolderName(i);
       const Notes_Node* subfolder = AddFolder(0, folder, i, title);
@@ -687,9 +756,9 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
       if (base::RandDouble() > 0.3) {
         for (int j = 0; j < 10; ++j) {
           if (base::RandDouble() > 0.6) {
-            std::string title = IndexedURLTitle(j);
+            std::string content = CreateAutoIndexedContent(j);
             GURL url = GURL(IndexedURL(j));
-            ASSERT_TRUE(AddNote(0, subfolder, j, title, url) != NULL);
+            ASSERT_TRUE(AddNote(0, subfolder, j, content, url) != NULL);
           } else {
             std::string title = IndexedSubsubfolderName(j);
             ASSERT_TRUE(AddFolder(0, subfolder, j, title) != NULL);
@@ -707,8 +776,9 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 }
 
 // Test Scribe ID - 371882.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_DelBMFoldWithParentAndChildrenBMsAndBMFolds) {
+IN_PROC_BROWSER_TEST_F(
+    TwoClientNotesSyncTest,
+    SC_DelBNotesFoldWithParentAndChildrenNotesAndNotesFolds) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
@@ -723,9 +793,9 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
   ASSERT_TRUE(subfolder != NULL);
   for (int i = 0; i < 30; ++i) {
     if (base::RandDouble() > 0.2) {
-      std::string title = IndexedURLTitle(i);
+      std::string content = CreateAutoIndexedContent(i);
       GURL url = GURL(IndexedURL(i));
-      ASSERT_TRUE(AddNote(0, subfolder, i, title, url) != NULL);
+      ASSERT_TRUE(AddNote(0, subfolder, i, content, url) != NULL);
     } else {
       std::string title = IndexedSubsubfolderName(i);
       ASSERT_TRUE(AddFolder(0, subfolder, i, title) != NULL);
@@ -740,16 +810,16 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 }
 
 // Test Scribe ID - 371931.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_ReverseTheOrderOfTwoBMs) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_ReverseTheOrderOfTwoNotes) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
   GURL url0 = GURL(IndexedURL(0));
   GURL url1 = GURL(IndexedURL(1));
-  std::string title0 = IndexedURLTitle(0);
-  std::string title1 = IndexedURLTitle(1);
-  const Notes_Node* note0 = AddNote(0, 0, title0, url0);
-  const Notes_Node* note1 = AddNote(0, 1, title1, url1);
+  std::string content0 = CreateAutoIndexedContent(0);
+  std::string content1 = CreateAutoIndexedContent(1);
+  const Notes_Node* note0 = AddNote(0, 0, content0, url0);
+  const Notes_Node* note1 = AddNote(0, 1, content1, url1);
   ASSERT_TRUE(note0 != NULL);
   ASSERT_TRUE(note1 != NULL);
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
@@ -761,14 +831,14 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_ReverseTheOrderOfTwoBMs) {
 }
 
 // Test Scribe ID - 371933.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_ReverseTheOrderOf10BMs) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_ReverseTheOrderOf10Notes) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
   for (int i = 0; i < 10; ++i) {
-    std::string title = IndexedURLTitle(i);
+    std::string content = CreateAutoIndexedContent(i);
     GURL url = GURL(IndexedURL(i));
-    ASSERT_TRUE(AddNote(0, i, title, url) != NULL);
+    ASSERT_TRUE(AddNote(0, i, content, url) != NULL);
   }
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
@@ -780,7 +850,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_ReverseTheOrderOf10BMs) {
 
 // Test Scribe ID - 371954.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_MovingBMsFromBMBarToBMFolder) {
+                       SC_MovingNotessFromRootToNotesFolder) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
@@ -788,9 +858,9 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
   const Notes_Node* folder = AddFolder(0, 1, kGenericFolderName);
   ASSERT_TRUE(folder != NULL);
   for (int i = 2; i < 10; ++i) {
-    std::string title = IndexedURLTitle(i);
+    std::string content = CreateAutoIndexedContent(i);
     GURL url = GURL(IndexedURL(i));
-    ASSERT_TRUE(AddNote(0, i, title, url) != NULL);
+    ASSERT_TRUE(AddNote(0, i, content, url) != NULL);
   }
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
@@ -805,17 +875,18 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 }
 
 // Test Scribe ID - 371957.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_MovingBMsFromBMFoldToBMBar) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_MovingNotesFromFoldToRoot) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
-  ASSERT_TRUE(AddNote(0, kGenericURLTitle, GURL(kGenericURL)) != NULL);
+  ASSERT_TRUE(AddNote(0, kGenericURLContent, kGenericURLTitle,
+                      GURL(kGenericURL)) != NULL);
   const Notes_Node* folder = AddFolder(0, 1, kGenericFolderName);
   ASSERT_TRUE(folder != NULL);
   for (int i = 0; i < 10; ++i) {
-    std::string title = IndexedURLTitle(i);
+    std::string content = CreateAutoIndexedContent(i);
     GURL url = GURL(IndexedURL(i));
-    ASSERT_TRUE(AddNote(0, folder, i, title, url) != NULL);
+    ASSERT_TRUE(AddNote(0, folder, i, content, url) != NULL);
   }
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
@@ -830,23 +901,23 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_MovingBMsFromBMFoldToBMBar) {
 
 // Test Scribe ID - 371961.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_MovingBMsFromParentBMFoldToChildBMFold) {
+                       SC_MovingNotesFromParentNotesFoldToChildNotesFold) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
   const Notes_Node* folder = AddFolder(0, kGenericFolderName);
   ASSERT_TRUE(folder != NULL);
   for (int i = 0; i < 3; ++i) {
-    std::string title = IndexedURLTitle(i);
+    std::string content = CreateAutoIndexedContent(i);
     GURL url = GURL(IndexedURL(i));
-    ASSERT_TRUE(AddNote(0, folder, i, title, url) != NULL);
+    ASSERT_TRUE(AddNote(0, folder, i, content, url) != NULL);
   }
   const Notes_Node* subfolder = AddFolder(0, folder, 3, kGenericSubfolderName);
   ASSERT_TRUE(subfolder != NULL);
   for (int i = 0; i < 10; ++i) {
-    std::string title = IndexedURLTitle(i + 3);
+    std::string content = CreateAutoIndexedContent(i + 3);
     GURL url = GURL(IndexedURL(i + 3));
-    ASSERT_TRUE(AddNote(0, subfolder, i, title, url) != NULL);
+    ASSERT_TRUE(AddNote(0, subfolder, i, content, url) != NULL);
   }
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
@@ -861,23 +932,23 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 371964.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_MovingBMsFromChildBMFoldToParentBMFold) {
+                       SC_MovingNotesFromChildNotesFoldToParentNotesFold) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
   const Notes_Node* folder = AddFolder(0, kGenericFolderName);
   ASSERT_TRUE(folder != NULL);
   for (int i = 0; i < 3; ++i) {
-    std::string title = IndexedURLTitle(i);
+    std::string content = CreateAutoIndexedContent(i);
     GURL url = GURL(IndexedURL(i));
-    ASSERT_TRUE(AddNote(0, folder, i, title, url) != NULL);
+    ASSERT_TRUE(AddNote(0, folder, i, content, url) != NULL);
   }
   const Notes_Node* subfolder = AddFolder(0, folder, 3, kGenericSubfolderName);
   ASSERT_TRUE(subfolder != NULL);
   for (int i = 0; i < 5; ++i) {
-    std::string title = IndexedURLTitle(i + 3);
+    std::string content = CreateAutoIndexedContent(i + 3);
     GURL url = GURL(IndexedURL(i + 3));
-    ASSERT_TRUE(AddNote(0, subfolder, i, title, url) != NULL);
+    ASSERT_TRUE(AddNote(0, subfolder, i, content, url) != NULL);
   }
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
@@ -891,7 +962,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 }
 
 // Test Scribe ID - 371967.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_HoistBMs10LevelUp) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_HoistNotes10LevelUp) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
@@ -901,9 +972,9 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_HoistBMs10LevelUp) {
   for (int level = 0; level < 15; ++level) {
     int num_notes = base::RandInt(0, 9);
     for (int i = 0; i < num_notes; ++i) {
-      std::string title = IndexedURLTitle(i);
+      std::string content = CreateAutoIndexedContent(i);
       GURL url = GURL(IndexedURL(i));
-      ASSERT_TRUE(AddNote(0, folder, i, title, url) != NULL);
+      ASSERT_TRUE(AddNote(0, folder, i, content, url) != NULL);
     }
     std::string title = IndexedFolderName(level);
     folder = AddFolder(0, folder, folder->children().size(), title);
@@ -922,7 +993,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_HoistBMs10LevelUp) {
   ASSERT_TRUE(AllModelsMatchVerifier());
 
   GURL url10 = GURL(IndexedURL(10));
-  Move(0, GetUniqueNodeByURL(0, url10), folder_L0, folder_L0->children().size());
+  Move(0, GetUniqueNodeByURL(0, url10), folder_L0,
+       folder_L0->children().size());
   GURL url11 = GURL(IndexedURL(11));
   Move(0, GetUniqueNodeByURL(0, url11), folder_L0, 0);
   GURL url12 = GURL(IndexedURL(12));
@@ -933,7 +1005,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_HoistBMs10LevelUp) {
 
 // Test Scribe ID - 371968.
 // Flaky. http://crbug.com/107744.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_SinkBMs10LevelDown) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_SinkNotes10LevelDown) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
@@ -943,9 +1015,9 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_SinkBMs10LevelDown) {
   for (int level = 0; level < 15; ++level) {
     int num_notes = base::RandInt(0, 9);
     for (int i = 0; i < num_notes; ++i) {
-      std::string title = IndexedURLTitle(i);
+      std::string content = CreateAutoIndexedContent(i);
       GURL url = GURL(IndexedURL(i));
-      ASSERT_TRUE(AddNote(0, folder, i, title, url) != NULL);
+      ASSERT_TRUE(AddNote(0, folder, i, content, url) != NULL);
     }
     std::string title = IndexedFolderName(level);
     folder = AddFolder(0, folder, folder->children().size(), title);
@@ -964,7 +1036,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_SinkBMs10LevelDown) {
   ASSERT_TRUE(AllModelsMatchVerifier());
 
   GURL url10 = GURL(IndexedURL(10));
-  Move(0, GetUniqueNodeByURL(0, url10), folder_L10, folder_L10->children().size());
+  Move(0, GetUniqueNodeByURL(0, url10), folder_L10,
+       folder_L10->children().size());
   GURL url11 = GURL(IndexedURL(11));
   Move(0, GetUniqueNodeByURL(0, url11), folder_L10, 0);
   GURL url12 = GURL(IndexedURL(12));
@@ -974,7 +1047,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_SinkBMs10LevelDown) {
 }
 
 // Test Scribe ID - 371980.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_SinkEmptyBMFold5LevelsDown) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
+                       SC_SinkEmptyNotesFold5LevelsDown) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
@@ -983,9 +1057,9 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_SinkEmptyBMFold5LevelsDown) {
   for (int level = 0; level < 15; ++level) {
     int num_notes = base::RandInt(0, 9);
     for (int i = 0; i < num_notes; ++i) {
-      std::string title = IndexedURLTitle(i);
+      std::string content = CreateAutoIndexedContent(i);
       GURL url = GURL(IndexedURL(i));
-      ASSERT_TRUE(AddNote(0, folder, i, title, url) != NULL);
+      ASSERT_TRUE(AddNote(0, folder, i, content, url) != NULL);
     }
     std::string title = IndexedFolderName(level);
     folder = AddFolder(0, folder, folder->children().size(), title);
@@ -993,7 +1067,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_SinkEmptyBMFold5LevelsDown) {
     if (level == 5)
       folder_L5 = folder;
   }
-  folder = AddFolder(0, GetNotesTopNode(0)->children().size(), kGenericFolderName);
+  folder =
+      AddFolder(0, GetNotesTopNode(0)->children().size(), kGenericFolderName);
   ASSERT_TRUE(folder != NULL);
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
@@ -1005,7 +1080,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_SinkEmptyBMFold5LevelsDown) {
 
 // Test Scribe ID - 371997.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_SinkNonEmptyBMFold5LevelsDown) {
+                       SC_SinkNonEmptyNotesFold5LevelsDown) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
@@ -1014,9 +1089,9 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
   for (int level = 0; level < 6; ++level) {
     int num_notes = base::RandInt(0, 9);
     for (int i = 0; i < num_notes; ++i) {
-      std::string title = IndexedURLTitle(i);
+      std::string content = CreateAutoIndexedContent(i);
       GURL url = GURL(IndexedURL(i));
-      ASSERT_TRUE(AddNote(0, folder, i, title, url) != NULL);
+      ASSERT_TRUE(AddNote(0, folder, i, content, url) != NULL);
     }
     std::string title = IndexedFolderName(level);
     folder = AddFolder(0, folder, folder->children().size(), title);
@@ -1024,12 +1099,13 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
     if (level == 5)
       folder_L5 = folder;
   }
-  folder = AddFolder(0, GetNotesTopNode(0)->children().size(), kGenericFolderName);
+  folder =
+      AddFolder(0, GetNotesTopNode(0)->children().size(), kGenericFolderName);
   ASSERT_TRUE(folder != NULL);
   for (int i = 0; i < 10; ++i) {
-    std::string title = IndexedURLTitle(i);
-    GURL url = GURL(IndexedURL(i));
-    ASSERT_TRUE(AddNote(0, folder, i, title, url) != NULL);
+    std::string content = CreateAutoIndexedContent(i);
+    GURL url = GURL(CreateAutoIndexedContent(i));
+    ASSERT_TRUE(AddNote(0, folder, i, content, url) != NULL);
   }
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
@@ -1049,9 +1125,9 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_HoistFolder5LevelsUp) {
   for (int level = 0; level < 6; ++level) {
     int num_notes = base::RandInt(0, 9);
     for (int i = 0; i < num_notes; ++i) {
-      std::string title = IndexedURLTitle(i);
+      std::string content = CreateAutoIndexedContent(i);
       GURL url = GURL(IndexedURL(i));
-      ASSERT_TRUE(AddNote(0, folder, i, title, url) != NULL);
+      ASSERT_TRUE(AddNote(0, folder, i, content, url) != NULL);
     }
     std::string title = IndexedFolderName(level);
     folder = AddFolder(0, folder, folder->children().size(), title);
@@ -1077,7 +1153,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_HoistFolder5LevelsUp) {
 
 // Test Scribe ID - 372026.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_ReverseTheOrderOfTwoBMFolders) {
+                       SC_ReverseTheOrderOfTwoNotesFolders) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
@@ -1086,9 +1162,9 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
     const Notes_Node* folder = AddFolder(0, i, title);
     ASSERT_TRUE(folder != NULL);
     for (int j = 0; j < 10; ++j) {
-      std::string title = IndexedURLTitle(j);
+      std::string content = CreateAutoIndexedContent(j);
       GURL url = GURL(IndexedURL(j));
-      ASSERT_TRUE(AddNote(0, folder, j, title, url) != NULL);
+      ASSERT_TRUE(AddNote(0, folder, j, content, url) != NULL);
     }
   }
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
@@ -1101,7 +1177,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 372028.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       SC_ReverseTheOrderOfTenBMFolders) {
+                       SC_ReverseTheOrderOfTenNotesFolders) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
@@ -1110,9 +1186,9 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
     const Notes_Node* folder = AddFolder(0, i, title);
     ASSERT_TRUE(folder != NULL);
     for (int j = 0; j < 10; ++j) {
-      std::string title = IndexedURLTitle(1000 * i + j);
+      std::string content = CreateAutoIndexedContent(1000 * i + j);
       GURL url = GURL(IndexedURL(j));
-      ASSERT_TRUE(AddNote(0, folder, j, title, url) != NULL);
+      ASSERT_TRUE(AddNote(0, folder, j, content, url) != NULL);
     }
   }
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
@@ -1124,18 +1200,19 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 }
 
 // Test Scribe ID - 373379.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, MC_BiDirectionalPushAddingBM) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
+                       MC_BiDirectionalPushAddingNotes) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
   DisableVerifier();
   for (int i = 0; i < 2; ++i) {
-    std::string title0 = IndexedURLTitle(2 * i);
+    std::string content0 = CreateAutoIndexedContent(2 * i);
     GURL url0 = GURL(IndexedURL(2 * i));
-    ASSERT_TRUE(AddNote(0, title0, url0) != NULL);
-    std::string title1 = IndexedURLTitle(2 * i + 1);
+    ASSERT_TRUE(AddNote(0, content0, url0) != NULL);
+    std::string content1 = CreateAutoIndexedContent(2 * i + 1);
     GURL url1 = GURL(IndexedURL(2 * i + 1));
-    ASSERT_TRUE(AddNote(1, title1, url1) != NULL);
+    ASSERT_TRUE(AddNote(1, content1, url1) != NULL);
   }
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(AllModelsMatch());
@@ -1144,7 +1221,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, MC_BiDirectionalPushAddingBM) {
 
 // Test Scribe ID - 373503.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       MC_BiDirectionalPush_AddingSameBMs) {
+                       MC_BiDirectionalPush_AddingSameNotes) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
@@ -1152,10 +1229,10 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
   // for duplicates to exist after sync completes. See http://crbug.com/19769.
   DisableVerifier();
   for (int i = 0; i < 2; ++i) {
-    std::string title = IndexedURLTitle(i);
+    std::string content = CreateAutoIndexedContent(i);
     GURL url = GURL(IndexedURL(i));
-    ASSERT_TRUE(AddNote(0, title, url) != NULL);
-    ASSERT_TRUE(AddNote(1, title, url) != NULL);
+    ASSERT_TRUE(AddNote(0, content, url) != NULL);
+    ASSERT_TRUE(AddNote(1, content, url) != NULL);
   }
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(AllModelsMatch());
@@ -1187,7 +1264,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
   ASSERT_TRUE(AddNote(1, folder1, 1, "NoTe 1", GURL(kGenericURL)) != NULL);
   ASSERT_TRUE(AddNote(1, folder1, 2, "nOTE 2", GURL(kGenericURL)) != NULL);
 
-  ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
+  // Commit sequentially to make sure there is no race condition.
+  SetupSyncOneClientAfterAnother();
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(AllModelsMatch());
   ASSERT_FALSE(ContainsDuplicateNotes(0));
@@ -1195,52 +1273,53 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 373508.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       MC_SimpleMergeOfDifferentBMModels) {
+                       MC_SimpleMergeOfDifferentNotesModels) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
   DisableVerifier();
 
   for (int i = 0; i < 3; ++i) {
-    std::string title = IndexedURLTitle(i);
+    std::string content = CreateAutoIndexedContent(i);
     GURL url = GURL(IndexedURL(i));
-    ASSERT_TRUE(AddNote(0, i, title, url) != NULL);
-    ASSERT_TRUE(AddNote(1, i, title, url) != NULL);
+    ASSERT_TRUE(AddNote(0, i, content, url) != NULL);
+    ASSERT_TRUE(AddNote(1, i, content, url) != NULL);
   }
 
   for (int i = 3; i < 10; ++i) {
-    std::string title0 = IndexedURLTitle(i);
+    std::string content0 = CreateAutoIndexedContent(i);
     GURL url0 = GURL(IndexedURL(i));
-    ASSERT_TRUE(AddNote(0, i, title0, url0) != NULL);
-    std::string title1 = IndexedURLTitle(i + 7);
+    ASSERT_TRUE(AddNote(0, i, content0, url0) != NULL);
+    std::string content1 = CreateAutoIndexedContent(i + 7);
     GURL url1 = GURL(IndexedURL(i + 7));
-    ASSERT_TRUE(AddNote(1, i, title1, url1) != NULL);
+    ASSERT_TRUE(AddNote(1, i, content1, url1) != NULL);
   }
 
-  ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
+  // Commit sequentially to make sure there is no race condition.
+  SetupSyncOneClientAfterAnother();
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(AllModelsMatch());
   ASSERT_FALSE(ContainsDuplicateNotes(0));
 }
 
 // Test Scribe ID - 386586.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       MC_MergeSimpleBMHierarchyUnderBMBar) {
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, MC_MergeSimpleNotesHierarchy) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
   DisableVerifier();
 
   for (int i = 0; i < 3; ++i) {
-    std::string title = IndexedURLTitle(i);
+    std::string content = CreateAutoIndexedContent(i);
     GURL url = GURL(IndexedURL(i));
-    ASSERT_TRUE(AddNote(0, i, title, url) != NULL);
-    ASSERT_TRUE(AddNote(1, i, title, url) != NULL);
+    ASSERT_TRUE(AddNote(0, i, content, url) != NULL);
+    ASSERT_TRUE(AddNote(1, i, content, url) != NULL);
   }
 
   for (int i = 3; i < 10; ++i) {
-    std::string title = IndexedURLTitle(i);
+    std::string content = CreateAutoIndexedContent(i);
     GURL url = GURL(IndexedURL(i));
-    ASSERT_TRUE(AddNote(1, i, title, url) != NULL);
+    ASSERT_TRUE(AddNote(1, i, content, url) != NULL);
   }
 
-  ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
+  // Commit sequentially to make sure there is no race condition.
+  SetupSyncOneClientAfterAnother();
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(AllModelsMatch());
   ASSERT_FALSE(ContainsDuplicateNotes(0));
@@ -1248,18 +1327,19 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 386589.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       MC_MergeSimpleBMHierarchyEqualSetsUnderBMBar) {
+                       MC_MergeSimpleNotesHierarchyEqualSets) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
   DisableVerifier();
 
   for (int i = 0; i < 3; ++i) {
-    std::string title = IndexedURLTitle(i);
+    std::string content = CreateAutoIndexedContent(i);
     GURL url = GURL(IndexedURL(i));
-    ASSERT_TRUE(AddNote(0, i, title, url) != NULL);
-    ASSERT_TRUE(AddNote(1, i, title, url) != NULL);
+    ASSERT_TRUE(AddNote(0, i, content, url) != NULL);
+    ASSERT_TRUE(AddNote(1, i, content, url) != NULL);
   }
 
-  ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
+  // Commit sequentially to make sure there is no race condition.
+  SetupSyncOneClientAfterAnother();
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(AllModelsMatch());
   ASSERT_FALSE(ContainsDuplicateNotes(0));
@@ -1267,7 +1347,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 373504 - Merge note folders with different notes.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       MC_MergeBMFoldersWithDifferentBMs) {
+                       MC_MergeNotesFoldersWithDifferentNotes) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
   DisableVerifier();
 
@@ -1276,14 +1356,15 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
   const Notes_Node* folder1 = AddFolder(1, kGenericFolderName);
   ASSERT_TRUE(folder1 != NULL);
   for (int i = 0; i < 2; ++i) {
-    std::string title0 = IndexedURLTitle(2 * i);
+    std::string content0 = CreateAutoIndexedContent(2 * i);
     GURL url0 = GURL(IndexedURL(2 * i));
-    ASSERT_TRUE(AddNote(0, folder0, i, title0, url0) != NULL);
-    std::string title1 = IndexedURLTitle(2 * i + 1);
+    ASSERT_TRUE(AddNote(0, folder0, i, content0, url0) != NULL);
+    std::string content1 = CreateAutoIndexedContent(2 * i + 1);
     GURL url1 = GURL(IndexedURL(2 * i + 1));
-    ASSERT_TRUE(AddNote(1, folder1, i, title1, url1) != NULL);
+    ASSERT_TRUE(AddNote(1, folder1, i, content1, url1) != NULL);
   }
-  ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
+  // Commit sequentially to make sure there is no race condition.
+  SetupSyncOneClientAfterAnother();
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(AllModelsMatch());
   ASSERT_FALSE(ContainsDuplicateNotes(0));
@@ -1291,17 +1372,17 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // Test Scribe ID - 373509 - Merge moderately complex note models.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       MC_MergeDifferentBMModelsModeratelyComplex) {
+                       MC_MergeDifferentNotesModelsModeratelyComplex) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
   DisableVerifier();
 
   for (int i = 0; i < 25; ++i) {
-    std::string title0 = IndexedURLTitle(i);
+    std::string contents0 = CreateAutoIndexedContent(i);
     GURL url0 = GURL(IndexedURL(i));
-    ASSERT_TRUE(AddNote(0, i, title0, url0) != NULL);
-    std::string title1 = IndexedURLTitle(i + 50);
+    ASSERT_TRUE(AddNote(0, i, contents0, url0) != NULL);
+    std::string contents1 = CreateAutoIndexedContent(i + 50);
     GURL url1 = GURL(IndexedURL(i + 50));
-    ASSERT_TRUE(AddNote(1, i, title1, url1) != NULL);
+    ASSERT_TRUE(AddNote(1, i, contents1, url1) != NULL);
   }
   for (int i = 25; i < 30; ++i) {
     std::string title0 = IndexedFolderName(i);
@@ -1311,21 +1392,22 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
     const Notes_Node* folder1 = AddFolder(1, i, title1);
     ASSERT_TRUE(folder1 != NULL);
     for (int j = 0; j < 5; ++j) {
-      std::string title0 = IndexedURLTitle(i + 5 * j);
+      std::string content0 = CreateAutoIndexedContent(i + 5 * j);
       GURL url0 = GURL(IndexedURL(i + 5 * j));
-      ASSERT_TRUE(AddNote(0, folder0, j, title0, url0) != NULL);
-      std::string title1 = IndexedURLTitle(i + 5 * j + 50);
+      ASSERT_TRUE(AddNote(0, folder0, j, content0, url0) != NULL);
+      std::string content1 = CreateAutoIndexedContent(i + 5 * j + 50);
       GURL url1 = GURL(IndexedURL(i + 5 * j + 50));
-      ASSERT_TRUE(AddNote(1, folder1, j, title1, url1) != NULL);
+      ASSERT_TRUE(AddNote(1, folder1, j, content1, url1) != NULL);
     }
   }
   for (int i = 100; i < 125; ++i) {
-    std::string title = IndexedURLTitle(i);
+    std::string content = CreateAutoIndexedContent(i);
     GURL url = GURL(IndexedURL(i));
-    ASSERT_TRUE(AddNote(0, title, url) != NULL);
-    ASSERT_TRUE(AddNote(1, title, url) != NULL);
+    ASSERT_TRUE(AddNote(0, content, url) != NULL);
+    ASSERT_TRUE(AddNote(1, content, url) != NULL);
   }
-  ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
+
+  SetupSyncOneClientAfterAnother();
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(AllModelsMatch());
   ASSERT_FALSE(ContainsDuplicateNotes(0));
@@ -1333,7 +1415,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // TCM ID - 3675271 - Merge simple note subset under note folder.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       MC_MergeSimpleBMHierarchySubsetUnderBMFolder) {
+                       MC_MergeSimpleNotesHierarchySubsetUnderNotesFolder) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
   DisableVerifier();
 
@@ -1342,16 +1424,17 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
     ASSERT_TRUE(folder != NULL);
     for (int j = 0; j < 4; ++j) {
       if (base::RandDouble() < 0.5) {
-        std::string title = IndexedURLTitle(j);
+        std::string content = CreateAutoIndexedContent(j);
         GURL url = GURL(IndexedURL(j));
-        ASSERT_TRUE(AddNote(i, folder, j, title, url) != NULL);
+        ASSERT_TRUE(AddNote(i, folder, j, content, url) != NULL);
       } else {
         std::string title = IndexedFolderName(j);
         ASSERT_TRUE(AddFolder(i, folder, j, title) != NULL);
       }
     }
   }
-  ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
+  // Commit sequentially to make sure there is no race condition.
+  SetupSyncOneClientAfterAnother();
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(AllModelsMatch());
   ASSERT_FALSE(ContainsDuplicateNotes(0));
@@ -1359,23 +1442,24 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // TCM ID - 3727284 - Merge subsets of note under note bar.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       MC_MergeSimpleBMHierarchySubsetUnderNoteBar) {
+                       MC_MergeSimpleNotesHierarchySubset) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
   DisableVerifier();
 
   for (int i = 0; i < 4; ++i) {
-    std::string title = IndexedURLTitle(i);
+    std::string content = CreateAutoIndexedContent(i);
     GURL url = GURL(IndexedURL(i));
-    ASSERT_TRUE(AddNote(0, i, title, url) != NULL);
+    ASSERT_TRUE(AddNote(0, i, content, url) != NULL);
   }
 
   for (int j = 0; j < 2; ++j) {
-    std::string title = IndexedURLTitle(j);
+    std::string content = CreateAutoIndexedContent(j);
     GURL url = GURL(IndexedURL(j));
-    ASSERT_TRUE(AddNote(1, j, title, url) != NULL);
+    ASSERT_TRUE(AddNote(1, j, content, url) != NULL);
   }
 
-  ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
+  // Commit sequentially to make sure there is no race condition.
+  SetupSyncOneClientAfterAnother();
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(AllModelsMatch());
   ASSERT_FALSE(ContainsDuplicateNotes(0));
@@ -1384,30 +1468,31 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // TCM ID - 3659294 - Merge simple note hierarchy under note folder.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       MC_Merge_SimpleBMHierarchy_Under_BMFolder) {
+                       MC_Merge_SimpleNotesHierarchy_Under_NotesFolder) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
   DisableVerifier();
 
   const Notes_Node* folder0 = AddFolder(0, 0, kGenericFolderName);
   ASSERT_TRUE(folder0 != NULL);
-  ASSERT_TRUE(AddNote(0, folder0, 0, IndexedURLTitle(1), GURL(IndexedURL(1))) !=
-              NULL);
+  ASSERT_TRUE(AddNote(0, folder0, 0, CreateAutoIndexedContent(1),
+                      GURL(IndexedURL(1))) != NULL);
   ASSERT_TRUE(AddFolder(0, folder0, 1, IndexedSubfolderName(2)) != NULL);
-  ASSERT_TRUE(AddNote(0, folder0, 2, IndexedURLTitle(3), GURL(IndexedURL(3))) !=
-              NULL);
+  ASSERT_TRUE(AddNote(0, folder0, 2, CreateAutoIndexedContent(3),
+                      GURL(IndexedURL(3))) != NULL);
   ASSERT_TRUE(AddFolder(0, folder0, 3, IndexedSubfolderName(4)) != NULL);
 
   const Notes_Node* folder1 = AddFolder(1, 0, kGenericFolderName);
   ASSERT_TRUE(folder1 != NULL);
   ASSERT_TRUE(AddFolder(1, folder1, 0, IndexedSubfolderName(0)) != NULL);
   ASSERT_TRUE(AddFolder(1, folder1, 1, IndexedSubfolderName(2)) != NULL);
-  ASSERT_TRUE(AddNote(1, folder1, 2, IndexedURLTitle(3), GURL(IndexedURL(3))) !=
-              NULL);
+  ASSERT_TRUE(AddNote(1, folder1, 2, CreateAutoIndexedContent(3),
+                      GURL(IndexedURL(3))) != NULL);
   ASSERT_TRUE(AddFolder(1, folder1, 3, IndexedSubfolderName(5)) != NULL);
-  ASSERT_TRUE(AddNote(1, folder1, 4, IndexedURLTitle(1), GURL(IndexedURL(1))) !=
-              NULL);
+  ASSERT_TRUE(AddNote(1, folder1, 4, CreateAutoIndexedContent(1),
+                      GURL(IndexedURL(1))) != NULL);
 
-  ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
+  // Commit sequentially to make sure there is no race condition.
+  SetupSyncOneClientAfterAnother();
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(AllModelsMatch());
   ASSERT_FALSE(ContainsDuplicateNotes(0));
@@ -1415,52 +1500,53 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
 
 // TCM ID - 3711273 - Merge disjoint sets of note hierarchy under note
 // folder.
-IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       MC_Merge_SimpleBMHierarchy_DisjointSets_Under_BMFolder) {
+IN_PROC_BROWSER_TEST_F(
+    TwoClientNotesSyncTest,
+    MC_Merge_SimpleNotesHierarchy_DisjointSets_Under_NotesFolder) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
   DisableVerifier();
 
   const Notes_Node* folder0 = AddFolder(0, 0, kGenericFolderName);
   ASSERT_TRUE(folder0 != NULL);
-  ASSERT_TRUE(AddNote(0, folder0, 0, IndexedURLTitle(1), GURL(IndexedURL(1))) !=
-              NULL);
+  ASSERT_TRUE(AddNote(0, folder0, 0, CreateAutoIndexedContent(1),
+                      GURL(IndexedURL(1))) != NULL);
   ASSERT_TRUE(AddFolder(0, folder0, 1, IndexedSubfolderName(2)) != NULL);
-  ASSERT_TRUE(AddNote(0, folder0, 2, IndexedURLTitle(3), GURL(IndexedURL(3))) !=
-              NULL);
+  ASSERT_TRUE(AddNote(0, folder0, 2, CreateAutoIndexedContent(3),
+                      GURL(IndexedURL(3))) != NULL);
   ASSERT_TRUE(AddFolder(0, folder0, 3, IndexedSubfolderName(4)) != NULL);
 
   const Notes_Node* folder1 = AddFolder(1, 0, kGenericFolderName);
   ASSERT_TRUE(folder1 != NULL);
   ASSERT_TRUE(AddFolder(1, folder1, 0, IndexedSubfolderName(5)) != NULL);
   ASSERT_TRUE(AddFolder(1, folder1, 1, IndexedSubfolderName(6)) != NULL);
-  ASSERT_TRUE(AddNote(1, folder1, 2, IndexedURLTitle(7), GURL(IndexedURL(7))) !=
-              NULL);
-  ASSERT_TRUE(AddNote(1, folder1, 3, IndexedURLTitle(8), GURL(IndexedURL(8))) !=
-              NULL);
+  ASSERT_TRUE(AddNote(1, folder1, 2, CreateAutoIndexedContent(7),
+                      GURL(IndexedURL(7))) != NULL);
+  ASSERT_TRUE(AddNote(1, folder1, 3, CreateAutoIndexedContent(8),
+                      GURL(IndexedURL(8))) != NULL);
 
-  ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
+  // Commit sequentially to make sure there is no race condition.
+  SetupSyncOneClientAfterAnother();
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(AllModelsMatch());
   ASSERT_FALSE(ContainsDuplicateNotes(0));
 }
 
-// TCM ID - 3639296 - Merge disjoint sets of note hierarchy under note
-// bar.
+// TCM ID - 3639296 - Merge disjoint sets of note hierarchy
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       MC_Merge_SimpleBMHierarchy_DisjointSets_Under_Note) {
+                       MC_Merge_SimpleNotesHierarchy_DisjointSets) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
   DisableVerifier();
 
   for (int i = 0; i < 3; ++i) {
-    std::string title = IndexedURLTitle(i + 1);
+    std::string content = CreateAutoIndexedContent(i + 1);
     GURL url = GURL(IndexedURL(i + 1));
-    ASSERT_TRUE(AddNote(0, i, title, url) != NULL);
+    ASSERT_TRUE(AddNote(0, i, content, url) != NULL);
   }
 
   for (int j = 0; j < 3; ++j) {
-    std::string title = IndexedURLTitle(j + 4);
+    std::string content = CreateAutoIndexedContent(j + 4);
     GURL url = GURL(IndexedURL(j + 4));
-    ASSERT_TRUE(AddNote(0, j, title, url) != NULL);
+    ASSERT_TRUE(AddNote(0, j, content, url) != NULL);
   }
 
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -1469,9 +1555,9 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
   ASSERT_FALSE(ContainsDuplicateNotes(0));
 }
 
-// TCM ID - 3616282 - Merge sets of duplicate notes under note bar.
+// TCM ID - 3616282 - Merge sets of duplicate notes.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
-                       MC_Merge_SimpleBMHierarchy_DuplicateBMs_Under_BMBar) {
+                       MC_Merge_SimpleNotesHierarchy_DuplicateNotes) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
   DisableVerifier();
 
@@ -1479,17 +1565,17 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
   int node_index = 0;
   for (int i = 1; i < 5; ++i) {
     for (int j = 0; j < i; ++j) {
-      std::string title = IndexedURLTitle(i);
+      std::string content = CreateAutoIndexedContent(i);
       GURL url = GURL(IndexedURL(i));
-      ASSERT_TRUE(AddNote(0, node_index, title, url) != NULL);
+      ASSERT_TRUE(AddNote(0, node_index, content, url) != NULL);
       ++node_index;
     }
   }
   // Let's add a set of notes {1,2,3,4} to client1.
   for (int i = 0; i < 4; ++i) {
-    std::string title = IndexedURLTitle(i + 1);
+    std::string content = CreateAutoIndexedContent(i + 1);
     GURL url = GURL(IndexedURL(i + 1));
-    ASSERT_TRUE(AddNote(1, i, title, url) != NULL);
+    ASSERT_TRUE(AddNote(1, i, content, url) != NULL);
   }
 
   // Commit sequentially to make sure there is no race condition.
@@ -1497,7 +1583,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
   ASSERT_TRUE(AwaitQuiescence());
 
   for (int i = 1; i < 5; ++i) {
-    ASSERT_TRUE(CountNotesWithTitlesMatching(1, IndexedURLTitle(i)) == i);
+    ASSERT_TRUE(CountNotesWithContentMatching(1, CreateAutoIndexedContent(i)) ==
+                i);
   }
 }
 
@@ -1506,12 +1593,14 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, DisableNotes) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
-  ASSERT_TRUE(GetClient(1)->DisableSyncForType(syncer::UserSelectableType::kNotes));
+  ASSERT_TRUE(
+      GetClient(1)->DisableSyncForType(syncer::UserSelectableType::kNotes));
   ASSERT_TRUE(AddFolder(1, kGenericFolderName) != NULL);
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_FALSE(AllModelsMatch());
 
-  ASSERT_TRUE(GetClient(1)->EnableSyncForType(syncer::UserSelectableType::kNotes));
+  ASSERT_TRUE(
+      GetClient(1)->EnableSyncForType(syncer::UserSelectableType::kNotes));
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(AllModelsMatch());
 }
@@ -1529,7 +1618,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, DisableSync) {
   ASSERT_TRUE(AddFolder(1, IndexedFolderName(1)) != NULL);
   ASSERT_FALSE(AllModelsMatch());
 
-  ASSERT_TRUE(GetClient(1)->EnableSyncForAllDatatypes());
+  ASSERT_TRUE(GetClient(1)->EnableSyncForRegisteredDatatypes());
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(AllModelsMatch());
 }
@@ -1545,12 +1634,12 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, MC_DuplicateFolders) {
   const Notes_Node* folder1 = AddFolder(1, kGenericFolderName);
   ASSERT_TRUE(folder1 != NULL);
   for (int i = 0; i < 5; ++i) {
-    std::string title0 = IndexedURLTitle(i);
+    std::string content0 = CreateAutoIndexedContent(i);
     GURL url0 = GURL(IndexedURL(i));
-    ASSERT_TRUE(AddNote(0, folder0, i, title0, url0) != NULL);
-    std::string title1 = IndexedURLTitle(i + 5);
+    ASSERT_TRUE(AddNote(0, folder0, i, content0, url0) != NULL);
+    std::string content1 = CreateAutoIndexedContent(i + 5);
     GURL url1 = GURL(IndexedURL(i + 5));
-    ASSERT_TRUE(AddNote(1, folder1, i, title1, url1) != NULL);
+    ASSERT_TRUE(AddNote(1, folder1, i, content1, url1) != NULL);
   }
 
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -1562,7 +1651,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, MC_DuplicateFolders) {
 // This test fails when run with FakeServer and FakeServerInvalidationService.
 IN_PROC_BROWSER_TEST_F(LegacyTwoClientNotesSyncTest, MC_DeleteNote) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
-  ASSERT_TRUE(GetClient(1)->DisableSyncForType(syncer::UserSelectableType::kNotes));
+  ASSERT_TRUE(
+      GetClient(1)->DisableSyncForType(syncer::UserSelectableType::kNotes));
 
   const GURL bar_url("http://example.com/bar");
   const GURL other_url("http://example.com/other");
@@ -1583,7 +1673,8 @@ IN_PROC_BROWSER_TEST_F(LegacyTwoClientNotesSyncTest, MC_DeleteNote) {
   ASSERT_FALSE(HasNodeWithURL(0, bar_url));
   ASSERT_TRUE(HasNodeWithURL(0, other_url));
 
-  ASSERT_TRUE(GetClient(1)->EnableSyncForType(syncer::UserSelectableType::kNotes));
+  ASSERT_TRUE(
+      GetClient(1)->EnableSyncForType(syncer::UserSelectableType::kNotes));
   ASSERT_TRUE(AwaitQuiescence());
 
   ASSERT_FALSE(HasNodeWithURL(0, bar_url));
@@ -1600,9 +1691,10 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, MC_NoteNameChangeConflict) {
   const Notes_Node* folder0 = AddFolder(0, kGenericFolderName);
   ASSERT_TRUE(folder0 != NULL);
   for (int i = 0; i < 3; ++i) {
+    std::string content = CreateAutoIndexedContent(i);
     std::string title = IndexedURLTitle(i);
     GURL url = GURL(IndexedURL(i));
-    ASSERT_TRUE(AddNote(0, folder0, i, title, url) != NULL);
+    ASSERT_TRUE(AddNote(0, folder0, i, content, title, url) != NULL);
   }
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
@@ -1618,6 +1710,31 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, MC_NoteNameChangeConflict) {
   ASSERT_FALSE(ContainsDuplicateNotes(0));
 }
 
+IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, MC_NoteContentChangeConflict) {
+  ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
+
+  const Notes_Node* folder0 = AddFolder(0, kGenericFolderName);
+  ASSERT_TRUE(folder0 != NULL);
+  for (int i = 0; i < 3; ++i) {
+    std::string content = CreateAutoIndexedContent(i);
+    std::string title = IndexedURLTitle(i);
+    GURL url = GURL(IndexedURL(i));
+    ASSERT_TRUE(AddNote(0, folder0, i, content, title, url) != NULL);
+  }
+  ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
+  ASSERT_TRUE(AllModelsMatchVerifier());
+  ASSERT_FALSE(ContainsDuplicateNotes(0));
+
+  DisableVerifier();
+  GURL url(IndexedURL(0));
+  SetContent(0, GetUniqueNodeByURL(0, url), "Content++");
+  SetContent(1, GetUniqueNodeByURL(1, url), "Content--");
+
+  ASSERT_TRUE(AwaitQuiescence());
+  ASSERT_TRUE(AllModelsMatch());
+  ASSERT_FALSE(ContainsDuplicateNotes(0));
+}
+
 // TCM ID - 3672299 - Test a scenario of updating the URL of the same note
 // from two clients at the same time.
 IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, MC_NoteURLChangeConflict) {
@@ -1626,9 +1743,9 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, MC_NoteURLChangeConflict) {
   const Notes_Node* folder0 = AddFolder(0, kGenericFolderName);
   ASSERT_TRUE(folder0 != NULL);
   for (int i = 0; i < 3; ++i) {
-    std::string title = IndexedURLTitle(i);
+    std::string content = CreateAutoIndexedContent(i);
     GURL url = GURL(IndexedURL(i));
-    ASSERT_TRUE(AddNote(0, folder0, i, title, url) != NULL);
+    ASSERT_TRUE(AddNote(0, folder0, i, content, url) != NULL);
   }
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
@@ -1668,9 +1785,9 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, MC_FolderNameChangeConflict) {
   folderB[1] = AddFolder(1, IndexedFolderName(1));
   ASSERT_TRUE(folderB[1] != NULL);
   for (int i = 0; i < 3; ++i) {
-    std::string title = IndexedURLTitle(i);
+    std::string content = CreateAutoIndexedContent(i);
     GURL url = GURL(IndexedURL(i));
-    ASSERT_TRUE(AddNote(0, folderB[0], i, title, url) != NULL);
+    ASSERT_TRUE(AddNote(0, folderB[0], i, content, url) != NULL);
   }
 
   // Create folder C with notes and subfolders on both clients.
@@ -1683,9 +1800,9 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, MC_FolderNameChangeConflict) {
     const Notes_Node* subfolder = AddFolder(0, folderC[0], i, folder_name);
     ASSERT_TRUE(subfolder != NULL);
     for (int j = 0; j < 3; ++j) {
-      std::string title = IndexedURLTitle(j);
+      std::string content = CreateAutoIndexedContent(j);
       GURL url = GURL(IndexedURL(j));
-      ASSERT_TRUE(AddNote(0, subfolder, j, title, url) != NULL);
+      ASSERT_TRUE(AddNote(0, subfolder, j, content, url) != NULL);
     }
   }
 
@@ -1761,8 +1878,10 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(IsEncryptionComplete(0));
   ASSERT_TRUE(IsEncryptionComplete(1));
-  ASSERT_TRUE(AddNote(0, IndexedURLTitle(0), GURL(IndexedURL(0))) != NULL);
-  ASSERT_TRUE(AddNote(0, IndexedURLTitle(1), GURL(IndexedURL(1))) != NULL);
+  ASSERT_TRUE(AddNote(0, CreateAutoIndexedContent(0), GURL(IndexedURL(0))) !=
+              NULL);
+  ASSERT_TRUE(AddNote(0, CreateAutoIndexedContent(1), GURL(IndexedURL(1))) !=
+              NULL);
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(AllModelsMatchVerifier());
   ASSERT_TRUE(IsEncryptionComplete(0));
@@ -1774,14 +1893,16 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(AllModelsMatchVerifier());
 
-  ASSERT_TRUE(AddNote(0, IndexedURLTitle(0), GURL(IndexedURL(0))) != NULL);
+  ASSERT_TRUE(AddNote(0, CreateAutoIndexedContent(0), GURL(IndexedURL(0))) !=
+              NULL);
   ASSERT_TRUE(EnableEncryption(0));
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(IsEncryptionComplete(0));
   ASSERT_TRUE(IsEncryptionComplete(1));
   ASSERT_TRUE(AllModelsMatchVerifier());
 
-  ASSERT_TRUE(AddNote(0, IndexedURLTitle(1), GURL(IndexedURL(1))) != NULL);
+  ASSERT_TRUE(AddNote(0, CreateAutoIndexedContent(1), GURL(IndexedURL(1))) !=
+              NULL);
   ASSERT_TRUE(AddFolder(0, IndexedFolderName(0)) != NULL);
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
@@ -1797,7 +1918,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, RacyPositionChanges) {
   // Add initial notes.
   size_t num_notes = 5;
   for (size_t i = 0; i < num_notes; ++i) {
-    ASSERT_TRUE(AddNote(0, i, IndexedURLTitle(i), GURL(IndexedURL(i))) != NULL);
+    ASSERT_TRUE(AddNote(0, i, CreateAutoIndexedContent(i),
+                        GURL(IndexedURL(i))) != NULL);
   }
 
   // Once we make diverging changes the verifer is helpless.
@@ -1849,7 +1971,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, NoteAllNodesRemovedEvent) {
   ASSERT_TRUE(AllModelsMatchVerifier());
 
   // Starting state:
-  // main_note
+  // root
   //    -> folder0
   //      -> tier1_a
   //        -> http://mail.google.com

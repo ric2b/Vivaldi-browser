@@ -171,9 +171,6 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
   // Used to expose the view to extensions, only popups now.
   std::unique_ptr<::vivaldi::VivaldiExtensionHost> extension_host_;
 
-  // Vivaldi added for devtools web contents ownership
-  void SetWebContentsIsOwnedByThis(bool is_owned);
-
  private:
   friend class WebViewPermissionHelper;
 

@@ -10,11 +10,13 @@
 #include "base/mac/mac_logging.h"
 #include "base/mac/scoped_cftyperef.h"
 #include "base/rand_util.h"
+#include "build/branding_buildflags.h"
 #include "components/os_crypt/encryption_key_creation_util.h"
 #include "crypto/apple_keychain.h"
 
 #ifdef VIVALDI_BUILD
-#define GOOGLE_CHROME_BUILD
+#undef BUILDFLAG_INTERNAL_GOOGLE_CHROME_BRANDING
+#define BUILDFLAG_INTERNAL_GOOGLE_CHROME_BRANDING() (1)
 #endif  // VIVALDI_BUILD
 
 using crypto::AppleKeychain;
@@ -51,7 +53,7 @@ std::string AddRandomPasswordToKeychain(const AppleKeychain& keychain,
 // These two strings ARE indeed user facing.  But they are used to access
 // the encryption keyword.  So as to not lose encrypted data when system
 // locale changes we DO NOT LOCALIZE.
-#if defined(GOOGLE_CHROME_BUILD)
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
 const char KeychainPassword::service_name[] = "Vivaldi Safe Storage";
 const char KeychainPassword::account_name[] = "Vivaldi";
 #else
@@ -126,6 +128,6 @@ std::string KeychainPassword::GetPassword(
   }
 }
 
-#ifndef GOOGLE_CHROME_BUILD
-#error GOOGLE_CHROME_BUILD must be set for Vivaldi builds
+#if !BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#error BUILDFLAG(GOOGLE_CHROME_BRANDING) must be set for Vivaldi builds
 #endif

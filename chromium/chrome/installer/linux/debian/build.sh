@@ -273,7 +273,7 @@ export DEBEMAIL="${MAINTMAIL}"
 DEB_COMMON_DEPS="${BUILDDIR}/deb_common.deps"
 COMMON_DEPS=$(sed ':a;N;$!ba;s/\n/, /g' "${DEB_COMMON_DEPS}")
 COMMON_PREDEPS="dpkg (>= 1.14.0)"
-COMMON_RECOMMENDS="libu2f-udev, adobe-flashplugin, chromium-codecs-ffmpeg-extra"
+COMMON_RECOMMENDS="libu2f-udev, adobe-flashplugin"
 
 
 # Make everything happen in the OUTPUTDIR.

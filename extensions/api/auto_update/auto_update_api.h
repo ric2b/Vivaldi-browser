@@ -11,7 +11,7 @@
 
 namespace extensions {
 
-class AutoUpdateCheckForUpdatesFunction : public UIThreadExtensionFunction {
+class AutoUpdateCheckForUpdatesFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("autoUpdate.checkForUpdates",
                              AUTOUPDATE_CHECKFORUPDATES)
@@ -24,8 +24,7 @@ class AutoUpdateCheckForUpdatesFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(AutoUpdateCheckForUpdatesFunction);
 };
 
-class AutoUpdateIsUpdateNotifierEnabledFunction
-    : public UIThreadExtensionFunction {
+class AutoUpdateIsUpdateNotifierEnabledFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("autoUpdate.isUpdateNotifierEnabled",
                              AUTOUPDATE_ISUPDATENOTIFIERENABLED)
@@ -38,8 +37,7 @@ class AutoUpdateIsUpdateNotifierEnabledFunction
   DISALLOW_COPY_AND_ASSIGN(AutoUpdateIsUpdateNotifierEnabledFunction);
 };
 
-class AutoUpdateEnableUpdateNotifierFunction
-    : public UIThreadExtensionFunction {
+class AutoUpdateEnableUpdateNotifierFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("autoUpdate.enableUpdateNotifier",
                              AUTOUPDATE_ENABLEUPDATENOTIFIER)
@@ -52,8 +50,7 @@ class AutoUpdateEnableUpdateNotifierFunction
   DISALLOW_COPY_AND_ASSIGN(AutoUpdateEnableUpdateNotifierFunction);
 };
 
-class AutoUpdateDisableUpdateNotifierFunction
-    : public UIThreadExtensionFunction {
+class AutoUpdateDisableUpdateNotifierFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("autoUpdate.disableUpdateNotifier",
                              AUTOUPDATE_DISABLEUPDATENOTIFIER)

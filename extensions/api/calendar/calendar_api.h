@@ -95,7 +95,7 @@ class CalendarAPI : public BrowserContextKeyedAPI,
   DISALLOW_COPY_AND_ASSIGN(CalendarAPI);
 };
 
-class CalendarAsyncFunction : public UIThreadExtensionFunction {
+class CalendarAsyncFunction : public ExtensionFunction {
  public:
   CalendarAsyncFunction() = default;
 
@@ -382,6 +382,28 @@ class CalendarDeleteEventTypeFunction : public CalendarAsyncFunction {
 
  private:
   DISALLOW_COPY_AND_ASSIGN(CalendarDeleteEventTypeFunction);
+};
+
+class CalendarCreateEventExceptionFunction : public CalendarAsyncFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("calendar.createEventException",
+                             CALENDAR_CREATE_EVENT_RECURRENCE_EXCEPTION)
+  CalendarCreateEventExceptionFunction() = default;
+
+ protected:
+  ~CalendarCreateEventExceptionFunction() override = default;
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  // Callback for the calendar function to provide results.
+  void CreateEventExceptionComplete(
+      std::shared_ptr<calendar::CreateRecurrenceExceptionResult> results);
+
+ private:
+  // The task tracker for the CalendarService callbacks.
+  base::CancelableTaskTracker task_tracker_;
+
+  DISALLOW_COPY_AND_ASSIGN(CalendarCreateEventExceptionFunction);
 };
 
 }  // namespace extensions

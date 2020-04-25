@@ -39,6 +39,8 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
   explicit VivaldiUtilitiesAPI(content::BrowserContext* context);
   ~VivaldiUtilitiesAPI() override;
 
+  void PostProfileSetup();
+
   // KeyedService implementation.
   void Shutdown() override;
 
@@ -81,12 +83,9 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
 
   // DownloadManager::Observer implementation
   void OnManagerInitialized() override;
+  void ManagerGoingDown(content::DownloadManager* manager) override;
 
   void OnPasswordIconStatusChanged(int window_id, bool show);
-
-  // Close all app windows generating thumbnails.
-  static void CloseAllThumbnailWindows(
-      content::BrowserContext* browser_context);
 
   // Trigger the OS authentication dialog, if needed. web_contents can be null.
   static bool AuthenticateUser(content::BrowserContext* browser_context,
@@ -152,7 +151,7 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
   std::unique_ptr<RazerChromaHandler> razer_chroma_handler_;
 };
 
-class UtilitiesPrintFunction : public UIThreadExtensionFunction {
+class UtilitiesPrintFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.print", UTILITIES_PRINT)
   UtilitiesPrintFunction() = default;
@@ -167,7 +166,7 @@ class UtilitiesPrintFunction : public UIThreadExtensionFunction {
 };
 
 class UtilitiesClearAllRecentlyClosedSessionsFunction
-    : public UIThreadExtensionFunction {
+    : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.clearAllRecentlyClosedSessions",
                              UTILITIES_CLEARALLRECENTLYCLOSEDSESSIONS)
@@ -186,7 +185,7 @@ class UtilitiesClearAllRecentlyClosedSessionsFunction
 // as a unique user id. The user id is stored in the vivaldi user profile
 // with a backup copy stored in the OS user profile (registry on Windows).
 // If no stored user id is found, a new one is generated.
-class UtilitiesGetUniqueUserIdFunction : public UIThreadExtensionFunction {
+class UtilitiesGetUniqueUserIdFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.getUniqueUserId",
                              UTILITIES_GETUNIQUEUSERID)
@@ -207,8 +206,7 @@ class UtilitiesGetUniqueUserIdFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(UtilitiesGetUniqueUserIdFunction);
 };
 
-class UtilitiesIsTabInLastSessionFunction
-    : public UIThreadExtensionFunction {
+class UtilitiesIsTabInLastSessionFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.isTabInLastSession",
                              UTILITIES_ISTABINLASTSESSION)
@@ -224,7 +222,7 @@ class UtilitiesIsTabInLastSessionFunction
   DISALLOW_COPY_AND_ASSIGN(UtilitiesIsTabInLastSessionFunction);
 };
 
-class UtilitiesIsUrlValidFunction : public UIThreadExtensionFunction {
+class UtilitiesIsUrlValidFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.isUrlValid", UTILITIES_ISURLVALID)
   UtilitiesIsUrlValidFunction();
@@ -246,7 +244,7 @@ class UtilitiesIsUrlValidFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(UtilitiesIsUrlValidFunction);
 };
 
-class UtilitiesGetSelectedTextFunction : public UIThreadExtensionFunction {
+class UtilitiesGetSelectedTextFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.getSelectedText",
                              UTILITIES_GETSELECTEDTEXT)
@@ -262,7 +260,7 @@ class UtilitiesGetSelectedTextFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(UtilitiesGetSelectedTextFunction);
 };
 
-class UtilitiesSelectFileFunction : public UIThreadExtensionFunction {
+class UtilitiesSelectFileFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.selectFile", UTILITIES_SELECTFILE)
   UtilitiesSelectFileFunction() = default;
@@ -278,7 +276,7 @@ class UtilitiesSelectFileFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(UtilitiesSelectFileFunction);
 };
 
-class UtilitiesSelectLocalImageFunction : public UIThreadExtensionFunction {
+class UtilitiesSelectLocalImageFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.selectLocalImage",
                              UTILITIES_SELECTLOCALIMAGE)
@@ -290,16 +288,16 @@ class UtilitiesSelectLocalImageFunction : public UIThreadExtensionFunction {
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  void OnFileSelected(base::FilePath path);
+  void OnFileSelected(int64_t bookmark_id,
+                      int preference_index,
+                      base::FilePath path);
 
-  void OnAddMappingFinished(Profile* profile,
-                            bool success,
-                            std::string data_mapping_url);
+  void SendResult(bool success);
 
   DISALLOW_COPY_AND_ASSIGN(UtilitiesSelectLocalImageFunction);
 };
 
-class UtilitiesGetVersionFunction : public UIThreadExtensionFunction {
+class UtilitiesGetVersionFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.getVersion",
                              UTILITIES_GETVERSION)
@@ -314,7 +312,22 @@ class UtilitiesGetVersionFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(UtilitiesGetVersionFunction);
 };
 
-class UtilitiesSetSharedDataFunction : public UIThreadExtensionFunction {
+class UtilitiesGetFFMPEGStateFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.getFFMPEGState",
+                             UTILITIES_GET_FFMPEG_STATE)
+  UtilitiesGetFFMPEGStateFunction() = default;
+
+ protected:
+  ~UtilitiesGetFFMPEGStateFunction() override = default;
+
+  ResponseAction Run() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesGetFFMPEGStateFunction);
+};
+
+class UtilitiesSetSharedDataFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.setSharedData", UTILITIES_SETSHAREDDATA)
 
@@ -329,7 +342,7 @@ class UtilitiesSetSharedDataFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(UtilitiesSetSharedDataFunction);
 };
 
-class UtilitiesGetSharedDataFunction : public UIThreadExtensionFunction {
+class UtilitiesGetSharedDataFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.getSharedData", UTILITIES_GETSHAREDDATA)
 
@@ -344,7 +357,7 @@ class UtilitiesGetSharedDataFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(UtilitiesGetSharedDataFunction);
 };
 
-class UtilitiesGetSystemDateFormatFunction : public UIThreadExtensionFunction {
+class UtilitiesGetSystemDateFormatFunction : public ExtensionFunction {
   DECLARE_EXTENSION_FUNCTION("utilities.getSystemDateFormat",
                              UTILITIES_GETSYSTEM_DATE_FORMAT)
  public:
@@ -362,7 +375,7 @@ class UtilitiesGetSystemDateFormatFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(UtilitiesGetSystemDateFormatFunction);
 };
 
-class UtilitiesSetLanguageFunction : public UIThreadExtensionFunction {
+class UtilitiesSetLanguageFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.setLanguage", UTILITIES_SETLANGUAGE)
   UtilitiesSetLanguageFunction() = default;
@@ -376,7 +389,7 @@ class UtilitiesSetLanguageFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(UtilitiesSetLanguageFunction);
 };
 
-class UtilitiesGetLanguageFunction : public UIThreadExtensionFunction {
+class UtilitiesGetLanguageFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.getLanguage", UTILITIES_GETLANGUAGE)
   UtilitiesGetLanguageFunction() = default;
@@ -390,8 +403,7 @@ class UtilitiesGetLanguageFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(UtilitiesGetLanguageFunction);
 };
 
-class UtilitiesSetVivaldiAsDefaultBrowserFunction
-    : public UIThreadExtensionFunction {
+class UtilitiesSetVivaldiAsDefaultBrowserFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.setVivaldiAsDefaultBrowser",
                              UTILITIES_SETVIVALDIDEFAULT)
@@ -410,8 +422,7 @@ class UtilitiesSetVivaldiAsDefaultBrowserFunction
   DISALLOW_COPY_AND_ASSIGN(UtilitiesSetVivaldiAsDefaultBrowserFunction);
 };
 
-class UtilitiesIsVivaldiDefaultBrowserFunction
-    : public UIThreadExtensionFunction {
+class UtilitiesIsVivaldiDefaultBrowserFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.isVivaldiDefaultBrowser",
                              UTILITIES_ISVIVALDIDEFAULT)
@@ -430,8 +441,7 @@ class UtilitiesIsVivaldiDefaultBrowserFunction
   DISALLOW_COPY_AND_ASSIGN(UtilitiesIsVivaldiDefaultBrowserFunction);
 };
 
-class UtilitiesLaunchNetworkSettingsFunction
-    : public UIThreadExtensionFunction {
+class UtilitiesLaunchNetworkSettingsFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.launchNetworkSettings",
                              UTILITIES_LAUNCHNETWORKSETTINGS)
@@ -446,7 +456,7 @@ class UtilitiesLaunchNetworkSettingsFunction
   DISALLOW_COPY_AND_ASSIGN(UtilitiesLaunchNetworkSettingsFunction);
 };
 
-class UtilitiesSavePageFunction : public UIThreadExtensionFunction {
+class UtilitiesSavePageFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.savePage", UTILITIES_SAVEPAGE)
   UtilitiesSavePageFunction() = default;
@@ -460,7 +470,7 @@ class UtilitiesSavePageFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(UtilitiesSavePageFunction);
 };
 
-class UtilitiesOpenPageFunction : public UIThreadExtensionFunction {
+class UtilitiesOpenPageFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.openPage",
                              UTILITIES_OPENPAGE)
@@ -475,8 +485,7 @@ class UtilitiesOpenPageFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(UtilitiesOpenPageFunction);
 };
 
-class UtilitiesSetDefaultContentSettingsFunction
-    : public UIThreadExtensionFunction {
+class UtilitiesSetDefaultContentSettingsFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.setDefaultContentSettings",
                              UTILITIES_SETDEFAULTCONTENTSETTING)
@@ -491,8 +500,7 @@ class UtilitiesSetDefaultContentSettingsFunction
   DISALLOW_COPY_AND_ASSIGN(UtilitiesSetDefaultContentSettingsFunction);
 };
 
-class UtilitiesGetDefaultContentSettingsFunction
-    : public UIThreadExtensionFunction {
+class UtilitiesGetDefaultContentSettingsFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.getDefaultContentSettings",
                              UTILITIES_GETDEFAULTCONTENTSETTING)
@@ -507,8 +515,7 @@ class UtilitiesGetDefaultContentSettingsFunction
   DISALLOW_COPY_AND_ASSIGN(UtilitiesGetDefaultContentSettingsFunction);
 };
 
-class UtilitiesSetBlockThirdPartyCookiesFunction
-    : public UIThreadExtensionFunction {
+class UtilitiesSetBlockThirdPartyCookiesFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.setBlockThirdPartyCookies",
                              UTILITIES_SET_BLOCKTHIRDPARTYCOOKIES)
@@ -523,8 +530,7 @@ class UtilitiesSetBlockThirdPartyCookiesFunction
   DISALLOW_COPY_AND_ASSIGN(UtilitiesSetBlockThirdPartyCookiesFunction);
 };
 
-class UtilitiesGetBlockThirdPartyCookiesFunction
-    : public UIThreadExtensionFunction {
+class UtilitiesGetBlockThirdPartyCookiesFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.getBlockThirdPartyCookies",
                              UTILITIES_GET_BLOCKTHIRDPARTYCOOKIES)
@@ -539,7 +545,7 @@ class UtilitiesGetBlockThirdPartyCookiesFunction
   DISALLOW_COPY_AND_ASSIGN(UtilitiesGetBlockThirdPartyCookiesFunction);
 };
 
-class UtilitiesOpenTaskManagerFunction : public UIThreadExtensionFunction {
+class UtilitiesOpenTaskManagerFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.openTaskManager",
                              UTILITIES_OPENTASKMANAGER)
@@ -555,7 +561,7 @@ class UtilitiesOpenTaskManagerFunction : public UIThreadExtensionFunction {
 };
 
 
-class UtilitiesGetStartupActionFunction : public UIThreadExtensionFunction {
+class UtilitiesGetStartupActionFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.getStartupAction",
                              UTILITIES_GET_STARTUPTYPE)
@@ -570,7 +576,7 @@ class UtilitiesGetStartupActionFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(UtilitiesGetStartupActionFunction);
 };
 
-class UtilitiesSetStartupActionFunction : public UIThreadExtensionFunction {
+class UtilitiesSetStartupActionFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.setStartupAction",
                              UTILITIES_SET_STARTUPTYPE)
@@ -585,8 +591,7 @@ class UtilitiesSetStartupActionFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(UtilitiesSetStartupActionFunction);
 };
 
-class UtilitiesCanShowWelcomePageFunction
-    : public UIThreadExtensionFunction {
+class UtilitiesCanShowWelcomePageFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.canShowWelcomePage",
                              UTILITIES_CANSHOWWELCOMEPAGE)
@@ -601,8 +606,7 @@ class UtilitiesCanShowWelcomePageFunction
   DISALLOW_COPY_AND_ASSIGN(UtilitiesCanShowWelcomePageFunction);
 };
 
-class UtilitiesCanShowWhatsNewPageFunction
-    : public UIThreadExtensionFunction {
+class UtilitiesCanShowWhatsNewPageFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.canShowWhatsNewPage",
                              UTILITIES_CANSHOWWHATSNEWPAGE)
@@ -617,8 +621,7 @@ class UtilitiesCanShowWhatsNewPageFunction
   DISALLOW_COPY_AND_ASSIGN(UtilitiesCanShowWhatsNewPageFunction);
 };
 
-class UtilitiesShowPasswordDialogFunction
-    : public UIThreadExtensionFunction {
+class UtilitiesShowPasswordDialogFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.showPasswordDialog",
                              UTILITIES_SHOW_PASSWORD_DIALOG)
@@ -631,7 +634,7 @@ class UtilitiesShowPasswordDialogFunction
   DISALLOW_COPY_AND_ASSIGN(UtilitiesShowPasswordDialogFunction);
 };
 
-class UtilitiesSetDialogPositionFunction : public UIThreadExtensionFunction {
+class UtilitiesSetDialogPositionFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.setDialogPosition",
                              UTILITIES_SET_DIALOG_POSITION)
@@ -644,8 +647,7 @@ class UtilitiesSetDialogPositionFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(UtilitiesSetDialogPositionFunction);
 };
 
-class UtilitiesIsRazerChromaAvailableFunction
-    : public UIThreadExtensionFunction {
+class UtilitiesIsRazerChromaAvailableFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.isRazerChromaAvailable",
                              UTILITIES_IS_RAZER_CHROMA_AVAILABLE)
@@ -658,7 +660,7 @@ class UtilitiesIsRazerChromaAvailableFunction
   DISALLOW_COPY_AND_ASSIGN(UtilitiesIsRazerChromaAvailableFunction);
 };
 
-class UtilitiesIsRazerChromaReadyFunction : public UIThreadExtensionFunction {
+class UtilitiesIsRazerChromaReadyFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.isRazerChromaReady",
                              UTILITIES_IS_RAZER_CHROMA_READY)
@@ -671,8 +673,7 @@ class UtilitiesIsRazerChromaReadyFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(UtilitiesIsRazerChromaReadyFunction);
 };
 
-class UtilitiesSetRazerChromaColorFunction
-    : public UIThreadExtensionFunction {
+class UtilitiesSetRazerChromaColorFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.setRazerChromaColor",
                              UTILITIES_SET_RAZER_CHROMA_COLOR)
@@ -685,8 +686,7 @@ class UtilitiesSetRazerChromaColorFunction
   DISALLOW_COPY_AND_ASSIGN(UtilitiesSetRazerChromaColorFunction);
 };
 
-class UtilitiesIsDownloadManagerReadyFunction
-    : public UIThreadExtensionFunction {
+class UtilitiesIsDownloadManagerReadyFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.isDownloadManagerReady",
                              UTILITIES_IS_DOWNLOAD_MANAGER_READY)
@@ -697,6 +697,19 @@ class UtilitiesIsDownloadManagerReadyFunction
   ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(UtilitiesIsDownloadManagerReadyFunction);
+};
+
+class UtilitiesSetContentSettingsFunction : public ExtensionFunction {
+public:
+  DECLARE_EXTENSION_FUNCTION("utilities.setContentSettings",
+                             UTILITIES_SET_CONTENTSETTING)
+   UtilitiesSetContentSettingsFunction() = default;
+
+private:
+  ~UtilitiesSetContentSettingsFunction() override = default;
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesSetContentSettingsFunction);
 };
 
 }  // namespace extensions

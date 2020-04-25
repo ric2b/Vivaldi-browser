@@ -53,6 +53,7 @@ args = parser.parse_args()
 # Need this file to be present
 gclient_gni_content = """checkout_nacl=false
 checkout_oculus_sdk=false
+checkout_openxr=false
 build_with_chromium=true
 """
 

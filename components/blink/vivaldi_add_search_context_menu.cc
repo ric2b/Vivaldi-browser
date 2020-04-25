@@ -21,6 +21,7 @@
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/web/web_searchable_form_data.h"
 #include "third_party/blink/public/web/web_form_element.h"
+#include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 
 using blink::FrameSelection;
 using blink::HTMLElement;
@@ -100,8 +101,8 @@ WebURL GetWebSearchableUrl(const FrameSelection& currentSelection,
                            HTMLInputElement* selected_element) {
   auto* form = CurrentForm(currentSelection);
   if (form && selected_element) {
-    WebSearchableFormData ws =
-        WebSearchableFormData(WebFormElement(form), selected_element);
+    WebSearchableFormData ws = WebSearchableFormData(
+        WebFormElement(form), blink::WebInputElement(selected_element));
 
     return ws.Url();
   }

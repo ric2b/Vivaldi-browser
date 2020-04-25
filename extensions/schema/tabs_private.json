@@ -67,17 +67,22 @@
           "title": {
             "type": "string",
             "description": "The title for the data. Needed for the html5 drag and drop engine. Not set in the onDropEnd event."
-          }
-        }
-      },
-      {
-        "id": "DragImage",
-        "type": "object",
-        "description": "Provides a custom drag image with cursor offset.",
-        "properties": {
-          "image": {
-            "type": "string",
-            "description": "Base 64 encoded jpg or png image to be used as the drag image."
+          },
+          "posX": {
+            "type": "number",
+            "description": "X offset inside the given app window in the UI coordinates."
+          },
+          "posY": {
+            "type": "number",
+            "description": "Y offset inside the given app window in the UI coordinates."
+          },
+          "width": {
+            "type": "number",
+            "description": "Width of the capture in the UI coordinates."
+          },
+          "height": {
+            "type": "number",
+            "description": "Height of the capture in the UI coordinates."
           },
           "cursorX": {
             "type": "integer",
@@ -86,6 +91,11 @@
           "cursorY": {
             "type": "integer",
             "description": "Y offset into the image for the cursor during drag."
+          },
+          "isFromTouch": {
+            "type": "boolean",
+            "optional": true,
+            "description": "True if the drag was initiated from touch. Default is false."
           }
         }
       }
@@ -156,18 +166,6 @@
             "$ref": "DragData",
             "name": "dragData",
             "description": "The drag data to be transported in the dataobject."
-          },
-          {
-            "$ref": "DragImage",
-            "name": "dragImage",
-            "optional": true,
-            "description": "The drag image in png or jpg format, base64 encoded. NOTE: Data URLs are not supported."
-          },
-          {
-            "name": "isFromTouch",
-            "type": "boolean",
-            "optional": true,
-            "description": "True if the drag was initiated from touch. Default is false."
           }
         ]
       },

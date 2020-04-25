@@ -25,6 +25,7 @@
 #include "calendar/calendar_backend_notifier.h"
 #include "calendar/calendar_database.h"
 #include "calendar/event_type.h"
+#include "calendar/recurrence_exception_type.h"
 #include "sql/init_status.h"
 
 namespace base {
@@ -131,6 +132,10 @@ class CalendarBackend
                        std::shared_ptr<UpdateEventTypeResult> result);
   void DeleteEventType(EventTypeID event_type_id,
                        std::shared_ptr<DeleteEventTypeResult> result);
+
+  void CreateRecurrenceException(
+      RecurrenceExceptionRow row,
+      std::shared_ptr<CreateRecurrenceExceptionResult> result);
 
   void NotifyEventCreated(const EventRow& row) override;
   void NotifyEventModified(const EventRow& row) override;

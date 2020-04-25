@@ -511,6 +511,10 @@ void WebViewGuest::CreateWebContents(const base::DictionaryValue& create_params,
               inspected_contents, &strategy);
         }
         DCHECK(devtools_contents);
+        if (!devtools_contents) {
+          // TODO(tomas@vivaldi.com): Band-aid for VB-48293
+          return;
+        }
         content::WebContentsImpl* contents =
           static_cast<content::WebContentsImpl*>(devtools_contents);
 
@@ -531,7 +535,6 @@ void WebViewGuest::CreateWebContents(const base::DictionaryValue& create_params,
 
         new_contents = contents;
         inspecting_tab_id_ = tab_id;
-        web_contents_is_owned_by_this_ = false;
         SetAttachParams(create_params);
       }
     }
@@ -826,9 +829,6 @@ void WebViewGuest::GuestZoomChanged(double old_zoom_level,
 void WebViewGuest::WillDestroy() {
   if (!attached() && GetOpener())
     GetOpener()->pending_new_windows_.erase(this);
-
-  web_contents()->GetRenderViewHost()->GetWidget()->RemoveMouseEventCallback(
-      mouseevent_callback_);
 
   if (connector_item_) {
     connector_item_->set_guest_delegate(nullptr);
@@ -1179,9 +1179,8 @@ void WebViewGuest::DidFinishNavigation(
       LoadAbort(navigation_handle->IsInMainFrame(), navigation_handle->GetURL(),
                 error_code);
     }
-    // The old behavior, before PlzNavigate, was that on failed navigations the
-    // webview would fire a loadabort (for the failed navigation) and a
-    // loadcommit (for the error page).
+    // Originally, on failed navigations the webview we would fire a loadabort
+    // (for the failed navigation) and a loadcommit (for the error page).
     if (!navigation_handle->IsErrorPage())
       return;
   }
@@ -2068,11 +2067,6 @@ void WebViewGuest::SetFullscreenState(bool is_fullscreen) {
       ->GetRenderViewHost()
       ->GetWidget()
       ->SynchronizeVisualProperties();
-}
-
-void WebViewGuest::SetWebContentsIsOwnedByThis(bool is_owned) {
-  // Used by vivaldi devtools window to let webviewguest know about ownership
-  web_contents_is_owned_by_this_ = is_owned;
 }
 
 }  // namespace extensions

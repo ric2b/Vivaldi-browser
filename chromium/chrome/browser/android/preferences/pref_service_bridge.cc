@@ -337,6 +337,13 @@ static jboolean JNI_PrefServiceBridge_GetPasswordManagerAutoSigninEnabled(
       password_manager::prefs::kCredentialsEnableAutosignin);
 }
 
+static jboolean JNI_PrefServiceBridge_GetPasswordLeakDetectionEnabled(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
+  return GetPrefService()->GetBoolean(
+      password_manager::prefs::kPasswordLeakDetectionEnabled);
+}
+
 static jboolean JNI_PrefServiceBridge_GetRememberPasswordsManaged(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
@@ -349,6 +356,13 @@ static jboolean JNI_PrefServiceBridge_GetPasswordManagerAutoSigninManaged(
     const JavaParamRef<jobject>& obj) {
   return GetPrefService()->IsManagedPreference(
       password_manager::prefs::kCredentialsEnableAutosignin);
+}
+
+static jboolean JNI_PrefServiceBridge_GetPasswordLeakDetectionManaged(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
+  return GetPrefService()->IsManagedPreference(
+      password_manager::prefs::kPasswordLeakDetectionEnabled);
 }
 
 static jboolean JNI_PrefServiceBridge_GetDoNotTrackEnabled(
@@ -788,6 +802,14 @@ static void JNI_PrefServiceBridge_SetPasswordManagerAutoSigninEnabled(
     jboolean enabled) {
   GetPrefService()->SetBoolean(
       password_manager::prefs::kCredentialsEnableAutosignin, enabled);
+}
+
+static void JNI_PrefServiceBridge_SetPasswordLeakDetectionEnabled(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    jboolean enabled) {
+  GetPrefService()->SetBoolean(
+      password_manager::prefs::kPasswordLeakDetectionEnabled, enabled);
 }
 
 static void JNI_PrefServiceBridge_SetAllowLocationEnabled(
@@ -1233,6 +1255,21 @@ static void JNI_PrefServiceBridge_GetUserAcceptLanguages(
   translate_prefs->GetLanguageList(&languages);
   Java_PrefServiceBridge_copyStringArrayToList(
       env, list, ToJavaArrayOfStrings(env, languages));
+}
+
+static void JNI_PrefServiceBridge_SetLanguageOrder(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jobjectArray>& j_order) {
+  std::unique_ptr<translate::TranslatePrefs> translate_prefs =
+      ChromeTranslateClient::CreateTranslatePrefs(GetPrefService());
+  std::vector<std::string> order;
+  const int num_langs = (*env).GetArrayLength(j_order);
+  for (int i = 0; i < num_langs; i++) {
+    jstring string = (jstring)(*env).GetObjectArrayElement(j_order, i);
+    order.push_back((*env).GetStringUTFChars(string, nullptr));
+  }
+  translate_prefs->SetLanguageOrder(order);
 }
 
 static void JNI_PrefServiceBridge_UpdateUserAcceptLanguages(

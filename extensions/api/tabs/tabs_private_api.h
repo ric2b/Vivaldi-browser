@@ -15,8 +15,10 @@
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/zoom/zoom_observer.h"
+#include "content/common/drag_event_source_info.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/native_web_keyboard_event.h"
+#include "content/public/common/drop_data.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/extension_event_histogram_value.h"
 #include "extensions/browser/extension_function.h"
@@ -181,7 +183,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(VivaldiPrivateTabObserver);
 };
 
-class TabsPrivateUpdateFunction : public UIThreadExtensionFunction {
+class TabsPrivateUpdateFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("tabsPrivate.update", TABSSPRIVATE_UPDATE)
 
@@ -197,7 +199,7 @@ class TabsPrivateUpdateFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(TabsPrivateUpdateFunction);
 };
 
-class TabsPrivateGetFunction : public UIThreadExtensionFunction {
+class TabsPrivateGetFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("tabsPrivate.get", TABSSPRIVATE_GET)
 
@@ -213,7 +215,7 @@ class TabsPrivateGetFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(TabsPrivateGetFunction);
 };
 
-class TabsPrivateDiscardFunction : public UIThreadExtensionFunction {
+class TabsPrivateDiscardFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("tabsPrivate.discard", TABSSPRIVATE_DISCARD)
 
@@ -229,7 +231,7 @@ class TabsPrivateDiscardFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(TabsPrivateDiscardFunction);
 };
 
-class TabsPrivateInsertTextFunction : public UIThreadExtensionFunction {
+class TabsPrivateInsertTextFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("tabsPrivate.insertText", TABSSPRIVATE_INSERTTEXT)
 
@@ -244,22 +246,30 @@ class TabsPrivateInsertTextFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(TabsPrivateInsertTextFunction);
 };
 
-class TabsPrivateStartDragFunction : public UIThreadExtensionFunction {
+class TabsPrivateStartDragFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("tabsPrivate.startDrag", TABSSPRIVATE_STARTDRAG)
 
-  TabsPrivateStartDragFunction() = default;
+  TabsPrivateStartDragFunction();
 
  protected:
-  ~TabsPrivateStartDragFunction() override = default;
+  ~TabsPrivateStartDragFunction() override;
 
  private:
   ResponseAction Run() override;
 
+  void OnCaptureDone(bool success,
+                     float device_scale_factor,
+                     const SkBitmap& bitmap);
+
+  content::DropData drop_data_;
+  content::DragEventSourceInfo event_info_;
+  gfx::Vector2d image_offset_;
+
   DISALLOW_COPY_AND_ASSIGN(TabsPrivateStartDragFunction);
 };
 
-class TabsPrivateScrollPageFunction : public UIThreadExtensionFunction {
+class TabsPrivateScrollPageFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("tabsPrivate.scrollPage", TABSSPRIVATE_SCROLLPAGE)
 

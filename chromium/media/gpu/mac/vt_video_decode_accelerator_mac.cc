@@ -486,13 +486,11 @@ bool VTVideoDecodeAccelerator::FrameOrder::operator()(
 
 VTVideoDecodeAccelerator::VTVideoDecodeAccelerator(
     const BindGLImageCallback& bind_image_cb,
-    MediaLog* media_log,
-    bool force_software_vivaldi)
+    MediaLog* media_log)
     : bind_image_cb_(bind_image_cb),
       media_log_(media_log),
       gpu_task_runner_(base::ThreadTaskRunnerHandle::Get()),
       decoder_thread_("VTDecoderThread"),
-      force_software_vivaldi_(force_software_vivaldi),
       weak_this_factory_(this) {
   DCHECK(bind_image_cb_);
 
@@ -686,17 +684,10 @@ bool VTVideoDecodeAccelerator::ConfigureDecoder() {
     return false;
   }
 
-  if (force_software_vivaldi_) {
-    CFDictionarySetValue(
-        decoder_config,
-        // kVTVideoDecoderSpecification_EnableHardwareAcceleratedVideoDecoder
-        CFSTR("EnableHardwareAcceleratedVideoDecoder"), kCFBooleanFalse);
-  } else {
-    CFDictionarySetValue(
-        decoder_config,
-        // kVTVideoDecoderSpecification_EnableHardwareAcceleratedVideoDecoder
-        CFSTR("EnableHardwareAcceleratedVideoDecoder"), kCFBooleanTrue);
-  }
+  CFDictionarySetValue(
+      decoder_config,
+      // kVTVideoDecoderSpecification_EnableHardwareAcceleratedVideoDecoder
+      CFSTR("EnableHardwareAcceleratedVideoDecoder"), kCFBooleanTrue);
 
   // VideoToolbox scales the visible rect to the output size, so we set the
   // output size for a 1:1 ratio. (Note though that VideoToolbox does not handle

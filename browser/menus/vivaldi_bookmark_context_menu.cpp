@@ -47,6 +47,7 @@ void BuildBookmarkContextMenu(ui::SimpleMenuModel* menu_model) {
       IDS_VIV_BOOKMARK_BAR_NEW_BOOKMARK);
   menu_model->AddItemWithStringId(IDC_BOOKMARK_BAR_NEW_FOLDER,
       IDS_VIV_BOOKMARK_BAR_NEW_FOLDER);
+  menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
   menu_model->AddItemWithStringId(IDC_BOOKMARK_BAR_EDIT,
       IDS_VIV_BOOKMARK_BAR_EDIT);
   menu_model->AddSeparator(ui::NORMAL_SEPARATOR);

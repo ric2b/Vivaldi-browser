@@ -192,7 +192,7 @@ NoteTreeNode MakeTreeNode(Notes_Node* node) {
   return notes_tree_node;
 }
 
-Notes_Model* GetNotesModel(UIThreadExtensionFunction* fun) {
+Notes_Model* GetNotesModel(ExtensionFunction* fun) {
   return NotesModelFactory::GetForBrowserContext(fun->browser_context());
 }
 

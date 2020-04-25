@@ -10,7 +10,7 @@
 
 namespace extensions {
 
-class InfobarsSendButtonActionFunction : public UIThreadExtensionFunction {
+class InfobarsSendButtonActionFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("infobars.sendButtonAction",
                              INFOBARS_SENDBUTTONACTION)

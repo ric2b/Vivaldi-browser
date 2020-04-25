@@ -36,11 +36,11 @@ VivaldiAppWindowClient* VivaldiAppWindowClient::GetInstance() {
 
 VivaldiNativeAppWindow* VivaldiAppWindowClient::CreateNativeAppWindow(
     VivaldiBrowserWindow* window,
-    extensions::AppWindow::CreateParams* params) {
+    const extensions::AppWindow::CreateParams& params) {
 #if defined(OS_ANDROID)
   return NULL;
 #else
-  return CreateNativeAppWindowImpl(window, *params);
+  return CreateNativeAppWindowImpl(window, params);
 #endif
 }
 

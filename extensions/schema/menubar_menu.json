@@ -43,6 +43,12 @@
         }
       },
       {
+        "id": "Icons",
+        "type": "array",
+        "description": "Icons encoded as base64.",
+        "items": { "type": "string" }
+      },
+      {
         "id": "Item",
         "type": "object",
         "description": "One menu item.",
@@ -61,14 +67,8 @@
           "url": {"type": "string", "optional": true, "description": "Url that can be used to determine a corresponding icon."},
           "parameter": {"type": "string", "optional": true, "description": "Parameter to command. Sent unaltered with the callback."},
           "index": {"type": "integer", "optional": true, "description": "Index in menu list. Can only be used insert into an existing list."},
-          "icon": {"type": "string", "optional": true, "description": "Icon in PNG format encoded as base64."}
+          "icons": {"$ref": "Icons", "optional": true, "description": "Icons for light and dark menus. There must be two icons and the last shall be for menus with a dark background."}
         }
-      },
-      {
-        "id": "Icons",
-        "type": "array",
-        "description": "Icons encoded as base64.",
-        "items": { "type": "string" }
       },
       {
         "id": "Separator",

@@ -7,11 +7,12 @@
 #include "content/public/browser/browser_thread.h"
 
 LocalImageDataClassHandler::LocalImageDataClassHandler(
-    content::BrowserContext* browser_context) {
+    content::BrowserContext* browser_context,
+    extensions::VivaldiDataSourcesAPI::UrlKind url_kind)
+    : data_sources_api_(extensions::VivaldiDataSourcesAPI::FromBrowserContext(
+          browser_context)),
+      url_kind_(url_kind) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
-  data_sources_api_ =
-      extensions::VivaldiDataSourcesAPI::FromBrowserContext(browser_context);
   DCHECK(data_sources_api_);
 }
 
@@ -26,7 +27,8 @@ bool LocalImageDataClassHandler::GetData(
 
   if (!data_sources_api_)
     return false;
-  data_sources_api_->GetDataForId(data_id, callback);
+
+  data_sources_api_->GetDataForId(url_kind_, data_id, callback);
 
   return true;
 }

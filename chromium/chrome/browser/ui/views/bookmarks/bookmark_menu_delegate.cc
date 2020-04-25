@@ -421,10 +421,18 @@ int BookmarkMenuDelegate::GetMaxWidthForMenu(MenuItemView* menu) {
 
 void BookmarkMenuDelegate::WillShowMenu(MenuItemView* menu) {
   auto iter = menu_id_to_node_map_.find(menu->GetCommand());
+  if (vivaldi::IsVivaldiRunning()) {
+    // Vivaldi always adds a menu entry to add active page to we must build
+    // menu even with no bookmarks.
+    if ((iter != menu_id_to_node_map_.end()) &&
+      menu->GetSubmenu()->GetMenuItems().empty())
+      BuildMenu(iter->second, 0, menu);
+  } else {
   if ((iter != menu_id_to_node_map_.end()) &&
       !iter->second->children().empty() &&
       menu->GetSubmenu()->GetMenuItems().empty())
     BuildMenu(iter->second, 0, menu);
+  }
 }
 
 void BookmarkMenuDelegate::BookmarkModelChanged() {

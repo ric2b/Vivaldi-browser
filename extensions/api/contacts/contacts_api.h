@@ -81,7 +81,7 @@ class ContactsAPI : public BrowserContextKeyedAPI,
   DISALLOW_COPY_AND_ASSIGN(ContactsAPI);
 };
 
-class ContactAsyncFunction : public UIThreadExtensionFunction {
+class ContactAsyncFunction : public ExtensionFunction {
  public:
   ContactAsyncFunction() = default;
 

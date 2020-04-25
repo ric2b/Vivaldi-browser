@@ -139,8 +139,6 @@ class NativeAppWindowViews : public extensions::NativeAppWindow,
   SkColor ActiveFrameColor() const override;
   SkColor InactiveFrameColor() const override;
   gfx::Insets GetFrameInsets() const override;
-  void HideWithApp() override;
-  void ShowWithApp() override;
   gfx::Size GetContentMinimumSize() const override;
   gfx::Size GetContentMaximumSize() const override;
   void SetContentSizeConstraints(const gfx::Size& min_size,
@@ -174,11 +172,6 @@ class NativeAppWindowViews : public extensions::NativeAppWindow,
 
   base::ObserverList<web_modal::ModalDialogHostObserver>::Unchecked
       observer_list_;
-
-  // NOTE(pettern@vivaldi): If true, this window is hidden for the user but
-  // "visible" for the underlying chromium code so that a thumbnail can be
-  // generated.
-  bool thumbnail_window_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(NativeAppWindowViews);
 };

@@ -33,7 +33,6 @@ NativeAppWindowViews::NativeAppWindowViews()
 
 void NativeAppWindowViews::Init(AppWindow* app_window,
                                 const AppWindow::CreateParams& create_params) {
-  thumbnail_window_ = create_params.thumbnail_window;
   app_window_ = app_window;
   frameless_ = create_params.frame == AppWindow::FRAME_NONE;
   resizable_ = create_params.resizable;
@@ -66,7 +65,7 @@ void NativeAppWindowViews::InitializeWindow(
   init_params.delegate = this;
   if (create_params.always_on_top)
     init_params.z_order = ui::ZOrderLevel::kFloatingWindow;
-  widget_->Init(init_params);
+  widget_->Init(std::move(init_params));
   widget_->CenterWindow(
       create_params.GetInitialWindowBounds(gfx::Insets()).size());
 }
@@ -111,8 +110,6 @@ gfx::Rect NativeAppWindowViews::GetBounds() const {
 }
 
 void NativeAppWindowViews::Show() {
-  if (thumbnail_window_)
-    return;
   if (widget_->IsVisible()) {
     widget_->Activate();
     return;
@@ -121,9 +118,6 @@ void NativeAppWindowViews::Show() {
 }
 
 void NativeAppWindowViews::ShowInactive() {
-  if (thumbnail_window_)
-    return;
-
   if (widget_->IsVisible())
     return;
 
@@ -420,12 +414,6 @@ gfx::Insets NativeAppWindowViews::GetFrameInsets() const {
   gfx::Rect window_bounds =
       widget_->non_client_view()->GetWindowBoundsForClientBounds(client_bounds);
   return window_bounds.InsetsFrom(client_bounds);
-}
-
-void NativeAppWindowViews::HideWithApp() {
-}
-
-void NativeAppWindowViews::ShowWithApp() {
 }
 
 gfx::Size NativeAppWindowViews::GetContentMinimumSize() const {

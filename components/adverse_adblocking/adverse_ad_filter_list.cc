@@ -13,6 +13,7 @@
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_piece.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/time/time_to_iso8601.h"
 #include "base/values.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -45,7 +46,7 @@ AdverseAdFilterListService::AdverseAdFilterListService(Profile* profile)
     return;
   if (profile_) {  // Profile will be null in components.
     task_runner_ = base::CreateSequencedTaskRunnerWithTraits(
-        {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+        {base::ThreadPool(), base::MayBlock(), base::TaskPriority::BEST_EFFORT,
          base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
 
     PrefService* prefs = profile_->GetPrefs();

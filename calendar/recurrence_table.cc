@@ -208,4 +208,24 @@ bool RecurrrenceTable::DeleteRecurrence(RecurrenceID recurrence_id) {
   return statement.Run();
 }
 
+bool RecurrrenceTable::DeleteRecurrenceForEvent(EventID event_id) {
+  sql::Statement statement(GetDB().GetCachedStatement(
+      SQL_FROM_HERE, "DELETE from recurring_events WHERE event_id=?"));
+  statement.BindInt64(0, event_id);
+
+  return statement.Run();
+}
+
+bool RecurrrenceTable::DoesRecurrenceRowExistForEvent(EventID event_id) {
+  sql::Statement statement(GetDB().GetUniqueStatement(
+      "select count(*) as count from recurring_events \
+        WHERE event_id = ?"));
+  statement.BindInt64(0, event_id);
+
+  if (!statement.Step())
+    return false;
+
+  return statement.ColumnInt(0) >= 1;
+}
+
 }  // namespace calendar

@@ -404,6 +404,8 @@ void RenderWidgetHostViewAura::InitAsPopup(
     RenderWidgetHostView* parent_host_view,
     const gfx::Rect& bounds_in_screen) {
   DCHECK_EQ(widget_type_, WidgetType::kPopup);
+  DCHECK(!static_cast<RenderWidgetHostViewBase*>(parent_host_view)
+              ->IsRenderWidgetHostViewChildFrame());
 
   popup_parent_host_view_ =
       static_cast<RenderWidgetHostViewAura*>(parent_host_view);
@@ -909,12 +911,6 @@ void RenderWidgetHostViewAura::OnDidNotProduceFrame(
     delegated_frame_host_->DidNotProduceFrame(ack);
 }
 
-void RenderWidgetHostViewAura::ClearCompositorFrame() {
-  // This method is only used for content rendering timeout when surface sync is
-  // off. However, surface sync is always on on Aura platforms.
-  NOTREACHED();
-}
-
 void RenderWidgetHostViewAura::ResetFallbackToFirstNavigationSurface() {
   if (delegated_frame_host_)
     delegated_frame_host_->ResetFallbackToFirstNavigationSurface();
@@ -1208,12 +1204,16 @@ void RenderWidgetHostViewAura::SetMainFrameAXTreeID(ui::AXTreeID id) {
   window_->SetProperty(ui::kChildAXTreeID, id.ToString());
 }
 
-bool RenderWidgetHostViewAura::LockMouse() {
-  return event_handler_->LockMouse();
+bool RenderWidgetHostViewAura::LockMouse(bool request_unadjusted_movement) {
+  return event_handler_->LockMouse(request_unadjusted_movement);
 }
 
 void RenderWidgetHostViewAura::UnlockMouse() {
   event_handler_->UnlockMouse();
+}
+
+bool RenderWidgetHostViewAura::GetIsMouseLockedUnadjustedMovementForTesting() {
+  return event_handler_->mouse_locked_unadjusted_movement();
 }
 
 bool RenderWidgetHostViewAura::LockKeyboard(
@@ -1757,7 +1757,8 @@ void RenderWidgetHostViewAura::OnKeyEvent(ui::KeyEvent* event) {
 void RenderWidgetHostViewAura::OnMouseEvent(ui::MouseEvent* event) {
 #if defined(OS_WIN)
   if (event->type() == ui::ET_MOUSE_MOVED) {
-    if (event->location() == last_mouse_move_location_) {
+    if (event->location() == last_mouse_move_location_ &&
+        event->movement().IsZero()) {
       event->SetHandled();
       return;
     }
@@ -2525,7 +2526,7 @@ void RenderWidgetHostViewAura::OnTextSelectionChanged(
     RenderWidgetHostViewBase* updated_view) {
 #if defined(USE_X11) && !defined(OS_CHROMEOS)
   if (vivaldi::IsVivaldiRunning() &&
-      vivaldi::clipboard::SuppressWrite(ui::ClipboardType::kSelection)) {
+      vivaldi::clipboard::SuppressWrite(ui::ClipboardBuffer::kSelection)) {
     return;
   }
 #endif // X11
@@ -2571,8 +2572,8 @@ void RenderWidgetHostViewAura::OnTextSelectionChanged(
   const TextInputManager::TextSelection* selection =
       GetTextInputManager()->GetTextSelection(focused_view);
   if (selection->selected_text().length()) {
-    // Set the ClipboardType::kSelection to the ui::Clipboard.
-    ui::ScopedClipboardWriter clipboard_writer(ui::ClipboardType::kSelection);
+    // Set the ClipboardBuffer::kSelection to the ui::Clipboard.
+    ui::ScopedClipboardWriter clipboard_writer(ui::ClipboardBuffer::kSelection);
     clipboard_writer.WriteText(selection->selected_text());
   }
 #endif  // defined(USE_X11)

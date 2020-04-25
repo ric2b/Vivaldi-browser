@@ -12,6 +12,7 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/guid.h"
 #include "base/i18n/string_compare.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -128,7 +129,9 @@ class EmptyUndoDelegate : public BookmarkUndoDelegate {
 
 BookmarkModel::BookmarkModel(std::unique_ptr<BookmarkClient> client)
     : client_(std::move(client)),
-      owned_root_(std::make_unique<BookmarkNode>(GURL())),
+      owned_root_(std::make_unique<BookmarkNode>(/*id=*/0,
+                                                 BookmarkNode::RootNodeGuid(),
+                                                 GURL())),
       root_(owned_root_.get()),
       observers_(base::ObserverListPolicy::EXISTING_ONLY),
       empty_undo_delegate_(std::make_unique<EmptyUndoDelegate>()) {
@@ -589,8 +592,8 @@ const BookmarkNode* BookmarkModel::AddFolderWithMetaInfo(
   DCHECK(!is_root_node(parent));
   DCHECK(IsValidIndex(parent, index, true));
 
-  std::unique_ptr<BookmarkNode> new_node =
-      std::make_unique<BookmarkNode>(generate_next_node_id(), GURL());
+  std::unique_ptr<BookmarkNode> new_node = std::make_unique<BookmarkNode>(
+      generate_next_node_id(), base::GenerateGUID(), GURL());
   new_node->set_date_folder_modified(Time::Now());
   // Folders shouldn't have line breaks in their titles.
   // --- VIVALDI --- changed by Daniel Sig. @ 11-02-2015
@@ -657,8 +660,8 @@ const BookmarkNode* BookmarkModel::AddURLWithCreationTimeAndMetaInfo(
   if (creation_time > parent->date_folder_modified())
     SetDateFolderModified(parent, creation_time);
 
-  std::unique_ptr<BookmarkNode> new_node =
-      std::make_unique<BookmarkNode>(generate_next_node_id(), url);
+  std::unique_ptr<BookmarkNode> new_node = std::make_unique<BookmarkNode>(
+      generate_next_node_id(), base::GenerateGUID(), url);
   new_node->SetTitle(title);
   new_node->set_date_added(creation_time);
   if (meta_info)
@@ -838,11 +841,12 @@ void BookmarkModel::DoneLoading(std::unique_ptr<BookmarkLoadDetails> details) {
 
   next_node_id_ = details->max_id();
   if (details->computed_checksum() != details->stored_checksum() ||
-      details->ids_reassigned()) {
+      details->ids_reassigned() || details->guids_reassigned()) {
     // If bookmarks file changed externally, the IDs may have changed
     // externally. In that case, the decoder may have reassigned IDs to make
     // them unique. So when the file has changed externally, we should save the
-    // bookmarks file to persist new IDs.
+    // bookmarks file to persist such changes. The same applies if new GUIDs
+    // have been assigned to bookmarks.
     if (store_)
       store_->ScheduleSave();
   }

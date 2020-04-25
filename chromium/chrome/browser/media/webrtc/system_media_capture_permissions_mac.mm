@@ -22,6 +22,7 @@
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/mac/foundation_util.h"
 #include "base/mac/scoped_cftyperef.h"
@@ -30,6 +31,7 @@
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "chrome/browser/media/webrtc/media_authorization_wrapper_mac.h"
+#include "chrome/common/chrome_features.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "media/base/media_switches.h"
@@ -81,16 +83,15 @@ class MediaAuthorizationWrapperImpl : public MediaAuthorizationWrapper {
         [target performSelector:selector
                      withObject:media_type
                      withObject:^(BOOL granted) {
-                       base::PostTaskWithTraits(FROM_HERE, traits,
-                                                std::move(callback));
+                       base::PostTask(FROM_HERE, traits, std::move(callback));
                      }];
       } else {
         DLOG(WARNING) << "requestAccessForMediaType could not be executed";
-        base::PostTaskWithTraits(FROM_HERE, traits, std::move(callback));
+        base::PostTask(FROM_HERE, traits, std::move(callback));
       }
     } else {
       NOTREACHED();
-      base::PostTaskWithTraits(FROM_HERE, traits, std::move(callback));
+      base::PostTask(FROM_HERE, traits, std::move(callback));
     }
   }
 
@@ -148,7 +149,7 @@ void RequestSystemMediaCapturePermission(NSString* media_type,
                                          base::RepeatingClosure callback,
                                          const base::TaskTraits& traits) {
   if (UsingFakeMediaDevices()) {
-    base::PostTaskWithTraits(FROM_HERE, traits, std::move(callback));
+    base::PostTask(FROM_HERE, traits, std::move(callback));
     return;
   }
 
@@ -160,7 +161,7 @@ void RequestSystemMediaCapturePermission(NSString* media_type,
     // Should never happen since for pre-10.14 system permissions don't exist
     // and checking them in CheckSystemAudioCapturePermission() will always
     // return allowed, and this function should not be called.
-    base::PostTaskWithTraits(FROM_HERE, traits, std::move(callback));
+    base::PostTask(FROM_HERE, traits, std::move(callback));
   }
 }
 
@@ -168,6 +169,10 @@ void RequestSystemMediaCapturePermission(NSString* media_type,
 // See https://crbug.com/993692#c3.
 bool IsScreenCaptureAllowed() {
   if (@available(macOS 10.15, *)) {
+    if (!base::FeatureList::IsEnabled(
+            features::kMacSystemScreenCapturePermissionCheck)) {
+      return true;
+    }
     base::ScopedCFTypeRef<CFArrayRef> window_list(CGWindowListCopyWindowInfo(
         kCGWindowListOptionOnScreenOnly, kCGNullWindowID));
     NSUInteger num_windows = CFArrayGetCount(window_list);

@@ -56,7 +56,7 @@ namespace vivaldi {
 
 bool VivaldiWebViewWithGuestFunction::PreRunValidation(
     std::string* error) {
-  if (!UIThreadExtensionFunction::PreRunValidation(error))
+  if (!ExtensionFunction::PreRunValidation(error))
     return false;
 
   int instance_id = 0;
@@ -161,7 +161,7 @@ void WebViewPrivateGetThumbnailFunction::CopyFromBackingStoreComplete(
     const SkBitmap& bitmap) {
   base::PostTaskWithTraits(
       FROM_HERE,
-      {base::TaskPriority::USER_VISIBLE, base::MayBlock(),
+      {base::ThreadPool(), base::TaskPriority::USER_VISIBLE, base::MayBlock(),
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
       base::BindOnce(
           &WebViewPrivateGetThumbnailFunction::ScaleAndEncodeOnWorkerThread,

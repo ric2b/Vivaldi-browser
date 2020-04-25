@@ -19,10 +19,14 @@
 <translation id="1430915738399379752">Printimine</translation>
 <translation id="1476607407192946488">&amp;Keeleseaded</translation>
 <translation id="1546280085599573572">See laiendus muutis seda, milline leht kuvatakse avalehe nupul klõpsamisel.</translation>
+<translation id="15662109988763471">Valitud printer kas pole saadaval või pole õigesti seadistatud. Kontrolli printerit või proovi mõnda teist printerit kasutada.</translation>
 <translation id="1588438908519853928">Tavaline</translation>
+<translation id="1603914832182249871">(privaatne)</translation>
 <translation id="1620510694547887537">Kaamera</translation>
 <translation id="1635033183663317347">Selle installis teie järelevaataja.</translation>
 <translation id="1682548588986054654">Uus privaatne aken</translation>
+<translation id="1706625117072057435">Suurendusastmed</translation>
+<translation id="1708338024780164500">(mitteaktiivne)</translation>
 <translation id="1723824996674794290">&amp;Uus aken</translation>
 <translation id="1729533290416704613">Lisaks juhib omnikastikeses otsingu tegemise lehte.</translation>
 <translation id="1744108098763830590">Uuri &amp;taustalehte</translation>
@@ -35,7 +39,7 @@
 <translation id="2148892889047469596">Kaardi ülekanne</translation>
 <translation id="2150139952286079145">Otsi printereid</translation>
 <translation id="2177950615300672361">Privaatne kaart: <ph name="TAB_NAME" /></translation>
-<translation id="219008588003277019">Omakliendi moodul: <ph name="NEXE_NAME" /></translation>
+<translation id="219008588003277019">Native Clienti moodul: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Aseta lihttekstina</translation>
 <translation id="2249605167705922988">nt 1-5, 8, 11-13</translation>
 <translation id="2263497240924215535">Keelatud</translation>
@@ -50,7 +54,7 @@
 <translation id="2348176352564285430">Rakendus: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Laienduse kataloogi valimine.</translation>
 <translation id="2379281330731083556">Prindi süsteemidialoogi abil... <ph name="SHORTCUT_KEY" /></translation>
-<translation id="241082044617551207">Tundmatu pistikprogramm</translation>
+<translation id="241082044617551207">Tundmatu plugin</translation>
 <translation id="2423578206845792524">Sa&amp;lvesta pilt nimega...</translation>
 <translation id="2436707352762155834">Minimaalsed</translation>
 <translation id="2439110203301358333">Teine programm arvutis on lisanud laienduse, mis võib muuta Vivaldi tööd.</translation>
@@ -59,6 +63,7 @@
 <translation id="2476578072172137802">Saidi seaded</translation>
 <translation id="2482878487686419369">Märguanded</translation>
 <translation id="253557089021624350">Elushoidmishulk</translation>
+<translation id="2546283357679194313">Küpsised ja saidiandmed</translation>
 <translation id="2550212893339833758">Saalitud mälu</translation>
 <translation id="2580924999637585241">Kokku: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="2662876636500006917">Chrome’i veebipood</translation>
@@ -72,6 +77,7 @@
 <translation id="2941112035454246133">Madal</translation>
 <translation id="2972581237482394796">&amp;Tee uuesti</translation>
 <translation id="299483336428448530">Selle installis teie vanem.</translation>
+<translation id="3012631534724231212">(iframe)</translation>
 <translation id="3013291976881901233">MIDI-seadmed</translation>
 <translation id="3080207940057008665">Teine programm arvutis on lisanud kujunduse, mis võib muuta Vivaldi tööd.</translation>
 <translation id="3122464029669770682">Protsessor</translation>
@@ -91,9 +97,11 @@
 <translation id="3387614642886316601">&amp;Täiustatud õigekirjakontroll</translation>
 <translation id="345693547134384690">Ava pilt uuel &amp;vahelehel</translation>
 <translation id="3505030558724226696">Tühista juurdepääs seadmele</translation>
+<translation id="3560034655160545939">&amp;Õigekirjakontroll</translation>
 <translation id="3574917942258583917">Kas tahad privaatse akna siiski sulgeda?</translation>
 <translation id="3587482841069643663">Kõik</translation>
 <translation id="3627588569887975815">Ava link inko&amp;gnito aknas</translation>
+<translation id="3668823961463113931">Käitlejad</translation>
 <translation id="3678156199662914018">Laiendus: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3725367690636977613">lehekülge</translation>
 <translation id="3727187387656390258">I&amp;nspekteeri</translation>
@@ -167,7 +175,7 @@
 <translation id="5649053991847567735">Automaatne allalaadimine</translation>
 <translation id="5677928146339483299">Blokeeritud</translation>
 <translation id="5689516760719285838">Asukoht</translation>
-<translation id="5715711091495208045">Pistikprogrammi vahendaja: <ph name="PLUGIN_NAME" /></translation>
+<translation id="5715711091495208045">Pluginavahendaja: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">PDF-ina salvestamine</translation>
 <translation id="5747809636523347288">Aseta ja ava <ph name="URL" /></translation>
 <translation id="5764483294734785780">Sa&amp;lvesta heli nimega...</translation>
@@ -207,7 +215,7 @@
 <translation id="6612358246767739896">Kaitstud sisu</translation>
 <translation id="6639554308659482635">SQLite’i mälu</translation>
 <translation id="6691936601825168937">&amp;Edasi</translation>
-<translation id="6798954102094737107">Pistikprogramm: <ph name="PLUGIN_NAME" /></translation>
+<translation id="6798954102094737107">Plugin: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Säilita muudatused</translation>
 <translation id="682123305478866682">Töölaua ülekanne</translation>
 <translation id="6886871292305414135">Ava link uuel &amp;vahelehel</translation>
@@ -220,6 +228,7 @@
 <translation id="7287143125007575591">Juurdepääs on keelatud.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />×<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">&amp;Juhtelemendid nähtaval</translation>
+<translation id="7311079019872751559">Isoleerimata juurdepääs pluginatele</translation>
 <translation id="7427348830195639090">Taustaleht: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="749028671485790643">Profiil <ph name="VALUE" /></translation>
 <translation id="7521387064766892559">JavaScript</translation>
@@ -265,7 +274,7 @@ Hoia oma võtmefaili kindlas kohas. Seda läheb vaja laienduse uute versioonide 
 <translation id="8546306075665861288">Piltide vahemälu</translation>
 <translation id="857943718398505171">Lubatud (soovitatav)</translation>
 <translation id="8584280235376696778">&amp;Ava video uuel kaardil</translation>
-<translation id="8615618338313291042">Inkognito rakendus: <ph name="APP_NAME" /></translation>
+<translation id="8615618338313291042">Privaatne rakendus: <ph name="APP_NAME" /></translation>
 <translation id="862750493060684461">CSS-i vahemälu</translation>
 <translation id="8664389313780386848">Vaata lehekülje lähtekoodi</translation>
 <translation id="8714838604780058252">Taustapildid</translation>
@@ -277,7 +286,7 @@ Hoia oma võtmefaili kindlas kohas. Seda läheb vaja laienduse uute versioonide 
 <translation id="8859174528519900719">Alampaneel: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Ava link uues &amp;aknas</translation>
 <translation id="8915370057835397490">Soovituse laadimine...</translation>
-<translation id="8916476537757519021">Inkognito alampaneel: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8916476537757519021">Privaatne alampaneel: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8962083179518285172">Peida üksikasjad</translation>
 <translation id="8996526648899750015">Lisa konto...</translation>
 <translation id="916607977885256133">Pilt pildis</translation>

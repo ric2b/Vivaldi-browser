@@ -57,7 +57,7 @@
 <translation id="220138918934036434">Esconder botão</translation>
 <translation id="2218515861914035131">Colar como texto simples</translation>
 <translation id="2249605167705922988">p. ex., 1-5, 8, 11-13</translation>
-<translation id="225240747099314620">Permitir identificadores para conteúdo protegido (pode ser necessário reiniciar o computador)</translation>
+<translation id="225240747099314620">Autorizar identificadores para conteúdo protegido (pode ser necessário reiniciar o computador)</translation>
 <translation id="2263497240924215535">(Desativado)</translation>
 <translation id="2277255602909579701">Todos os cookies e dados de sites</translation>
 <translation id="2280486287150724112">Margem direita</translation>
@@ -98,7 +98,7 @@
 <translation id="2889064240420137087">Abrir ligação com...</translation>
 <translation id="2902127500170292085">A extensão <ph name="EXTENSION_NAME" /> não conseguiu comunicar com esta impressora. Certifique-se de que a impressora está ligada à corrente e tente novamente.</translation>
 <translation id="2904456025988372123">Perguntar sempre que um site tentar transferir ficheiros automaticamente após o primeiro ficheiro</translation>
-<translation id="2913331724188855103">Permitir que os sites guardem e leiam dados de cookies (recomendado)</translation>
+<translation id="2913331724188855103">Autorizar os sites a guardar e ler dados de cookies (recomendado)</translation>
 <translation id="2932883381142163287">Denunciar abuso</translation>
 <translation id="2941112035454246133">Baixa</translation>
 <translation id="2972581237482394796">&amp;Repetir</translation>
@@ -213,7 +213,7 @@
 <translation id="5000922062037820727">Bloqueado (recomendado)</translation>
 <translation id="5027562294707732951">Adicionar extensão</translation>
 <translation id="5036662165765606524">Não permitir que os sites transfiram vários ficheiros automaticamente</translation>
-<translation id="5039804452771397117">Permitir</translation>
+<translation id="5039804452771397117">Autorizar</translation>
 <translation id="5057110919553308744">Quando clica na extensão</translation>
 <translation id="5063480226653192405">Utilização</translation>
 <translation id="5068918910148307423">Não permitir que os sites fechados recentemente concluam o envio e a receção de dados</translation>
@@ -336,7 +336,7 @@
 <translation id="7576690715254076113">Agrupar</translation>
 <translation id="7629827748548208700">Separador: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Cancelar</translation>
-<translation id="7661259717474717992">Permitir que os sites guardem e leiam dados de cookies</translation>
+<translation id="7661259717474717992">Autorizar os sites a ler e guardar dados de cookies</translation>
 <translation id="7663719505383602579">Recetor: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7685049629764448582">Memória JavaScript</translation>
 <translation id="7701040980221191251">Nenhum</translation>

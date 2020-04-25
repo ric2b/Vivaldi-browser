@@ -21,6 +21,8 @@
 #include "extensions/browser/extension_registry_observer.h"
 #include "extensions/schema/browser_action_utilities.h"
 
+class PrefChangeRegistrar;
+
 namespace extensions {
 
 class ExtensionActionUtil;
@@ -62,6 +64,10 @@ class ExtensionActionUtil
 
   explicit ExtensionActionUtil(Profile*);
 
+  void FillInfoForTabId(vivaldi::extension_action_utils::ExtensionInfo* info,
+                        ExtensionAction* action,
+                        int tab_id);
+
  private:
   ~ExtensionActionUtil() override;
 
@@ -98,6 +104,13 @@ class ExtensionActionUtil
     const TabStripModelChange& change,
     const TabStripSelectionChange& selection) override;
 
+  void PrefsChange();
+
+  // Cached settings
+  std::unique_ptr<base::ListValue> user_hidden_extensions_;
+
+  std::unique_ptr<PrefChangeRegistrar> prefs_registrar_;
+
   Profile* profile_;
 
   content::WebContents* current_webcontents_ = nullptr;
@@ -106,7 +119,7 @@ class ExtensionActionUtil
 };
 
 class ExtensionActionUtilsGetToolbarExtensionsFunction
-    : public UIThreadExtensionFunction {
+    : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("extensionActionUtils.getToolbarExtensions",
                              GETTOOLBAR_EXTENSIONS)
@@ -121,7 +134,7 @@ class ExtensionActionUtilsGetToolbarExtensionsFunction
 };
 
 class ExtensionActionUtilsExecuteExtensionActionFunction
-    : public UIThreadExtensionFunction {
+    : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("extensionActionUtils.executeExtensionAction",
                              EXECUTE_EXTENSIONACTION)
@@ -137,7 +150,7 @@ class ExtensionActionUtilsExecuteExtensionActionFunction
 };
 
 class ExtensionActionUtilsToggleBrowserActionVisibilityFunction
-    : public UIThreadExtensionFunction {
+    : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION(
       "extensionActionUtils.toggleBrowserActionVisibility",
@@ -155,8 +168,7 @@ class ExtensionActionUtilsToggleBrowserActionVisibilityFunction
       ExtensionActionUtilsToggleBrowserActionVisibilityFunction);
 };
 
-class ExtensionActionUtilsRemoveExtensionFunction
-    : public UIThreadExtensionFunction {
+class ExtensionActionUtilsRemoveExtensionFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("extensionActionUtils.removeExtension",
                              EXTENSIONS_REMOVE)
@@ -172,7 +184,7 @@ class ExtensionActionUtilsRemoveExtensionFunction
 };
 
 class ExtensionActionUtilsShowExtensionOptionsFunction
-    : public UIThreadExtensionFunction {
+    : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("extensionActionUtils.showExtensionOptions",
                              EXTENSIONS_SHOWOPTIONS)

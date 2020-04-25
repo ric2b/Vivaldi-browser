@@ -38,6 +38,7 @@
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "extensions/buildflags/buildflags.h"
+#include "ui/content/vivaldi_tab_check.h"
 #include "ui/devtools/devtools_connector.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -155,7 +156,7 @@ class GuestViewBase::OwnerContentsObserver : public WebContentsObserver {
       if (guest_web_contents->GetOuterWebContents())
         also_delete = false;
     }
-    guest_->Destroy(guest_->web_contents_is_owned_by_this_);
+    guest_->Destroy(also_delete);
   }
 
   DISALLOW_COPY_AND_ASSIGN(OwnerContentsObserver);
@@ -203,13 +204,20 @@ GuestViewBase::GuestViewBase(WebContents* owner_web_contents)
 }
 
 GuestViewBase::~GuestViewBase() {
+  // TODO(igor@vivaldi.com): Wrap this into IsVivaldiRunning().
   if (delegate_to_browser_plugin_) {
     delegate_to_browser_plugin_->set_delegate(nullptr);
   }
   // Make sure destroy is called so the guestview manager is updated.
   // This can happen when the guest is automatically deleted via webcontents
   // being destroyed when attached to a widget. (I.e. an AppWindow.)
-  Destroy(true);
+  //
+  // TODO(igor@vivaldi.com): Do we still need this? And if we do, then
+  // investigate if calling Destroy really does what we want. The method calls
+  // virtual WillDestroy so WebViewGuest::WillDestroy() will not run when called
+  // from the destructor. So perhaps move this to ~WebViewGuest.
+  if (web_contents())
+    Destroy(true);
 }
 
 void GuestViewBase::Init(const base::DictionaryValue& create_params,
@@ -543,31 +551,39 @@ void GuestViewBase::Destroy(bool also_delete) {
 
   // Give the content module an opportunity to perform some cleanup.
   if (guest_host_) {
+    // clang-format off
   guest_host_->WillDestroy();
+    // clang-format on
   }
   guest_host_ = nullptr;
 
+  g_webcontents_guestview_map.Get().erase(web_contents());
+  GetGuestViewManager()->RemoveGuest(guest_instance_id_);
   pending_events_.clear();
 
-  if (web_contents()) {
-    GetGuestViewManager()->RemoveGuest(guest_instance_id_);
-    g_webcontents_guestview_map.Get().erase(web_contents());
-    if (
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-      HandOverToBrowser(web_contents()) ||
-#endif
-      !web_contents_is_owned_by_this_) {
-      content::WebContentsObserver::Observe(NULL);
-    } else if (web_contents_is_owned_by_this_) {
-      // NOTE(jarle@vivaldi): Check if the WebContent object is already being
-      // destroyed. We can get a callback from the WebContentsImpl destructor
-      // through GuestViewBase::OwnerContentsObserver. This fixes VB-8381.
-      if (!web_contents()->IsBeingDestroyed()) {
+  if (vivaldi::IsVivaldiRunning() && web_contents()) {
+    if (VivaldiTabCheck::IsOwnedByTabStripOrDevTools(web_contents())) {
+      web_contents()->SetDelegate(nullptr);
+      content::WebContentsObserver::Observe(nullptr);
+      return;
+    }
+    // NOTE(jarle@vivaldi): Check if the WebContent object is already being
+    // destroyed. We can get a callback from the WebContentsImpl destructor
+    // through GuestViewBase::OwnerContentsObserver. This fixes VB-8381.
+    //
+    // NOTE(igor@vivaldi.com): This check is probably not applicable. The
+    // IsOwnedByTabStripOrDevTools check should reliably skip externally owned
+    // WebContents and GuestViewBase::WebContentsDestroyed() calls
+    // Destroy(false). But there could still be a code path that destroys the
+    // view from another WebContentsDestroyed callback before Destroy(false) was
+    // called. As we patched the destructor to call Destroy(true) we need to
+    // check for that possibility.
+    if (web_contents()->IsBeingDestroyed())
+      return;
+  }
+
   if (also_delete)
     delete web_contents();
-      }
-    }
-  }
 }
 
 void GuestViewBase::SetAttachParams(const base::DictionaryValue& params) {
@@ -642,11 +658,9 @@ void GuestViewBase::WillAttach(WebContents* embedder_web_contents,
     embedder_web_contents->GetMainFrame()->Send(
         new GuestViewMsg_AttachToEmbedderFrame_ACK(element_instance_id));
   }
-
   // Completing attachment will resume suspended resource loads and then send
   // queued events.
   SignalWhenReady(std::move(completion_callback));
-
 }
 
 void GuestViewBase::SignalWhenReady(base::OnceClosure callback) {

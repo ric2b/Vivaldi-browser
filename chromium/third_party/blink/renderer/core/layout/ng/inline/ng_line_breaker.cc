@@ -4,7 +4,6 @@
 
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_line_breaker.h"
 
-#include "third_party/blink/renderer/core/layout/logical_values.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_bidi_paragraph.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_break_token.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_node.h"
@@ -204,7 +203,6 @@ NGLineBreaker::NGLineBreaker(NGInlineNode node,
     break_iterator_.SetStartOffset(offset_);
     is_after_forced_break_ = break_token->IsForcedBreak();
     items_data_.AssertOffset(item_index_, offset_);
-    ignore_floats_ = break_token->IgnoreFloats();
   }
 
   // There's a special intrinsic size measure quirk for images that are direct
@@ -447,7 +445,8 @@ void NGLineBreaker::BreakLine(
     }
 
     if (item.Type() == NGInlineItem::kOutOfFlowPositioned) {
-      AddItem(item, line_info);
+      NGInlineItemResult* item_result = AddItem(item, line_info);
+      ComputeCanBreakAfter(item_result, auto_wrap_, break_iterator_);
       MoveToNextOf(item);
     } else if (item.Length()) {
       NOTREACHED();
@@ -473,13 +472,51 @@ void NGLineBreaker::ComputeLineLocation(NGLineInfo* line_info) const {
   // Negative margins can make the position negative, but the inline size is
   // always positive or 0.
   LayoutUnit available_width = AvailableWidth();
-  DCHECK_EQ(position_, line_info->ComputeWidth());
+
+  // Text measurement is done using floats which may introduce small rounding
+  // errors for near-saturated values.
+  DCHECK_EQ(position_.Round(), line_info->ComputeWidth().Round());
 
   line_info->SetWidth(available_width, position_);
   line_info->SetBfcOffset(
       {line_opportunity_.line_left_offset, line_opportunity_.bfc_block_offset});
   if (mode_ == NGLineBreakerMode::kContent)
     line_info->UpdateTextAlign();
+}
+
+// For Web-compatibility, allow break between an atomic inline and any adjacent
+// U+00A0 NO-BREAK SPACE character.
+// https://www.w3.org/TR/css-text-3/#line-break-details
+bool NGLineBreaker::IsAtomicInlineBeforeNoBreakSpace(
+    const NGInlineItemResult& item_result) const {
+  DCHECK_EQ(item_result.item->Type(), NGInlineItem::kAtomicInline);
+  const String& text = Text();
+  DCHECK_GE(text.length(), item_result.end_offset);
+  return text.length() > item_result.end_offset &&
+         text[item_result.end_offset] == kNoBreakSpaceCharacter;
+}
+
+bool NGLineBreaker::IsAtomicInlineAfterNoBreakSpace(
+    const NGInlineItemResult& item_result) const {
+  DCHECK_EQ(item_result.item->Type(), NGInlineItem::kText);
+  const String& text = Text();
+  DCHECK_GE(text.length(), item_result.end_offset);
+  if (text[item_result.end_offset - 1] != kNoBreakSpaceCharacter ||
+      text.length() <= item_result.end_offset ||
+      text[item_result.end_offset] != kObjectReplacementCharacter)
+    return false;
+  // This kObjectReplacementCharacter can be any objects, such as a floating or
+  // an OOF object. Check if it's really an atomic inline.
+  const Vector<NGInlineItem>& items = Items();
+  for (const NGInlineItem* item = std::next(item_result.item);
+       item != items.end(); ++item) {
+    DCHECK_EQ(item->StartOffset(), item_result.end_offset);
+    if (item->Type() == NGInlineItem::kAtomicInline)
+      return true;
+    if (item->EndOffset() > item_result.end_offset)
+      break;
+  }
+  return false;
 }
 
 void NGLineBreaker::HandleText(const NGInlineItem& item,
@@ -542,7 +579,6 @@ void NGLineBreaker::HandleText(const NGInlineItem& item,
             !override_break_anywhere_));
     position_ += item_result->inline_size;
     DCHECK_EQ(break_result == kSuccess, position_ <= available_width);
-    item_result->may_break_inside = break_result == kSuccess;
     MoveToNextOf(*item_result);
 
     if (break_result == kSuccess ||
@@ -640,12 +676,12 @@ NGLineBreaker::BreakResult NGLineBreaker::BreakText(
   unsigned try_count = 0;
 #endif
   LayoutUnit inline_size;
+  ShapingLineBreaker::Result result;
   while (true) {
 #if DCHECK_IS_ON()
     ++try_count;
     DCHECK_LE(try_count, 2u);
 #endif
-    ShapingLineBreaker::Result result;
     scoped_refptr<const ShapeResultView> shape_result = breaker.ShapeLine(
         item_result->start_offset, available_width.ClampNegativeToZero(),
         options, &result);
@@ -710,8 +746,18 @@ NGLineBreaker::BreakResult NGLineBreaker::BreakText(
     DCHECK_EQ(item_result->end_offset, item.EndOffset());
     item_result->can_break_after =
         break_iterator_.IsBreakable(item_result->end_offset);
+    if (!item_result->can_break_after && item.Type() == NGInlineItem::kText &&
+        IsAtomicInlineAfterNoBreakSpace(*item_result))
+      item_result->can_break_after = true;
     trailing_whitespace_ = WhitespaceState::kUnknown;
   }
+
+  // This result is not breakable any further if overflow. This information is
+  // useful to optimize |HandleOverflow()|.
+  item_result->may_break_inside = !result.is_overflow;
+
+  // TODO(crbug.com/1003742): We should use |result.is_overflow| here. For now,
+  // use |inline_size| because some tests rely on this behavior.
   return inline_size <= available_width ? kSuccess : kOverflow;
 }
 
@@ -1251,6 +1297,9 @@ bool NGLineBreaker::HandleAtomicInline(
   trailing_whitespace_ = WhitespaceState::kNone;
   position_ += item_result->inline_size;
   ComputeCanBreakAfter(item_result, auto_wrap_, break_iterator_);
+  if (!item_result->can_break_after &&
+      IsAtomicInlineBeforeNoBreakSpace(*item_result))
+    item_result->can_break_after = true;
 
   if (UNLIKELY(is_sticky_image)) {
     const auto& items = Items();
@@ -1305,9 +1354,6 @@ void NGLineBreaker::HandleFloat(const NGInlineItem& item,
     out_floats_for_min_max->push_back(item.GetLayoutObject());
     return;
   }
-
-  if (ignore_floats_)
-    return;
 
   // Make sure we populate the positioned_float inside the |item_result|.
   if (item_index_ <= handled_leading_floats_index_ &&
@@ -1372,7 +1418,7 @@ void NGLineBreaker::HandleFloat(const NGInlineItem& item,
 
     NGLayoutOpportunity opportunity = exclusion_space_->FindLayoutOpportunity(
         {constraint_space_.BfcOffset().line_offset, bfc_block_offset},
-        constraint_space_.AvailableSize().inline_size, LogicalSize());
+        constraint_space_.AvailableSize().inline_size);
 
     DCHECK_EQ(bfc_block_offset, opportunity.rect.BlockStartOffset());
 

@@ -83,7 +83,7 @@ bool SessionService::ShouldTrackVivaldiBrowser(Browser* browser) {
 bool SessionService::ShouldTrackBrowserOfType(Browser::Type type) {
   sessions::SessionWindow::WindowType window_type =
       WindowTypeForBrowserType(type);
-  return window_type == sessions::SessionWindow::TYPE_TABBED;
+  return window_type == sessions::SessionWindow::TYPE_NORMAL;
 }
 
 namespace resource_coordinator {

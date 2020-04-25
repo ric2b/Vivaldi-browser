@@ -14,6 +14,7 @@ void SkipVivaldiAPIPermissions(extensions::APIPermissionSet& skip) {
   skip.insert(APIPermission::kBookmarksPrivate);
   skip.insert(APIPermission::kCalendar);
   skip.insert(APIPermission::kContacts);
+  skip.insert(APIPermission::kContextMenu);
   skip.insert(APIPermission::kDevtoolsPrivate);
   skip.insert(APIPermission::kEditCommand);
   skip.insert(APIPermission::kExtensionActionUtils);
@@ -29,7 +30,6 @@ void SkipVivaldiAPIPermissions(extensions::APIPermissionSet& skip) {
   skip.insert(APIPermission::kSavedPasswords);
   skip.insert(APIPermission::kSessionsPrivate);
   skip.insert(APIPermission::kSettings);
-  skip.insert(APIPermission::kShowMenu);
   skip.insert(APIPermission::kSync);
   skip.insert(APIPermission::kTabsPrivate);
   skip.insert(APIPermission::kThumbnails);

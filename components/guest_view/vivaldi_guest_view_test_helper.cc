@@ -14,11 +14,6 @@ namespace guest_view {
 // |content::WebContents|
 
 // declared in src/components/guest_view/browser/guest_view_base.h
-bool HandOverToBrowser(content::WebContents* contents) {
-  return false;
-}
-
-// declared in src/components/guest_view/browser/guest_view_base.h
 void AttachWebContentsObservers(content::WebContents* contents) {}
 
 }  // namespace guest_view

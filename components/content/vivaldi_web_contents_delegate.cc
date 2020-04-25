@@ -6,10 +6,6 @@
 
 namespace content {
 
-bool WebContentsDelegate::HasOwnerShipOfContents() {
-  return true;
-}
-
 void WebContentsDelegate::SetDownloadInformation(
     const content::DownloadInformation& info) {
   download_info_ = info;

@@ -39,6 +39,7 @@ bool NeedsDisabledMacMenuItem(int action) {
     case IDC_VIV_PRINT:
     case IDC_VIV_FIND_IN_PAGE:
     case IDC_VIV_PASTE_AS_PLAIN_TEXT_OR_PASTE_AND_GO:
+    case IDC_VIV_TOGGLE_TAB_BAR:
     case IDC_VIV_TOGGLE_BOOKMARKS_BAR:
     case IDC_VIV_TOGGLE_PANEL:
     case IDC_VIV_TOGGLE_STATUS_BAR:
@@ -107,6 +108,7 @@ void UpdateCommandsForVivaldi(CommandUpdater* command_updater_) {
   command_updater_->UpdateCommandEnabled(IDC_VIV_TASK_MANAGER, true);
   command_updater_->UpdateCommandEnabled(IDC_VIV_DEVELOPER_TOOLS, true);
   command_updater_->UpdateCommandEnabled(IDC_VIV_PLUGINS_PAGE, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_TOGGLE_TAB_BAR, true);
   command_updater_->UpdateCommandEnabled(IDC_VIV_TOGGLE_BOOKMARKS_BAR, true);
   command_updater_->UpdateCommandEnabled(
       IDC_VIV_PASTE_AS_PLAIN_TEXT_OR_PASTE_AND_GO, true);
@@ -165,6 +167,8 @@ void UpdateCommandsForVivaldi(CommandUpdater* command_updater_) {
   command_updater_->UpdateCommandEnabled(IDC_VIV_SET_ANIMATIONS_LOOP, true);
   command_updater_->UpdateCommandEnabled(IDC_VIV_SET_ANIMATIONS_NEVER, true);
   command_updater_->UpdateCommandEnabled(IDC_VIV_SET_ANIMATIONS_ONCE, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_REPORT_BUG, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_TOGGLE_WEBPANEL, true);
 }
 
 bool ExecuteVivaldiCommands(Browser* browser, int id) {
@@ -194,6 +198,7 @@ bool ExecuteVivaldiCommands(Browser* browser, int id) {
     case IDC_VIV_TASK_MANAGER:
     case IDC_VIV_DEVELOPER_TOOLS:
     case IDC_VIV_PLUGINS_PAGE:
+    case IDC_VIV_TOGGLE_TAB_BAR:
     case IDC_VIV_TOGGLE_BOOKMARKS_BAR:
     case IDC_VIV_PASTE_AS_PLAIN_TEXT_OR_PASTE_AND_GO:
     case IDC_VIV_SHOW_KEYBOARDSHORTCUTS:
@@ -243,7 +248,9 @@ bool ExecuteVivaldiCommands(Browser* browser, int id) {
     case IDC_VIV_SET_LOAD_IMAGES_CACHE:
     case IDC_VIV_SET_ANIMATIONS_LOOP:
     case IDC_VIV_SET_ANIMATIONS_NEVER:
-    case IDC_VIV_SET_ANIMATIONS_ONCE: {
+    case IDC_VIV_SET_ANIMATIONS_ONCE:
+    case IDC_VIV_REPORT_BUG:
+    case IDC_VIV_TOGGLE_WEBPANEL: {
       // The API is registered with a regular profile.
       Profile* profile = browser->profile()->GetOriginalProfile();
       extensions::MenubarAPI::SendOnActivated(

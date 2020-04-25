@@ -151,7 +151,6 @@
 <translation id="6328639280570009161">Опитайте да забраните предсказването в мрежата</translation>
 <translation id="6328786501058569169">Подправен сайт</translation>
 <translation id="6358450015545214790">Какво означава това?</translation>
-<translation id="6417515091412812850">Проверяване дали удостоверението не е било отзовано е невъзможно.</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> отказва свързване.</translation>
 <translation id="6447842834002726250">Бисквитки</translation>
 <translation id="6451458296329894277">Потвърждение при повторно изпращане</translation>
@@ -206,7 +205,6 @@
 <translation id="8332188693563227489">Отказан достъп до <ph name="HOST_NAME" /></translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> отговаря след твърде дълго време.</translation>
 <translation id="8503813439785031346">Потребител</translation>
-<translation id="859285277496340001">Удостоверението не указва механизъм, чрез който да се провери дали не е било отзовано.</translation>
 <translation id="8703575177326907206">Свързването със <ph name="DOMAIN" /> не се шифрова.</translation>
 <translation id="8740359287975076522">Намиране на &lt;abbr id="dnsDefinition"&gt;адрес DNS&lt;/abbr&gt; на <ph name="HOST_NAME" /> е невъзможно. Диагностициране в ход…</translation>
 <translation id="9001074447101275817">Посредникът <ph name="DOMAIN" /> изисква потребител и парола.</translation>

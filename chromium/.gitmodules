@@ -133,6 +133,9 @@
 [submodule "chrome/installer/mac/third_party/xz/xz"]
 	path = chrome/installer/mac/third_party/xz/xz
 	url = ../deps/xz.git
+[submodule "third_party/libipp/libipp"]
+	path = third_party/libipp/libipp
+	url = ../../chromiumos/platform2/libipp.git
 [submodule "third_party/dav1d/libdav1d"]
 	path = third_party/dav1d/libdav1d
 	url = ../../external/github.com/videolan/dav1d.git
@@ -175,9 +178,6 @@
 [submodule "third_party/depot_tools"]
 	path = third_party/depot_tools
 	url = ../tools/depot_tools.git
-[submodule "third_party/openscreen/src"]
-	path = third_party/openscreen/src
-	url = ../../openscreen.git
 [submodule "third_party/libsrtp"]
 	path = third_party/libsrtp
 	url = ../deps/libsrtp.git
@@ -268,6 +268,9 @@
 [submodule "third_party/snappy/src"]
 	path = third_party/snappy/src
 	url = ../../external/github.com/google/snappy.git
+[submodule "third_party/openscreen/src"]
+	path = third_party/openscreen/src
+	url = ../../openscreen.git
 [submodule "third_party/angle"]
 	path = third_party/angle
 	url = ../../angle/angle.git

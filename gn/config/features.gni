@@ -29,12 +29,6 @@ vivaldi_pending_locales = [
   "nn",
 ]
 
-declare_overrides() {
-  if (!is_mac) {
-    is_component_ffmpeg = true
-  }
-}
-
 if (is_mac && is_official_build) {
   mac_strip_release = true
 }

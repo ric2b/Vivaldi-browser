@@ -98,6 +98,8 @@ class VivaldiNativeAppWindowViews : public VivaldiNativeAppWindow,
   SkRegion* shape() { return shape_.get(); }
   ShapeRects* shape_rects() { return shape_rects_.get(); }
 
+  gfx::NativeView GetNativeView();
+
  protected:
   // Called before views::Widget::Init() in InitializeDefaultWindow() to allow
   // subclasses to customize the InitParams that would be passed.
@@ -214,8 +216,6 @@ class VivaldiNativeAppWindowViews : public VivaldiNativeAppWindow,
   SkColor ActiveFrameColor() const override;
   SkColor InactiveFrameColor() const override;
   gfx::Insets GetFrameInsets() const override;
-  void HideWithApp() override;
-  void ShowWithApp() override;
   gfx::Size GetContentMinimumSize() const override;
   gfx::Size GetContentMaximumSize() const override;
   void SetContentSizeConstraints(const gfx::Size& min_size,

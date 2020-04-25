@@ -10,8 +10,7 @@
 
 namespace extensions {
 
-class AccessKeysGetAccessKeysForPageFunction
-    : public UIThreadExtensionFunction {
+class AccessKeysGetAccessKeysForPageFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("accessKeys.getAccessKeysForPage",
                              ACCESSKEYS_GETACCESSKEYSFORPAGE)
@@ -28,8 +27,7 @@ class AccessKeysGetAccessKeysForPageFunction
   DISALLOW_COPY_AND_ASSIGN(AccessKeysGetAccessKeysForPageFunction);
 };
 
-class AccessKeysActionFunction
-    : public UIThreadExtensionFunction {
+class AccessKeysActionFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("accessKeys.action",
                              ACCESSKEYS_ACTION)

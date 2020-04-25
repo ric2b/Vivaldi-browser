@@ -710,6 +710,10 @@ void NotesChangeProcessor::UpdateNoteWithAttachmentData(
         break;
     }
   }
+  if (specifics.has_creation_time_us()) {
+    mutable_node->SetCreationTime(
+        base::Time::FromInternalValue(specifics.creation_time_us()));
+  }
 }
 
 // static

@@ -26,6 +26,7 @@
 <translation id="2030481566774242610">Դուք սա՞ նկատի ունեիք՝ <ph name="LINK" />։</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Ստուգել պրոքսին և հրապատը<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">Ձայն</translation>
+<translation id="2119505898009119320">Ում է տրված. <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2147827593068025794">Ֆոնային սինք</translation>
 <translation id="2166378884831602661">Այս կայքը չի կարող ապահովել անվտանգ միացում</translation>
 <translation id="2187317261103489799">Հայտնաբերել (ստանդարտ)</translation>
@@ -151,7 +152,6 @@
 <translation id="6328639280570009161">Փորձեք անջատել ցանցային կանխատեսումը</translation>
 <translation id="6328786501058569169">Այս կայքը մոլորեցնող է</translation>
 <translation id="6358450015545214790">Ի՞նչ է սա նշանակում։</translation>
-<translation id="6417515091412812850">Հնարավոր չէ ստուգել՝ արդյոք հավաստագիրը չեղարկված է։</translation>
 <translation id="6433595998831338502">Միացումը մերժվեց <ph name="HOST_NAME" />-ի կողմից։</translation>
 <translation id="6447842834002726250">Քուքիներ</translation>
 <translation id="6451458296329894277">Հաստատեք ձևաթղթի վերաուղարկումը</translation>
@@ -206,7 +206,6 @@
 <translation id="8332188693563227489">Մուտքը <ph name="HOST_NAME" /> արգելված է</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> կայքի պատասխանը շատ է երկարաձգվում։</translation>
 <translation id="8503813439785031346">Օգտվողի անուն</translation>
-<translation id="859285277496340001">Հավաստագրում սահմանված չէ մեխանիզմ դրա չեղարկված լինելը ստուգելու համար։</translation>
 <translation id="8703575177326907206">Ձեր միացումը <ph name="DOMAIN" />-ի հետ գաղտնագրված չէ։</translation>
 <translation id="8740359287975076522"><ph name="HOST_NAME" />-ի &lt;abbr id="dnsDefinition"&gt;DNS հասցեն&lt;/abbr&gt; գտնել չհաջողվեց։ Կատարվում է խնդրի ախտորոշում։</translation>
 <translation id="9001074447101275817"><ph name="DOMAIN" /> պրոքսին պահանջում է օգտվողի անուն և գաղտնաբառ։</translation>

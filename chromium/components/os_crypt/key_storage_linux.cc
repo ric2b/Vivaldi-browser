@@ -12,6 +12,7 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/task_runner_util.h"
 #include "base/threading/thread_restrictions.h"
+#include "build/branding_buildflags.h"
 #include "components/os_crypt/key_storage_config_linux.h"
 #include "components/os_crypt/key_storage_util_linux.h"
 
@@ -26,10 +27,11 @@
 #endif
 
 #ifdef VIVALDI_BUILD
-#define GOOGLE_CHROME_BUILD
+#undef BUILDFLAG_INTERNAL_GOOGLE_CHROME_BRANDING
+#define BUILDFLAG_INTERNAL_GOOGLE_CHROME_BRANDING() (1)
 #endif  // VIVALDI_BUILD
 
-#if defined(GOOGLE_CHROME_BUILD)
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
 const char KeyStorageLinux::kFolderName[] = "Chrome Keys";
 const char KeyStorageLinux::kKey[] = "Chrome Safe Storage";
 #else
@@ -162,6 +164,6 @@ void KeyStorageLinux::BlockOnInitThenSignal(base::WaitableEvent* on_inited,
   on_inited->Signal();
 }
 
-#ifndef GOOGLE_CHROME_BUILD
-#error GOOGLE_CHROME_BUILD must be set for Vivaldi builds
+#if !BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#error GOOGLE_CHROME_BRANDING must be set in this file for Vivaldi builds
 #endif

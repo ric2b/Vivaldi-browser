@@ -26,6 +26,7 @@
 <translation id="2030481566774242610">Bedoele jo <ph name="LINK" />?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Kontrolearje de proksy en de brânmuorre<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">Lûd</translation>
+<translation id="2119505898009119320">Ferlient oan: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2147827593068025794">Syngronisaasje op de eftergrûn</translation>
 <translation id="2166378884831602661">De webstee kin gjin feilige ferbining ferskaffe</translation>
 <translation id="2187317261103489799">Detektearje (standert)</translation>
@@ -150,7 +151,6 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="6328639280570009161">Besykje netwurk foarsizzing út te skeakeljen</translation>
 <translation id="6328786501058569169">Dizze webstee ferrifelet</translation>
 <translation id="6358450015545214790">Wat hâld it yn?</translation>
-<translation id="6417515091412812850">Net mooglik om te hifkjen of sertifikaat ynlutsen is.</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> wegeret te ferbinen.</translation>
 <translation id="6447842834002726250">Koekjes</translation>
 <translation id="6451458296329894277">Op 'e nij yntsjinje befêstigje</translation>
@@ -205,7 +205,6 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="8332188693563227489">Tagong ta <ph name="HOST_NAME" /> is wegere</translation>
 <translation id="8498891568109133222">It reagearjen fan <ph name="HOST_NAME" /> naam tefolle tiid.</translation>
 <translation id="8503813439785031346">Brûkersnamme</translation>
-<translation id="859285277496340001">Yn de sertifikaat wurdt gjin metoade oantsjut om te hifkjen of it sertifikaat ynlutsen is.</translation>
 <translation id="8703575177326907206">Jo ferbining mei <ph name="DOMAIN" /> is net fersifere.</translation>
 <translation id="8740359287975076522">It &lt;abbr id="dnsDefinition"&gt;DNS adres&lt;/abbr&gt; fan <ph name="HOST_NAME" /> koe net fûn wurde. De swierigens wurdt ûndersocht.</translation>
 <translation id="9001074447101275817">De proksy <ph name="DOMAIN" /> fereasket in brûkersnamme en wachtwurd.</translation>

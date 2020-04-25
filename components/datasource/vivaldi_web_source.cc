@@ -39,7 +39,7 @@ const char kBackgroundColorCss[] = "background-color";
 
 void VivaldiWebSource::StartDataRequest(
     const std::string& path,
-    const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
+    const content::WebContents::Getter& wc_getter,
     const content::URLDataSource::GotDataCallback& callback) {
   std::string type;
   std::string data;

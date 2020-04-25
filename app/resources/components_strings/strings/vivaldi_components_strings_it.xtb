@@ -148,7 +148,6 @@
 <translation id="6328639280570009161">Prova a disattivare la previsione della rete</translation>
 <translation id="6328786501058569169">Questo sito è ingannevole</translation>
 <translation id="6358450015545214790">Che cosa significano?</translation>
-<translation id="6417515091412812850">Impossibile controllare se il certificato è stato revocato.</translation>
 <translation id="6433595998831338502">Connessione negata da <ph name="HOST_NAME" />.</translation>
 <translation id="6447842834002726250">Cookie</translation>
 <translation id="6451458296329894277">Conferma reinvio modulo</translation>
@@ -203,7 +202,6 @@
 <translation id="8332188693563227489">Accesso a <ph name="HOST_NAME" /> negato</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> ha impiegato troppo tempo a rispondere.</translation>
 <translation id="8503813439785031346">Nome utente</translation>
-<translation id="859285277496340001">Il certificato non specifica un meccanismo per verificare se è stato revocato.</translation>
 <translation id="8703575177326907206">La connessione a <ph name="DOMAIN" /> non è crittografata.</translation>
 <translation id="8740359287975076522">Impossibile trovare &lt;abbr id="dnsDefinition"&gt; indirizzo DNS &lt;/abbr&gt; di <ph name="HOST_NAME" />. Stiamo analizzando il problema.</translation>
 <translation id="9001074447101275817">Il proxy <ph name="DOMAIN" /> richiede un nome utente e una password.</translation>

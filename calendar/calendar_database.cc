@@ -18,6 +18,7 @@
 
 #include "base/command_line.h"
 #include "base/files/file_util.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/rand_util.h"
@@ -39,8 +40,34 @@ namespace {
 // Current version number. We write databases at the "current" version number,
 // but any previous version that can read the "compatible" one can make do with
 // our database without *too* many bad effects.
-const int kCurrentVersionNumber = 1;
-const int kCompatibleVersionNumber = 1;
+const int kCurrentVersionNumber = 2;
+const int kCompatibleVersionNumber = 2;
+
+sql::InitStatus LogMigrationFailure(int from_version) {
+  LOG(ERROR) << "Calendar DB failed to migrate from version " << from_version
+             << ". Calendar API will be disabled.";
+  return sql::INIT_FAILURE;
+}
+
+// Reasons for initialization to fail. These are logged to UMA. It corresponds
+// to the CalendarInitStep enum in enums.xml.
+//
+// DO NOT CHANGE THE VALUES. Leave holes if anything is removed and add only
+// to the end.
+enum class InitStep {
+  OPEN = 0,
+  TRANSACTION_BEGIN = 1,
+  META_TABLE_INIT = 2,
+  CREATE_TABLES = 3,
+  VERSION = 4,
+  COMMIT = 5,
+};
+
+sql::InitStatus LogInitFailure(InitStep what) {
+  base::UmaHistogramSparse("Calendar.InitializationFailureStep",
+                           static_cast<int>(what));
+  return sql::INIT_FAILURE;
+}
 
 }  // namespace
 
@@ -89,8 +116,16 @@ sql::InitStatus CalendarDatabase::Init(const base::FilePath& calendar_name) {
     return sql::INIT_FAILURE;
 
   if (!CreateCalendarTable() || !CreateEventTable() ||
-      !CreateRecurringTable() || !CreateEventTypeTable())
+      !CreateRecurringTable() || !CreateEventTypeTable() ||
+      !CreateRecurringExceptionTable())
     return sql::INIT_FAILURE;
+
+  // Version check.
+  sql::InitStatus version_status = EnsureCurrentVersion();
+  if (version_status != sql::INIT_OK) {
+    LogInitFailure(InitStep::VERSION);
+    return version_status;
+  }
 
   CreateDefaultCalendar();
 
@@ -142,6 +177,30 @@ bool CalendarDatabase::Raze() {
 
 sql::Database& CalendarDatabase::GetDB() {
   return db_;
+}
+
+sql::InitStatus CalendarDatabase::EnsureCurrentVersion() {
+  // We can't read databases newer than we were designed for.
+  if (meta_table_.GetCompatibleVersionNumber() > kCurrentVersionNumber) {
+    LOG(WARNING) << "Calendar database is too new.";
+    return sql::INIT_TOO_NEW;
+  }
+
+  int cur_version = meta_table_.GetVersionNumber();
+
+  if (cur_version == 1) {
+    // Version prior to adding sequence and ical columns to events
+    // table.
+    if (!MigrateEventsWithoutSequenceAndIcalColumns()) {
+      return LogMigrationFailure(1);
+    }
+    ++cur_version;
+    meta_table_.SetVersionNumber(cur_version);
+    meta_table_.SetCompatibleVersionNumber(
+        std::min(cur_version, kCompatibleVersionNumber));
+  }
+
+  return sql::INIT_OK;
 }
 
 }  // namespace calendar

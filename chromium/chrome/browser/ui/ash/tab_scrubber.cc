@@ -8,6 +8,7 @@
 
 #include <algorithm>
 
+#include "ash/public/cpp/ash_features.h"
 #include "ash/shell.h"
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
@@ -28,6 +29,13 @@ namespace {
 
 inline float Clamp(float value, float low, float high) {
   return std::min(high, std::max(value, low));
+}
+
+int GetRequiredNumberOfFingers() {
+  return ash::features::IsVirtualDesksEnabled() &&
+                 ash::features::IsVirtualDesksGesturesEnabled()
+             ? 4
+             : 3;
 }
 
 }  // namespace
@@ -74,7 +82,8 @@ bool TabScrubber::IsActivationPending() {
   return activate_timer_.IsRunning();
 }
 
-TabScrubber::TabScrubber() {
+TabScrubber::TabScrubber()
+    : required_finger_count_(GetRequiredNumberOfFingers()) {
   // TODO(mash): Add window server API to observe swipe gestures. Observing
   // gestures on browser windows is not sufficient, as this feature works when
   // the cursor is over the shelf, desktop, etc. https://crbug.com/796366
@@ -94,7 +103,7 @@ void TabScrubber::OnScrollEvent(ui::ScrollEvent* event) {
     return;
   }
 
-  if (event->finger_count() != 3)
+  if (event->finger_count() != required_finger_count_)
     return;
 
   Browser* browser = GetActiveBrowser();
@@ -202,7 +211,7 @@ void TabScrubber::OnTabRemoved(int index) {
 
 Browser* TabScrubber::GetActiveBrowser() {
   Browser* browser = chrome::FindLastActive();
-  if (!browser || browser->type() != Browser::TYPE_TABBED ||
+  if (!browser || !browser->is_type_normal() ||
       !browser->window()->IsActive()) {
     return nullptr;
   }
@@ -214,6 +223,7 @@ void TabScrubber::BeginScrub(BrowserView* browser_view, float x_offset) {
   DCHECK(browser_view);
   DCHECK(browser_view->browser());
 
+  scrubbing_start_time_ = base::TimeTicks::Now();
   tab_strip_ = browser_view->tabstrip();
   scrubbing_ = true;
   browser_ = browser_view->browser();
@@ -243,6 +253,8 @@ void TabScrubber::FinishScrub(bool activate) {
       int distance = std::abs(highlighted_tab_ -
                               browser_->tab_strip_model()->active_index());
       UMA_HISTOGRAM_CUSTOM_COUNTS("Tabs.ScrubDistance", distance, 1, 20, 21);
+      UMA_HISTOGRAM_TIMES("Tabs.ScrubDuration",
+                          base::TimeTicks::Now() - scrubbing_start_time_);
       browser_->tab_strip_model()->ActivateTabAt(
           highlighted_tab_, {TabStripModel::GestureType::kOther});
     }

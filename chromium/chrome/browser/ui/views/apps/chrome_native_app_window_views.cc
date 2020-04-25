@@ -125,10 +125,8 @@ void ChromeNativeAppWindowViews::InitializeDefaultWindow(
   init_params.visible_on_all_workspaces =
       create_params.visible_on_all_workspaces;
 
-  init_params.thumbnail_window = create_params.thumbnail_window;
-
   OnBeforeWidgetInit(create_params, &init_params, widget());
-  widget()->Init(init_params);
+  widget()->Init(std::move(init_params));
 
   // The frame insets are required to resolve the bounds specifications
   // correctly. So we set the window bounds and constraints now.
@@ -351,11 +349,11 @@ void ChromeNativeAppWindowViews::InitializeWindow(
   active_frame_color_ = create_params.active_frame_color;
   inactive_frame_color_ = create_params.inactive_frame_color;
   InitializeDefaultWindow(create_params);
-  extension_keybinding_registry_.reset(new ExtensionKeybindingRegistryViews(
-      Profile::FromBrowserContext(app_window->browser_context()),
-      widget()->GetFocusManager(),
-      extensions::ExtensionKeybindingRegistry::PLATFORM_APPS_ONLY,
-      NULL));
+  extension_keybinding_registry_ =
+      std::make_unique<ExtensionKeybindingRegistryViews>(
+          Profile::FromBrowserContext(app_window->browser_context()),
+          widget()->GetFocusManager(),
+          extensions::ExtensionKeybindingRegistry::PLATFORM_APPS_ONLY, nullptr);
 }
 
 void ChromeNativeAppWindowViews::EnsureAppIconCreated() {

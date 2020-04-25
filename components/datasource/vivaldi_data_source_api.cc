@@ -2,6 +2,7 @@
 
 #include "components/datasource/vivaldi_data_source_api.h"
 
+#include "app/vivaldi_constants.cc"
 #include "base/guid.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
@@ -11,12 +12,15 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_paths.h"
 #include "components/prefs/pref_change_registrar.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "extensions/api/bookmarks/bookmarks_private_api.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/common/api/extension_types.h"
 #include "prefs/vivaldi_gen_prefs.h"
@@ -67,26 +71,23 @@ const char* VivaldiDataSourcesAPI::kDataMappingPrefs[] = {
     vivaldiprefs::kStartpageImagePathCustom,
 };
 
-VivaldiDataSourcesAPI::DataSourceItem::DataSourceItem() = default;
-
-VivaldiDataSourcesAPI::DataSourceItem::DataSourceItem(base::FilePath file_path)
-    : file_path_(std::move(file_path)) {}
-
-VivaldiDataSourcesAPI::DataSourceItem::DataSourceItem(DataSourceItem&&) =
-    default;
-
-VivaldiDataSourcesAPI::DataSourceItem& VivaldiDataSourcesAPI::DataSourceItem::
-operator=(DataSourceItem&&) = default;
-
-VivaldiDataSourcesAPI::DataSourceItem::~DataSourceItem() = default;
-
 VivaldiDataSourcesAPI::VivaldiDataSourcesAPI(Profile* profile)
     : profile_(profile),
       user_data_dir_(profile->GetPath()),
       sequence_task_runner_(base::CreateSequencedTaskRunnerWithTraits(
-          {base::TaskPriority::USER_VISIBLE, base::MayBlock()})) {}
+          {base::ThreadPool(), base::TaskPriority::USER_VISIBLE,
+           base::MayBlock()})) {}
 
 VivaldiDataSourcesAPI::~VivaldiDataSourcesAPI() {}
+
+// static
+int VivaldiDataSourcesAPI::FindMappingPreference(base::StringPiece preference) {
+  const char* const* i = std::find(std::cbegin(kDataMappingPrefs),
+                                   std::cend(kDataMappingPrefs), preference);
+  if (i == std::cend(kDataMappingPrefs))
+    return -1;
+  return static_cast<int>(i - kDataMappingPrefs);
+}
 
 // static
 bool VivaldiDataSourcesAPI::ReadFileOnBlockingThread(
@@ -141,7 +142,7 @@ void VivaldiDataSourcesAPI::LoadMappings() {
 
 void VivaldiDataSourcesAPI::LoadMappingsOnFileThread() {
   DCHECK(sequence_task_runner_->RunsTasksInCurrentSequence());
-  DCHECK(id_to_file_map_.empty());
+  DCHECK(path_id_map_.empty());
 
   base::FilePath file_path = GetFileMappingFilePath();
   std::vector<unsigned char> data;
@@ -168,55 +169,49 @@ void VivaldiDataSourcesAPI::LoadMappingsOnFileThread() {
 void VivaldiDataSourcesAPI::InitMappingsOnFileThread(
     const base::DictionaryValue* dict) {
   DCHECK(sequence_task_runner_->RunsTasksInCurrentSequence());
-  DCHECK(id_to_file_map_.empty());
+  DCHECK(path_id_map_.empty());
 
-  for (base::DictionaryValue::Iterator it(*dict); !it.IsAtEnd(); it.Advance()) {
-    const std::string& id = it.key();
-    const base::Value* root = nullptr;
-    if (!dict->GetWithoutPathExpansion(id, &root)) {
-      LOG(WARNING) << "Invalid entry in \"" << kDatasourceFilemappingFilename
-        << "\" file.";
+  for (const auto& i : dict->DictItems()) {
+    const std::string& id = i.first;
+    if (isOldFormatThumbnailId(id)) {
+      // Older mapping entry that we just skip as we know the path statically.
       continue;
     }
-    const base::DictionaryValue* value = nullptr;
-    if (root->GetAsDictionary(&value)) {
-      for (base::DictionaryValue::Iterator values_it(*value);
-           !values_it.IsAtEnd(); values_it.Advance()) {
-        const base::Value* sub_value = nullptr;
-        if (value->GetWithoutPathExpansion(values_it.key(), &sub_value)) {
-          if (values_it.key() == "local_path" ||
-              values_it.key() == "relative_path") {
-            std::string file;
-            if (sub_value->GetAsString(&file)) {
+    const base::Value& value = i.second;
+    if (value.is_dict()) {
+      const std::string* path_string = value.FindStringKey("local_path");
+      if (!path_string) {
+        // Older format support.
+        path_string = value.FindStringKey("relative_path");
+      }
+      if (path_string) {
 #if defined(OS_POSIX)
-              base::FilePath path(file);
+        base::FilePath path(*path_string);
 #elif defined(OS_WIN)
-              base::FilePath path(base::UTF8ToWide(file));
+        base::FilePath path(base::UTF8ToWide(*path_string));
 #endif
-              id_to_file_map_.emplace(id, DataSourceItem(std::move(path)));
-            }
-          }
-        }
+        path_id_map_.emplace(id, std::move(path));
+        continue;
       }
     }
+    LOG(WARNING) << "Invalid entry " << id << " in \""
+                 << kDatasourceFilemappingFilename << "\" file.";
   }
 }
 
 std::string VivaldiDataSourcesAPI::GetMappingJSONOnFileThread() {
   DCHECK(sequence_task_runner_->RunsTasksInCurrentSequence());
 
-  if (id_to_file_map_.empty())
-    return std::string();
+  // TODO(igor@vivaldi.com): Write the mapping file even if there are no
+  // entries. This allows in future to write a URL format converter for
+  // bookamrks and a add a version field to the file. Then presence of the file
+  // without the version string will indicate the need for converssion.
 
   std::vector<base::Value::DictStorage::value_type> items;
-  for (const auto& it : id_to_file_map_) {
-    const base::FilePath& path = it.second.GetFilePath();
+  for (const auto& it : path_id_map_) {
+    const base::FilePath& path = it.second;
     auto item = std::make_unique<base::Value>(base::Value::Type::DICTIONARY);
-    if (path.IsAbsolute()) {
-      item->SetStringKey("local_path", path.value());
-    } else {
-      item->SetStringKey("relative_path", path.value());
-    }
+    item->SetStringKey("local_path", path.value());
     items.emplace_back(it.first, std::move(item));
   }
 
@@ -306,41 +301,33 @@ base::FilePath VivaldiDataSourcesAPI::GetFileMappingFilePath() {
   return user_data_dir_.AppendASCII(kDatasourceFilemappingFilename);
 }
 
-base::FilePath VivaldiDataSourcesAPI::GetBookmarkThumbnailPath(
-    int64_t bookmark_id) {
+base::FilePath VivaldiDataSourcesAPI::GetThumbnailPath(
+    base::StringPiece thumbnail_id) {
   base::FilePath path = user_data_dir_.Append(kThumbnailDirectory);
-  std::string filename =
-      base::StringPrintf("%jd.png", static_cast<intmax_t>(bookmark_id));
 #if defined(OS_POSIX)
-  path = path.Append(filename);
+  path = path.Append(thumbnail_id);
 #elif defined(OS_WIN)
-  path = path.Append(base::UTF8ToUTF16(filename));
+  path = path.Append(base::UTF8ToUTF16(thumbnail_id));
 #endif
   return path;
 }
 
 // static
-std::string VivaldiDataSourcesAPI::GetBookmarkThumbnailUrl(
-    int64_t bookmark_id) {
-  return base::StringPrintf("%s%jd", ::vivaldi::kBaseFileMappingUrl,
-                            static_cast<intmax_t>(bookmark_id));
-}
-
-// static
 bool VivaldiDataSourcesAPI::IsBookmarkCapureUrl(const std::string& url) {
+  UrlKind url_kind;
   std::string id;
-  int64_t bookmark_id = 0;
-  return GetDataMappingId(url, &id) && base::StringToInt64(id, &bookmark_id);
+  return ParseDataUrl(url, &url_kind, &id) && url_kind == THUMBNAIL_URL;
 }
 
 // static
-bool VivaldiDataSourcesAPI::GetDataMappingId(const std::string& url,
-                                             std::string* id) {
+bool VivaldiDataSourcesAPI::ParseDataUrl(base::StringPiece url,
+                                         UrlKind* url_kind,
+                                         std::string* id) {
   if (url.empty())
     return false;
 
   // Special-case resource URLs that do not have scheme or path components
-  if (base::StringPiece(url).starts_with("/resources/"))
+  if (url.starts_with("/resources/"))
     return false;
 
   GURL gurl(url);
@@ -352,9 +339,23 @@ bool VivaldiDataSourcesAPI::GetDataMappingId(const std::string& url,
   if (gurl.SchemeIs(VIVALDI_DATA_URL_SCHEME) &&
       gurl.host_piece() == VIVALDI_DATA_URL_HOST) {
     base::StringPiece path = gurl.path_piece();
-    if (path.starts_with(VIVALDI_DATA_URL_MAPPING_DIR)) {
-      path.remove_prefix(strlen(VIVALDI_DATA_URL_MAPPING_DIR));
+    base::StringPiece prefix = "/" VIVALDI_DATA_URL_PATH_MAPPING_DIR "/";
+    if (path.starts_with(prefix)) {
+      path.remove_prefix(prefix.length());
       path.CopyToString(id);
+      if (isOldFormatThumbnailId(path)) {
+        *url_kind = VivaldiDataSourcesAPI::THUMBNAIL_URL;
+        *id += ".png";
+      } else {
+        *url_kind = VivaldiDataSourcesAPI::PATH_MAPPING_URL;
+      }
+      return true;
+    }
+    prefix = "/" VIVALDI_DATA_URL_THUMBNAIL_DIR "/";
+    if (path.starts_with(prefix)) {
+      path.remove_prefix(prefix.length());
+      path.CopyToString(id);
+      *url_kind = VivaldiDataSourcesAPI::THUMBNAIL_URL;
       return true;
     }
   }
@@ -362,49 +363,90 @@ bool VivaldiDataSourcesAPI::GetDataMappingId(const std::string& url,
 }
 
 // static
-std::string VivaldiDataSourcesAPI::GetDataMappingUrl(const std::string& id) {
-  return base::StringPrintf("%s%s", ::vivaldi::kBaseFileMappingUrl, id.c_str());
+std::string VivaldiDataSourcesAPI::MakeDataUrl(UrlKind url_kind,
+                                              base::StringPiece id) {
+  std::string url = (url_kind == PATH_MAPPING_URL)
+                        ? ::vivaldi::kBasePathMappingUrl
+                        : ::vivaldi::kBaseThumbnailUrl;
+  id.AppendToString(&url);
+  return url;
 }
 
 // static
-void VivaldiDataSourcesAPI::AddMapping(content::BrowserContext* browser_context,
-                                       base::FilePath file_path,
-                                       AddMappingCallback callback) {
+bool VivaldiDataSourcesAPI::isOldFormatThumbnailId(base::StringPiece id) {
+  int64_t bookmark_id;
+  return id.length() <= 20 && base::StringToInt64(id, &bookmark_id);
+}
+
+// static
+void VivaldiDataSourcesAPI::UpdateMapping(
+    content::BrowserContext* browser_context,
+    int64_t bookmark_id,
+    int preference_index,
+    base::FilePath file_path,
+    UpdateMappingCallback callback) {
+  // Exactly one of bookmarkId, preference_index must be given.
+  DCHECK_NE(bookmark_id == 0, preference_index == -1);
+  DCHECK(0 <= bookmark_id);
+  DCHECK(-1 <= preference_index || preference_index < kDataMappingPrefsCount);
   VivaldiDataSourcesAPI* api = FromBrowserContext(browser_context);
   DCHECK(api);
   if (!api) {
-    std::move(callback).Run(nullptr, false, std::string());
+    std::move(callback).Run(false);
     return;
   }
 
   api->sequence_task_runner_->PostTask(
       FROM_HERE,
-      base::BindOnce(&VivaldiDataSourcesAPI::AddMappingOnFileThread,
-                     api, std::move(file_path), std::move(callback)));
+      base::BindOnce(&VivaldiDataSourcesAPI::UpdateMappingOnFileThread, api,
+                     bookmark_id, preference_index, std::move(file_path),
+                     std::move(callback)));
 }
 
-void VivaldiDataSourcesAPI::AddMappingOnFileThread(
+void VivaldiDataSourcesAPI::UpdateMappingOnFileThread(
+    int64_t bookmark_id,
+    int preference_index,
     base::FilePath file_path,
-    AddMappingCallback callback) {
+    UpdateMappingCallback callback) {
   DCHECK(sequence_task_runner_->RunsTasksInCurrentSequence());
 
-  std::string id = base::GenerateGUID();
-  id_to_file_map_.emplace(id, DataSourceItem(std::move(file_path)));
+  std::string path_id = base::GenerateGUID();
+  path_id_map_.emplace(path_id, std::move(file_path));
 
   base::PostTaskWithTraits(
       FROM_HERE, {content::BrowserThread::UI},
-      base::BindOnce(&VivaldiDataSourcesAPI::FinishAddMappingOnUIThread, this,
-                     std::move(id), std::move(callback)));
+      base::BindOnce(&VivaldiDataSourcesAPI::FinishUpdateMappingOnUIThread,
+                     this, bookmark_id, preference_index, std::move(path_id),
+                     std::move(callback)));
   SaveMappingsOnFileThread();
 }
 
-void VivaldiDataSourcesAPI::FinishAddMappingOnUIThread(
+void VivaldiDataSourcesAPI::FinishUpdateMappingOnUIThread(
+    int64_t bookmark_id,
+    int preference_index,
     std::string id,
-    AddMappingCallback callback) {
+    UpdateMappingCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   // profile_ is null on shutdown.
-  std::move(callback).Run(profile_, true, GetDataMappingUrl(id));
+  bool success = false;
+  if (profile_) {
+    std::string url = MakeDataUrl(PATH_MAPPING_URL, id);
+    if (bookmark_id > 0) {
+      success =
+          VivaldiBookmarksAPI::SetBookmarkThumbnail(profile_, bookmark_id, url);
+    } else {
+      profile_->GetPrefs()->SetString(kDataMappingPrefs[preference_index], url);
+      success = true;
+    }
+  }
+  if (!success) {
+    sequence_task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&VivaldiDataSourcesAPI::RemoveDataUrlOnFileThread,
+                       this, PATH_MAPPING_URL, std::move(id)));
+  }
+  std::move(callback).Run(success);
 }
 
 // static
@@ -422,107 +464,129 @@ void VivaldiDataSourcesAPI::OnUrlChange(
 void VivaldiDataSourcesAPI::OnUrlChange(const std::string& old_url,
                                         const std::string& new_url) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  UrlKind old_kind;
   std::string old_id;
-  if (!GetDataMappingId(old_url, &old_id))
+  if (!ParseDataUrl(old_url, &old_kind, &old_id))
     return;
+  UrlKind new_kind;
   std::string new_id;
-  if (GetDataMappingId(new_url, &new_id) && new_id == old_id)
-    return;
+  if (ParseDataUrl(new_url, &new_kind, &new_id)) {
+    if (new_kind == old_kind && new_id == old_id)
+      return;
+  }
 
   sequence_task_runner_->PostTask(
       FROM_HERE,
-      base::BindOnce(&VivaldiDataSourcesAPI::RemoveMappingOnFileThread,
-                     this, std::move(old_id)));
+      base::BindOnce(&VivaldiDataSourcesAPI::RemoveDataUrlOnFileThread, this,
+                     old_kind, std::move(old_id)));
 }
 
-void VivaldiDataSourcesAPI::RemoveMappingOnFileThread(std::string id) {
-  if (!id_to_file_map_.erase(id)) {
-    LOG(WARNING) << "Data mapping URL with unknown id - " << id;
-    return;
-  }
-  int64_t bookmark_id;
-  if (!base::StringToInt64(id, &bookmark_id)) {
-    // If id starts with digits, StringToInt64 sets bookmark_id to number that
-    // it was able to extract before returning false.
-    bookmark_id = 0;
-  }
-
+void VivaldiDataSourcesAPI::RemoveDataUrlOnFileThread(UrlKind url_kind,
+                                                      std::string id) {
   base::PostTaskWithTraits(
       FROM_HERE, {content::BrowserThread::IO},
-      base::BindOnce(&VivaldiDataSourcesAPI::ClearCacheOnIOThread,
-                     this, std::move(id)));
-  SaveMappingsOnFileThread();
+      base::BindOnce(&VivaldiDataSourcesAPI::ClearCacheOnIOThread, this,
+                     url_kind, id));
 
-  // Remove the captured thumbnail file if any
-  if (bookmark_id) {
-    base::DeleteFile(GetBookmarkThumbnailPath(bookmark_id), false);
+  if (url_kind == THUMBNAIL_URL) {
+    if (!base::DeleteFile(GetThumbnailPath(id), false)) {
+      LOG(WARNING) << "Failed to remove thumbnail file "
+                   << GetThumbnailPath(id);
+    }
+  } else {
+    DCHECK(url_kind == PATH_MAPPING_URL);
+    if (!path_id_map_.erase(id)) {
+      LOG(WARNING) << "Path mapping URL with unknown id - " << id;
+    } else {
+      SaveMappingsOnFileThread();
+    }
   }
 }
 
 void VivaldiDataSourcesAPI::SetCacheOnIOThread(
-    std::string id,
+    UrlKind url_kind, std::string id,
     scoped_refptr<base::RefCountedMemory> data) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   DCHECK(data);
-  io_thread_data_cache_[id] = std::move(data);
+  io_thread_data_cache_[url_kind][id] = std::move(data);
 }
 
-void VivaldiDataSourcesAPI::ClearCacheOnIOThread(std::string id) {
+void VivaldiDataSourcesAPI::ClearCacheOnIOThread(UrlKind url_kind,
+                                                 std::string id) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-  io_thread_data_cache_.erase(id);
+  io_thread_data_cache_[url_kind].erase(id);
 }
 
 void VivaldiDataSourcesAPI::GetDataForId(
-    const std::string& id,
+    UrlKind url_kind,
+    std::string id,
     content::URLDataSource::GotDataCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
-  auto it = io_thread_data_cache_.find(id);
-  if (it != io_thread_data_cache_.end()) {
+  if (url_kind == PATH_MAPPING_URL) {
+    if (isOldFormatThumbnailId(id)) {
+      url_kind = THUMBNAIL_URL;
+      id += ".png";
+    }
+  } else {
+    DCHECK(url_kind == THUMBNAIL_URL);
+  }
+
+  auto it = io_thread_data_cache_[url_kind].find(id);
+  if (it != io_thread_data_cache_[url_kind].end()) {
     callback.Run(it->second);
     return;
   }
 
   sequence_task_runner_->PostTask(
       FROM_HERE,
-      base::BindOnce(&VivaldiDataSourcesAPI::GetDataForIdOnFileThread, this, id,
-                     std::move(callback)));
+      base::BindOnce(&VivaldiDataSourcesAPI::GetDataForIdOnFileThread, this,
+                     url_kind, std::move(id), std::move(callback)));
 }
 
 void VivaldiDataSourcesAPI::GetDataForIdOnFileThread(
-    std::string id,
+    UrlKind url_kind, std::string id,
     content::URLDataSource::GotDataCallback callback) {
   DCHECK(sequence_task_runner_->RunsTasksInCurrentSequence());
 
-  // It is not an error if id is not in id_to_file_map_. The IO thread may not
-  // be aware yet that the id was removed when it called this.
-  scoped_refptr<base::RefCountedMemory> data;
+  base::FilePath file_path;
+  if (url_kind == THUMBNAIL_URL) {
+    file_path = GetThumbnailPath(id);
+  } else {
+    DCHECK(url_kind == PATH_MAPPING_URL);
 
-  auto it = id_to_file_map_.find(id);
-  if (it != id_to_file_map_.end()) {
-    base::FilePath file_path = it->second.GetFilePath();
-    if (!file_path.empty()) {
+    // It is not an error if id is not in the map. The IO thread may not
+    // be aware yet that the id was removed when it called this.
+    auto it = path_id_map_.find(id);
+    if (it != path_id_map_.end()) {
+      file_path = it->second;
       if (!file_path.IsAbsolute()) {
         file_path = user_data_dir_.Append(file_path);
       }
-      data = ReadFileOnBlockingThread(file_path);
     }
+  }
+
+  scoped_refptr<base::RefCountedMemory> data;
+  if (!file_path.empty()) {
+    data = ReadFileOnBlockingThread(file_path);
   }
 
   base::PostTaskWithTraits(
       FROM_HERE, {content::BrowserThread::IO},
       base::BindOnce(&VivaldiDataSourcesAPI::FinishGetDataForIdOnIOThread, this,
-                     std::move(id), std::move(data), std::move(callback)));
+                     url_kind, std::move(id), std::move(data),
+                     std::move(callback)));
 }
 
 void VivaldiDataSourcesAPI::FinishGetDataForIdOnIOThread(
+    UrlKind url_kind,
     std::string id,
     scoped_refptr<base::RefCountedMemory> data,
     content::URLDataSource::GotDataCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
   if (data) {
-    SetCacheOnIOThread(std::move(id), data);
+    SetCacheOnIOThread(url_kind, std::move(id), data);
   }
   callback.Run(std::move(data));
 }
@@ -563,7 +627,8 @@ void VivaldiDataSourcesAPI::AddImageDataForBookmarkOnFileThread(
   DCHECK(sequence_task_runner_->RunsTasksInCurrentSequence());
 
   bool success = false;
-  base::FilePath path = GetBookmarkThumbnailPath(bookmark_id);
+  std::string id = base::GenerateGUID() + ".png";
+  base::FilePath path = GetThumbnailPath(id);
   base::FilePath dir = path.DirName();
   if (!base::DirectoryExists(dir)) {
     LOG(INFO) << "Creating thumbnail directory: " << path.value();
@@ -575,30 +640,43 @@ void VivaldiDataSourcesAPI::AddImageDataForBookmarkOnFileThread(
   if (bytes < 0 || static_cast<size_t>(bytes) != png_data->size()) {
     LOG(ERROR) << "Error writing to file: " << path.value();
   } else {
-    // We use the relative path in the mapping file.
-    base::FilePath relative_path =
-        base::FilePath(kThumbnailDirectory).Append(path.BaseName());
-
-    std::string id = std::to_string(bookmark_id);
-
-    // If the old mapping for bookmark captured thumbnail exists, it should
-    // match the new one.  But the file may be editted etc. so we do not check
-    // and always overwrite it.
-    id_to_file_map_[id] = DataSourceItem(std::move(relative_path));
     success = true;
 
     // Populate the cache
     base::PostTaskWithTraits(
         FROM_HERE, {content::BrowserThread::IO},
         base::BindOnce(&VivaldiDataSourcesAPI::SetCacheOnIOThread, this,
-                       std::move(id), std::move(png_data)));
+                       THUMBNAIL_URL, id, std::move(png_data)));
   }
 
   base::PostTaskWithTraits(
       FROM_HERE, {content::BrowserThread::UI},
-      base::BindOnce(std::move(ui_thread_callback), success));
+      base::BindOnce(
+          &VivaldiDataSourcesAPI::FinishAddImageDataForBookmarkOnUIThread, this,
+          std::move(ui_thread_callback), success, bookmark_id,
+          std::move(id)));
+}
 
-  SaveMappingsOnFileThread();
+void VivaldiDataSourcesAPI::FinishAddImageDataForBookmarkOnUIThread(
+    AddBookmarkImageCallback ui_thread_callback,
+    bool success,
+    int64_t bookmark_id, std::string id) {
+  if (success) {
+    if (!profile_) {
+      success = false;
+    } else  {
+      std::string url = MakeDataUrl(THUMBNAIL_URL, id);
+      success =
+          VivaldiBookmarksAPI::SetBookmarkThumbnail(profile_, bookmark_id, url);
+    }
+    if (!success) {
+      sequence_task_runner_->PostTask(
+          FROM_HERE,
+          base::BindOnce(&VivaldiDataSourcesAPI::RemoveDataUrlOnFileThread,
+                         this, THUMBNAIL_URL, id));
+    }
+  }
+  std::move(ui_thread_callback).Run(success);
 }
 
 // static

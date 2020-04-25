@@ -53,7 +53,7 @@
 <translation id="2909946352844186028">Высветлелась змена сеткі.</translation>
 <translation id="2991571918955627853">Сайт <ph name="SITE" /> выкарыстует механізм HSTS. Адчыніць сайт нельга. Збой мог здарыцца з-за сеткавай памылкі або дзейнасцю злачынцаў. Хучэй за ўсе сайт безде працаваць праз некаторы час.</translation>
 <translation id="3005723025932146533">Паказаць захаваную копію</translation>
-<translation id="301521992641321250">Атамацічна заблакавана</translation>
+<translation id="301521992641321250">Атаматычна блакавана</translation>
 <translation id="3109728660330352905">У Вас няма правоў для прагляду гэтай старонкі.</translation>
 <translation id="3154506275960390542">Старонка мае форму, якая можа не абаронена. Дасланыя вамі дадзеныя могуць праглядацца трэцімі асобамі пад час перадачы, або злачынцы могуць змяніць дадзеныя на шляху да сэрвэра.</translation>
 <translation id="3176929007561373547">Спраўдзіце налады proxy-сэрвэру або папрасіце кіраўніка сеткі
@@ -97,7 +97,7 @@
 <translation id="4506599922270137252">Зазваніце кіраўніку кампутара</translation>
 <translation id="4522570452068850558">Болей</translation>
 <translation id="4552089082226364758">Флэш</translation>
-<translation id="4558551763791394412">Паспрабуй вылучыць пашырэнні.</translation>
+<translation id="4558551763791394412">Паспрабуце вылучыць пашырэнні.</translation>
 <translation id="4592951414987517459">Твае пдалучэнне з <ph name="DOMAIN" /> шыфравана з дапамогай сучасных шыфраў.</translation>
 <translation id="4690462567478992370">Не карыстаць гэты серціфікат</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" />   <ph name="SENTENCE2" /></translation>
@@ -150,7 +150,6 @@
 <translation id="6328639280570009161">Паспрабуйце вылучыць сеткаваю абарону</translation>
 <translation id="6328786501058569169">Гэты сайт з’яўляецца падробкай</translation>
 <translation id="6358450015545214790">Што гэта азначае?</translation>
-<translation id="6417515091412812850">Не атрымліваецца спраўдзіць , серціфікат дзейнічае ці скасаваны.</translation>
 <translation id="6433595998831338502">Сайт <ph name="HOST_NAME" /> адхіліў запыт на падлучэнне.</translation>
 <translation id="6447842834002726250">Cookie - файлы</translation>
 <translation id="6451458296329894277">Адправіць зноў Дадзеныя формы</translation>
@@ -205,7 +204,6 @@
 <translation id="8332188693563227489">Доступ к <ph name="HOST_NAME" /> забаронены</translation>
 <translation id="8498891568109133222">Хост <ph name="HOST_NAME" /> не адказйвае занадта доўга.</translation>
 <translation id="8503813439785031346">Імя карыстальніка</translation>
-<translation id="859285277496340001">У серціфікаце не пазначаны механізм спраўджання ці быў ён скасаваны.</translation>
 <translation id="8703575177326907206">Твае падлучэнне да <ph name="DOMAIN" /> не шыфраванае.</translation>
 <translation id="8740359287975076522">Не атрымліваецца знайсці &lt;abbr id="dnsDefinition"&gt;DNS-адрас&lt;/abbr&gt; сайту <ph name="HOST_NAME" /> . Выконваецца дзіягносціка.</translation>
 <translation id="9001074447101275817">Proxy <ph name="DOMAIN" /> патрабуе імя карыстальніка і пароль.</translation>

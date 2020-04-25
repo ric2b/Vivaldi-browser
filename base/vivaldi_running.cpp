@@ -76,13 +76,6 @@ void SetTabDragInProgress(bool tab_drag_in_progress) {
   g_tab_drag_in_progress = tab_drag_in_progress;
 }
 
-#if defined(OS_MACOSX)
-bool ShouldForceGpuDecodeOnMac() {
-  base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
-  return !cmd_line->HasSwitch(switches::kDontForceGpuDecodeMac);
-}
-#endif
-
 void CommandLineAppendSwitchNoDup(base::CommandLine* const cmd_line,
                                   const std::string& switch_string) {
   if (!cmd_line->HasSwitch(switch_string))

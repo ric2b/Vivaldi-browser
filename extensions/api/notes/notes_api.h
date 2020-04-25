@@ -46,7 +46,7 @@ class NotesAPI : public BrowserContextKeyedAPI,
   static const bool kServiceRedirectedInIncognito = true;
 };
 
-class NotesGetFunction : public UIThreadExtensionFunction {
+class NotesGetFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("notes.get", NOTES_GET)
   NotesGetFunction() = default;
@@ -57,7 +57,7 @@ class NotesGetFunction : public UIThreadExtensionFunction {
   ExtensionFunction::ResponseAction Run() override;
 };
 
-class NotesGetTreeFunction : public UIThreadExtensionFunction,
+class NotesGetTreeFunction : public ExtensionFunction,
                              public ::vivaldi::NotesModelObserver {
  public:
   DECLARE_EXTENSION_FUNCTION("notes.getTree", NOTES_GETTREE)
@@ -76,7 +76,7 @@ class NotesGetTreeFunction : public UIThreadExtensionFunction,
   void SendGetTreeResponse(::vivaldi::Notes_Model* model);
 };
 
-class NotesMoveFunction : public UIThreadExtensionFunction {
+class NotesMoveFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("notes.move", NOTES_MOVE)
   NotesMoveFunction() = default;
@@ -87,7 +87,7 @@ class NotesMoveFunction : public UIThreadExtensionFunction {
   ExtensionFunction::ResponseAction Run() override;
 };
 
-class NotesSearchFunction : public UIThreadExtensionFunction {
+class NotesSearchFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("notes.search", NOTES_SEARCH)
   NotesSearchFunction() = default;
@@ -98,7 +98,7 @@ class NotesSearchFunction : public UIThreadExtensionFunction {
   ExtensionFunction::ResponseAction Run() override;
 };
 
-class NotesCreateFunction : public UIThreadExtensionFunction {
+class NotesCreateFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("notes.create", NOTES_CREATE)
   NotesCreateFunction() = default;
@@ -109,7 +109,7 @@ class NotesCreateFunction : public UIThreadExtensionFunction {
   ExtensionFunction::ResponseAction Run() override;
 };
 
-class NotesUpdateFunction : public UIThreadExtensionFunction {
+class NotesUpdateFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("notes.update", NOTES_UPDATE)
   NotesUpdateFunction() = default;
@@ -120,7 +120,7 @@ class NotesUpdateFunction : public UIThreadExtensionFunction {
   ExtensionFunction::ResponseAction Run() override;
 };
 
-class NotesRemoveFunction : public UIThreadExtensionFunction {
+class NotesRemoveFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("notes.remove", NOTES_REMOVE)
   NotesRemoveFunction() = default;
@@ -131,7 +131,7 @@ class NotesRemoveFunction : public UIThreadExtensionFunction {
   ExtensionFunction::ResponseAction Run() override;
 };
 
-class NotesEmptyTrashFunction : public UIThreadExtensionFunction {
+class NotesEmptyTrashFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("notes.emptyTrash", NOTES_EMPTYTRASH)
   NotesEmptyTrashFunction() = default;

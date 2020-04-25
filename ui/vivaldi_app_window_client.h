@@ -35,7 +35,7 @@ class VivaldiAppWindowClient {
 
   VivaldiNativeAppWindow* CreateNativeAppWindow(
     VivaldiBrowserWindow* window,
-    extensions::AppWindow::CreateParams* params);
+    const extensions::AppWindow::CreateParams& params);
 
 private:
   friend struct base::DefaultSingletonTraits<VivaldiAppWindowClient>;

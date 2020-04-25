@@ -1,0 +1,135 @@
+//
+// Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved.
+//
+
+[
+  {
+    "namespace": "contextMenu",
+    "description": "Use the <code>vivaldi.contextMenu</code> API to show a popup-menu.",
+    "types": [
+      {
+        "id": "Rect",
+        "type": "object",
+        "description": "Position and size of item that opens menu",
+        "properties": {
+          "x": {"type": "number", "description": "Left position of item that opens menu, screen coordinates."},
+          "y": {"type": "number", "description": "Top position of item that opens menu, screen coordinates."},
+          "width": {"type": "number", "description": "Width of item that opens menu."},
+          "height": {"type": "number", "description": "Height of item that opens menu."}
+        }
+      },
+      {
+        "id": "Origin",
+        "type": "string",
+        "description": "Menu location with respect to rectangle. With pointer the size and height is ignored.",
+        "enum": ["pointer", "topLeft", "bottomLeft", "topRight", "bottomRight"]
+      },
+      {
+        "id": "ExpandType",
+        "type": "string",
+        "description": "Defines functionality to set up on the C++ side. One or more menu items may be created.",
+        "enum": ["pwa"]
+      },
+      {
+        "id": "MenuItem",
+        "type": "object",
+        "description": "One menu item.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Text in item."
+          },
+          "id": {
+            "type": "integer",
+            "description": "The unique id of item."
+          },
+          "items": {
+            "type": "array",
+            "optional": true,
+            "items": {"$ref": "MenuItem"},
+            "description": "Child menu items."
+          },
+          "type": {
+            "type": "string",
+            "optional": false,
+            "description": "'normal' or 'checkbox'. Defaults to 'normal'."
+          },
+          "radiogroup": {
+            "type": "integer",
+            "optional": true,
+            "description": "The radiobutton group this item belongs to."
+          },
+          "checked": {
+            "type": "boolean",
+            "optional": true,
+            "description": "true if the checkbox is checked, otherwise false. Only applies for type='checkbox'."
+          },
+          "disabled": {
+            "type": "boolean",
+            "optional": true,
+            "description": "true if the item should appear as grayed out."
+          },
+          "emphasized": {
+            "type": "boolean",
+            "optional": true,
+            "description": "true if the item should appear in an emphasized style (typically bold)."
+          },
+          "shortcut": {
+            "type": "string",
+            "optional": true,
+            "description": "String which illustrates a shortcut. The presence of a string will not execute menu action."
+          },
+          "url": {
+            "type": "string",
+            "optional": true,
+            "description": "Url that can be used to determine a corresponding icon."
+          },
+          "parameter": {
+            "type": "string",
+            "optional": true,
+            "description": "Parameter to command. Sent back unaltered."
+          },
+          "expand": {
+            "$ref": "ExpandType",
+            "optional": true,
+            "description": "Specifies an element to expand in C++ to one or more elements. How it is expanded is implementation specific."
+          },
+          "index": {
+            "type": "integer",
+            "optional": true,
+            "description": "Index in menu list. Can only be used insert into an existing list"
+          },
+          "icon": {
+            "type": "string",
+            "optional": true,
+            "description": "Icon in PNG format encoded as base64."
+          }
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "show",
+        "type": "function",
+        "description": "Shows a new context menu.",
+        "parameters": [
+          {
+            "name": "properties",
+            "type": "object",
+            "properties": {
+              "items": { "type": "array", "items": {"$ref": "MenuItem"}, "description": "List of menu entries."},
+              "rect": {"$ref": "Rect"},
+              "origin": {"$ref": "Origin"}
+            }
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": false,
+            "description": "Notifies caller that menu has closed."
+          }
+        ]
+      }
+    ]
+  }
+]

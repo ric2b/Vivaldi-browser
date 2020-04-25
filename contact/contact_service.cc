@@ -26,6 +26,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/task_runner_util.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_checker.h"
@@ -124,7 +125,7 @@ bool ContactService::Init(
     backend_task_runner_ = thread_->task_runner();
   } else {
     backend_task_runner_ = base::CreateSequencedTaskRunnerWithTraits(
-        base::TaskTraits(base::TaskPriority::USER_BLOCKING,
+        base::TaskTraits(base::ThreadPool(), base::TaskPriority::USER_BLOCKING,
                          base::TaskShutdownBehavior::BLOCK_SHUTDOWN,
                          base::MayBlock(), base::WithBaseSyncPrimitives()));
   }

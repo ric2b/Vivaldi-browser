@@ -22,11 +22,10 @@ VivaldiAppWindowDesktopNativeWidgetAuraWin::
     ~VivaldiAppWindowDesktopNativeWidgetAuraWin() {}
 
 void VivaldiAppWindowDesktopNativeWidgetAuraWin::InitNativeWidget(
-    const views::Widget::InitParams& params) {
-  views::Widget::InitParams modified_params = params;
+    views::Widget::InitParams params) {
   tree_host_ = new VivaldiAppWindowDesktopWindowTreeHostWin(app_window_, this);
-  modified_params.desktop_window_tree_host = tree_host_;
-  DesktopNativeWidgetAura::InitNativeWidget(modified_params);
+  params.desktop_window_tree_host = tree_host_;
+  DesktopNativeWidgetAura::InitNativeWidget(std::move(params));
 }
 
 void VivaldiAppWindowDesktopNativeWidgetAuraWin::Maximize() {

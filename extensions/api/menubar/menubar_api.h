@@ -21,7 +21,7 @@ class MenubarAPI {
                               const std::string& parameter = "");
 };
 
-class MenubarSetupFunction : public UIThreadExtensionFunction {
+class MenubarSetupFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("menubar.setup", MENUBAR_SETUP)
   MenubarSetupFunction() = default;
@@ -29,7 +29,7 @@ class MenubarSetupFunction : public UIThreadExtensionFunction {
  protected:
   ~MenubarSetupFunction() override = default;
 
-  // UIThreadExtensionFunction
+  // ExtensionFunction
   ExtensionFunction::ResponseAction Run() override;
 
  private:

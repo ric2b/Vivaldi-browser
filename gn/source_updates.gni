@@ -55,11 +55,20 @@ update_target("//components/sessions:shared") {
   ]
 }
 
+
 if (is_win) {
   update_target("//rlz:rlz_lib") {
     sources -= [
         "lib/financial_ping.cc",
         "lib/rlz_lib.cc",
+    ]
+  }
+  update_template_instance("//gpu/command_buffer/service:gles2_sources") {
+    if (!defined(jumbo_excluded_sources)) {
+      jumbo_excluded_sources = []
+    }
+    jumbo_excluded_sources += [
+      "shared_context_state.cc",
     ]
   }
 }

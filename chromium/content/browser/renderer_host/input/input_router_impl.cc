@@ -475,6 +475,7 @@ void InputRouterImpl::OnMouseWheelEventAck(
     InputEventAckSource ack_source,
     InputEventAckState ack_result) {
   disposition_handler_->OnWheelEventAck(event, ack_source, ack_result);
+  gesture_event_queue_.OnWheelEventAck(event, ack_source, ack_result);
 }
 
 void InputRouterImpl::ForwardGestureEventWithLatencyInfo(
@@ -691,9 +692,8 @@ void InputRouterImpl::MouseWheelEventHandled(
     } while (false);
   }
 
-  wheel_event_queue_.ProcessMouseWheelAck(source, state, event.latency);
-  touchpad_pinch_event_queue_.ProcessMouseWheelAck(source, state,
-                                                   event.latency);
+  wheel_event_queue_.ProcessMouseWheelAck(source, state, event);
+  touchpad_pinch_event_queue_.ProcessMouseWheelAck(source, state, event);
 }
 
 void InputRouterImpl::OnHasTouchEventHandlers(bool has_handlers) {
@@ -710,6 +710,10 @@ void InputRouterImpl::WaitForInputProcessed(base::OnceClosure callback) {
   // queues are flushed before issuing this message. This will be done in a
   // follow-up. https://crbug.com/902446.
   client_->GetWidgetInputHandler()->WaitForInputProcessed(std::move(callback));
+}
+
+void InputRouterImpl::FlushTouchEventQueue() {
+  touch_event_queue_.FlushQueue();
 }
 
 void InputRouterImpl::ForceSetTouchActionAuto() {

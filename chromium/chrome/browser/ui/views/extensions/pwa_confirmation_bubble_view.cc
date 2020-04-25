@@ -27,6 +27,9 @@
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/window/dialog_client_view.h"
 
+#include "ui/vivaldi_browser_window.h"
+#include "ui/vivaldi_native_app_window_views.h"
+
 namespace {
 
 PWAConfirmationBubbleView* g_bubble_ = nullptr;
@@ -59,7 +62,7 @@ std::unique_ptr<views::Label> CreateOriginLabel(const url::Origin& origin) {
   auto origin_label = std::make_unique<views::Label>(
       FormatOriginForSecurityDisplay(
           origin, url_formatter::SchemeDisplay::OMIT_HTTP_AND_HTTPS),
-      CONTEXT_BODY_TEXT_SMALL, STYLE_SECONDARY);
+      CONTEXT_BODY_TEXT_SMALL, views::style::STYLE_SECONDARY);
 
   origin_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
 
@@ -84,7 +87,7 @@ PWAConfirmationBubbleView::PWAConfirmationBubbleView(
     views::Button* highlight_button,
     std::unique_ptr<WebApplicationInfo> web_app_info,
     chrome::AppInstallationAcceptanceCallback callback)
-    : LocationBarBubbleDelegateView(anchor_view, gfx::Point(), nullptr),
+    : LocationBarBubbleDelegateView(anchor_view, nullptr),
       web_app_info_(std::move(web_app_info)),
       callback_(std::move(callback)) {
   DCHECK(web_app_info_);
@@ -175,6 +178,21 @@ void ShowPWAInstallBubble(content::WebContents* web_contents,
   if (!browser)
     return;
 
+  if (browser->is_vivaldi()) {
+    VivaldiBrowserWindow* window =
+        VivaldiBrowserWindow::GetBrowserWindowForBrowser(browser);
+    VivaldiNativeAppWindowViews* native_view =
+        static_cast<VivaldiNativeAppWindowViews*>(window->GetBaseWindow());
+
+    g_bubble_ = new PWAConfirmationBubbleView(native_view->web_view(), nullptr,
+                                              std::move(web_app_info),
+                                              std::move(callback));
+
+    g_bubble_->SetArrow(views::BubbleBorder::Arrow::FLOAT);
+    g_bubble_->set_parent_window(native_view->GetNativeView());
+
+    views::BubbleDialogDelegateView::CreateBubble(g_bubble_)->Show();
+  } else {
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
   views::View* anchor_view =
       browser_view->toolbar_button_provider()->GetAnchorView();
@@ -190,6 +208,7 @@ void ShowPWAInstallBubble(content::WebContents* web_contents,
 
   icon->Update();
   DCHECK(icon->GetVisible());
+  }
 }
 
 void SetAutoAcceptPWAInstallConfirmationForTesting(bool auto_accept) {

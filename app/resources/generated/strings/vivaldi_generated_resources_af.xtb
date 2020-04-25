@@ -25,6 +25,7 @@
 <translation id="1603914832182249871">(Privaat)</translation>
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1635033183663317347">Deur u voog geïnstalleer.</translation>
+<translation id="1706625117072057435">Zoemvlakke</translation>
 <translation id="1708338024780164500">(Onaktief)</translation>
 <translation id="1723824996674794290">&amp;Nuwe venster</translation>
 <translation id="1729533290416704613">Dit beheer ook die blad wat vertoon word wanneer u vanuit die adresveld soek.</translation>
@@ -33,6 +34,8 @@
 <translation id="1850508293116537636">Draai &amp;kloksgewys</translation>
 <translation id="1901303067676059328">Kies &amp;alles</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
+<translation id="1963227389609234879">Verwyder Alles</translation>
+<translation id="1994173015038366702">Werfbronadres</translation>
 <translation id="2050339315714019657">Portret</translation>
 <translation id="2076269580855484719">Versteek hierdie inprop</translation>
 <translation id="2087822576218954668">Druk: <ph name="PRINT_NAME" /></translation>
@@ -45,6 +48,7 @@
 <translation id="2218515861914035131">Plak as skoonteks</translation>
 <translation id="2249605167705922988">bv. 1-5, 8, 11-13</translation>
 <translation id="2263497240924215535">(Gedeaktiveer)</translation>
+<translation id="2277255602909579701">Alle koekies en werfdata</translation>
 <translation id="2280486287150724112">Regterkantlyn</translation>
 <translation id="2282146716419988068">GVE-proses</translation>
 <translation id="2301382460326681002">Uitbreidingstamgids is ongeldig.</translation>
@@ -66,6 +70,7 @@
 <translation id="2482878487686419369">Kennisgewings</translation>
 <translation id="2509495747794740764">Die waarde van die skaal moet ’n getal tussen 10 en 200 wees.</translation>
 <translation id="253557089021624350">Keepalive-telling</translation>
+<translation id="2546283357679194313">Koekies en werfdata</translation>
 <translation id="2550212893339833758">Wisselgeheue</translation>
 <translation id="2580924999637585241">Totaal: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="2662876636500006917">Chrome-webwinkel</translation>
@@ -73,15 +78,18 @@
 <translation id="2721037002783622288">&amp;Deursoek <ph name="SEARCH_ENGINE" /> vir beeld</translation>
 <translation id="2785873697295365461">Lêerbeskrywers</translation>
 <translation id="2809586584051668049">en nog <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
+<translation id="2812989263793994277">Toon geen beelde</translation>
 <translation id="2850541429955027218">Voeg tema toe</translation>
 <translation id="2861941300086904918">Eie Kliënt-sekuriteitsbestuurder</translation>
 <translation id="2889064240420137087">Open skakel met…</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> kon nie met hierdie drukker kommunikeer nie. Maak seker die drukker is ingeprop en probeer weer.</translation>
+<translation id="2913331724188855103">Laat werwe toe om koekiedata te bewaar en te lees (aanbeveel)</translation>
 <translation id="2932883381142163287">Rapporteer misbruik</translation>
 <translation id="2941112035454246133">Laag</translation>
 <translation id="2972581237482394796">&amp;Herdoen</translation>
 <translation id="299483336428448530">Deur u ouer geïnstalleer.</translation>
 <translation id="3012631534724231212">(iframe)</translation>
+<translation id="3013291976881901233">MIDI-toestelle</translation>
 <translation id="302620147503052030">Toon knop</translation>
 <translation id="3036546437875325427">Aktiveer Flash</translation>
 <translation id="3046910703532196514">Webblad, Volledig</translation>
@@ -111,12 +119,14 @@
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; wil ’n drukker &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; met ’n groep wat u besit, deel: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Indien u aanvaar sal alle groeplede na daardie drukker kan afdruk.</translation>
 <translation id="3587482841069643663">Alles</translation>
 <translation id="3627588569887975815">Open skakel in &amp;privaatvenster</translation>
+<translation id="3668823961463113931">Hanteerders</translation>
 <translation id="3678156199662914018">Uitbreiding: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> Skermdeelversoek</translation>
 <translation id="3725367690636977613">bladsye</translation>
 <translation id="3727187387656390258">Inspekteer opwip</translation>
 <translation id="3744111561329211289">Agtergrondsinchronisering</translation>
 <translation id="3797900183766075808">&amp;Deursoek <ph name="SEARCH_ENGINE" /> vir “<ph name="SEARCH_TERMS" />”</translation>
+<translation id="3800806661949714323">Toon alles (aanbeveel)</translation>
 <translation id="385051799172605136">Terug</translation>
 <translation id="3899879303189199559">Vanlyn vir meer as ’n jaar</translation>
 <translation id="3905761538810670789">Repareer toep</translation>
@@ -125,6 +135,7 @@
 <translation id="3927932062596804919">Weier</translation>
 <translation id="3936390757709632190">&amp;Open oudio in nuwe oortjie</translation>
 <translation id="3943582379552582368">&amp;Terug</translation>
+<translation id="3955193568934677022">Laat werwe toe om beveiligde inhoud af te speel (aanbeveel)</translation>
 <translation id="3979395879372752341">Nuwe uitbreiding toegevoeg (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="407520071244661467">Skaal</translation>
@@ -135,10 +146,12 @@
 <translation id="4091434297613116013">velle papier</translation>
 <translation id="4096508467498758490">Deaktiveer uitbreidings in ontwikkelaarsmodus</translation>
 <translation id="4100839878934973028">’n Ander program op u rekenaar het ’n toep toegevoeg wat Vivaldi se werkswyse kan verander.</translation>
+<translation id="4115080753528843955">Sommige inhoudsdienste gebruik unieke identifiseerders om toegang tot beveiligde inhoud te verleen</translation>
 <translation id="4130207949184424187">Hierdie uitbreiding het die blad wat vertoon word wanneer u vanuit die adresbalk soek, verander.</translation>
 <translation id="4131410914670010031">Swart/wit</translation>
 <translation id="4176463684765177261">Gedeaktiveer</translation>
 <translation id="4200983522494130825">Nuwe &amp;oortjie</translation>
+<translation id="4278390842282768270">Toegelaat</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />kB (<ph name="NUM_KILOBYTES_LIVE" />kB live)</translation>
 <translation id="4345587454538109430">Konfigureer…</translation>
 <translation id="4348766275249686434">Versamel foute</translation>
@@ -146,6 +159,7 @@
 <translation id="4384652540891215547">Aktiveer die uitbreiding</translation>
 <translation id="4394049700291259645">Deaktiveer</translation>
 <translation id="4409697491990005945">Kantlyne</translation>
+<translation id="4434045419905280838">Opwippe en herleidings</translation>
 <translation id="4552089082226364758">Flash</translation>
 <translation id="4579581181964204535">Kan nie <ph name="HOST_NAME" /> send nie.</translation>
 <translation id="4593021220803146968">&amp;Gaan na <ph name="URL" /></translation>
@@ -165,8 +179,10 @@
 <translation id="4988526792673242964">Bladsye</translation>
 <translation id="49896407730300355">Draai a&amp;ntikloksgewys</translation>
 <translation id="4989966318180235467">Inspekteer &amp;agtergrondblad</translation>
+<translation id="5000922062037820727">Versper (aanbeveel)</translation>
 <translation id="5027562294707732951">Voeg uitbreiding toe</translation>
-<translation id="5039804452771397117">Staan Toe</translation>
+<translation id="5039804452771397117">Laat Toe</translation>
+<translation id="5063480226653192405">Gebruik</translation>
 <translation id="5143374789336132547">Die uitbreiding “<ph name="EXTENSION_NAME" />” het die blad wat vertoon word wanneer u die Tuis-knop klik, verander.</translation>
 <translation id="5154108062446123722">Gevorderde instellings vir <ph name="PRINTING_DESTINATION" /></translation>
 <translation id="5233019165164992427">NaCl-ontfoutingspoort</translation>
@@ -184,6 +200,7 @@
 <translation id="5431318178759467895">Kleur</translation>
 <translation id="5483785310822538350">Herroep lêer- en toesteltoegang</translation>
 <translation id="5485102783864353244">Voeg toep toe</translation>
+<translation id="5487521232677179737">Wis data</translation>
 <translation id="5521078259930077036">Is dit die tuisblad wat u verwag het?</translation>
 <translation id="5542132724887566711">Profiel</translation>
 <translation id="5556459405103347317">Herlaai</translation>
@@ -191,6 +208,7 @@
 <translation id="5623842676595125836">Log</translation>
 <translation id="5627086634964711283">Dit beheer ook die blad wat vertoon word wanneer u die Tuis-knop klik.</translation>
 <translation id="5649053991847567735">Outomatiese aflaaie</translation>
+<translation id="5677928146339483299">Versper</translation>
 <translation id="5689516760719285838">Ligging</translation>
 <translation id="5707185214361380026">Fout by laai van die uitbreiding vanaf:</translation>
 <translation id="5715711091495208045">Inpropmakelaar: <ph name="PLUGIN_NAME" /></translation>
@@ -198,13 +216,16 @@
 <translation id="5759728514498647443">Dokumente wat u d.m.v. <ph name="APP_NAME" /> laat afdruk kan deur <ph name="APP_NAME" /> gelees word.</translation>
 <translation id="5764483294734785780">Be&amp;waar oudio as…</translation>
 <translation id="5780973441651030252">Prosesprioriteit</translation>
+<translation id="5804241973901381774">Toestemmings</translation>
 <translation id="5828633471261496623">Druk tans af…</translation>
 <translation id="583281660410589416">Onbekend</translation>
 <translation id="5956585768868398362">Is dit die soekblad wat u verwag het?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> piek)</translation>
 <translation id="5965661248935608907">Dit beheer ook die blad wat vertoon word wanneer u die Tuis-knop klik of vanuit die adresveld soek.</translation>
 <translation id="5979421442488174909">&amp;Vertaal na <ph name="LANGUAGE" /></translation>
+<translation id="6011449291337289699">Wis werfdata</translation>
 <translation id="6042308850641462728">Nog</translation>
+<translation id="6059925163896151826">USB-toestelle</translation>
 <translation id="6082651258230788217">Toon in nutsbalk</translation>
 <translation id="6086846494333236931">Deur u administrateur geïnstalleer</translation>
 <translation id="6101226222197207147">Nuwe toep toegevoeg (<ph name="EXTENSION_NAME" />)</translation>
@@ -222,6 +243,7 @@
 <translation id="6295158916970320988">Alle werwe</translation>
 <translation id="6295855836753816081">Bewaar tans…</translation>
 <translation id="6308937455967653460">Bewaar &amp;skakel as…</translation>
+<translation id="6385543213911723544">Werwe kan koekiedata bewaar en lees</translation>
 <translation id="6398765197997659313">Verlaat volskerm</translation>
 <translation id="6406303162637086258">Simuleer blaaierherbegin</translation>
 <translation id="6445450263907939268">Indien u nie hierdie veranderinge wil hê nie, kan u u vorige instellings terugstel.</translation>
@@ -232,6 +254,7 @@
 <translation id="6508261954199872201">Toep: <ph name="APP_NAME" /></translation>
 <translation id="6518014396551869914">Kop&amp;ieer beeld</translation>
 <translation id="6550675742724504774">Opsies</translation>
+<translation id="6612358246767739896">Beveiligde inhoud</translation>
 <translation id="6639554308659482635">SQLite-geheue</translation>
 <translation id="6691936601825168937">&amp;Vorentoe</translation>
 <translation id="6798954102094737107">Inprop: <ph name="PLUGIN_NAME" /></translation>
@@ -245,12 +268,14 @@
 <translation id="6991665348624301627">Kies ’n bestemming</translation>
 <translation id="7005848115657603926">Ongeldige bladsyomvang, gebruik <ph name="EXAMPLE_PAGE_RANGE" /></translation>
 <translation id="7006634003215061422">Onderste kantlyn</translation>
+<translation id="7053983685419859001">Versper</translation>
 <translation id="708060913198414444">K&amp;opieer oudio-adres</translation>
 <translation id="7175353351958621980">Gelaai vanaf:</translation>
 <translation id="7287143125007575591">Toegang geweier.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Toon &amp;kontroles</translation>
 <translation id="7385854874724088939">Iets het skeefgeloop tydens afdruk.  Gaan u drukker na en probeer weer.</translation>
+<translation id="7423098979219808738">Vra eers</translation>
 <translation id="7427348830195639090">Agtergrondblad: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7453008956351770337">Deur hierdie drukker te kies kry die volgende uitbreiding toestemming vir toegang tot u drukker:</translation>
 <translation id="749028671485790643">Persoon <ph name="VALUE" /></translation>
@@ -258,11 +283,13 @@
 <translation id="7564847347806291057">Beëindig proses</translation>
 <translation id="7576690715254076113">Sorteer</translation>
 <translation id="7629827748548208700">Oortjie: <ph name="TAB_NAME" /></translation>
+<translation id="7661259717474717992">Laat werwe toe om koekiedata te bewaar en te lees</translation>
 <translation id="7663719505383602579">Ontvanger: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7685049629764448582">JavaScript-geheue</translation>
 <translation id="7701040980221191251">Geen</translation>
 <translation id="7704305437604973648">Taak</translation>
 <translation id="7710568461918838723">&amp;Send…</translation>
+<translation id="7751260505918304024">Toon alles</translation>
 <translation id="7760004034676677601">Is dit die beginblad wat u verwag het?</translation>
 <translation id="7771452384635174008">Uitleg</translation>
 <translation id="7782102568078991263">Geen verdere voorstele van Google</translation>
@@ -285,6 +312,7 @@ Sleutellêer: <ph name="KEY_FILE" />
 
 Bewaar u sleutellêer op ’n veilige plek. U benodig dit om nuwe weergawes van u uitbreiding te skep.</translation>
 <translation id="8004582292198964060">Blaaier</translation>
+<translation id="8018313076035239964">Beheer welke inligting webwerwe kan gebruik en welke inhoud dit aan u kan toon</translation>
 <translation id="8032244173881942855">Kan nie oortjie send nie.</translation>
 <translation id="8071432093239591881">Druk af as beeld</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
@@ -294,12 +322,15 @@ Bewaar u sleutellêer op ’n veilige plek. U benodig dit om nuwe weergawes van 
 <translation id="8270242299912238708">PDF-dokumente</translation>
 <translation id="8351419472474436977">Hierdie uitbreiding het beheer oor u instaanbedienerinstellings oorgeneem, wat beteken dat dit enigiets wat u aanlyn doen kan verander, breek of afluister. Indien u onseker is oor waarom dit gebeur het, wil u dit waarskynlik nie hê nie.</translation>
 <translation id="8382913212082956454">Kopieer &amp;e-posadres</translation>
+<translation id="8413385045638830869">Vra eers (aanbeveel)</translation>
 <translation id="8546306075665861288">Beeldkasgeheue</translation>
 <translation id="8569682776816196752">Geen bestemmings gevind</translation>
+<translation id="857943718398505171">Toegelaat (aanbeveel)</translation>
 <translation id="8584280235376696778">&amp;Open video in nuwe oortjie</translation>
 <translation id="8615618338313291042">Privaatmodustoep: <ph name="APP_NAME" /></translation>
 <translation id="862750493060684461">CSS-kasgeheue</translation>
 <translation id="8664389313780386848">&amp;Bekyk bladsybron</translation>
+<translation id="8708000541097332489">Wis by verlaat</translation>
 <translation id="8714838604780058252">Agtergrondgrafika</translation>
 <translation id="8757090071857742562">Kan nie werkskerm send nie. Bevestig dat u ingestem het op die porboodskap om u skerm te deel.</translation>
 <translation id="8774934320277480003">Boonste kantlyn</translation>
@@ -315,6 +346,7 @@ Bewaar u sleutellêer op ’n veilige plek. U benodig dit om nuwe weergawes van 
 <translation id="8915370057835397490">Laai tans voorstel</translation>
 <translation id="8916476537757519021">Privaatsubraam: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8962083179518285172">Versteek Details</translation>
+<translation id="8973557916016709913">Verwyder zoemvlak</translation>
 <translation id="8996526648899750015">Voeg rekening toe…</translation>
 <translation id="9003647077635673607">Staan toe op alle webwerwe</translation>
 <translation id="9056810968620647706">Geen treffers gevind.</translation>

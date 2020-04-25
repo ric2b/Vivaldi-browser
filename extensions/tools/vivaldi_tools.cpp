@@ -227,6 +227,17 @@ blink::WebFloatPoint FromUICoordinates(content::WebContents* web_contents,
   return blink::WebFloatPoint(p.x * zoom_factor, p.y * zoom_factor);
 }
 
+void FromUICoordinates(content::WebContents* web_contents, gfx::RectF* rect) {
+  // Account for the zoom factor in the UI.
+  zoom::ZoomController* zoom_controller =
+      zoom::ZoomController::FromWebContents(web_contents);
+  if (!zoom_controller)
+    return;
+  double zoom_factor =
+      content::ZoomLevelToZoomFactor(zoom_controller->GetZoomLevel());
+  rect->Scale(zoom_factor);
+}
+
 blink::WebFloatPoint ToUICoordinates(content::WebContents* web_contents,
                                      blink::WebFloatPoint p) {
   // Account for the zoom factor in the UI.

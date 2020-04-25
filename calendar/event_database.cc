@@ -61,6 +61,8 @@ bool EventDatabase::CreateEventTable() {
       "complete INTEGER,"
       "trash INTEGER,"
       "trash_time INTEGER, "
+      "sequence INTEGER DEFAULT 0 NOT NULL,"
+      "ical LONGVARCHAR,"
       "created INTEGER,"
       "last_modified INTEGER"
       ")");
@@ -75,9 +77,9 @@ EventID EventDatabase::CreateCalendarEvent(calendar::EventRow row) {
       "(calendar_id, alarm_id, title, description, "
       "start, end, all_day, is_recurring, start_recurring, end_recurring, "
       "location, url, etag, href, uid, event_type_id, task, complete, trash, "
-      "trash_time, created, last_modified) "
+      "trash_time, sequence, ical, created, last_modified) "
       "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
-      "?)"));
+      "?, ?, ?)"));
 
   statement.BindInt64(0, row.calendar_id());
   statement.BindInt64(1, row.alarm_id());
@@ -100,8 +102,10 @@ EventID EventDatabase::CreateCalendarEvent(calendar::EventRow row) {
   statement.BindInt(18, row.trash() ? 1 : 0);
   statement.BindInt64(19,
                       row.trash() ? base::Time().Now().ToInternalValue() : 0);
-  statement.BindInt64(20, base::Time().Now().ToInternalValue());
-  statement.BindInt64(21, base::Time().Now().ToInternalValue());
+  statement.BindInt64(20, row.sequence());
+  statement.BindString16(21, row.ical());
+  statement.BindInt64(22, base::Time().Now().ToInternalValue());
+  statement.BindInt64(23, base::Time().Now().ToInternalValue());
 
   if (!statement.Run()) {
     return 0;
@@ -144,7 +148,7 @@ bool EventDatabase::UpdateEventRow(const EventRow& event) {
         calendar_id=?, alarm_id=?, title=?, description=?, start=?, end=?, \
         all_day=?, is_recurring=?, start_recurring=?, end_recurring=?, \
         location=?, url=?, etag=?, href=?, uid=?, event_type_id=?, \
-        task=?, complete=?, trash=?, trash_time=? \
+        task=?, complete=?, trash=?, trash_time=?, sequence=?, ical=? \
         WHERE id=?"));
   statement.BindInt64(0, event.calendar_id());
   statement.BindInt64(1, event.alarm_id());
@@ -165,9 +169,11 @@ bool EventDatabase::UpdateEventRow(const EventRow& event) {
   statement.BindInt(16, event.task() ? 1 : 0);
   statement.BindInt(17, event.complete() ? 1 : 0);
   statement.BindInt(18, event.trash() ? 1 : 0);
-  statement.BindInt64(19, event.trash() ?
-    base::Time().Now().ToInternalValue() : 0);
-  statement.BindInt64(20, event.id());
+  statement.BindInt64(19,
+                      event.trash() ? base::Time().Now().ToInternalValue() : 0);
+  statement.BindInt(20, event.sequence());
+  statement.BindString16(21, event.ical());
+  statement.BindInt64(22, event.id());
 
   return statement.Run();
 }
@@ -196,6 +202,8 @@ void EventDatabase::FillEventRow(sql::Statement& s, EventRow* event) {
   int complete = s.ColumnInt(18);
   int trash = s.ColumnInt(19);
   base::Time trash_time = base::Time::FromInternalValue(s.ColumnInt64(20));
+  int sequence = s.ColumnInt(21);
+  base::string16 ical = s.ColumnString16(22);
 
   event->set_id(id);
   event->set_calendar_id(calendar_id);
@@ -218,6 +226,8 @@ void EventDatabase::FillEventRow(sql::Statement& s, EventRow* event) {
   event->set_complete(complete == 1 ? true : false);
   event->set_trash(trash == 1 ? true : false);
   event->set_trash_time(trash_time);
+  event->set_sequence(sequence);
+  event->set_ical(ical);
 }
 
 bool EventDatabase::DeleteEvent(calendar::EventID event_id) {
@@ -233,6 +243,46 @@ bool EventDatabase::DeleteEventsForCalendar(CalendarID calendar_id) {
       SQL_FROM_HERE, "DELETE FROM events WHERE calendar_id=?"));
   statement.BindInt64(0, calendar_id);
   return statement.Run();
+}
+
+bool EventDatabase::DoesEventIdExist(EventID event_id) {
+  sql::Statement statement(
+      GetDB().GetUniqueStatement("select count(*) as count from events \
+        WHERE id=?"));
+  statement.BindInt64(0, event_id);
+
+  if (!statement.Step())
+    return false;
+
+  return statement.ColumnInt(0) == 1;
+}
+
+// Updates to version 2
+bool EventDatabase::MigrateEventsWithoutSequenceAndIcalColumns() {
+  if (!GetDB().DoesTableExist("events")) {
+    NOTREACHED() << "Events table should exist before migration";
+    return false;
+  }
+
+  if (!GetDB().DoesColumnExist("events", "sequence") &&
+      !GetDB().DoesColumnExist("events", "ical")) {
+    // Old versions don't have the sequence and ical column, we modify the table
+    // to add that field.
+    if (!GetDB().Execute("ALTER TABLE events "
+                         "ADD COLUMN sequence INTEGER DEFAULT 0 NOT NULL"))
+      return false;
+
+    if (!GetDB().Execute("ALTER TABLE events "
+                         "ADD COLUMN ical LONGVARCHAR"))
+      return false;
+
+    if (!GetDB().Execute("update calendar set ctag = ''"))
+      return false;
+
+    if (!GetDB().Execute("update events set etag = ''"))
+      return false;
+  }
+  return true;
 }
 
 }  // namespace calendar

@@ -143,21 +143,23 @@ if (is_android) {
   }
 #}
 
-if (is_linux) {
-  if (is_official_build) {
-    update_template_instance("//chrome:chrome_symbols") {
-      binary = "$root_out_dir/vivaldi"
-    }
-  }
-  update_target("//chrome:xdg_mime") {
-    sources -= [
-      "//chrome/app/theme/$branding_path_component/product_logo_48.png"
-    ]
-    sources += [
-      "//vivaldi/app/resources/theme/$VIVALDI_RELEASE_KIND/product_logo_48.png"
-    ]
-  }
-}
+#if (is_linux) {
+#  if (is_official_build) {
+#    Need to fix scope handling for variant toolchains in the GN tools
+#    update_template_instance("//chrome:chrome_symbols") {
+#      binary = "$root_out_dir/vivaldi"
+#    }
+#  }
+#  Need to fix scope handling for variant toolchains in the GN tools
+#  update_target("//chrome:xdg_mime") {
+#    sources -= [
+#      "//chrome/app/theme/$branding_path_component/product_logo_48.png"
+#    ]
+#    sources += [
+#      "//vivaldi/app/resources/theme/$VIVALDI_RELEASE_KIND/product_logo_48.png"
+#    ]
+#  }
+#}
 
 if (enable_resource_whitelist_generation && is_win) {
   update_template_instance("//chrome:resource_whitelist") {

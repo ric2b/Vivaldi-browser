@@ -48,7 +48,8 @@ BookmarkMenuController::BookmarkMenuController(Browser* browser,
     // Enables the menu to draw mnemonics
     run_type |= views::MenuRunner::HAS_MNEMONICS;
   }
-  menu_runner_.reset(new views::MenuRunner(menu_delegate_->menu(), run_type));
+  menu_runner_ =
+      std::make_unique<views::MenuRunner>(menu_delegate_->menu(), run_type);
 }
 
 void BookmarkMenuController::RunMenuAt(BookmarkBarView* bookmark_bar) {

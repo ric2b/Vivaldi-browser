@@ -27,9 +27,15 @@
           "syncable": true
         },
         "visible": {
-          "description": "Whether extension buttons are shown on the address bar.",
+          "description": "Whether the extension toolbars is visible or not.",
           "type": "boolean",
           "default": true,
+          "syncable": true
+        },
+        "hidden_extensions": {
+          "description": "Whether an extension action button are hidden or not. List of extension ids.",
+          "type": "list",
+          "default": [],
           "syncable": true
         }
       },
@@ -58,6 +64,26 @@
         "show_top_sites": {
           "type": "boolean",
           "default": false,
+          "syncable": false
+        },
+        "number_of_bookmark_results": {
+          "type": "integer",
+          "default": 15,
+          "syncable": false
+        },
+        "number_of_typed_history_results": {
+          "type": "integer",
+          "default": 15,
+          "syncable": false
+        },
+        "number_of_history_results": {
+          "type": "integer",
+          "default": 15,
+          "syncable": false
+        },
+        "number_of_search_suggestions": {
+          "type": "integer",
+          "default": 5,
           "syncable": false
         }
       },
@@ -983,7 +1009,6 @@
         "description": "Check if vivaldi is default on startup (not synced to allow people to have different default browser on different computers)",
         "type": "boolean",
         "default": true,
-        "default_linux": false,
         "syncable": false
       },
       "last_seen_version": {
@@ -997,6 +1022,12 @@
         "type": "boolean",
         "default": false,
         "syncable": true
+      },
+      "show_ffmpeg_information": {
+        "description": "Show dialog on startup regarding media support. Linux only.",
+        "type": "boolean",
+        "default": true,
+        "syncable": false
       }
     },
     "status_bar": {
@@ -1353,7 +1384,7 @@
         "default": "",
         "syncable": false
       },
-      "column_widths": {
+      "tree_columns": {
         "entries": {
           "type": "dictionary",
           "default": {},
@@ -1557,6 +1588,12 @@
           "default": true,
           "syncable": true
         }
+      },
+      "fallback_background_color": {
+        "description": "Background color shown before a webpage has been loaded.",
+        "type": "string",
+        "default": "var(--colorBgLightIntense)",
+        "syncable": true
       }
     },
     "welcome": {

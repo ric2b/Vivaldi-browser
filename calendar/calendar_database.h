@@ -18,6 +18,7 @@
 #include "calendar/calendar_table.h"
 #include "calendar/event_database.h"
 #include "calendar/event_type_database.h"
+#include "calendar/recurrence_exception_table.h"
 #include "calendar/recurrence_table.h"
 #include "sql/database.h"
 #include "sql/init_status.h"
@@ -39,6 +40,7 @@ namespace calendar {
 class CalendarDatabase : public EventDatabase,
                          public EventTypeDatabase,
                          public CalendarTable,
+                         public RecurrrenceExceptionTable,
                          public RecurrrenceTable {
  public:
   CalendarDatabase() {}
@@ -101,6 +103,7 @@ class CalendarDatabase : public EventDatabase,
   // Overridden from URLDatabase, DownloadDatabase, VisitDatabase,
   // VisitSegmentDatabase and TypedURLSyncMetadataDatabase.
   sql::Database& GetDB() override;
+  sql::InitStatus EnsureCurrentVersion();
 
   sql::Database db_;
   sql::MetaTable meta_table_;

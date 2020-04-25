@@ -8,8 +8,7 @@
 
 namespace extensions {
 
-class DevtoolsPrivateGetDockingStateSizesFunction
-    : public UIThreadExtensionFunction {
+class DevtoolsPrivateGetDockingStateSizesFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("devtoolsPrivate.getDockingStateSizes",
                              DEVTOOLSPRIVATE_GETDOCKINGSTATESIZES)
@@ -25,8 +24,7 @@ class DevtoolsPrivateGetDockingStateSizesFunction
   DISALLOW_COPY_AND_ASSIGN(DevtoolsPrivateGetDockingStateSizesFunction);
 };
 
-class DevtoolsPrivateCloseDevtoolsFunction
-  : public UIThreadExtensionFunction {
+class DevtoolsPrivateCloseDevtoolsFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("devtoolsPrivate.closeDevtools",
   DEVTOOLSPRIVATE_CLOSEDEVTOOLS)
@@ -42,8 +40,7 @@ class DevtoolsPrivateCloseDevtoolsFunction
   DISALLOW_COPY_AND_ASSIGN(DevtoolsPrivateCloseDevtoolsFunction);
 };
 
-class DevtoolsPrivateToggleDevtoolsFunction
-    : public UIThreadExtensionFunction {
+class DevtoolsPrivateToggleDevtoolsFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("devtoolsPrivate.toggleDevtools",
                              DEVTOOLSPRIVATE_TOGGLEDEVTOOLS)

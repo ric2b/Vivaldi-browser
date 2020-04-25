@@ -104,18 +104,20 @@ class CalendarService : public KeyedService {
   typedef base::Callback<void(std::shared_ptr<DeleteCalendarResult>)>
       DeleteCalendarCallback;
 
-
   typedef base::Callback<void(std::shared_ptr<EventTypeRows>)>
-    GetALLEventTypesCallback;
+      GetALLEventTypesCallback;
 
   typedef base::Callback<void(std::shared_ptr<CreateEventTypeResult>)>
-    CreateEventTypeCallback;
+      CreateEventTypeCallback;
 
   typedef base::Callback<void(std::shared_ptr<UpdateEventTypeResult>)>
-    UpdateEventTypeCallback;
+      UpdateEventTypeCallback;
 
   typedef base::Callback<void(std::shared_ptr<DeleteEventTypeResult>)>
-    DeleteEventTypeCallback;
+      DeleteEventTypeCallback;
+
+  typedef base::Callback<void(std::shared_ptr<CreateRecurrenceExceptionResult>)>
+      CreateRecurrenceExceptionCallback;
 
   base::CancelableTaskTracker::TaskId GetAllEvents(
       const QueryCalendarCallback& callback,
@@ -167,25 +169,30 @@ class CalendarService : public KeyedService {
       const DeleteCalendarCallback& callback,
       base::CancelableTaskTracker* tracker);
 
-
   base::CancelableTaskTracker::TaskId GetAllEventTypes(
-    const GetALLEventTypesCallback& callback,
-    base::CancelableTaskTracker* tracker);
+      const GetALLEventTypesCallback& callback,
+      base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId CreateEventType(
-    EventTypeRow ev,
-    const CreateEventTypeCallback& callback,
-    base::CancelableTaskTracker* tracker);
+      EventTypeRow ev,
+      const CreateEventTypeCallback& callback,
+      base::CancelableTaskTracker* tracker);
 
-  base::CancelableTaskTracker::TaskId UpdateEventType(EventTypeID event_type_id,
-    EventType ev,
-    const UpdateEventTypeCallback& callback,
-    base::CancelableTaskTracker* tracker);
+  base::CancelableTaskTracker::TaskId UpdateEventType(
+      EventTypeID event_type_id,
+      EventType ev,
+      const UpdateEventTypeCallback& callback,
+      base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId DeleteEventType(
-    EventTypeID event_type_id,
-    const DeleteEventTypeCallback& callback,
-    base::CancelableTaskTracker* tracker);
+      EventTypeID event_type_id,
+      const DeleteEventTypeCallback& callback,
+      base::CancelableTaskTracker* tracker);
+
+  base::CancelableTaskTracker::TaskId CreateRecurrenceException(
+      RecurrenceExceptionRow ev,
+      const CreateRecurrenceExceptionCallback& callback,
+      base::CancelableTaskTracker* tracker);
 
  private:
   class CalendarBackendDelegate;

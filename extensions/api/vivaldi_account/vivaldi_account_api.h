@@ -75,7 +75,7 @@ class VivaldiAccountAPI : public BrowserContextKeyedAPI,
   std::unique_ptr<VivaldiAccountEventRouter> vivaldi_account_event_router_;
 };
 
-class VivaldiAccountLoginFunction : public UIThreadExtensionFunction {
+class VivaldiAccountLoginFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("vivaldiAccount.login", VIVALDI_ACCOUNT_LOGIN)
   VivaldiAccountLoginFunction() = default;
@@ -88,7 +88,7 @@ class VivaldiAccountLoginFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(VivaldiAccountLoginFunction);
 };
 
-class VivaldiAccountLogoutFunction : public UIThreadExtensionFunction {
+class VivaldiAccountLogoutFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("vivaldiAccount.logout", VIVALDI_ACCOUNT_LOGOUT)
   VivaldiAccountLogoutFunction() = default;
@@ -101,7 +101,7 @@ class VivaldiAccountLogoutFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(VivaldiAccountLogoutFunction);
 };
 
-class VivaldiAccountGetStateFunction : public UIThreadExtensionFunction {
+class VivaldiAccountGetStateFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("vivaldiAccount.getState",
                              VIVALDI_ACCOUNT_GET_STATE)

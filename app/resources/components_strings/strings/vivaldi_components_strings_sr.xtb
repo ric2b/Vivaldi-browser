@@ -147,7 +147,6 @@
 <translation id="6328639280570009161">Покушајте да онемогућите предвиђање мреже</translation>
 <translation id="6328786501058569169">Овај сајт је обмањујућ</translation>
 <translation id="6358450015545214790">Шта ово значи?</translation>
-<translation id="6417515091412812850">Није могуће проверити да ли је сертификат опозван.</translation>
 <translation id="6433595998831338502">Хост <ph name="HOST_NAME" /> је одбио повезивање.</translation>
 <translation id="6447842834002726250">Колачићи</translation>
 <translation id="6451458296329894277">Потврђивање поновног слања обрасца</translation>
@@ -202,7 +201,6 @@
 <translation id="8332188693563227489">Приступ хосту <ph name="HOST_NAME" /> је одбијен</translation>
 <translation id="8498891568109133222">Одговор хоста <ph name="HOST_NAME" /> је трајао предуго.</translation>
 <translation id="8503813439785031346">Корисничко име</translation>
-<translation id="859285277496340001">Сертификат не наводи механизам којим се проверава да ли је опозван.</translation>
 <translation id="8703575177326907206">Ваша веза са доменом <ph name="DOMAIN" /> није шифрована.</translation>
 <translation id="8740359287975076522">Није пронађена &lt;abbr id="dnsDefinition"&gt;DNS адреса&lt;/abbr&gt; хоста <ph name="HOST_NAME" />. У току је дијагностика проблема.</translation>
 <translation id="9001074447101275817">Прокси <ph name="DOMAIN" /> захтева корисничко име и лозинку.</translation>

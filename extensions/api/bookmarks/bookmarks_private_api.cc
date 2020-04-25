@@ -243,6 +243,28 @@ void VivaldiBookmarksAPI::BookmarkNodeFaviconChanged(BookmarkModel* model,
                             browser_context_);
 }
 
+// static
+bool VivaldiBookmarksAPI::SetBookmarkThumbnail(
+    content::BrowserContext* browser_context,
+    int64_t bookmark_id,
+    const std::string& url) {
+  BookmarkModel* model =
+      BookmarkModelFactory::GetForBrowserContext(browser_context);
+  // model should be loaded as bookmark_id comes from it.
+  DCHECK(model->loaded());
+  const BookmarkNode* node = bookmarks::GetBookmarkNodeByID(model, bookmark_id);
+  if (!node) {
+    LOG(ERROR) << "Failed to locate bookmark with id " << bookmark_id;
+    return false;
+  }
+  if (model->is_permanent_node(node)) {
+    LOG(ERROR) << "Cannot modify special bookmark " << bookmark_id;
+    return false;
+  }
+  model->SetNodeMetaInfo(node, "Thumbnail", url);
+  return true;
+}
+
 ExtensionFunction::ResponseAction
 BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction::Run() {
   using vivaldi::bookmarks_private::UpdateSpeedDialsForWindowsJumplist::Params;

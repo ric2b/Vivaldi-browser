@@ -31,10 +31,6 @@ namespace guest_view {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 // Vivaldi helper functions that is declared here and defined multiple places.
 
-// Returns true if a Browser object owns and manage the lifecycle of the
-// |content::WebContents|
-bool HandOverToBrowser(content::WebContents* contents);
-
 // Add WebContentObservers here when running Vivaldi.
 void AttachWebContentsObservers(content::WebContents* contents);
 
@@ -238,9 +234,6 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
   void AttachToOuterWebContentsFrame(content::RenderFrameHost* embedder_frame,
                                      int32_t element_instance_id,
                                      bool is_full_page_plugin);
-  // NOTE(andre@vivaldi.com): This is used in Vivaldi to make sure the lifecycle
-  // of webcontents is working for webcontents owned by multiple guests.
-  bool web_contents_is_owned_by_this_ = true;
 
  protected:
   explicit GuestViewBase(content::WebContents* owner_web_contents);

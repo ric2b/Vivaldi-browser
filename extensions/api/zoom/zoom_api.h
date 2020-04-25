@@ -51,7 +51,7 @@ class ZoomAPI : public BrowserContextKeyedAPI,
       default_zoom_level_subscription_;
 };
 
-class ZoomSetVivaldiUIZoomFunction : public UIThreadExtensionFunction {
+class ZoomSetVivaldiUIZoomFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("zoom.setVivaldiUIZoom", ZOOM_SET_VIVALDI_UI_ZOOM)
   ZoomSetVivaldiUIZoomFunction() = default;
@@ -64,7 +64,7 @@ class ZoomSetVivaldiUIZoomFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(ZoomSetVivaldiUIZoomFunction);
 };
 
-class ZoomGetVivaldiUIZoomFunction : public UIThreadExtensionFunction {
+class ZoomGetVivaldiUIZoomFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("zoom.getVivaldiUIZoom", ZOOM_GET_VIVALDI_UI_ZOOM)
   ZoomGetVivaldiUIZoomFunction() = default;
@@ -77,7 +77,7 @@ class ZoomGetVivaldiUIZoomFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(ZoomGetVivaldiUIZoomFunction);
 };
 
-class ZoomSetDefaultZoomFunction : public UIThreadExtensionFunction {
+class ZoomSetDefaultZoomFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("zoom.setDefaultZoom", ZOOM_SET_DEFAULT_ZOOM)
   ZoomSetDefaultZoomFunction() = default;
@@ -90,7 +90,7 @@ class ZoomSetDefaultZoomFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(ZoomSetDefaultZoomFunction);
 };
 
-class ZoomGetDefaultZoomFunction : public UIThreadExtensionFunction {
+class ZoomGetDefaultZoomFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("zoom.getDefaultZoom", ZOOM_GET_DEFAULT_ZOOM)
   ZoomGetDefaultZoomFunction() = default;

@@ -26,6 +26,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/task_runner_util.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_checker.h"
@@ -159,7 +160,7 @@ bool CalendarService::Init(
     backend_task_runner_ = thread_->task_runner();
   } else {
     backend_task_runner_ = base::CreateSequencedTaskRunnerWithTraits(
-        base::TaskTraits(base::TaskPriority::USER_BLOCKING,
+        base::TaskTraits(base::ThreadPool(), base::TaskPriority::USER_BLOCKING,
                          base::TaskShutdownBehavior::BLOCK_SHUTDOWN,
                          base::MayBlock(), base::WithBaseSyncPrimitives()));
   }
@@ -399,6 +400,25 @@ base::CancelableTaskTracker::TaskId CalendarService::DeleteEventType(
       base::Bind(&CalendarBackend::DeleteEventType, calendar_backend_,
                  event_type_id, delete_results),
       base::Bind(callback, delete_results));
+}
+
+base::CancelableTaskTracker::TaskId CalendarService::CreateRecurrenceException(
+    RecurrenceExceptionRow ev,
+    const CreateRecurrenceExceptionCallback& callback,
+    base::CancelableTaskTracker* tracker) {
+  DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  std::shared_ptr<CreateRecurrenceExceptionResult>
+      create_recurrence_exception_results =
+          std::shared_ptr<CreateRecurrenceExceptionResult>(
+              new CreateRecurrenceExceptionResult());
+
+  return tracker->PostTaskAndReply(
+      backend_task_runner_.get(), FROM_HERE,
+      base::Bind(&CalendarBackend::CreateRecurrenceException, calendar_backend_,
+                 ev, create_recurrence_exception_results),
+      base::Bind(callback, create_recurrence_exception_results));
 }
 
 void CalendarService::ScheduleTask(base::OnceClosure task) {

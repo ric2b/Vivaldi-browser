@@ -45,8 +45,8 @@ void OnInputEvent(const blink::WebInputEvent& input_event) {
   }
 }
 
-bool SuppressWrite(ui::ClipboardType clipboardType) {
-  if (clipboardType == ui::ClipboardType::kSelection) {
+bool SuppressWrite(ui::ClipboardBuffer clipboardType) {
+  if (clipboardType == ui::ClipboardBuffer::kSelection) {
     return suppress_selection_write;
   }
   return false;

@@ -77,6 +77,11 @@ gfx::Image TabFaviconFromWebContents(content::WebContents* contents) {
       favicon::ContentFaviconDriver::FromWebContents(contents);
   gfx::Image favicon = favicon_driver->GetFavicon();
 
+  if (favicon.IsEmpty()) {
+    // This could crash Vivaldi : See VB-58594.
+    return favicon;
+  }
+
   // Desaturate the favicon if the navigation entry contains a network error.
   if (!contents->IsLoadingToDifferentDocument()) {
     content::NavigationController& controller = contents->GetController();
@@ -96,7 +101,7 @@ gfx::Image TabFaviconFromWebContents(content::WebContents* contents) {
 gfx::Image GetDefaultFavicon() {
   const ui::NativeTheme* native_theme =
       ui::NativeTheme::GetInstanceForNativeUi();
-  bool is_dark = native_theme && native_theme->SystemDarkModeEnabled();
+  bool is_dark = native_theme && native_theme->ShouldUseDarkColors();
   int resource_id = is_dark ? IDR_DEFAULT_FAVICON_DARK : IDR_DEFAULT_FAVICON;
   return ui::ResourceBundle::GetSharedInstance().GetNativeImageNamed(
       resource_id);

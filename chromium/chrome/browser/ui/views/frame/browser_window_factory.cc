@@ -16,25 +16,10 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/views/widget/widget.h"
 
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-#include "ui/vivaldi_browser_window.h"
-#endif
-
 // static
 BrowserWindow* BrowserWindow::CreateBrowserWindow(
     std::unique_ptr<Browser> browser,
     bool user_gesture) {
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  if (browser->is_vivaldi()) {
-    std::string base_url;
-    extensions::AppWindow::CreateParams params =
-        VivaldiBrowserWindow::PrepareWindowParameters(browser.get(), base_url);
-
-    return VivaldiBrowserWindow::CreateVivaldiBrowserWindow(std::move(browser),
-                                                            base_url, params);
-  }
-#endif
-
   // Create the view and the frame. The frame will attach itself via the view
   // so we don't need to do anything with the pointer.
   BrowserView* view = new BrowserView(std::move(browser));
@@ -48,6 +33,5 @@ BrowserWindow* BrowserWindow::CreateBrowserWindow(
   view->GetWidget()->GetNativeWindow()->SetProperty(
       aura::client::kCreatedByUserGesture, user_gesture);
 #endif
-  safe_browsing::LogContentsSize(view->GetContentsSize());
   return view;
 }

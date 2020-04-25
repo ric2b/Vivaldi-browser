@@ -8,6 +8,8 @@ namespace switches {
 
 // All switches in alphabetical order. The switches should be documented
 
+// To be used to disable code that interferes automatic tests.
+const char kAutoTestMode[] = "auto-test-mode";
 const char kDebugVivaldi[] = "debug-vivaldi";
 const char kDisableVivaldi[] = "disable-vivaldi";
 const char kRunningVivaldi[] = "running-vivaldi";
@@ -25,10 +27,5 @@ const char kLaunchUpdater[] = "launch-updater";
 // This will delay exit with a minute to be able to test the dialog that opens
 // on startup if Vivaldi is already running.
 const char kTestAlreadyRunningDialog[] = "test-already-running-dialog";
-
-#if defined(OS_MACOSX)
-// This switch disables forced gpu viceo decode on mac
-const char kDontForceGpuDecodeMac[] = "dont-force-gpu-decode-mac";
-#endif
 
 }  // namespace switches

@@ -27,6 +27,7 @@
 #include "content/public/browser/favicon_status.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
+#include "extensions/common/features/feature.h"
 
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
@@ -44,12 +45,16 @@ namespace {
 bool WillDispatchTabUpdatedEvent(
     WebContents* contents,
     const std::set<std::string> changed_property_names,
-    content::BrowserContext* context,
+    content::BrowserContext* browser_context,
+    Feature::Context target_context,
     const Extension* extension,
     Event* event,
     const base::DictionaryValue* listener_filter) {
+  ExtensionTabUtil::ScrubTabBehavior scrub_tab_behavior =
+      ExtensionTabUtil::GetScrubTabBehavior(extension, target_context,
+                                            contents);
   std::unique_ptr<api::tabs::Tab> tab_object =
-      ExtensionTabUtil::CreateTabObject(contents, ExtensionTabUtil::kScrubTab,
+      ExtensionTabUtil::CreateTabObject(contents, scrub_tab_behavior,
                                         extension);
 
   std::unique_ptr<base::DictionaryValue> tab_value = tab_object->ToValue();
@@ -69,14 +74,17 @@ bool WillDispatchTabUpdatedEvent(
 
 bool WillDispatchTabCreatedEvent(WebContents* contents,
                                  bool active,
-                                 content::BrowserContext* context,
+                                 content::BrowserContext* browser_context,
+                                 Feature::Context target_context,
                                  const Extension* extension,
                                  Event* event,
                                  const base::DictionaryValue* listener_filter) {
   event->event_args->Clear();
+  ExtensionTabUtil::ScrubTabBehavior scrub_tab_behavior =
+      ExtensionTabUtil::GetScrubTabBehavior(extension, target_context,
+                                            contents);
   std::unique_ptr<base::DictionaryValue> tab_value =
-      ExtensionTabUtil::CreateTabObject(contents, ExtensionTabUtil::kScrubTab,
-                                        extension)
+      ExtensionTabUtil::CreateTabObject(contents, scrub_tab_behavior, extension)
           ->ToValue();
   tab_value->SetBoolean(tabs_constants::kSelectedKey, active);
   tab_value->SetBoolean(tabs_constants::kActiveKey, active);
@@ -103,20 +111,6 @@ std::set<std::string> TabsEventRouter::TabEntry::UpdateLoadState() {
   // We only want to respond to the first change from loading to !loading after
   // the NavigationEntryCommitted() was fired.
   if (!complete_waiting_on_load_ || web_contents()->IsLoading()) {
-    if (vivaldi::IsVivaldiRunning()) {
-      std::set<std::string> changed_property_names;
-      if (web_contents()->GetTitle() != title_) {
-        title_ = web_contents()->GetTitle();
-        changed_property_names.insert(tabs_constants::kTitleKey);
-      }
-      if (web_contents()->GetURL() != url_) {
-        url_ = web_contents()->GetURL();
-        changed_property_names.insert(tabs_constants::kUrlKey);
-      }
-
-      return changed_property_names;
-    }
-
     return std::set<std::string>();
   }
 

@@ -7,8 +7,24 @@
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 
 const int VivaldiTabCheck::kVivaldiTabObserverContextKey = 0;
+const int VivaldiTabCheck::kDevToolContextKey = 0;
 
 // static
 bool VivaldiTabCheck::IsVivaldiTab(content::WebContents* web_contents) {
   return web_contents->GetUserData(&kVivaldiTabObserverContextKey);
+}
+
+// static
+bool VivaldiTabCheck::IsOwnedByTabStripOrDevTools(
+    content::WebContents* web_contents) {
+  return IsVivaldiTab(web_contents) ||
+         web_contents->GetUserData(&kDevToolContextKey);
+}
+
+// static
+void VivaldiTabCheck::MarkAsDevToolContents(
+    content::WebContents* web_contents) {
+  DCHECK(!IsVivaldiTab(web_contents));
+  web_contents->SetUserData(&kDevToolContextKey,
+                            std::make_unique<base::SupportsUserData::Data>());
 }

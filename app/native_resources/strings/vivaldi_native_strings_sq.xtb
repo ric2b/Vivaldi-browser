@@ -12,6 +12,7 @@
 <translation id="2873951654529031587">Koshi</translation>
 <translation id="2972581237482394796">&amp;Përsërit</translation>
 <translation id="2977472760057091832">Hap lidhjen në dritare private</translation>
+<translation id="2989805286512600854">Hap në skedë të re</translation>
 <translation id="3027988479108856431">Fatkeqësisht, parametrat e Yandex nuk mund të importohen kur shfletuesi është ende në punë. Regjistroni dokumentet që ju duhen dhe mbyllni të gjitha dritaret e Yandex. Pastaj klikoni Vazhdoj.</translation>
 <translation id="3259769196742189631">Vlerësoj faqen</translation>
 <translation id="3270847123878663523">&amp;Kthej renditjen</translation>
@@ -25,9 +26,9 @@
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">&amp;Nuk e tregoj më</translation>
 <translation id="4074744496918018786">Hap imazhin në dritare private</translation>
-<translation id="4512900838580567989">Hap lidhjen te skeda e re në sfond</translation>
+<translation id="4512900838580567989">Hap lidhjen në skedën e re në sfond</translation>
 <translation id="4515472507709384008">Opera version 15+</translation>
-<translation id="4548358047305717967">Hap imazhin te skeda e re në sfond</translation>
+<translation id="4548358047305717967">Hap imazhin në skedën e re në sfond</translation>
 <translation id="4594403342090139922">&amp;Kthej fshirjen</translation>
 <translation id="4636708767492582204">Dërgoj me postë</translation>
 <translation id="5014281392052865061">Taste të shpejta të importuara</translation>
@@ -46,7 +47,7 @@
 <translation id="6477028720702061455">Përzgjidhni dosjen e profilit të Opera për ta importuar</translation>
 <translation id="6510706699590490869">&amp;Përditësoj Vivaldin</translation>
 <translation id="6529602333819889595">&amp;Përsërit fshirjen</translation>
-<translation id="6538338088414940408">Hap lidhjen te skeda në sfond</translation>
+<translation id="6538338088414940408">Hap lidhjen në skedën në sfond</translation>
 <translation id="6551219277044048123">Shtoj si mot&amp;or kërkimi...</translation>
 <translation id="6804831687363620480">Fatkeqësisht, parametrat e Opera 15+ nuk mund të importohen kur shfletuesi është ende në punë. Regjistroni dokumentet që ju duhen dhe mbyllni të gjitha dritaret e Opera 15+. Pastaj klikoni Vazhdoj.</translation>
 <translation id="7337881442233988129">Chromium</translation>

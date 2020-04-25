@@ -73,6 +73,8 @@ static std::string PermissionTypeToString(WebViewPermissionType type) {
       return "microphone";
     case WEB_VIEW_PERMISSION_TYPE_MICROPHONE_AND_CAMERA:
       return "microphone_and_camera";
+    case WEB_VIEW_PERMISSION_TYPE_SENSORS:
+      return "sensors";
     default:
       NOTREACHED();
       return std::string();
@@ -234,114 +236,40 @@ bool WebViewPermissionHelper::OnMessageReceived(
 #endif  // BUILDFLAG(ENABLE_PLUGINS)
 
 void WebViewPermissionHelper::RequestMediaAccessPermission(
-    content::WebContents* source,
-    const content::MediaStreamRequest& request,
-    content::MediaResponseCallback callback) {
-  // Vivaldi
-  // If this is a TabCast request.
-  if (request.video_type == blink::mojom::MediaStreamType::GUM_TAB_VIDEO_CAPTURE ||
-      request.audio_type == blink::mojom::MediaStreamType::GUM_TAB_AUDIO_CAPTURE) {
-    // Only allow the stable Google cast component extension...
-    std::string extension_id = request.security_origin.host();
-    if (extension_id == extension_misc::kMediaRouterStableExtensionId) {
-      blink::MediaStreamDevices devices;
-      extensions::TabCaptureRegistry* const tab_capture_registry =
-          extensions::TabCaptureRegistry::Get(source->GetBrowserContext());
-      // and doublecheck that this came from the correct renderer.
-      if (tab_capture_registry &&
-          tab_capture_registry->VerifyRequest(request.render_process_id,
-                                              request.render_frame_id,
-                                              extension_id)) {
-        if (request.audio_type == blink::mojom::MediaStreamType::GUM_TAB_AUDIO_CAPTURE) {
-          devices.push_back(
-              blink::MediaStreamDevice(blink::mojom::MediaStreamType::GUM_TAB_AUDIO_CAPTURE,
-                                       std::string(), std::string()));
-        }
-        if (request.video_type == blink::mojom::MediaStreamType::GUM_TAB_VIDEO_CAPTURE) {
-          devices.push_back(
-              blink::MediaStreamDevice(blink::mojom::MediaStreamType::GUM_TAB_VIDEO_CAPTURE,
-                                       std::string(), std::string()));
-        }
-      }
-      blink::mojom::MediaStreamRequestResult result =
-          blink::mojom::MediaStreamRequestResult::INVALID_STATE;
-
-      std::unique_ptr<content::MediaStreamUI> ui;
-      if (!devices.empty()) {
-        result = blink::mojom::MediaStreamRequestResult::OK;
-        ui = MediaCaptureDevicesDispatcher::GetInstance()
-          ->GetMediaStreamCaptureIndicator()
-          ->RegisterMediaStream(source, devices);
-      }
-
-      std::move(callback).Run(devices, result, std::move(ui));
-      return;
-    }
+  content::WebContents* source,
+  const content::MediaStreamRequest& request,
+  content::MediaResponseCallback callback) {
+  Profile* profile = Profile::FromBrowserContext(source->GetBrowserContext());
+  const extensions::Extension* extension =
+    extensions::ExtensionRegistry::Get(profile)->enabled_extensions().GetByID(
+      request.security_origin.host());
+  // Let the extension requesting permission handle this as it already has
+  // permission.
+  if (extension) {
+    MediaCaptureDevicesDispatcher::GetInstance()->ProcessMediaAccessRequest(
+      source, request, std::move(callback), extension);
+    return;
   }
-
-  extensions::VivaldiAppHelper* helper =
-      extensions::VivaldiAppHelper::FromWebContents(web_view_guest()->
-        embedder_web_contents());
-  if (helper) do {
-    Profile* profile = Profile::FromBrowserContext(source->GetBrowserContext());
-
-    ContentSetting audio_setting = CONTENT_SETTING_DEFAULT;
-    ContentSetting camera_setting = CONTENT_SETTING_DEFAULT;
-
-    if (request.audio_type != blink::mojom::MediaStreamType::NO_SERVICE) {
-      audio_setting = HostContentSettingsMapFactory::GetForProfile(profile)->
-        GetContentSetting(
-            request.security_origin, GURL(),
-            CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC, std::string());
-      if (audio_setting != CONTENT_SETTING_ALLOW &&
-          audio_setting != CONTENT_SETTING_BLOCK)
-        break;
-    }
-    if (request.video_type  != blink::mojom::MediaStreamType::NO_SERVICE) {
-      camera_setting = HostContentSettingsMapFactory::GetForProfile(profile)->
-        GetContentSetting(
-            request.security_origin, GURL(),
-            CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA, std::string());
-      if (camera_setting != CONTENT_SETTING_ALLOW &&
-          camera_setting != CONTENT_SETTING_BLOCK)
-        break;
-    }
-
-    // Only default (not requested), allow and block allowed.
-    // Others are "always ask".
-    if (audio_setting == CONTENT_SETTING_BLOCK ||
-        camera_setting == CONTENT_SETTING_BLOCK) {
-      std::move(callback).Run(blink::MediaStreamDevices(),
-                              blink::mojom::MediaStreamRequestResult::PERMISSION_DENIED,
-                              std::unique_ptr<content::MediaStreamUI>());
-      return;
-    }
-    if (audio_setting == CONTENT_SETTING_ALLOW ||
-        camera_setting == CONTENT_SETTING_ALLOW) {
-      web_view_guest()
-          ->embedder_web_contents()
-          ->GetDelegate()
-          ->RequestMediaAccessPermission(
-              web_view_guest()->embedder_web_contents(), request,
-              std::move(callback));
-      return;
-    }
-  } while (false);
 
   WebViewPermissionType request_type = WEB_VIEW_PERMISSION_TYPE_MEDIA;
 
   if (::vivaldi::IsVivaldiRunning()) {
     // camera , microphone and microphone_and_camera
-    if (request.audio_type == blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE &&
-        request.video_type == blink::mojom::MediaStreamType::DEVICE_VIDEO_CAPTURE) {
+    if (request.audio_type ==
+            blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE &&
+        request.video_type ==
+            blink::mojom::MediaStreamType::DEVICE_VIDEO_CAPTURE) {
       request_type = WEB_VIEW_PERMISSION_TYPE_MICROPHONE_AND_CAMERA;
-    } else if (request.video_type == blink::mojom::MediaStreamType::DEVICE_VIDEO_CAPTURE) {
+
+    } else if (request.video_type ==
+               blink::mojom::MediaStreamType::DEVICE_VIDEO_CAPTURE) {
       request_type = WEB_VIEW_PERMISSION_TYPE_CAMERA;
-    } else if (request.audio_type == blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE) {
+
+    } else if (request.audio_type ==
+               blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE) {
       request_type = WEB_VIEW_PERMISSION_TYPE_MICROPHONE;
     }
   }
-  // End Vivaldi
 
   base::DictionaryValue request_info;
   request_info.SetString(guest_view::kUrl, request.security_origin.spec());
@@ -471,9 +399,9 @@ void WebViewPermissionHelper::CancelNotificationPermissionRequest(
 void WebViewPermissionHelper::RequestFileSystemPermission(
     const GURL& url,
     bool allowed_by_default,
-    const base::Callback<void(bool)>& callback) {
+    base::OnceCallback<void(bool)> callback) {
   web_view_permission_helper_delegate_->RequestFileSystemPermission(
-      url, allowed_by_default, callback);
+      url, allowed_by_default, std::move(callback));
 }
 
 void WebViewPermissionHelper::FileSystemAccessedAsync(int render_process_id,

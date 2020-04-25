@@ -33,3 +33,14 @@ void ToolkitDelegateViews::VivaldiUpdateMenu(views::MenuItemView* view,
   ui::SimpleMenuModel* menu_model) {
   menu_adapter_->VivaldiUpdateMenu(view, menu_model);
 }
+
+void ToolkitDelegateViews::VivaldiRunMenuAt(views::Widget* parent,
+                                            const gfx::Rect& rect,
+                                            ui::MenuSourceType type) {
+  using Position = views::MenuAnchorPosition;
+  Position anchor_position =
+      (type == ui::MENU_SOURCE_TOUCH || type == ui::MENU_SOURCE_TOUCH_EDIT_MENU)
+          ? Position::kBottomCenter
+          : Position::kTopLeft;
+  menu_runner_->RunMenuAt(parent, nullptr, rect, anchor_position, type);
+}

@@ -28,7 +28,14 @@ Mixer::SortData::SortData(ChromeSearchResult* result, double score)
     : result(result), score(score) {}
 
 bool Mixer::SortData::operator<(const SortData& other) const {
-  // This data precedes (less than) |other| if it has higher score.
+  // This data precedes (less than) |other| if it has specified display index or
+  // higher score.
+  ash::SearchResultDisplayIndex index1 = result->display_index();
+  ash::SearchResultDisplayIndex index2 = other.result->display_index();
+  // The |kUndefined| index is larger than other specified indexes.
+  if (index1 != index2)
+    return index1 < index2;
+
   return score > other.score;
 }
 
@@ -112,6 +119,13 @@ void Mixer::MixAndPublish(size_t num_max_results, const base::string16& query) {
   // number* will be kept (e.g., an app result takes priority over a web store
   // result with the same ID).
   RemoveDuplicates(&results);
+
+  // Zero state search results: if any search provider won't have any results
+  // displayed, but has a high-scoring result that the user hasn't seen many
+  // times, replace a to-be-displayed result with it.
+  if (query.empty() && non_app_ranker_)
+    non_app_ranker_->OverrideZeroStateResults(&results);
+
   std::sort(results.begin(), results.end());
 
   const size_t original_size = results.size();

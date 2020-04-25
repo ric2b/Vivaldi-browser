@@ -29,7 +29,6 @@
 
 namespace {
 const char kDesktopImageType[] = "desktop-image";
-const char kLocalImageType[] = "local-image";
 const char kCSSModsType[] = "css-mods";
 const char kCSSModsData[] = "css";
 const char kDefaultFallbackImageBase64[] = "R0lGODlhAQABAAAAACwAAAAAAQABAAA=";
@@ -42,14 +41,20 @@ VivaldiDataSource::VivaldiDataSource(Profile* profile) {
   // Initialize data_class_handlers_ early as it is accessed from UI and IO
   // threads in StartDataRequest.
 #if defined(OS_WIN)
-  data_class_handlers_.insert(
-      std::make_pair(kDesktopImageType,
-                     std::make_unique<DesktopWallpaperDataClassHandlerWin>()));
+  data_class_handlers_.emplace(
+      kDesktopImageType,
+      std::make_unique<DesktopWallpaperDataClassHandlerWin>());
 #endif  // defined(OS_WIN)
-  data_class_handlers_.insert(std::make_pair(
-      kLocalImageType, std::make_unique<LocalImageDataClassHandler>(profile)));
-  data_class_handlers_.insert(std::make_pair(
-      kCSSModsType, std::make_unique<CSSModsDataClassHandler>(profile)));
+  data_class_handlers_.emplace(
+      VIVALDI_DATA_URL_PATH_MAPPING_DIR,
+      std::make_unique<LocalImageDataClassHandler>(
+          profile, extensions::VivaldiDataSourcesAPI::PATH_MAPPING_URL));
+  data_class_handlers_.emplace(
+      VIVALDI_DATA_URL_THUMBNAIL_DIR,
+      std::make_unique<LocalImageDataClassHandler>(
+          profile, extensions::VivaldiDataSourcesAPI::THUMBNAIL_URL));
+  data_class_handlers_.emplace(
+      kCSSModsType, std::make_unique<CSSModsDataClassHandler>(profile));
 
   std::string data;
   base::Base64Decode(kDefaultFallbackImageBase64, &data);
@@ -100,7 +105,7 @@ VivaldiDataSource::TaskRunnerForRequestPath(const std::string& path) {
 
 void VivaldiDataSource::StartDataRequest(
     const std::string& path,
-    const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
+    const content::WebContents::Getter& wc_getter,
     const content::URLDataSource::GotDataCallback& callback) {
   std::string type;
   std::string data;

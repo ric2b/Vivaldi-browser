@@ -12,9 +12,13 @@ if (is_win) {
       "//vivaldi/installer/util/vivaldi_progress_dialog.cc",
       "//vivaldi/installer/util/vivaldi_progress_dialog.h",
       "//vivaldi/installer/win/setup/setup.rc",
-      "//vivaldi/installer/win/setup/setup_exe_version.rc.version",
       "//vivaldi/installer/win/setup/setup_resource.h",
     ]
+  }
+
+  update_template_instance("//chrome/installer/setup:setup_exe_version") {
+    template_file =
+        "//vivaldi/installer/win/setup/setup_exe_version.rc.version"
   }
 
   update_target("//chrome/installer/setup:lib") {
@@ -71,6 +75,7 @@ if (is_linux && !is_component_build) {
     sources += [
       "//vivaldi/installer/linux/common/appdata.xml.template",
       "//vivaldi/installer/linux/common/update-widevine",
+      "//vivaldi/installer/linux/common/update-ffmpeg",
       "//vivaldi/installer/linux/common/vivaldi.info",
       "//vivaldi/installer/linux/common/wrapper",
       "//vivaldi/installer/linux/common/xfce-helper.template",

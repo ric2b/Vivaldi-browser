@@ -234,6 +234,9 @@ class VIEWS_EXPORT MenuController
   // gfx::AnimationDelegate:
   void AnimationProgressed(const gfx::Animation* animation) override;
 
+  // Added by Vivaldi.
+  void VivaldiOpenMenu(MenuItemView* item);
+
  private:
   friend class internal::MenuRunnerImpl;
   friend class test::MenuControllerTest;
@@ -378,6 +381,10 @@ class VIEWS_EXPORT MenuController
   // Added by Vivaldi.
   bool StepSiblingMenu(bool next);
   bool HandleSynthesizedEvent(const ui::MouseEvent& event);
+  void VivaldiAdjustMenubarMenuGeometry(
+      gfx::Rect* menu_bounds,
+      const gfx::Rect& monitor_bounds,
+      const gfx::Rect& anchor_bounds);
 
   bool ShowSiblingMenu(SubmenuView* source, const gfx::Point& mouse_location);
 

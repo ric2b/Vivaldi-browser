@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "base/optional.h"
-#include "base/test/scoped_task_environment.h"
+#include "base/test/task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace network {
@@ -16,7 +16,7 @@ namespace {
 
 class WebSocketThrottlerTest : public ::testing::Test {
  private:
-  base::test::ScopedTaskEnvironment scoped_task_environment_;
+  base::test::SingleThreadTaskEnvironment task_environment_;
 };
 
 TEST(WebSocketPerProcessThrottlerTest, InitialState) {

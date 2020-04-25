@@ -148,6 +148,8 @@ static std::string ContentSettingsTypeToString(
       return "multiple-automatic-downloads";
     case CONTENT_SETTINGS_TYPE_MIDI_SYSEX:
       return "midi-sysex";
+    case CONTENT_SETTINGS_TYPE_ADS:
+      return "ads";
     default:
       // fallthrough
       break;
@@ -677,14 +679,6 @@ void WebViewGuest::ExitPictureInPicture() {
   PictureInPictureWindowManager::GetInstance()->ExitPictureInPicture();
 }
 
-
-bool WebViewGuest::HasOwnerShipOfContents() {
-  if (web_contents_is_owned_by_this_ == false) {
-    return false;
-  }
-  return !chrome::FindBrowserWithWebContents(web_contents());
-}
-
 void WebViewGuest::LoadTabContentsIfNecessary() {
   web_contents()->GetController().LoadIfNecessary();
 
@@ -727,21 +721,6 @@ WebViewGuest::NewWindowInfo::~NewWindowInfo() {
 // Bridge helpers to allow usage of component code in the browser.
 ////////////////////////////////////////////////////////////////////////////////
 namespace guest_view {
-
-// Vivaldi helper function that is declared in
-// src/components/guest_view/browser/guest_view_base.h.
-// Returns true if a Browser object owns and manage the lifecycle of the
-// |content::WebContents|
-bool HandOverToBrowser(content::WebContents* contents) {
-  // gisli@vivaldi.com:  In case of Vivaldi view the view is not
-  // an owner of the web contents (the browser object owns it).
-  Browser* browser = chrome::FindBrowserWithWebContents(contents);
-  if (browser) {
-    // Hand the web contents over to the browser.
-    contents->SetDelegate(browser);
-  }
-  return !!browser;
-}
 
 // declared in src/components/guest_view/browser/guest_view_base.h
 void AttachWebContentsObservers(content::WebContents* contents) {

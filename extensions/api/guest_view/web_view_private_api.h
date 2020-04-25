@@ -15,8 +15,7 @@
 namespace extensions {
 namespace vivaldi {
 
-class VivaldiWebViewWithGuestFunction
-    : public UIThreadExtensionFunction {
+class VivaldiWebViewWithGuestFunction : public ExtensionFunction {
  public:
   VivaldiWebViewWithGuestFunction() = default;
 

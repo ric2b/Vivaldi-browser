@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/loader/base_fetch_context.h"
 
+#include "services/network/public/cpp/request_mode.h"
 #include "third_party/blink/public/mojom/loader/request_context_frame_type.mojom-blink.h"
 #include "third_party/blink/public/platform/web_content_settings_client.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
@@ -138,14 +139,14 @@ BaseFetchContext::CanRequestInternal(
   // On navigation cases, Context().GetSecurityOrigin() may return nullptr, so
   // the request's origin may be nullptr.
   // TODO(yhirano): Figure out if it's actually fine.
-  DCHECK(request_mode == network::mojom::RequestMode::kNavigate || origin);
+  DCHECK(network::IsNavigationRequestMode(request_mode) || origin);
 #if !defined(OFFICIAL_BUILD)
   // VB-24745 VB-44251 Render Mail in Webview: Allow HTML messages to request
   // inline attachments as blob-URL. TODO: remove this when the webview will be
   // "self-contained" and the blobs will be created within the webview.
   if (!url.GetString().StartsWith("blob:chrome-extension://" VIVALDI_APP_ID "/"))
 #endif
-  if (request_mode != network::mojom::RequestMode::kNavigate &&
+  if (!network::IsNavigationRequestMode(request_mode) &&
       !origin->CanDisplay(url)) {
     if (reporting_policy == SecurityViolationReportingPolicy::kReport) {
       AddConsoleMessage(ConsoleMessage::Create(

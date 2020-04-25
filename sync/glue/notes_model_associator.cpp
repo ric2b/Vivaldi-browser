@@ -127,9 +127,8 @@ class ScopedAssociationUpdater {
 NotesNodeFinder::NotesNodeFinder(const Notes_Node* parent_node)
     : parent_node_(parent_node) {
   for (auto& it: parent_node_->children()) {
-    std::string title = base::UTF16ToUTF8(it->GetTitle());
-
-    child_nodes_.insert(std::make_pair(title, it.get()));
+    std::string content = base::UTF16ToUTF8(it->GetContent());
+    child_nodes_.insert(std::make_pair(content, it.get()));
   }
 }
 
@@ -141,14 +140,21 @@ const Notes_Node* NotesNodeFinder::FindNotesNode(const GURL& url,
                                                  int64_t preferred_id) {
   const Notes_Node* match = nullptr;
 
-  // First lookup a range of notes with the same title.
-  NotesNodeRange range = child_nodes_.equal_range(title);
+  // First lookup a range of notes with the same content.
+  NotesNodeRange range = child_nodes_.equal_range(content);
   NotesNodeMap::iterator match_iter = range.second;
   for (NotesNodeMap::iterator iter = range.first; iter != range.second;
        ++iter) {
     // Then within the range match the node by the folder bit
     // and the url.
     const Notes_Node* node = iter->second;
+    std::string local_title;
+    ConvertTitleToSyncInternalFormat(base::UTF16ToUTF8(node->GetTitle()),
+                                     &local_title);
+    std::string sync_title;
+    ConvertTitleToSyncInternalFormat(title, &sync_title);
+    if (local_title != sync_title)
+      continue;
     if (is_folder != node->is_folder())
       continue;
     if (url != node->GetURL())
@@ -166,11 +172,9 @@ const Notes_Node* NotesNodeFinder::FindNotesNode(const GURL& url,
       match_iter = iter;
       break;
     } else if (match == nullptr) {
-      if (base::UTF16ToUTF8(node->GetContent()) == content) {
-        // First match - continue iterating.
-        match = node;
-        match_iter = iter;
-      }
+      // First match - continue iterating.
+      match = node;
+      match_iter = iter;
     }
   }
 

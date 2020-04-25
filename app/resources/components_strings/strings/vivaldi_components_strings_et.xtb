@@ -4,6 +4,7 @@
 <translation id="1110994991967754504"><ph name="PERMISSION_NAME" /></translation>
 <translation id="1152921474424827756">Vaata aadressi <ph name="URL" /> <ph name="BEGIN_LINK" />puhverdatud koopiat<ph name="END_LINK" /></translation>
 <translation id="1158211211994409885">Host <ph name="HOST_NAME" /> sulges ootamatult ühenduse.</translation>
+<translation id="1161325031994447685">Loo WiFi-ühendus uuesti</translation>
 <translation id="1175364870820465910">Prindi...</translation>
 <translation id="1375198122581997741">Teave versiooni kohta</translation>
 <translation id="139305205187523129">Host <ph name="HOST_NAME" /> ei saatnud andmeid.</translation>
@@ -58,10 +59,12 @@
 <translation id="3681007416295224113">Sertifikaadi info</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Kontrolli puhverserveri, tulemüüri ja DNS-i seadistust<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Kui kasutad puhverserverit:</translation>
+<translation id="3950820424414687140">Sisselogimine</translation>
 <translation id="3973234410852337861">Sait <ph name="HOST_NAME" /> on blokeeritud</translation>
 <translation id="3987940399970879459">Vähem kui 1 MB</translation>
 <translation id="410351446219883937">Automaatesitus</translation>
 <translation id="4116663294526079822">Sellel saidil alati lubatud</translation>
+<translation id="4130226655945681476">Kontrolli võrgukaableid, modemit ja ruuterit</translation>
 <translation id="4151403195736952345">Üldreegli järgi (tuvastatakse)</translation>
 <translation id="4165986682804962316">Saidi seaded</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Kontrolli tulemüüri ja viirusetõrje seadeid<ph name="END_LINK" /></translation>

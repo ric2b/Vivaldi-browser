@@ -39,8 +39,7 @@ class BookmarkContextMenuAPI : public BrowserContextKeyedAPI {
 };
 
 // Opens a bookmark context menu
-class BookmarkContextMenuShowFunction :
-    public UIThreadExtensionFunction,
+class BookmarkContextMenuShowFunction : public ExtensionFunction,
     public ::vivaldi::BookmarkMenuContainer::Delegate,
     public ::vivaldi::VivaldiBookmarkMenuObserver {
  public:

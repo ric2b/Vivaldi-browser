@@ -61,7 +61,7 @@ PlatformPipelineTestBase::~PlatformPipelineTestBase() {}
 
 Demuxer * PlatformPipelineTestBase::CreatePlatformDemuxer(
     std::unique_ptr<DataSource> & data_source,
-    base::test::ScopedTaskEnvironment & task_environment_,
+    base::test::TaskEnvironment & task_environment_,
     MediaLog* media_log) {
   const std::string content_type;
   const GURL url("file://" + filepath_.AsUTF8Unsafe());

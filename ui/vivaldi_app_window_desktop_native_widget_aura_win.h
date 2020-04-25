@@ -28,7 +28,7 @@ class VivaldiAppWindowDesktopNativeWidgetAuraWin
   ~VivaldiAppWindowDesktopNativeWidgetAuraWin() override;
 
   // Overridden from views::DesktopNativeWidgetAura:
-  void InitNativeWidget(const views::Widget::InitParams& params) override;
+  void InitNativeWidget(views::Widget::InitParams params) override;
   void Maximize() override;
   void Minimize() override;
 

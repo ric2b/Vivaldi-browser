@@ -11,8 +11,9 @@
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "media/base/renderer_factory.h"
-#include "media/mojo/interfaces/interface_factory.mojom.h"
-#include "media/mojo/interfaces/renderer.mojom.h"
+#include "media/mojo/buildflags.h"
+#include "media/mojo/mojom/interface_factory.mojom.h"
+#include "media/mojo/mojom/renderer.mojom.h"
 
 namespace service_manager {
 class InterfaceProvider;
@@ -47,6 +48,12 @@ class MojoRendererFactory : public RendererFactory {
       const RequestOverlayInfoCB& request_overlay_info_cb,
       const gfx::ColorSpace& target_color_space,
       bool use_platform_media_pipeline = false) final;
+
+#if BUILDFLAG(ENABLE_CAST_RENDERER)
+  std::unique_ptr<MojoRenderer> CreateCastRenderer(
+      const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
+      VideoRendererSink* video_renderer_sink);
+#endif  // BUILDFLAG(ENABLE_CAST_RENDERER)
 
 #if defined(OS_ANDROID)
   std::unique_ptr<MojoRenderer> CreateFlingingRenderer(

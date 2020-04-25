@@ -16,7 +16,7 @@
 
 namespace extensions {
 
-class SettingsSetContentSettingFunction : public UIThreadExtensionFunction {
+class SettingsSetContentSettingFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("settings.setContentSetting",
                              SETTINGS_SET_CONTENTSETTING)

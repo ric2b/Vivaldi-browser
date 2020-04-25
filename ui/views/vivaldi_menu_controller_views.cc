@@ -7,6 +7,32 @@ static bool FilterSynthesizedMoveEvent = false;
 
 namespace views {
 
+void MenuController::VivaldiAdjustMenubarMenuGeometry(
+    gfx::Rect* menu_bounds,
+    const gfx::Rect& monitor_bounds,
+    const gfx::Rect& anchor_bounds) {
+  // Adjust x to avoid horizontal clipping
+  if (menu_bounds->right() > monitor_bounds.right())
+      menu_bounds->set_x(monitor_bounds.right() - menu_bounds->width());
+  // Adjust y to use area with most available space.
+  int above = anchor_bounds.y() - monitor_bounds.y();
+  int below = monitor_bounds.bottom() - anchor_bounds.bottom();
+  if (above > below) {
+    menu_bounds->set_y(monitor_bounds.y());
+    menu_bounds->set_height(above);
+  } else {
+    menu_bounds->set_y(anchor_bounds.bottom());
+    menu_bounds->set_height(monitor_bounds.bottom() - menu_bounds->y());
+  }
+}
+
+// Wrapper for access to private function
+void MenuController::VivaldiOpenMenu(MenuItemView* item) {
+  SetSelection(item,
+      views::MenuController::SELECTION_OPEN_SUBMENU |
+      views::MenuController::SELECTION_UPDATE_IMMEDIATELY);
+}
+
 // To be used for navigating a menu bar using the keyboard
 bool MenuController::StepSiblingMenu(bool next) {
   if (!menu_stack_.empty()) {

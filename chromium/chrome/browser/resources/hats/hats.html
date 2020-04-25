@@ -1,29 +1,25 @@
+<!doctype html>
 <html>
   <head>
     <style>
-      /**
-       * The style used to draw done-button.
-       * Use z-index to make sure the button is in front of the survey content.
-       * TODO(weili): we need to make it RTL friendly if we need to support RTL.
+      /* 402 is the project code name used in the content loaded by this page.
+       * We need to override their focus behavior to improve keyboard focus
+       * accessibility.
        */
-      .done-button {
-        bottom: 17px;
-        color: rgb(33, 150, 243);
-        display: block;
-        font: 400 16px Roboto,RobotoDraft,Helvetica,sans-serif;
-        position: fixed;
-        right: 25px;
-        text-transform: uppercase;
-        z-index: 10;
+      .t402-prompt-websat .t402-prompt-root .t402-button:focus {
+        outline-style: auto;
       }
-
-      #id-done-button[hidden] {
-        display: none;
+      .t402-css-theme-hats-material1 .t402-titlebar-title-alt:focus {
+        outline-style: auto;
+      }
+      :focus {
+        /* Needs to override dynamically loaded, more specific styles. */
+        outline-color: rgb(77, 144, 254) !important;
       }
     </style>
     <script>
       /**
-       * Handles the callback when the survey is submitted or when the survey
+       * Close the window when the survey is submitted or when the survey
        * has already been submitted in the past.
        * @param {boolean} isFirstRun Will be true when the user just earned
        *    access to the content and false if the user had already had access
@@ -34,12 +30,8 @@
           return;
         }
 
-        /* Display the done button at the end of the survey. */
-        document.getElementById('id-done-button').hidden = false;
-
-        /* Auto dismiss after two seconds. */
-        setTimeout(function(){ window.close(); }, 2000);
-      };
+        window.close();
+      }
 
       /**
        * Called after the survey HTML is injected into the page.
@@ -50,20 +42,9 @@
         for (const element of elements)
           element.style.display = 'none';
       }
-
-      document.addEventListener('DOMContentLoaded', function() {
-        document.getElementById('id-link-done-button').onclick = function() {
-          window.close();
-        }
-      })
     </script>
-    <script src="$SCRIPT_SRC"></script>
+    <script src="$i18n{scriptSrc}"></script>
   </head>
   <body>
-    <a id="id-link-done-button" href="#" role="button">
-      <div id="id-done-button" class="done-button" hidden>
-        $DONE_BUTTON_LABEL
-      </div>
-    </a>
   </body>
 </html>

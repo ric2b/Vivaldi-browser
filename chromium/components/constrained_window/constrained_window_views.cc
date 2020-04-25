@@ -213,12 +213,13 @@ views::Widget* CreateWebModalDialogViews(views::WidgetDelegate* dialog,
   // too late for session auth dialogs, so nullptr check it here. The delegate
   // is set later and will position the dialog correctly before it's shown,
   // so this is just to avoid the crasher from VB-4437.
-  web_modal::WebContentsModalDialogManagerDelegate *delegate =
-      web_modal::WebContentsModalDialogManager::FromWebContents(web_contents)
-          ->delegate();
+  web_modal::WebContentsModalDialogManager* manager =
+      web_modal::WebContentsModalDialogManager::FromWebContents(web_contents);
+  CHECK(manager);
   return views::DialogDelegate::CreateDialogWidget(
       dialog, nullptr,
-      delegate ? delegate->GetWebContentsModalDialogHost()->GetHostView()
+      manager->delegate() ?
+      manager->delegate()->GetWebContentsModalDialogHost()->GetHostView() 
                : nullptr);
   // Vivaldi end
 }

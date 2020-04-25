@@ -74,6 +74,7 @@
 #include "extensions/api/runtime/runtime_api.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "net/base/url_util.h"
+#include "ui/content/vivaldi_tab_check.h"
 #include "ui/devtools/devtools_connector.h"
 #include "ui/infobar_container_web_proxy.h"
 
@@ -435,6 +436,13 @@ DevToolsWindow::~DevToolsWindow() {
     close_callback_.Run();
     close_callback_ = base::Closure();
   }
+  // Defer deletion of the main web contents, since we could get here
+  // via RenderFrameHostImpl method that expects WebContents to live
+  // for some time. See http://crbug.com/997299 for details.
+  if (owned_main_web_contents_) {
+    base::SequencedTaskRunnerHandle::Get()->DeleteSoon(
+        FROM_HERE, std::move(owned_main_web_contents_));
+  }
 }
 
 // static
@@ -611,7 +619,7 @@ void DevToolsWindow::ToggleDevToolsWindow(
     Browser* browser,
     const DevToolsToggleAction& action) {
   if (action.type() == DevToolsToggleAction::kToggle &&
-      browser->is_devtools()) {
+      browser->is_type_devtools()) {
     browser->tab_strip_model()->CloseAllTabs();
     return;
   }
@@ -952,7 +960,7 @@ bool DevToolsWindow::NeedsToInterceptBeforeUnload(
 // static
 bool DevToolsWindow::HasFiredBeforeUnloadEventForDevToolsBrowser(
     Browser* browser) {
-  DCHECK(browser->is_devtools());
+  DCHECK(browser->is_type_devtools());
   // When FastUnloadController is used, devtools frontend will be detached
   // from the browser window at this point which means we've already fired
   // beforeunload.
@@ -1083,9 +1091,9 @@ DevToolsWindow* DevToolsWindow::Create(
   if (inspected_web_contents) {
     // Check for a place to dock.
     int tab;
-    if (!FindInspectedBrowserAndTabIndex(inspected_web_contents,
-                                         &browser, &tab) ||
-        browser->is_type_popup()) {
+    if (!FindInspectedBrowserAndTabIndex(inspected_web_contents, &browser,
+                                         &tab) ||
+        !browser->is_type_normal()) {
       can_dock = false;
     }
   }
@@ -1117,6 +1125,8 @@ DevToolsWindow* DevToolsWindow::Create(
 
   std::unique_ptr<WebContents> main_web_contents =
       WebContents::Create(params);
+  VivaldiTabCheck::MarkAsDevToolContents(main_web_contents.get());
+
   main_web_contents->GetController().LoadURL(
       DecorateFrontendURL(url), content::Referrer(),
       ui::PAGE_TRANSITION_AUTO_TOPLEVEL, std::string());
@@ -1249,13 +1259,7 @@ void DevToolsWindow::AddNewContents(WebContents* source,
                                     bool* was_blocked) {
   if (new_contents.get() == toolbox_web_contents_) {
     owned_toolbox_web_contents_ = std::move(new_contents);
-    extensions::WebViewGuest* web_view_guest =
-      extensions::WebViewGuest::FromWebContents(
-        owned_toolbox_web_contents_.get());
-    if (web_view_guest) {
-      // Devtools owns this webcontents, let the webviewguest know.
-      web_view_guest->SetWebContentsIsOwnedByThis(false);
-    }
+    VivaldiTabCheck::MarkAsDevToolContents(toolbox_web_contents_);
 
     toolbox_web_contents_->SetDelegate(
         new DevToolsToolboxDelegate(toolbox_web_contents_,

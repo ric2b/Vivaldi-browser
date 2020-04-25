@@ -142,7 +142,6 @@
 <translation id="6321917430147971392">Verifique suas configurações de DNS</translation>
 <translation id="6328639280570009161">Tente desativar a previsão de página</translation>
 <translation id="6328786501058569169">Este site é enganoso</translation>
-<translation id="6417515091412812850">Não foi possível verificar se o certificado foi revogado.</translation>
 <translation id="6433595998831338502">A conexão com <ph name="HOST_NAME" /> foi recusada.</translation>
 <translation id="6447842834002726250">Cookies</translation>
 <translation id="6569060085658103619">Você está vendo uma página de extensões</translation>
@@ -195,7 +194,6 @@ incomuns e incorretas. Isso pode acontecer quando um invasor está fingindo ser 
 <translation id="8332188693563227489">O acesso a <ph name="HOST_NAME" /> foi negado</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> demorou muito para responder.</translation>
 <translation id="8503813439785031346">Nome de usuário</translation>
-<translation id="859285277496340001">O certificado não especifica um mecanismo para verificar se ele foi revogado.</translation>
 <translation id="8703575177326907206">Sua conexão com <ph name="DOMAIN" /> não está criptografada.</translation>
 <translation id="8740359287975076522">Não foi possível encontrar um &lt;abbr id="dnsDefinition"&gt;endereço DNS&lt;/abbr&gt; para <ph name="HOST_NAME" />. Diagnosticando o problema...</translation>
 <translation id="9001074447101275817">O proxy <ph name="DOMAIN" /> exige um nome de usuário e uma senha.</translation>

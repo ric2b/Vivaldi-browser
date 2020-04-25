@@ -199,10 +199,6 @@ class AppWindow : public content::WebContentsDelegate,
     // Icon URL to be used for setting the window icon.
     GURL window_icon_url;
 
-    // (Vivaldi) If true, this window will be used as a hidden window for
-    // thumbnail generation.
-    bool thumbnail_window = false;
-
     // (Vivaldi) If true, this window will not use the position cache app
     // windows usually use but rather the provided dimensions as-is.
     bool avoid_cached_positions = false;
@@ -393,7 +389,6 @@ class AppWindow : public content::WebContentsDelegate,
   bool DidFinishFirstNavigation() { return did_finish_first_navigation_; }
 
   // Vivaldi specific extensions.
-  bool thumbnail_window() const { return thumbnail_window_; }
   void CloseWindow() { CloseContents(nullptr); }
 
   // Called by the window API when events can be sent to the window for this
@@ -606,8 +601,8 @@ class AppWindow : public content::WebContentsDelegate,
   // race condition of loading custom app icon and app content simultaneously.
   bool window_ready_ = false;
 
-  // PlzNavigate: these callbacks are called when the navigation is finished on
-  // both browser and renderer sides.
+  // These callbacks are called when the navigation is finished on both browser
+  // and renderer sides.
   std::vector<DidFinishFirstNavigationCallback>
       on_did_finish_first_navigation_callbacks_;
   // Whether the first navigation was completed in both browser and renderer
@@ -619,9 +614,6 @@ class AppWindow : public content::WebContentsDelegate,
   // If the mouse has entered the app-window. Used for ContentsMouseEvent
   // leaving and entering.
   bool mouse_has_entered_ = false;
-
-  // Vivaldi: Whether |thumbnail_window| was set in the CreateParams.
-  bool thumbnail_window_ = false;
 
   base::WeakPtrFactory<AppWindow> image_loader_ptr_factory_{this};
 

@@ -25,33 +25,49 @@ const Notes_Node* GetNotesTopNode(int index) WARN_UNUSED_RESULT;
 // Used to access the notes within the verifier sync profile.
 Notes_Model* GetVerifierNotesModel() WARN_UNUSED_RESULT;
 
-// Adds a URL with address |url| and title |title| to the notes of
+// Adds a URL with address |url| and content |content| to the notes of
 // profile |profile|. Returns a pointer to the node that was added.
 const Notes_Node* AddNote(int profile,
-                          const std::string& title,
+                          const std::string& content,
                           const GURL& url) WARN_UNUSED_RESULT;
 
-// Adds a URL with address |url| and title |title| to the notes of
+// Adds a URL with address |url|, title |title| and content |content| to the
+// notes of profile |profile|. Returns a pointer to the node that was added.
+const Notes_Node* AddNote(int profile,
+                          const std::string& title,
+                          const std::string& content,
+                          const GURL& url) WARN_UNUSED_RESULT;
+
+// Adds a URL with address |url| and content |content| to the notes of
 // profile |profile| at position |index|. Returns a pointer to the node that
 // was added.
 const Notes_Node* AddNote(int profile,
                           int index,
+                          const std::string& content,
+                          const GURL& url) WARN_UNUSED_RESULT;
+
+// Adds a URL with address |url|, title |title| and content |content| to the
+// notes of profile |profile| at position |index|. Returns a pointer to the node
+// that was added.
+const Notes_Node* AddNote(int profile,
+                          int index,
+                          const std::string& content,
                           const std::string& title,
                           const GURL& url) WARN_UNUSED_RESULT;
 
-// Adds a URL with address |url| and title |title| under the node |parent| of
-// profile |profile| at position |index|. Returns a pointer to the node that
+// Adds a URL with address |url| and content |content| under the node |parent|
+// of profile |profile| at position |index|. Returns a pointer to the node that
 // was added.
 const Notes_Node* AddNote(int profile,
                           const Notes_Node* parent,
                           int index,
+                          const std::string& content,
                           const std::string& title,
-                          const GURL& url,
-                          const std::string& content) WARN_UNUSED_RESULT;
+                          const GURL& url) WARN_UNUSED_RESULT;
 const Notes_Node* AddNote(int profile,
                           const Notes_Node* parent,
                           int index,
-                          const std::string& title,
+                          const std::string& content,
                           const GURL& url) WARN_UNUSED_RESULT;
 
 // Adds a folder named |title| to the notes profile |profile|.
@@ -72,6 +88,12 @@ const Notes_Node* AddFolder(int profile,
                             const Notes_Node* parent,
                             int index,
                             const std::string& title) WARN_UNUSED_RESULT;
+
+// Changes the title of the node |node| in the notes model of profile
+// |profile| to |new_content|.
+void SetContent(int profile,
+                const Notes_Node* node,
+                const std::string& new_content);
 
 // Changes the title of the node |node| in the notes model of profile
 // |profile| to |new_title|.
@@ -143,14 +165,9 @@ const Notes_Node* GetUniqueNodeByURL(int profile,
                                      const GURL& url) WARN_UNUSED_RESULT;
 
 // Returns the number of notes in notes model of profile |profile|
-// whose titles match the string |title|.
-int CountNotesWithTitlesMatching(int profile,
-                                 const std::string& title) WARN_UNUSED_RESULT;
-
-// Returns the number of notes folders in the notes model of profile
-// |profile| whose titles contain the query string |title|.
-int CountFoldersWithTitlesMatching(int profile,
-                                   const std::string& title) WARN_UNUSED_RESULT;
+// whose content match the string |content|.
+int CountNotesWithContentMatching(int profile, const std::string& content)
+    WARN_UNUSED_RESULT;
 
 }  // namespace notes_helper
 

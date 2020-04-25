@@ -5,7 +5,7 @@
 <translation id="1031362278801463162">正在載入預覽畫面</translation>
 <translation id="1049795001945932310">語言設定(&amp;L)</translation>
 <translation id="1056898198331236512">警告</translation>
-<translation id="1084824384139382525">複製連結地址(&amp;E)</translation>
+<translation id="1084824384139382525">複製連結(&amp;E)</translation>
 <translation id="1128109161498068552">禁止任何網站使用系統專用訊息存取 MIDI 裝置</translation>
 <translation id="1163931534039071049">檢視頁框原始碼(&amp;V)</translation>
 <translation id="1165039591588034296">錯誤</translation>
@@ -128,7 +128,7 @@
 <translation id="3305661444342691068">在預覽中開啟 PDF</translation>
 <translation id="3317459757438853210">雙面</translation>
 <translation id="3341703758641437857">允許存取本地檔案 URL</translation>
-<translation id="3347086966102161372">複製圖片網址(&amp;O)</translation>
+<translation id="3347086966102161372">複製圖片位址(&amp;O)</translation>
 <translation id="3360297538363969800">列印失敗。請檢查您的印表機，然後再試一次。</translation>
 <translation id="3378572629723696641">這個延伸套件可能已損毀。</translation>
 <translation id="3387614642886316601">使用進階拼字檢查功能</translation>
@@ -319,7 +319,7 @@
 <translation id="7005848115657603926">頁面範圍無效，請使用 <ph name="EXAMPLE_PAGE_RANGE" /></translation>
 <translation id="7006634003215061422">下邊界</translation>
 <translation id="7053983685419859001">封鎖</translation>
-<translation id="708060913198414444">複製音訊網址(&amp;O)</translation>
+<translation id="708060913198414444">複製音訊位址(&amp;O)</translation>
 <translation id="7175353351958621980">載入自：</translation>
 <translation id="7270858098575133036">每當有網站要使用系統專用訊息存取 MIDI 裝置時詢問我</translation>
 <translation id="7287143125007575591">存取遭拒。</translation>
@@ -350,7 +350,7 @@
 <translation id="7791543448312431591">新增</translation>
 <translation id="7814458197256864873">複製(&amp;C)</translation>
 <translation id="7818135753970109980">已新增主題：<ph name="EXTENSION_NAME" /></translation>
-<translation id="782057141565633384">複製影片網址(&amp;O)</translation>
+<translation id="782057141565633384">複製影片位址(&amp;O)</translation>
 <translation id="7857949311770343000">這是您想要的新分頁嗎？</translation>
 <translation id="786073089922909430">服務：<ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7885253890047913815">最近用過的印表機</translation>

@@ -38,7 +38,7 @@ bool CSSModsDataClassHandler::GetData(
   // method to redirect to it.
   return base::PostTaskWithTraitsAndReplyWithResult(
       FROM_HERE,
-      {base::TaskPriority::USER_VISIBLE, base::MayBlock(),
+      {base::ThreadPool(), base::TaskPriority::USER_VISIBLE, base::MayBlock(),
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
       base::BindOnce(&CSSModsDataClassHandler::GetDataForIdOnBlockingThread,
                      custom_css_path, data_id),

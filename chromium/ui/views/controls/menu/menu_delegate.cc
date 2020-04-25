@@ -168,4 +168,8 @@ bool MenuDelegate::ShouldTryPositioningBesideAnchor() const {
   return true;
 }
 
+bool MenuDelegate::VivaldiShouldTryPositioningInMenuBar() const {
+  return false;
+}
+
 }  // namespace views

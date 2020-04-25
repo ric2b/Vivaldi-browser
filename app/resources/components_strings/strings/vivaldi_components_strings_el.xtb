@@ -26,6 +26,7 @@
 <translation id="2030481566774242610">Μήπως εννοείτε <ph name="LINK" />;</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Έλεγχος του διακομιστή μεσολάβησης και του τείχους προστασίας<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">Ήχος</translation>
+<translation id="2119505898009119320">Εκδόθηκε σε: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2147827593068025794">Συγχρονισμός Παρασκηνίου</translation>
 <translation id="2166378884831602661">Αυτός ο ιστότοπος δεν μπορεί να προσφέρει ασφαλή σύνδεση</translation>
 <translation id="2187317261103489799">Εντοπισμός (προεπιλογή)</translation>
@@ -151,7 +152,6 @@
 <translation id="6328639280570009161">Δοκιμάστε να απενεργοποιήσετε την πρόβλεψη δικτύου</translation>
 <translation id="6328786501058569169">Αυτός ο ιστότοπος είναι παραπλανητικός</translation>
 <translation id="6358450015545214790">Τι σημαίνουν αυτά;</translation>
-<translation id="6417515091412812850">Δεν είναι δυνατόν να ελεγχθεί αν το πιστοποιητικό έχει ακυρωθεί.</translation>
 <translation id="6433595998831338502">Ο κεντρικός υπολογιστής <ph name="HOST_NAME" /> απέρριψε τη σύνδεση.</translation>
 <translation id="6447842834002726250">Cookies</translation>
 <translation id="6451458296329894277">Επιβεβαίωση Νέας Υποβολής Φόρμας</translation>
@@ -206,7 +206,6 @@
 <translation id="8332188693563227489">Απορρίφθηκε η πρόσβαση στο κεντρικό υπολογιστή <ph name="HOST_NAME" /></translation>
 <translation id="8498891568109133222">Ο κεντρικός υπολογιστής <ph name="HOST_NAME" /> άργησε πολύ να ανταποκριθεί.</translation>
 <translation id="8503813439785031346">Όνομα χρήστη</translation>
-<translation id="859285277496340001">Αυτό το πιστοποιητικό δεν καθορίζει κάποιο μηχανισμό για να ελέγχεται εάν έχει ανακληθεί.</translation>
 <translation id="8703575177326907206">Η σύνδεσή σας με τον τομέα <ph name="DOMAIN" /> δεν είναι κρυπτογραφημένη.</translation>
 <translation id="8740359287975076522">Δεν ήταν δυνατός ο εντοπισμός της &lt;abbr id="dnsDefinition"&gt;διεύθυνσης DNS&lt;/abbr&gt; του κεντρικού υπολογιστή <ph name="HOST_NAME" />. Γίνεται διάγνωση του προβλήματος.</translation>
 <translation id="9001074447101275817">Απαιτείται όνομα χρήστη και κωδικός πρόσβασης για το διακομιστή μεσολάβησης <ph name="DOMAIN" />.</translation>

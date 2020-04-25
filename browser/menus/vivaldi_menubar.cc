@@ -5,8 +5,11 @@
 #include "browser/menus/vivaldi_menubar.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
+#include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_menu_delegate.h"
 #include "components/favicon/core/favicon_service.h"
+#include "ui/base/theme_provider.h"
+#include "ui/gfx/color_utils.h"
 #include "ui/views/controls/menu/menu_model_adapter.h"
 #include "ui/views/widget/widget.h"
 
@@ -15,6 +18,22 @@ namespace vivaldi {
 static bool IsBookmarkCommand(int command_id) {
   return command_id >= IDC_FIRST_BOOKMARK_MENU;
 }
+
+SkColor TextColorForMenu(views::MenuItemView* menu, views::Widget* widget) {
+  // Use the same code as in MenuItemView::GetTextColor() for best result.
+  if (widget && widget->GetNativeTheme()) {
+    return widget->GetNativeTheme()->GetSystemColor(
+        ui::NativeTheme::kColorId_EnabledMenuItemForegroundColor);
+  } else {
+    return menu->GetNativeTheme()->GetSystemColor(
+        ui::NativeTheme::kColorId_EnabledMenuItemForegroundColor);
+  }
+}
+
+// The Menubar class is a support class for the MenubarMenu api. It is used to
+// display single context menus as well. They are basically a menubar with only
+// one top element. Menus are created on demand just before shown do deal with
+// large menus slowing execution time down.
 
 Menubar::Menubar(Browser* browser, MenubarMenuParams& params, int run_types)
  :browser_(browser),
@@ -34,15 +53,24 @@ void Menubar::SetActiveMenu(int id) {
   params_->delegate->OnMenuOpened(active_menu_id_);
 }
 
+bool Menubar::IsDarkTextColor(views::MenuItemView* menu) {
+  views::Widget* parent =
+    views::Widget::GetWidgetForNativeWindow(
+        browser_->window()->GetNativeWindow());
+  return color_utils::IsDark(TextColorForMenu(menu, parent));
+}
+
+// This function populates the toplevel of a menu. Sub menus are created on
+// demand in WillShowMenu()
 void Menubar::Populate(int id) {
   DCHECK(params_->delegate);
   // Menu models are owned by the delegate
-  ui::SimpleMenuModel* menu_model = nullptr;
-  params_->delegate->PopulateModel(id, &menu_model);
-  DCHECK(menu_model);
   views::MenuItemView* root = new views::MenuItemView(this);
   id_to_menu_map_[id] = root;
   root->set_has_icons(true);
+  ui::MenuModel* menu_model = nullptr;
+  params_->delegate->PopulateModel(id, IsDarkTextColor(root), &menu_model);
+  DCHECK(menu_model);
   PopulateMenu(root, menu_model);
 
   if (params_->delegate->IsBookmarkMenu(id)) {
@@ -78,11 +106,12 @@ void Menubar::PopulateMenu(views::MenuItemView* parent, ui::MenuModel* model) {
     // Add the menu item at the end.
     int menu_index =
         parent->HasSubmenu() ? int{parent->GetSubmenu()->children().size()} : 0;
-    views::MenuItemView* item =
-        AddMenuItem(parent, menu_index, model, i, model->GetTypeAt(i));
+    AddMenuItem(parent, menu_index, model, i, model->GetTypeAt(i));
 
-    if (model->GetTypeAt(i) == ui::MenuModel::TYPE_SUBMENU)
-      PopulateMenu(item, model->GetSubmenuModelAt(i));
+    if (model->GetTypeAt(i) == ui::MenuModel::TYPE_SUBMENU) {
+      id_to_menumodel_map_[model->GetCommandIdAt(i)] =
+          model->GetSubmenuModelAt(i);
+    }
   }
 }
 
@@ -131,8 +160,30 @@ void Menubar::RunMenu(views::Widget* parent) {
   }
 }
 
-
 void Menubar::WillShowMenu(views::MenuItemView* menu) {
+
+  int id = menu->GetCommand();
+  ui::MenuModel* menu_model = id_to_menumodel_map_[id];
+  if (menu_model && menu_model->GetItemCount() == 0) {
+    params_->delegate->PopulateSubmodel(id, IsDarkTextColor(menu), menu_model);
+    PopulateMenu(menu, id_to_menumodel_map_[id]);
+    if (params_->delegate->IsBookmarkMenu(id)) {
+      bookmark_menu_ = menu;
+    }
+  }
+
+  if (has_been_shown_ == false) {
+    has_been_shown_ = true;
+    // When using this class for the Vivaldi menu we support shortcuts opening
+    // a sub menu as a child of the Vivaldi menu once the latter opens. This can
+    // only happen one time, that is, when the Vivaldi menu opens.
+    views::MenuItemView* item = menu->GetMenuItemByID(
+        params_->delegate->GetSelectedMenuId());
+    if (item) {
+      views::MenuController::GetActiveInstance()->VivaldiOpenMenu(item);
+    }
+  }
+
   if (menu == bookmark_menu_) {
     // Top level
     vivaldi::BookmarkMenuContainer* container =
@@ -166,6 +217,17 @@ bool Menubar::ShouldExecuteCommandWithoutClosingMenu(int id,
   }
   return params_->delegate->IsItemPersistent(id);
  }
+
+// We want all menus to open under or over the menu bar to prevent long menus
+// from opening left or right to the menu bar button. This would prevent proper
+// bar navigation.
+bool Menubar::ShouldTryPositioningBesideAnchor() const {
+  return false;
+}
+
+bool Menubar::VivaldiShouldTryPositioningInMenuBar() const {
+  return true;
+}
 
 void Menubar::ExecuteCommand(int id, int mouse_event_flags) {
   if (IsBookmarkCommand(id) || IsVivaldiMenuItem(id)) {

@@ -26,7 +26,6 @@
 #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "net/base/escape.h"
-#include "prefs/vivaldi_gen_prefs.h"
 #include "third_party/blink/public/web/web_context_menu_data.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/clipboard/clipboard.h"
@@ -371,7 +370,7 @@ bool IsVivaldiCommandIdEnabled(const SimpleMenuModel& menu,
       std::vector<base::string16> types;
       bool ignore;
       ui::Clipboard::GetForCurrentThread()->ReadAvailableTypes(
-          ui::ClipboardType::kCopyPaste, &types, &ignore);
+          ui::ClipboardBuffer::kCopyPaste, &types, &ignore);
       *enabled = !types.empty();
       break;
     }
@@ -406,15 +405,6 @@ bool IsVivaldiCommandIdEnabled(const SimpleMenuModel& menu,
   return true;
 }
 
-void OnLocalImageAsBackgroundDataMappingReady(Profile* profile,
-                                              bool success,
-                                              std::string data_mapping_url) {
-  if (profile && success) {
-    profile->GetPrefs()->SetString(vivaldiprefs::kStartpageImagePathCustom,
-                                   data_mapping_url);
-  }
-}
-
 void OnUseLocalImageAsBackground(content::WebContents* web_contents,
                                  int event_flags,
                                  const GURL& src_url) {
@@ -444,18 +434,19 @@ void OnUseLocalImageAsBackground(content::WebContents* web_contents,
 #endif
     }
   }
-  // Call AddMapping and send a notification to JS to switch to use the custom
-  // background image in parallel. In the very unlikely case when the former
-  // will access the custom image preference before we set its URL in the
-  // AddMapping callback the user may briefly see the older background.
+  // Call UpdateMapping and send a notification to JS to switch to use the
+  // custom background image in parallel. In the very unlikely case when the
+  // former will access the custom image preference before we set its URL in the
+  // UpdateMapping callback the user may briefly see the older background.
   //
   // If we will need to ensure that useLocalImageAsBackground will always be
-  // called after AddMapping calls our callback, we will need a weak pointer
+  // called after UpdateMapping calls our callback, we will need a weak pointer
   // for WebContents, which is messy until https://crbug.com/952390 is
   // resolved.
-  extensions::VivaldiDataSourcesAPI::AddMapping(
-      web_contents->GetBrowserContext(), std::move(path),
-      base::BindOnce(&OnLocalImageAsBackgroundDataMappingReady));
+  extensions::VivaldiDataSourcesAPI::UpdateMapping(
+      web_contents->GetBrowserContext(), 0,
+      extensions::VivaldiDataSourcesAPI::kStartpageImagePathCustom_Index,
+      std::move(path), base::DoNothing());
   SendSimpleAction(web_contents, event_flags, "useLocalImageAsBackground");
 }
 
@@ -517,7 +508,7 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
       if (IsVivaldiRunning()) {
         base::string16 text;
         ui::Clipboard::GetForCurrentThread()->ReadText(
-            ui::ClipboardType::kCopyPaste, &text);
+            ui::ClipboardBuffer::kCopyPaste, &text);
         std::string target;
         if (params.vivaldi_input_type == "vivaldi-addressfield")
           target = "url";

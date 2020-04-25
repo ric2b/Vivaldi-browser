@@ -94,7 +94,7 @@ bool IsOutsideAppWindow(int screen_x, int screen_y) {
   bool outside = true;
   for (auto* browser : *BrowserList::GetInstance()) {
     gfx::Rect rect =
-        browser->is_devtools() ? gfx::Rect() : browser->window()->GetBounds();
+        browser->is_type_devtools() ? gfx::Rect() : browser->window()->GetBounds();
     if (rect.Contains(screen_point)) {
       outside = false;
       break;
@@ -168,6 +168,11 @@ Browser* FindBrowserForPinnedTabs(Browser* current_browser) {
     // Pinned tabs can never be moved to another browser
     return nullptr;
   }
+  if (browser_shutdown::IsTryingToQuit() ||
+      browser_shutdown::GetShutdownType() != browser_shutdown::NOT_VALID) {
+    // Do not move anything on shutdown
+    return nullptr;
+  }
   for (auto* browser : *BrowserList::GetInstance()) {
     if (browser == current_browser) {
       continue;
@@ -178,7 +183,7 @@ Browser* FindBrowserForPinnedTabs(Browser* current_browser) {
     if (browser->type() != current_browser->type()) {
       continue;
     }
-    if (browser->is_devtools()) {
+    if (browser->is_type_devtools()) {
       continue;
     }
     // Only move within the same profile.
@@ -186,6 +191,11 @@ Browser* FindBrowserForPinnedTabs(Browser* current_browser) {
       continue;
     }
     if (!IsMainVivaldiBrowserWindow(browser)) {
+      continue;
+    }
+    if (browser->tab_strip_model()->empty() ||
+        browser->tab_strip_model()->closing_all()) {
+      // The browser window is not yet fully initialized or is about to close.
       continue;
     }
     return browser;

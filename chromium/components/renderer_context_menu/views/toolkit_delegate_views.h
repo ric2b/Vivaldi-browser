@@ -38,7 +38,9 @@ class ToolkitDelegateViews : public RenderViewContextMenuBase::ToolkitDelegate {
   views::MenuItemView* VivaldiInit(ui::SimpleMenuModel* menu_model);
   void VivaldiUpdateMenu(views::MenuItemView* view,
                          ui::SimpleMenuModel* menu_model);
-
+  void VivaldiRunMenuAt(views::Widget* parent,
+                        const gfx::Rect& rect,
+                        ui::MenuSourceType type);
  protected:
   // ToolkitDelegate:
   void Init(ui::SimpleMenuModel* menu_model) override;

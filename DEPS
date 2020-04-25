@@ -379,7 +379,6 @@ hooks = [
   {
     'name': 'vpython_common',
     'pattern': '.',
-    'condition': 'checkout_linux or checkout_mac',
     'action': [ 'vpython',
                 '-vpython-spec', 'chromium/.vpython',
                 '-vpython-tool', 'install',

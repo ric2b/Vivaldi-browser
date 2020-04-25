@@ -18,6 +18,7 @@
 #include "extensions/browser/event_router.h"
 #include "extensions/schema/devtools_private.h"
 #include "extensions/tools/vivaldi_tools.h"
+#include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_ui_utils.h"
 
@@ -273,6 +274,17 @@ DevtoolsConnectorItem::PreHandleKeyboardEvent(
   content::KeyboardEventProcessingResult handled =
       content::KeyboardEventProcessingResult::NOT_HANDLED;
 
+  // NOTE(daniel@vivaldi.com): For Ctrl+R and F5 we send the event immediately
+  // to the webpage to be handled by the shortcut system (see VB-56590).
+  if (guest_delegate_ &&
+          (((event.GetModifiers() & blink::WebInputEvent::kControlKey ||
+            event.GetModifiers() & blink::WebInputEvent::kMetaKey) &&
+           event.windows_key_code == ui::VKEY_R) ||
+      (event.dom_code == (int)ui::DomCode::F5))) {
+    guest_delegate_->HandleKeyboardEvent(source, event);
+    return content::KeyboardEventProcessingResult::HANDLED;
+  }
+
   if (devtools_delegate_) {
     handled = devtools_delegate_->PreHandleKeyboardEvent(source, event);
   }
@@ -281,10 +293,6 @@ DevtoolsConnectorItem::PreHandleKeyboardEvent(
     handled = guest_delegate_->PreHandleKeyboardEvent(source, event);
   }
   return handled;
-}
-
-bool DevtoolsConnectorItem::HasOwnerShipOfContents() {
-  return false;
 }
 
 bool DevtoolsConnectorItem::HandleContextMenu(

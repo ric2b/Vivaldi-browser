@@ -230,7 +230,7 @@ StatsReporterImpl::~StatsReporterImpl() = default;
 
 void StatsReporterImpl::Init() {
   base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock()},
+      FROM_HERE, {base::ThreadPool(), base::MayBlock()},
       base::BindOnce(&GetUserIdFromLegacyStorage),
       base::BindOnce(&StatsReporterImpl::OnLegacyUserIdGot,
                      weak_factory_.GetWeakPtr()));
@@ -317,7 +317,8 @@ void StatsReporterImpl::Worker::Start(
   // the worker does not complete, due to a task not firing or other issues,
   // it will leak (small leak), but no new worker will be started.
   base::PostTaskWithTraits(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::LOWEST},
+      FROM_HERE,
+      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::LOWEST},
       base::BindOnce(&StatsReporterImpl::Worker::Run, base::Unretained(worker),
                      os_profile_reporting_data_path, legacy_user_id,
                      local_state_reporting_data));
@@ -592,10 +593,11 @@ void StatsReporterImpl::Worker::LoadUrlOnUIThread() {
 
 void StatsReporterImpl::Worker::OnURLLoadComplete(
     std::unique_ptr<std::string> response_body) {
-  base::PostTaskWithTraits(FROM_HERE,
-                           {base::MayBlock(), base::TaskPriority::LOWEST},
-                           base::BindOnce(&StatsReporterImpl::Worker::Finish,
-                                          base::Unretained(this)));
+  base::PostTaskWithTraits(
+      FROM_HERE,
+      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::LOWEST},
+      base::BindOnce(&StatsReporterImpl::Worker::Finish,
+                     base::Unretained(this)));
 }
 
 void StatsReporterImpl::Worker::Finish() {

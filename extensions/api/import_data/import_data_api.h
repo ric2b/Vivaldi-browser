@@ -79,7 +79,7 @@ class ImportDataAPI : public importer::ImporterProgressObserver,
   int import_succeeded_count_;
 };
 
-class ImportDataGetProfilesFunction : public UIThreadExtensionFunction {
+class ImportDataGetProfilesFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("importData.getProfiles", IMPORTDATA_GETPROFILES)
   ImportDataGetProfilesFunction();
@@ -95,7 +95,7 @@ class ImportDataGetProfilesFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(ImportDataGetProfilesFunction);
 };
 
-class ImportDataStartImportFunction : public UIThreadExtensionFunction,
+class ImportDataStartImportFunction : public ExtensionFunction,
                                       public ui::SelectFileDialog::Listener {
  public:
   DECLARE_EXTENSION_FUNCTION("importData.startImport", IMPORTDATA_STARTIMPORT)

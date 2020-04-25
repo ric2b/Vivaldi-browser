@@ -72,7 +72,7 @@ class VivaldiWindowsAPI : public BrowserListObserver,
   static const bool kServiceRedirectedInIncognito = true;
 };
 
-class WindowPrivateCreateFunction : public UIThreadExtensionFunction {
+class WindowPrivateCreateFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("windowPrivate.create", WINDOW_PRIVATE_CREATE)
 
@@ -87,7 +87,7 @@ class WindowPrivateCreateFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(WindowPrivateCreateFunction);
 };
 
-class WindowPrivateGetCurrentIdFunction : public UIThreadExtensionFunction {
+class WindowPrivateGetCurrentIdFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("windowPrivate.getCurrentId",
                              WINDOW_PRIVATE_GET_CURRENT_ID)
@@ -103,7 +103,7 @@ class WindowPrivateGetCurrentIdFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(WindowPrivateGetCurrentIdFunction);
 };
 
-class WindowPrivateSetStateFunction : public UIThreadExtensionFunction {
+class WindowPrivateSetStateFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("windowPrivate.setState",
                              WINDOW_PRIVATE_SET_STATE)

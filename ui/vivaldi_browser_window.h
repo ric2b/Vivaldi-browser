@@ -50,46 +50,22 @@ namespace extensions {
 class Extension;
 class NativeAppWindow;
 struct DraggableRegion;
-
-class VivaldiWindowEventDelegate {
- public:
-  virtual void OnMinimizedChanged(bool minimized) = 0;
-  virtual void OnMaximizedChanged(bool maximized) = 0;
-  virtual void OnFullscreenChanged(bool fullscreen) = 0;
-  virtual void OnActivationChanged(bool activated) = 0;
-  virtual void OnDocumentLoaded() = 0;
-  virtual void OnPositionChanged() = 0;
-};
+}
 
 // AppWindowContents class specific to vivaldi app windows. It maintains a
 // WebContents instance and observes it for the purpose of passing
 // messages to the extensions system.
-class VivaldiAppWindowContentsImpl : public AppWindowContents,
-                                     public content::WebContentsDelegate,
+class VivaldiAppWindowContentsImpl : public content::WebContentsDelegate,
                                      public content::WebContentsObserver {
  public:
-  VivaldiAppWindowContentsImpl(VivaldiBrowserWindow* host,
-                               VivaldiWindowEventDelegate* delegate,
-                               extensions::AppDelegate* app_delegate);
+  VivaldiAppWindowContentsImpl(VivaldiBrowserWindow* host);
   ~VivaldiAppWindowContentsImpl() override;
 
-  // AppWindowContents
-  void Initialize(content::BrowserContext* context,
-                  content::RenderFrameHost* creator_frame,
-                  const GURL& url) override;
-  void LoadContents(int32_t creator_process_id) override;
-  void NativeWindowChanged(NativeAppWindow* native_app_window) override;
-  void NativeWindowClosed(bool send_onclosed) override;
-  content::WebContents* GetWebContents() const override;
-  WindowController* GetWindowController() const override;
+  content::WebContents* web_contents() const { return web_contents_.get(); }
 
-  struct StateData {
-    // State kept to dispatch events on changes.
-    bool is_fullscreen_ = false;
-    bool is_maximized_ = false;
-    bool is_minimized_ = false;
-    gfx::Rect bounds_;
-  };
+  // AppWindowContents
+  void Initialize(std::unique_ptr<content::WebContents> web_contents);
+  void NativeWindowClosed();
 
   // Overridden from WebContentsDelegate
   bool HandleKeyboardEvent(
@@ -113,9 +89,10 @@ class VivaldiAppWindowContentsImpl : public AppWindowContents,
   bool CheckMediaAccessPermission(content::RenderFrameHost* render_frame_host,
                                   const GURL& security_origin,
                                   blink::mojom::MediaStreamType type) override;
-  content::PictureInPictureResult EnterPictureInPicture(content::WebContents* web_contents,
-                                  const viz::SurfaceId& surface_id,
-                                  const gfx::Size& natural_size) override;
+  content::PictureInPictureResult EnterPictureInPicture(
+      content::WebContents* web_contents,
+      const viz::SurfaceId& surface_id,
+      const gfx::Size& natural_size) override;
   void ExitPictureInPicture() override;
   void PrintCrossProcessSubframe(
       content::WebContents* web_contents,
@@ -135,33 +112,17 @@ class VivaldiAppWindowContentsImpl : public AppWindowContents,
   void DidFinishLoad(content::RenderFrameHost* render_frame_host,
                      const GURL& validated_url) override;
 
-  void UpdateDraggableRegions(content::RenderFrameHost* sender,
-                              const std::vector<DraggableRegion>& regions);
+  void UpdateDraggableRegions(
+      content::RenderFrameHost* sender,
+      const std::vector<extensions::DraggableRegion>& regions);
 
-  // Force showing of the window after a delay, even if the document has not
-  // loaded. This avoids situations where the document fails somehow and no
-  // window is shown.
-  void ForceShowWindow();
+  extensions::AppDelegate* GetAppDelegate();
 
   VivaldiBrowserWindow* host_;  // This class is owned by |host_|
-  GURL url_;
   std::unique_ptr<content::WebContents> web_contents_;
-  VivaldiWindowEventDelegate* delegate_ = nullptr;
-
-  std::unique_ptr<extensions::AppWebContentsHelper> helper_;
-
-  StateData state_;
-
-  // Used to timeout the main document loading and force show the window.
-  base::OneShotTimer load_timeout_;
-
-  // Owned by VivaldiBrowserWindow
-  extensions::AppDelegate* app_delegate_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiAppWindowContentsImpl);
 };
-
-}  // namespace extensions
 
 // An implementation of BrowserWindow used for Vivaldi.
 class VivaldiBrowserWindow
@@ -170,7 +131,6 @@ class VivaldiBrowserWindow
       public ExclusiveAccessContext,
       public ui::AcceleratorProvider,
       public infobars::InfoBarContainer::Delegate,
-      public extensions::VivaldiWindowEventDelegate,
       public extensions::ExtensionFunctionDispatcher::Delegate,
       public extensions::ExtensionRegistryObserver {
  public:
@@ -182,32 +142,28 @@ class VivaldiBrowserWindow
     SETTINGS,
   };
 
-  // Takes ownership of |browser|.
-  void Init(std::unique_ptr<Browser>  browser,
-            std::string& base_url,
-            extensions::AppWindow::CreateParams& params);
-
   // Returns the BrowserView used for the specified Browser.
   static VivaldiBrowserWindow* GetBrowserWindowForBrowser(
       const Browser* browser);
 
   // Create a new VivaldiBrowserWindow;
   static VivaldiBrowserWindow* CreateVivaldiBrowserWindow(
-      std::unique_ptr<Browser>  browser,
-      std::string& base_url,
-      extensions::AppWindow::CreateParams& params);
-
-  static extensions::AppWindow::CreateParams PrepareWindowParameters(
-      Browser* browser,
-      std::string& base_url);
+      std::unique_ptr<Browser> browser);
 
   // Returns a Browser instance of this view.
   Browser* browser() { return browser_.get(); }
   const Browser* browser() const { return browser_.get(); }
-  content::WebContents* web_contents() const;
+  content::WebContents* web_contents() const {
+    return app_window_contents_.web_contents();
+  }
 
   // Takes ownership of |browser|.
-  void set_browser(Browser* browser);
+  void SetBrowser(std::unique_ptr<Browser> browser);
+
+  void CreateWebContents(const extensions::AppWindow::CreateParams& params,
+                         content::RenderFrameHost* creator_frame);
+
+  void LoadContents(const std::string& resource_relative_url);
 
   // LoadCompleteListener::Delegate implementation. Creates and initializes the
   // |jumplist_| after the first page load.
@@ -276,6 +232,7 @@ class VivaldiBrowserWindow
   void ToolbarSizeChanged(bool is_animating) override {}
   void FocusAppMenu() override {}
   void FocusBookmarksToolbar() override {}
+  void FocusInactivePopupForAccessibility() override {}
   void RotatePaneFocus(bool forwards) override {}
   void ShowAppMenu() override {}
   content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
@@ -302,7 +259,7 @@ class VivaldiBrowserWindow
   DownloadShelf* GetDownloadShelf() override;
   void ConfirmBrowserCloseWithPendingDownloads(
       int download_count,
-      Browser::DownloadClosePreventionType dialog_type,
+      Browser::DownloadCloseType dialog_type,
       bool app_modal,
       const base::Callback<void(bool)>& callback) override;
   void UserChangedTheme(BrowserThemeChangeType theme_change_type) override {}
@@ -320,10 +277,6 @@ class VivaldiBrowserWindow
     const content::WebContents* contents) const override;
   int GetTopControlsHeight() const override;
   void SetTopControlsGestureScrollInProgress(bool in_progress) override {}
-#if defined(OS_CHROMEOS) || defined(OS_MACOSX) || defined(OS_WIN) || \
-    defined(OS_LINUX)
-  void ShowHatsBubbleFromAppMenuButton() override {}
-#endif
   bool CanUserExitFullscreen() const override;
   std::unique_ptr<FindBar> CreateFindBar() override;
   web_modal::WebContentsModalDialogHost* GetWebContentsModalDialogHost()
@@ -347,22 +300,30 @@ class VivaldiBrowserWindow
   void OnTabDetached(content::WebContents* contents, bool was_active) override {
   }
   void TabDraggingStatusChanged(bool is_dragging) override {}
-  void UpdateToolbarVisibility(bool visible, bool animate) override {}
   // Shows in-product help for the given feature.
   void ShowInProductHelpPromo(InProductHelpFeature iph_feature) override {}
   void UpdateFrameColor() override {}
 #if !defined(OS_ANDROID)
-  void ShowIntentPickerBubble(
-    std::vector<apps::IntentPickerAppInfo> app_info,
-    bool show_stay_in_chrome,
-    bool show_remember_selection,
-    IntentPickerResponse callback) override {}
+  void ShowIntentPickerBubble(std::vector<apps::IntentPickerAppInfo> app_info,
+                              bool show_stay_in_chrome,
+                              bool show_remember_selection,
+                              PageActionIconType icon_type,
+                              IntentPickerResponse callback) override {}
 #endif
   send_tab_to_self::SendTabToSelfBubbleView* ShowSendTabToSelfBubble(
     content::WebContents* contents,
     send_tab_to_self::SendTabToSelfBubbleController* controller,
     bool is_user_gesture) override;
+  ExtensionsContainer* GetExtensionsContainer() override;
+  void UpdateCustomTabBarVisibility(bool visible, bool animate) override {}
+  SharingDialog* ShowSharingDialog(content::WebContents* contents,
+                                   SharingUiController* controller) override;
+  void ShowHatsBubble(const std::string& site_id) override {}
   // BrowserWindow overrides end
+
+  // BaseWindow overrides
+  ui::ZOrderLevel GetZOrderLevel() const override;
+  void SetZOrderLevel(ui::ZOrderLevel order) override {}
 
   // web_modal::WebContentsModalDialogManagerDelegate implementation.
   void SetWebContentsBlocked(content::WebContents* web_contents,
@@ -393,7 +354,6 @@ class VivaldiBrowserWindow
   ExclusiveAccessContext* GetExclusiveAccessContext() override;
   void ShowAvatarBubbleFromAvatarButton(
       AvatarBubbleMode mode,
-      const signin::ManageAccountsParams& manage_accounts_params,
       signin_metrics::AccessPoint access_point,
       bool is_source_keyboard) override {}
 
@@ -409,10 +369,6 @@ class VivaldiBrowserWindow
 
   bool IsToolbarShowing() const override;
 
-  ClickToCallDialog* ShowClickToCallDialog(
-    content::WebContents* contents,
-    ClickToCallSharingDialogController* controller) override;
-
   void UpdateDraggableRegions(
       const std::vector<extensions::DraggableRegion>& regions);
 
@@ -420,15 +376,6 @@ class VivaldiBrowserWindow
   void OnNativeWindowChanged(bool moved = false);
   void OnNativeClose();
   void OnNativeWindowActivationChanged(bool active);
-
-  // VivaldiWindowEventDelegate implementation
-  void OnMinimizedChanged(bool minimized) override;
-  void OnMaximizedChanged(bool maximized) override;
-  void OnFullscreenChanged(bool fullscreen) override;
-  void OnActivationChanged(bool activated) override;
-  void OnDocumentLoaded() override;
-  void OnPositionChanged() override;
-  void FocusInactivePopupForAccessibility() override {}
 
   void NavigationStateChanged(content::WebContents* source,
     content::InvalidateTypes changed_flags);
@@ -444,9 +391,6 @@ class VivaldiBrowserWindow
   // TODO(pettern): fix
   bool requested_alpha_enabled() { return false; }
 
-  // Call to create web contents delayed.
-  void CreateWebContents(content::RenderFrameHost* host);
-
   const extensions::Extension* extension() { return extension_; }
 
   bool is_hidden() { return is_hidden_; }
@@ -457,11 +401,6 @@ class VivaldiBrowserWindow
   WindowType type() {
     return window_type_;
   }
-
-  ExtensionsContainer* GetExtensionsContainer() override;
-
-  ui::ZOrderLevel GetZOrderLevel() const override;
-  void SetZOrderLevel(ui::ZOrderLevel order) override {}
 
  protected:
   void DestroyBrowser() override;
@@ -479,7 +418,7 @@ class VivaldiBrowserWindow
 
   class VivaldiManagePasswordsIconView : public ManagePasswordsIconView {
    public:
-    VivaldiManagePasswordsIconView(Profile* profile, Browser* browser);
+    VivaldiManagePasswordsIconView(Browser* browser);
 
     virtual ~VivaldiManagePasswordsIconView() = default;
 
@@ -487,7 +426,6 @@ class VivaldiBrowserWindow
     void Update();
 
    private:
-    Profile* profile_ = nullptr;
     Browser* browser_ = nullptr;
 
     DISALLOW_COPY_AND_ASSIGN(VivaldiManagePasswordsIconView);
@@ -495,7 +433,7 @@ class VivaldiBrowserWindow
 
   class VivaldiPageActionIconContainer : public PageActionIconContainer {
    public:
-    VivaldiPageActionIconContainer(Profile* profile, Browser* browser);
+    VivaldiPageActionIconContainer(Browser* browser);
 
     ~VivaldiPageActionIconContainer() override;
 
@@ -504,7 +442,6 @@ class VivaldiBrowserWindow
     void ExecutePageActionIconForTesting(PageActionIconType type) override;
 
    private:
-    Profile* profile_ = nullptr;
     Browser* browser_ = nullptr;
     std::unique_ptr<VivaldiManagePasswordsIconView> icon_view_;
 
@@ -512,17 +449,30 @@ class VivaldiBrowserWindow
   };
 
  private:
+  struct WindowStateData {
+    // State kept to dispatch events on changes.
+    bool is_fullscreen = false;
+    bool is_maximized = false;
+    bool is_minimized = false;
+    gfx::Rect bounds;
+  };
+
+  friend class VivaldiAppWindowContentsImpl;
+
+  void OnMinimizedChanged(bool minimized);
+  void OnMaximizedChanged(bool maximized);
+  void OnFullscreenChanged(bool fullscreen);
+  void OnPositionChanged();
+  void OnActivationChanged(bool activated);
+
+  // Force showing of the window, even if the document has not loaded. This
+  // avoids situations where the document fails somehow and no window is shown.
+  void ForceShow();
+
   // From AppWindow:
   std::unique_ptr<VivaldiNativeAppWindow> native_app_window_;
-  std::unique_ptr<extensions::AppWindowContents> app_window_contents_;
+  VivaldiAppWindowContentsImpl app_window_contents_;
   std::unique_ptr<extensions::AppDelegate> app_delegate_;
-
-  // The initial url this AppWindow was navigated to.
-  GURL initial_url_;
-  std::string base_url_;
-
-  // params passed from the api.
-  extensions::AppWindow::CreateParams params_;
 
   // Whether the window has been shown or not.
   bool has_been_shown_ = false;
@@ -535,17 +485,11 @@ class VivaldiBrowserWindow
   // hidden, are considered hidden.
   bool is_hidden_ = false;
 
-  // Whether the main document (UI) has loaded or not. The window will not be
-  // be shown until that happens.
-  bool has_loaded_document_ = false;
-
   // Whether the window is active (focused) or not.
   bool is_active_ = false;
 
   // Return the old title if the new title is not usable.
   base::string16 old_title_;
-
-  ui::WindowShowState initial_state_ = ui::SHOW_STATE_DEFAULT;
 
   // The window type for this window.
   WindowType window_type_ = WindowType::NORMAL;
@@ -564,6 +508,11 @@ class VivaldiBrowserWindow
   // Last key code received in HandleKeyboardEvent(). For auto repeat detection.
   int last_key_code_ = -1;
 #endif  // !defined(OS_MACOSX)
+
+  WindowStateData window_state_data_;
+
+  // Used to timeout the main document loading and force show the window.
+  std::unique_ptr<base::OneShotTimer> show_delay_timeout_;
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiBrowserWindow);
 };

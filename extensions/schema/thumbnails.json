@@ -41,25 +41,21 @@
         "type": "object",
         "description": "A structure containing parameters for the captureUI call.",
         "properties": {
-          "windowId": {
-            "type": "integer",
-            "description": "Window id to capture."
-          },
           "posX": {
-            "type": "integer",
-            "description": "X offset inside the given app window."
+            "type": "number",
+            "description": "X offset inside the given app window in the UI coordinates."
           },
           "posY": {
-            "type": "integer",
-            "description": "Y offset inside the given app window."
+            "type": "number",
+            "description": "Y offset inside the given app window in the UI coordinates."
           },
           "width": {
-            "type": "integer",
-            "description": "Width of the capture."
+            "type": "number",
+            "description": "Width of the capture in the UI coordinates."
           },
           "height": {
-            "type": "integer",
-            "description": "Height of the capture."
+            "type": "number",
+            "description": "Height of the capture in the UI coordinates."
           },
           "encodeFormat": {
             "type": "string",
@@ -80,11 +76,6 @@
             "type": "boolean",
             "optional": true,
             "description": "If |saveToBasePath| is provided, setting this to true will open the folder with the file selected after capture has completed. Default is false."
-          },
-          "encodeToDataUrl": {
-            "type": "boolean",
-            "optional": true,
-            "description": "If true, the appropiate data will be inserted to make it a valid data url that can be set as url in elements. Default is false."
           },
           "copyToClipboard": {
             "type": "boolean",
@@ -194,9 +185,14 @@
             "name": "callback",
             "parameters": [
               {
+                "name": "success",
+                "type": "boolean",
+                "description": "true if the image was succesfully captured"
+              },
+              {
                 "name": "image",
                 "type": "string",
-                "description": "base64-encoded png of the captured image."
+                "description": "base64-encoded of the captured image if any."
               }
             ]
           }
@@ -221,9 +217,14 @@
             "name": "callback",
             "parameters": [
               {
+                "name": "success",
+                "type": "boolean",
+                "description": "true if the image was succesfully captured"
+              },
+              {
                 "name": "image",
                 "type": "string",
-                "description": "base64-encoded jpg of the captured image or, if |saveToBasePath| is used, the full path to the image on disk."
+                "description": "base64-encoded of the captured image if any."
               }
             ]
           }
@@ -243,9 +244,9 @@
             "name": "callback",
             "parameters": [
               {
-                "name": "thumbnailUrl",
-                "type": "string",
-                "description": "Url to reference the thumbnail with."
+                "name": "success",
+                "type": "boolean",
+                "description": "True if the thumbnail was successfully generated and stored in the bookmark."
               }
             ]
           }

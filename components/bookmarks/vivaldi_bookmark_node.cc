@@ -14,6 +14,9 @@ namespace bookmarks {
 
 // BookmarkNode ---------------------------------------------------------------
 
+const char BookmarkNode::kTrashNodeGuid[] =
+    "00000000-0000-4000-A000-000000040000";
+
 const base::Time BookmarkNode::date_visited() const {
   std::string date;
   int64_t date_val=0;

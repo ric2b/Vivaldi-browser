@@ -113,7 +113,7 @@ class VivaldiRuntimeFeatures : public KeyedService {
   DISALLOW_COPY_AND_ASSIGN(VivaldiRuntimeFeatures);
 };
 
-class RuntimePrivateExitFunction : public UIThreadExtensionFunction {
+class RuntimePrivateExitFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("runtimePrivate.exit", RUNTIME_EXIT)
 
@@ -126,8 +126,7 @@ class RuntimePrivateExitFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(RuntimePrivateExitFunction);
 };
 
-class RuntimePrivateGetAllFeatureFlagsFunction
-    : public UIThreadExtensionFunction {
+class RuntimePrivateGetAllFeatureFlagsFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("runtimePrivate.getAllFeatureFlags",
                              RUNTIME_SETFEATUREENABLED)
@@ -142,8 +141,7 @@ class RuntimePrivateGetAllFeatureFlagsFunction
   DISALLOW_COPY_AND_ASSIGN(RuntimePrivateGetAllFeatureFlagsFunction);
 };
 
-class RuntimePrivateSetFeatureEnabledFunction
-    : public UIThreadExtensionFunction {
+class RuntimePrivateSetFeatureEnabledFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("runtimePrivate.setFeatureEnabled",
                              RUNTIME_GETALLFEATUREFLAGS)
@@ -158,8 +156,7 @@ class RuntimePrivateSetFeatureEnabledFunction
   DISALLOW_COPY_AND_ASSIGN(RuntimePrivateSetFeatureEnabledFunction);
 };
 
-class RuntimePrivateIsGuestSessionFunction
-    : public UIThreadExtensionFunction {
+class RuntimePrivateIsGuestSessionFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("runtimePrivate.isGuestSession",
                              RUNTIME_ISGUESTSESSION)
@@ -174,8 +171,7 @@ class RuntimePrivateIsGuestSessionFunction
   DISALLOW_COPY_AND_ASSIGN(RuntimePrivateIsGuestSessionFunction);
 };
 
-class RuntimePrivateHasGuestSessionFunction
-    : public UIThreadExtensionFunction {
+class RuntimePrivateHasGuestSessionFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("runtimePrivate.hasGuestSession",
                              RUNTIME_HASGUESTSESSION)
@@ -190,8 +186,7 @@ class RuntimePrivateHasGuestSessionFunction
   DISALLOW_COPY_AND_ASSIGN(RuntimePrivateHasGuestSessionFunction);
 };
 
-class RuntimePrivateSwitchToGuestSessionFunction
-    : public UIThreadExtensionFunction {
+class RuntimePrivateSwitchToGuestSessionFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("runtimePrivate.switchToGuestSession",
                              RUNTIME_SWITCHTOGUESTSESSION)
@@ -206,8 +201,7 @@ class RuntimePrivateSwitchToGuestSessionFunction
   DISALLOW_COPY_AND_ASSIGN(RuntimePrivateSwitchToGuestSessionFunction);
 };
 
-class RuntimePrivateCloseGuestSessionFunction
-    : public UIThreadExtensionFunction {
+class RuntimePrivateCloseGuestSessionFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("runtimePrivate.closeGuestSession",
                              RUNTIME_CLOSEGUESTSESSION)
@@ -223,7 +217,7 @@ class RuntimePrivateCloseGuestSessionFunction
 };
 
 class RuntimePrivateOpenProfileSelectionWindowFunction
-    : public UIThreadExtensionFunction {
+    : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("runtimePrivate.openProfileSelectionWindow",
                              RUNTIME_OPENPROFILESELECTIONWINDOW)
@@ -238,8 +232,7 @@ class RuntimePrivateOpenProfileSelectionWindowFunction
   DISALLOW_COPY_AND_ASSIGN(RuntimePrivateOpenProfileSelectionWindowFunction);
 };
 
-class RuntimePrivateGetUserProfilesFunction
-    : public UIThreadExtensionFunction {
+class RuntimePrivateGetUserProfilesFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("runtimePrivate.getUserProfiles",
                              RUNTIME_GETUSERPROFILES)
@@ -254,8 +247,7 @@ class RuntimePrivateGetUserProfilesFunction
   DISALLOW_COPY_AND_ASSIGN(RuntimePrivateGetUserProfilesFunction);
 };
 
-class RuntimePrivateOpenNamedProfileFunction
-    : public UIThreadExtensionFunction {
+class RuntimePrivateOpenNamedProfileFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("runtimePrivate.openNamedProfile",
                              RUNTIME_OPENNAMEDPROFILE)
@@ -270,8 +262,7 @@ class RuntimePrivateOpenNamedProfileFunction
   DISALLOW_COPY_AND_ASSIGN(RuntimePrivateOpenNamedProfileFunction);
 };
 
-class RuntimePrivateCloseActiveProfileFunction
-    : public UIThreadExtensionFunction {
+class RuntimePrivateCloseActiveProfileFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("runtimePrivate.closeActiveProfile",
                              RUNTIME_CLOSEACTIVEPROFILE)
@@ -286,8 +277,7 @@ class RuntimePrivateCloseActiveProfileFunction
   DISALLOW_COPY_AND_ASSIGN(RuntimePrivateCloseActiveProfileFunction);
 };
 
-class RuntimePrivateGetUserProfileImagesFunction
-    : public UIThreadExtensionFunction {
+class RuntimePrivateGetUserProfileImagesFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("runtimePrivate.getUserProfileImages",
                              RUNTIME_GETUSERPROFILEIMAGES)
@@ -302,8 +292,7 @@ class RuntimePrivateGetUserProfileImagesFunction
   DISALLOW_COPY_AND_ASSIGN(RuntimePrivateGetUserProfileImagesFunction);
 };
 
-class RuntimePrivateUpdateActiveProfileFunction
-    : public UIThreadExtensionFunction {
+class RuntimePrivateUpdateActiveProfileFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("runtimePrivate.updateActiveProfile",
                              RUNTIME_UPDATEACTIVEPROFILE)
@@ -318,8 +307,7 @@ class RuntimePrivateUpdateActiveProfileFunction
   DISALLOW_COPY_AND_ASSIGN(RuntimePrivateUpdateActiveProfileFunction);
 };
 
-class RuntimePrivateGetProfileDefaultsFunction
-    : public UIThreadExtensionFunction {
+class RuntimePrivateGetProfileDefaultsFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("runtimePrivate.getProfileDefaults",
                              RUNTIME_GETPROFILEDEFAULTS)
@@ -334,7 +322,7 @@ class RuntimePrivateGetProfileDefaultsFunction
   DISALLOW_COPY_AND_ASSIGN(RuntimePrivateGetProfileDefaultsFunction);
 };
 
-class RuntimePrivateCreateProfileFunction : public UIThreadExtensionFunction {
+class RuntimePrivateCreateProfileFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("runtimePrivate.createProfile",
                              RUNTIME_CREATEPROFILE)
@@ -357,8 +345,7 @@ class RuntimePrivateCreateProfileFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(RuntimePrivateCreateProfileFunction);
 };
 
-class RuntimePrivateGetProfileStatisticsFunction
-    : public UIThreadExtensionFunction {
+class RuntimePrivateGetProfileStatisticsFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("runtimePrivate.getProfileStatistics",
                              RUNTIME_GETPROFILESTATISTICS)
@@ -379,7 +366,7 @@ class RuntimePrivateGetProfileStatisticsFunction
   DISALLOW_COPY_AND_ASSIGN(RuntimePrivateGetProfileStatisticsFunction);
 };
 
-class RuntimePrivateDeleteProfileFunction : public UIThreadExtensionFunction {
+class RuntimePrivateDeleteProfileFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("runtimePrivate.deleteProfile",
                              RUNTIME_DELETEPROFILE)
@@ -394,8 +381,7 @@ class RuntimePrivateDeleteProfileFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(RuntimePrivateDeleteProfileFunction);
 };
 
-class RuntimePrivateHasDesktopShortcutFunction
-    : public UIThreadExtensionFunction {
+class RuntimePrivateHasDesktopShortcutFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("runtimePrivate.hasDesktopShortcut",
                              RUNTIME_HASDESKTOPSHORTCUT)

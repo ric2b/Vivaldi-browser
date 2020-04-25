@@ -12,7 +12,7 @@
 
 namespace extensions {
 
-class MailPrivateGetPathsFunction : public UIThreadExtensionFunction {
+class MailPrivateGetPathsFunction : public ExtensionFunction {
   DECLARE_EXTENSION_FUNCTION("mailPrivate.getPaths", MAIL_GET_PATHS)
  public:
   MailPrivateGetPathsFunction() = default;
@@ -28,7 +28,7 @@ class MailPrivateGetPathsFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(MailPrivateGetPathsFunction);
 };
 
-class MailPrivateSaveBufferFunction : public UIThreadExtensionFunction {
+class MailPrivateSaveBufferFunction : public ExtensionFunction {
   DECLARE_EXTENSION_FUNCTION("mailPrivate.saveBuffer", MAIL_SAVE_FILE_BUFFER)
  public:
   MailPrivateSaveBufferFunction() = default;
@@ -43,7 +43,7 @@ class MailPrivateSaveBufferFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(MailPrivateSaveBufferFunction);
 };
 
-class MailPrivateSaveFunction : public UIThreadExtensionFunction {
+class MailPrivateSaveFunction : public ExtensionFunction {
   DECLARE_EXTENSION_FUNCTION("mailPrivate.save", MAIL_SAVE)
  public:
   MailPrivateSaveFunction() = default;
@@ -58,7 +58,7 @@ class MailPrivateSaveFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(MailPrivateSaveFunction);
 };
 
-class MailPrivateDeleteFunction : public UIThreadExtensionFunction {
+class MailPrivateDeleteFunction : public ExtensionFunction {
   DECLARE_EXTENSION_FUNCTION("mailPrivate.delete", MAIL_DELETE)
  public:
   MailPrivateDeleteFunction() = default;
@@ -78,7 +78,7 @@ struct ReadFileResult {
   std::string raw;
 };
 
-class MailPrivateReadFunction : public UIThreadExtensionFunction {
+class MailPrivateReadFunction : public ExtensionFunction {
   DECLARE_EXTENSION_FUNCTION("mailPrivate.read", MAIL_READ)
  public:
   MailPrivateReadFunction() = default;
@@ -93,7 +93,7 @@ class MailPrivateReadFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(MailPrivateReadFunction);
 };
 
-class MailPrivateReadBufferFunction : public UIThreadExtensionFunction {
+class MailPrivateReadBufferFunction : public ExtensionFunction {
   DECLARE_EXTENSION_FUNCTION("mailPrivate.readBuffer", MAIL_READ_FILE_BUFFER)
  public:
   MailPrivateReadBufferFunction() = default;
@@ -108,7 +108,7 @@ class MailPrivateReadBufferFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(MailPrivateReadBufferFunction);
 };
 
-class MailPrivateReadFileFunction : public UIThreadExtensionFunction {
+class MailPrivateReadFileFunction : public ExtensionFunction {
   DECLARE_EXTENSION_FUNCTION("mailPrivate.readFile", MAIL_READ_FILE)
  public:
   MailPrivateReadFileFunction() = default;
@@ -128,7 +128,7 @@ struct GetDataDirectoryResult {
   base::FilePath::StringType path;
 };
 
-class MailPrivateGetDataDirectoryFunction : public UIThreadExtensionFunction {
+class MailPrivateGetDataDirectoryFunction : public ExtensionFunction {
   DECLARE_EXTENSION_FUNCTION("mailPrivate.getDataDirectory",
                              MAIL_GET_DATA_DIRECTORY)
  public:
@@ -144,8 +144,7 @@ class MailPrivateGetDataDirectoryFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(MailPrivateGetDataDirectoryFunction);
 };
 
-class MailPrivateCreateDataDirectoryFunction
-    : public UIThreadExtensionFunction {
+class MailPrivateCreateDataDirectoryFunction : public ExtensionFunction {
   DECLARE_EXTENSION_FUNCTION("mailPrivate.createDataDirectory",
                              MAIL_CREATE_DATA_DIRECTORY)
  public:
@@ -161,7 +160,7 @@ class MailPrivateCreateDataDirectoryFunction
   DISALLOW_COPY_AND_ASSIGN(MailPrivateCreateDataDirectoryFunction);
 };
 
-class MailPrivateRenameFunction : public UIThreadExtensionFunction {
+class MailPrivateRenameFunction : public ExtensionFunction {
   DECLARE_EXTENSION_FUNCTION("mailPrivate.rename", MAIL_RENAME)
  public:
   MailPrivateRenameFunction() = default;

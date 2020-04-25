@@ -19,7 +19,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
-#include "base/test/scoped_task_environment.h"
+#include "base/test/task_environment.h"
 #include "chrome/browser/ui/app_list/search/chrome_search_result.h"
 #include "chrome/browser/ui/app_list/search/search_provider.h"
 #include "chrome/browser/ui/app_list/test/fake_app_list_model_updater.h"
@@ -77,6 +77,7 @@ class TestSearchProvider : public SearchProvider {
         count_(0),
         bad_relevance_range_(false),
         small_relevance_range_(false),
+        last_result_has_display_index_(false),
         display_type_(ash::SearchResultDisplayType::kList),
         result_type_(result_type) {}
   ~TestSearchProvider() override {}
@@ -99,6 +100,10 @@ class TestSearchProvider : public SearchProvider {
       TestSearchResult* result = new TestSearchResult(id, relevance);
       result->SetDisplayType(display_type_);
       result->SetResultType(result_type_);
+
+      if (last_result_has_display_index_ && i == count_ - 1)
+        result->SetDisplayIndex(ash::SearchResultDisplayIndex::kFirstIndex);
+
       Add(std::unique_ptr<ChromeSearchResult>(result));
     }
   }
@@ -110,12 +115,16 @@ class TestSearchProvider : public SearchProvider {
   void set_count(size_t count) { count_ = count; }
   void set_bad_relevance_range() { bad_relevance_range_ = true; }
   void set_small_relevance_range() { small_relevance_range_ = true; }
+  void set_last_result_has_display_index() {
+    last_result_has_display_index_ = true;
+  }
 
  private:
   std::string prefix_;
   size_t count_;
   bool bad_relevance_range_;
   bool small_relevance_range_;
+  bool last_result_has_display_index_;
   ChromeSearchResult::DisplayType display_type_;
   ResultType result_type_;
 
@@ -177,7 +186,7 @@ class MixerTest : public testing::Test {
     return result;
   }
 
-  void Wait() { scoped_task_environment_.RunUntilIdle(); }
+  void Wait() { task_environment_.RunUntilIdle(); }
 
   Mixer* mixer() { return mixer_.get(); }
   TestSearchProvider* app_provider() { return providers_[0].get(); }
@@ -185,7 +194,7 @@ class MixerTest : public testing::Test {
   TestSearchProvider* playstore_provider() { return providers_[2].get(); }
 
  private:
-  base::test::ScopedTaskEnvironment scoped_task_environment_;
+  base::test::TaskEnvironment task_environment_;
   base::test::ScopedFeatureList scoped_feature_list_;
   base::ScopedTempDir temp_dir_;
 
@@ -237,8 +246,7 @@ TEST_F(MixerTest, Basic) {
       {2, 10, 2,
        "app0,omnibox0,app1,omnibox1,omnibox2,omnibox3,playstore0,playstore1"},
       {2, 0, 2, "app0,app1,playstore0,playstore1"},
-      {0, 0, 0, ""},
-  };
+      {0, 0, 0, ""}};
 
   for (size_t i = 0; i < base::size(kTestCases); ++i) {
     app_provider()->set_count(kTestCases[i].app_results);
@@ -248,6 +256,34 @@ TEST_F(MixerTest, Basic) {
 
     EXPECT_EQ(kTestCases[i].expected, GetResults()) << "Case " << i;
   }
+}
+
+// Tests that results with display index defined, will be shown in the final
+// results.
+TEST_F(MixerTest, ResultsWithDisplayIndex) {
+  CreateMixer();
+
+  // If the last result has no display index defined, it will not shown in the
+  // final results.
+  app_provider()->set_count(6);
+  omnibox_provider()->set_count(6);
+  playstore_provider()->set_count(6);
+  RunQuery();
+
+  EXPECT_EQ(
+      "app0,omnibox0,app1,omnibox1,app2,omnibox2,app3,omnibox3,playstore0,"
+      "playstore1",
+      GetResults());
+
+  // If the last result has display index defined, it will be in the final
+  // results.
+  app_provider()->set_last_result_has_display_index();
+  RunQuery();
+
+  EXPECT_EQ(
+      "app5,app0,omnibox0,app1,omnibox1,app2,omnibox2,omnibox3,playstore0,"
+      "playstore1",
+      GetResults());
 }
 
 TEST_F(MixerTest, RemoveDuplicates) {

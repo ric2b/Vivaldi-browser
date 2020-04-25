@@ -65,7 +65,7 @@ void StartPinShortcutToTaskbar(VivaldiBrowserWindow* window) {
   base::string16 app_name_wide;
   app_name_wide.assign(app_name.begin(), app_name.end());
   base::PostTaskWithTraits(
-      FROM_HERE, { base::MayBlock() },
+      FROM_HERE, {base::ThreadPool(), base::MayBlock()},
       base::Bind(&VivaldiShortcutPinToTaskbar, app_name_wide));
 }
 

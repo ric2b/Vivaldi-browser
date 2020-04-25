@@ -19,12 +19,14 @@ using content::WebContents;
 
 namespace vivaldi {
 
-Browser* FindBrowserForEmbedderWebContents(const WebContents* contents) {
+Browser* FindBrowserForEmbedderWebContents(const WebContents* web_contents) {
+  if (!web_contents)
+    return nullptr;
   for (auto* browser : *BrowserList::GetInstance()) {
     // Devtools windows are not vivaldi windows, so exclude those.
     if (browser->is_vivaldi() &&
         static_cast<VivaldiBrowserWindow*>(browser->window())->web_contents() ==
-            contents) {
+            web_contents) {
       return browser;
     }
   }

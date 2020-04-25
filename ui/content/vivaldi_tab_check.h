@@ -20,6 +20,17 @@ class CONTENT_EXPORT VivaldiTabCheck {
   static const int kVivaldiTabObserverContextKey;
 
   static bool IsVivaldiTab(content::WebContents* web_contents);
+
+  // Returned true if the contents is owned by TabStipModel or DevTool and
+  // neither GuestViewBase nor its outer contents should delete it.
+  static bool IsOwnedByTabStripOrDevTools(content::WebContents* web_contents);
+
+  // Mark contents as managed by DevTools
+  static void MarkAsDevToolContents(content::WebContents* web_contents);
+
+  private:
+   static const int kDevToolContextKey;
+
 };
 
 #endif  // UI_CONTENT_VIVALDI_TAB_CHECK_H_

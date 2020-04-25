@@ -27,7 +27,6 @@
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
-#include "content/public/browser/resource_dispatcher_host.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/app_window/app_delegate.h"
 #include "extensions/browser/app_window/app_web_contents_helper.h"
@@ -353,14 +352,6 @@ void AppWindow::Init(const GURL& url,
     SetAppIconUrl(params.window_icon_url);
 
   AppWindowRegistry::Get(browser_context_)->AddAppWindow(this);
-
-  if (new_params.thumbnail_window) {
-    // Mute sound on thumbnail capture windows.
-    chrome::SetTabAudioMuted(web_contents(), true,
-                             TabMutedReason::MEDIA_CAPTURE,
-                             extension_id_);
-    thumbnail_window_ = true;
-  }
 
   if (new_params.hidden) {
     // Although the window starts hidden by default, calling Hide() here
@@ -1171,10 +1162,8 @@ SkRegion* AppWindow::RawDraggableRegionsToSkRegion(
   for (auto iter = regions.cbegin(); iter != regions.cend(); ++iter) {
     const DraggableRegion& region = *iter;
     sk_region->op(
-        region.bounds.x(),
-        region.bounds.y(),
-        region.bounds.right(),
-        region.bounds.bottom(),
+        SkIRect::MakeLTRB(region.bounds.x(), region.bounds.y(),
+                          region.bounds.right(), region.bounds.bottom()),
         region.draggable ? SkRegion::kUnion_Op : SkRegion::kDifference_Op);
   }
   return sk_region;

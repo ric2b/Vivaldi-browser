@@ -1,6 +1,32 @@
 #include "ui/vivaldi_context_menu.h"
 
+#include "browser/vivaldi_browser_finder.h"
+
 namespace vivaldi {
+
+// static
+gfx::NativeView VivaldiMenu::GetActiveNativeViewFromWebContents(
+    content::WebContents* web_contents) {
+  return web_contents->GetFullscreenRenderWidgetHostView()
+      ? web_contents->GetFullscreenRenderWidgetHostView()->GetNativeView()
+      : web_contents->GetNativeView();
+}
+
+// static
+views::Widget* VivaldiMenu::GetTopLevelWidgetFromWebContents(
+    content::WebContents* web_contents) {
+  return views::Widget::GetTopLevelWidgetForNativeView(
+      GetActiveNativeViewFromWebContents(web_contents));
+}
+
+// static
+Browser* VivaldiMenu::GetBrowserFromWebContents(
+    content::WebContents* web_contents) {
+  views::Widget* widget = GetTopLevelWidgetFromWebContents(web_contents);
+  return widget ? chrome::FindBrowserWithWindow(widget->GetNativeWindow())
+                : nullptr;
+}
+
 BookmarkMenuContainer::BookmarkMenuContainer(Delegate* a_delegate)
   :delegate(a_delegate) {}
 BookmarkMenuContainer::~BookmarkMenuContainer() {}
@@ -10,6 +36,10 @@ MenubarMenuParams::~MenubarMenuParams() {}
 
 bool MenubarMenuParams::Delegate::IsBookmarkMenu(int menu_id) {
   return false;
+}
+
+int MenubarMenuParams::Delegate::GetSelectedMenuId() {
+  return -1;
 }
 
 bool MenubarMenuParams::Delegate::IsItemChecked(int id) {

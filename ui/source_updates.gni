@@ -17,6 +17,8 @@ update_template_instance("//chrome/browser/ui:ui") {
   ]
   if (!is_android) {
     sources += [
+      "//vivaldi/ui/views/vivaldi_context_menu_views.h",
+      "//vivaldi/ui/views/vivaldi_context_menu_views.cc",
       "//vivaldi/ui/vivaldi_app_window_client.cc",
       "//vivaldi/ui/vivaldi_app_window_client.h",
       "//vivaldi/ui/vivaldi_browser_window.cc",
@@ -60,8 +62,6 @@ update_template_instance("//chrome/browser/ui:ui") {
       "//vivaldi/ui/views/vivaldi_bookmark_menu_controller_views.cc",
       "//vivaldi/ui/views/vivaldi_bookmark_menu_views.h",
       "//vivaldi/ui/views/vivaldi_bookmark_menu_views.cc",
-      "//vivaldi/ui/views/vivaldi_context_menu_views.h",
-      "//vivaldi/ui/views/vivaldi_context_menu_views.cc",
       "//vivaldi/ui/views/vivaldi_system_menu_model_builder.cc",
       "//vivaldi/ui/views/vivaldi_system_menu_model_builder.h",
       "//vivaldi/ui/vivaldi_native_app_window_views.cc",

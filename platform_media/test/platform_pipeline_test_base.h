@@ -4,7 +4,7 @@
 #include "platform_media/common/feature_toggles.h"
 
 #include "base/files/file_path.h"
-#include "base/test/scoped_task_environment.h"
+#include "base/test/task_environment.h"
 #include "media/base/data_source.h"
 #include "media/base/demuxer.h"
 
@@ -21,7 +21,7 @@ public:
 protected:
 
   Demuxer * CreatePlatformDemuxer(std::unique_ptr<DataSource> & data_source,
-                                  base::test::ScopedTaskEnvironment & task_environment_,
+                                  base::test::TaskEnvironment & task_environment_,
                                   MediaLog* media_log);
 
   void AppendPlatformAudioDecoders(std::vector<std::unique_ptr<AudioDecoder>> & audio_decoders,

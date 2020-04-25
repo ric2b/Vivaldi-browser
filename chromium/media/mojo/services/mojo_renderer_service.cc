@@ -83,10 +83,10 @@ void MojoRendererService::Initialize(
   }
 
   DCHECK(!media_url_params->media_url.is_empty());
-  DCHECK(!media_url_params->site_for_cookies.is_empty());
   media_resource_.reset(new MediaUrlDemuxer(
       nullptr, media_url_params->media_url, media_url_params->site_for_cookies,
-      media_url_params->allow_credentials, media_url_params->is_hls));
+      media_url_params->top_frame_origin, media_url_params->allow_credentials,
+      media_url_params->is_hls));
   renderer_->Initialize(
       media_resource_.get(), this,
       base::Bind(&MojoRendererService::OnRendererInitializeDone, weak_this_,
@@ -127,13 +127,16 @@ void MojoRendererService::SetCdm(int32_t cdm_id, SetCdmCallback callback) {
     return;
   }
 
-  cdm_context_ref_ = mojo_cdm_service_context_->GetCdmContextRef(cdm_id);
-  if (!cdm_context_ref_) {
+  auto cdm_context_ref = mojo_cdm_service_context_->GetCdmContextRef(cdm_id);
+  if (!cdm_context_ref) {
     DVLOG(1) << "CdmContextRef not found for CDM ID: " << cdm_id;
     std::move(callback).Run(false);
     return;
   }
 
+  // |cdm_context_ref_| must be kept as long as |cdm_context| is used by the
+  // |renderer_|.
+  cdm_context_ref_ = std::move(cdm_context_ref);
   auto* cdm_context = cdm_context_ref_->GetCdmContext();
   DCHECK(cdm_context);
 

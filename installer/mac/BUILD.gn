@@ -102,7 +102,7 @@ if (perform_signing) {
       "--identity", vivaldi_signing_id,
       "--input", ".",
       "--output", ".",
-      "--no-dmg",
+      "--disable-packaging",
     ]
 
     # hardening and notarization and disabled due to VB-58183

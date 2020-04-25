@@ -10,8 +10,7 @@
 
 namespace extensions {
 
-class SessionsPrivateSaveOpenTabsFunction
-    : public UIThreadExtensionFunction {
+class SessionsPrivateSaveOpenTabsFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("sessionsPrivate.saveOpenTabs",
                              SESSIONS_SAVEOPENTABS)
@@ -26,7 +25,7 @@ class SessionsPrivateSaveOpenTabsFunction
   DISALLOW_COPY_AND_ASSIGN(SessionsPrivateSaveOpenTabsFunction);
 };
 
-class SessionsPrivateGetAllFunction : public UIThreadExtensionFunction {
+class SessionsPrivateGetAllFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("sessionsPrivate.getAll", SESSIONS_GETALL)
   SessionsPrivateGetAllFunction() = default;
@@ -40,7 +39,7 @@ class SessionsPrivateGetAllFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(SessionsPrivateGetAllFunction);
 };
 
-class SessionsPrivateOpenFunction : public UIThreadExtensionFunction {
+class SessionsPrivateOpenFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("sessionsPrivate.open", SESSIONS_OPEN)
   SessionsPrivateOpenFunction() = default;
@@ -54,7 +53,7 @@ class SessionsPrivateOpenFunction : public UIThreadExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(SessionsPrivateOpenFunction);
 };
 
-class SessionsPrivateDeleteFunction : public UIThreadExtensionFunction {
+class SessionsPrivateDeleteFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("sessionsPrivate.delete", SESSIONS_DELETE)
   SessionsPrivateDeleteFunction() = default;

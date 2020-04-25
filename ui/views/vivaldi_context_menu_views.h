@@ -14,26 +14,12 @@
 
 #include <memory>
 
-#include "content/public/common/context_menu_params.h"
 #include "ui/vivaldi_context_menu.h"
 
 class BookmarkMenuController;
 
-namespace aura {
-class Window;
-}
-
-namespace bookmarks {
-class BookmarkNode;
-}
-
-namespace content {
-class RenderFrameHost;
-}
-
 namespace gfx {
 class Image;
-class Point;
 }
 
 namespace ui {
@@ -47,32 +33,32 @@ class Widget;
 
 class ToolkitDelegateViews;
 
-class VivaldiContextMenuViews : public vivaldi::VivaldiContextMenu {
+namespace vivaldi {
+
+class VivaldiContextMenuViews : public VivaldiContextMenu {
  public:
   ~VivaldiContextMenuViews() override;
   VivaldiContextMenuViews(content::WebContents* web_contents,
                           ui::SimpleMenuModel* menu_model,
-                          const content::ContextMenuParams& params);
+                          const gfx::Rect& rect);
   void Show() override;
   void SetIcon(const gfx::Image& icon, int id) override;
-  void SetSelectedItem(int id) override;
   void UpdateMenu(ui::SimpleMenuModel* menu_model, int id) override;
 
  private:
   void RunMenuAt(views::Widget* parent,
-                 const gfx::Point& point,
+                 const gfx::Rect& rect,
                  ui::MenuSourceType type);
 
- private:
-  aura::Window* GetActiveNativeView();
-  views::Widget* GetTopLevelWidget();
   std::unique_ptr<ToolkitDelegateViews> toolkit_delegate_;
   content::WebContents* web_contents_;
   ui::SimpleMenuModel* menu_model_;
-  content::ContextMenuParams params_;
   views::MenuItemView* menu_view_;  // owned by toolkit_delegate_
+  gfx::Rect rect_;
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiContextMenuViews);
 };
+
+}  // namespace vivialdi
 
 #endif  // UI_VIEWS_VIVALDI_CONTEXT_MENU_VIEWS_H_

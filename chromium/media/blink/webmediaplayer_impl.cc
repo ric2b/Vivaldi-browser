@@ -103,6 +103,13 @@ namespace media {
 
 namespace {
 
+const char kWatchTimeHistogram[] = "Media.WebMediaPlayerImpl.WatchTime";
+
+void RecordSimpleWatchTimeUMA(RendererFactorySelector::FactoryType type) {
+  UMA_HISTOGRAM_ENUMERATION(kWatchTimeHistogram, type,
+                            RendererFactorySelector::FACTORY_TYPE_MAX + 1);
+}
+
 void SetSinkIdOnMediaThread(
     scoped_refptr<blink::WebAudioSourceProviderImpl> sink,
     const std::string& device_id,
@@ -267,9 +274,9 @@ void DestructionHelper(
   // used because virtual memory overhead is not considered blocking I/O; and
   // CONTINUE_ON_SHUTDOWN is used to allow process termination to not block on
   // completing the task.
-  base::PostTaskWithTraits(
+  base::PostTask(
       FROM_HERE,
-      {base::TaskPriority::BEST_EFFORT,
+      {base::ThreadPool(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::BindOnce(
           [](scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
@@ -342,7 +349,13 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
       is_background_video_playback_enabled_(
           params->IsBackgroundVideoPlaybackEnabled()),
       is_background_video_track_optimization_supported_(
-          params->IsBackgroundVideoTrackOptimizationSupported()) {
+          params->IsBackgroundVideoTrackOptimizationSupported()),
+      reported_renderer_type_(RendererFactorySelector::DEFAULT),
+      simple_watch_timer_(
+          base::BindRepeating(&WebMediaPlayerImpl::OnSimpleWatchTimerTick,
+                              base::Unretained(this)),
+          base::BindRepeating(&WebMediaPlayerImpl::GetCurrentTimeInternal,
+                              base::Unretained(this))) {
   DVLOG(1) << __func__;
   DCHECK(adjust_allocated_memory_cb_);
   DCHECK(renderer_factory_selector_);
@@ -473,6 +486,7 @@ WebMediaPlayerImpl::~WebMediaPlayerImpl() {
   if (!surface_layer_for_video_enabled_ && video_layer_)
     video_layer_->StopUsingProvider();
 
+  simple_watch_timer_.Stop();
   media_log_->AddEvent(
       media_log_->CreateEvent(MediaLogEvent::WEBMEDIAPLAYER_DESTROYED));
 
@@ -634,9 +648,9 @@ void WebMediaPlayerImpl::ExitedFullscreen() {
     MaybeSendOverlayInfoToDecoder();
 }
 
-void WebMediaPlayerImpl::BecameDominantVisibleContent(bool isDominant) {
+void WebMediaPlayerImpl::BecameDominantVisibleContent(bool is_dominant) {
   if (observer_)
-    observer_->OnBecameDominantVisibleContent(isDominant);
+    observer_->OnBecameDominantVisibleContent(is_dominant);
 }
 
 void WebMediaPlayerImpl::SetIsEffectivelyFullscreen(
@@ -809,6 +823,7 @@ void WebMediaPlayerImpl::Play() {
   if (video_decode_stats_reporter_)
     video_decode_stats_reporter_->OnPlaying();
 
+  simple_watch_timer_.Start();
   media_metrics_provider_->SetHasPlayed();
   media_log_->AddEvent(media_log_->CreateEvent(MediaLogEvent::PLAY));
 
@@ -847,6 +862,7 @@ void WebMediaPlayerImpl::Pause() {
   if (video_decode_stats_reporter_)
     video_decode_stats_reporter_->OnPaused();
 
+  simple_watch_timer_.Stop();
   media_log_->AddEvent(media_log_->CreateEvent(MediaLogEvent::PAUSE));
 
   // Paused changed so we should update media position state.
@@ -1806,6 +1822,7 @@ void WebMediaPlayerImpl::OnError(PipelineStatus status) {
 
   MaybeSetContainerName();
   ReportPipelineError(load_type_, status, media_log_.get());
+  simple_watch_timer_.Stop();
   media_log_->AddEvent(media_log_->CreatePipelineErrorEvent(status));
   media_metrics_provider_->OnError(status);
   if (watch_time_reporter_)
@@ -2667,6 +2684,7 @@ std::unique_ptr<Renderer> WebMediaPlayerImpl::CreateRenderer() {
   request_overlay_info_cb = BindToCurrentLoop(
       base::Bind(&WebMediaPlayerImpl::OnOverlayInfoRequested, weak_this_));
 #endif
+  reported_renderer_type_ = renderer_factory_selector_->GetCurrentFactoryType();
 
   bool use_platform_media_pipeline = false;
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
@@ -2678,6 +2696,7 @@ std::unique_ptr<Renderer> WebMediaPlayerImpl::CreateRenderer() {
     use_platform_media_pipeline = false;
   }
 #endif
+
   return renderer_factory_selector_->GetCurrentFactory()->CreateRenderer(
       media_task_runner_, worker_task_runner_, audio_source_provider_.get(),
       compositor_.get(), request_overlay_info_cb, client_->TargetColorSpace(),
@@ -2712,6 +2731,7 @@ void WebMediaPlayerImpl::StartPipeline() {
 
     demuxer_.reset(new MediaUrlDemuxer(
         media_task_runner_, loaded_url_, frame_->GetDocument().SiteForCookies(),
+        frame_->GetDocument().TopFrameOrigin(),
         allow_media_player_renderer_credentials_, demuxer_found_hls_));
     pipeline_controller_->Start(Pipeline::StartType::kNormal, demuxer_.get(),
                                 this, false, false);
@@ -3737,6 +3757,10 @@ void WebMediaPlayerImpl::MaybeUpdateBufferSizesForPlayback() {
   // The playback rate has changed so we should rebuild the media position
   // state.
   UpdateMediaPositionState();
+}
+
+void WebMediaPlayerImpl::OnSimpleWatchTimerTick() {
+  RecordSimpleWatchTimeUMA(reported_renderer_type_);
 }
 
 }  // namespace media
