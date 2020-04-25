@@ -53,16 +53,6 @@ bool IPCFactory::IsAvailable() {
     return false;
   }
 
-#if defined(OS_MACOSX)
-  if (!base::mac::IsAtLeastOS10_10()) {
-    // The pre-10.10 PlatformMediaPipeline implementation decodes media by
-    // playing them at the regular playback rate.  This is unacceptable for Web
-    // Audio API.
-    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__ << ": No";
-    return false;
-  }
-#endif
-
   if (IsPlatformMediaPipelineAvailable(PlatformMediaCheckType::BASIC)) {
     VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__ << ": Yes";
     return true;

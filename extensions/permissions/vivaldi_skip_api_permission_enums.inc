@@ -22,6 +22,7 @@ void SkipVivaldiAPIPermissions(extensions::APIPermissionSet& skip) {
   skip.insert(APIPermission::kInfobars);
   skip.insert(APIPermission::kMailPrivate);
   skip.insert(APIPermission::kMenubar);
+  skip.insert(APIPermission::kMenubarMenu);
   skip.insert(APIPermission::kNotes);
   skip.insert(APIPermission::kPrefs);
   skip.insert(APIPermission::kRuntimePrivate);

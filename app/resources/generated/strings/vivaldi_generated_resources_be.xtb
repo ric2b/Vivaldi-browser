@@ -92,7 +92,6 @@
 <translation id="2785873697295365461">Дэскрыптары файлаў</translation>
 <translation id="2809586584051668049">і яшчэ <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
 <translation id="2812989263793994277">Не паказваць карцінкі</translation>
-<translation id="2847759467426165163">Трансліраваць на</translation>
 <translation id="2850541429955027218">Дадаць тэму</translation>
 <translation id="2861941300086904918">Мэнаджар бязпечнасці – Native Client</translation>
 <translation id="2889064240420137087">Адчыніць спасылку з...</translation>
@@ -130,7 +129,6 @@
 <translation id="3341703758641437857">Дазволіць для лакальных файлаў</translation>
 <translation id="3347086966102161372">Капіяваць адрэс малюнку</translation>
 <translation id="3360297538363969800">Друкаванне не атрымалася. Спраўдзіце наяўнасць друкаркі і паспрабуйце зноў.</translation>
-<translation id="3378503599595235699">Трымаць дадзеныя толькі да моманта зачынення браўзеру</translation>
 <translation id="3378572629723696641">Гэта пашырэнне можа быць пашкоджана.</translation>
 <translation id="3387614642886316601">Пашырэная праверка правапісу</translation>
 <translation id="3432227430032737297">Выдаліць ўсе бачныя</translation>
@@ -197,7 +195,6 @@
 <translation id="4613271546271159013">Пашырэнне змяніла старонку ў новай картке.</translation>
 <translation id="4677772697204437347">GPU памяць</translation>
 <translation id="4681930562518940301">Адчыніць арыгінальны малюнак у новай картке</translation>
-<translation id="4688541352655220763">Транслюйце змест з Vivaldi на тэлевізар ды іншыя прылады.</translation>
 <translation id="4711638718396952945">Аднавіць налады</translation>
 <translation id="4726710629007580002">У час усталёўкі атрымаліся наступныя папярэджанні:</translation>
 <translation id="479536056609751218">ВЭБ старонка, толкі HTML</translation>
@@ -268,7 +265,6 @@
 <translation id="5978277834170881274">&amp;Базавая праверка правапісу</translation>
 <translation id="5979421442488174909">&amp;Перакласці на <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">Выдаліць дадзеныя сайту</translation>
-<translation id="6040143037577758943">Закрыць</translation>
 <translation id="6042308850641462728">Болей</translation>
 <translation id="6059925163896151826">USB прылады</translation>
 <translation id="6082651258230788217">Адлюстраваць на панэлі</translation>
@@ -293,7 +289,7 @@
 <translation id="6398765197997659313">Выйсце з поўнаэкраннага рэжыму</translation>
 <translation id="6406303162637086258">Сімуляваць рэстарт web-праглядніка</translation>
 <translation id="6445450263907939268">Калі Вы не хочаце гэтых змен, то можеце аднавіць Вашыя налады.</translation>
-<translation id="6447842834002726250">Cookie файлы</translation>
+<translation id="6447842834002726250">Файлы cookie</translation>
 <translation id="6452181791372256707">Адхіліць</translation>
 <translation id="6498249116389603658">Усе твае мовы</translation>
 <translation id="6503077044568424649">Найчасцейшыя</translation>
@@ -326,10 +322,8 @@
 <translation id="7270858098575133036">Пытацца , калі сайт хоча выкарыстоўваць сістэмныя паведамленні для доступа да MIDI прылад</translation>
 <translation id="7287143125007575591">Достут забаронены.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />х<ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="7293919849802650062">Запрашаем у трансляцыю для Vivaldi!</translation>
 <translation id="7309257895202129721">Паказаць элементы &amp;кіравання</translation>
 <translation id="7311079019872751559">Дасягненне да плагінаў не ў тэставам асяродздзе</translation>
-<translation id="7346909386216857016">ОК</translation>
 <translation id="7385854874724088939">Штос-ці не атрымалася пад час друку.   Каліласка спраўдзіце працу друкаркі і паспрабуце зноў.</translation>
 <translation id="7423098979219808738">Спачатку спытаць</translation>
 <translation id="7427348830195639090">Фонавая старонка : <ph name="BACKGROUND_PAGE_URL" /></translation>
@@ -388,7 +382,6 @@
 <translation id="857943718398505171">Дазволена (раім)</translation>
 <translation id="8584280235376696778">Адцыніць відэа ў новай картке</translation>
 <translation id="8615618338313291042">Прылада ў прыватным рэжыме <ph name="APP_NAME" /></translation>
-<translation id="8627151598708688654">Вылучыць крыніцу</translation>
 <translation id="862750493060684461">Кэш CSS</translation>
 <translation id="8664389313780386848">&amp;Крыніца старонкі</translation>
 <translation id="8708000541097332489">Ачысціць пры выйсце</translation>

@@ -4,7 +4,6 @@ if (is_win) {
   update_target("//chrome/installer/setup:setup") {
     sources -= [
       "setup.rc",
-      "setup_exe_version.rc.version",
       "setup_resource.h",
     ]
     sources += [

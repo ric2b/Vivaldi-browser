@@ -1,0 +1,287 @@
+//
+// Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved.
+//
+
+[
+  {
+    "namespace": "menubarMenu",
+    "description": "Use the <code>vivaldi.menubarMenu</code> API to show a menubar menu for windows and linux.",
+    "types": [
+      {
+        "id": "ContainerType",
+        "type": "string",
+        "description": "Defines content of a container.",
+        "enum": [ "bookmarks", "history" ]
+      },
+      {
+        "id": "SortOrder",
+        "type": "string",
+        "description": "Defines how to sort container items.",
+        "enum": [ "ascending", "descending" ]
+      },
+      {
+        "id": "SortField",
+        "type": "string",
+        "description": "Defines what element to use as sort key.",
+        "enum": [ "title", "url", "nickname", "description", "dateadded" ]
+      },
+      {
+        "id": "ItemType",
+        "type": "string",
+        "description": "What kind of item.",
+        "enum": [ "normal", "checkbox", "radiobutton" ]
+      },
+      {
+        "id": "Rect",
+        "type": "object",
+        "description": "Position and size of element in menu bar.",
+        "properties": {
+          "x": {"type": "integer", "description": "Left position of item that opens menu, screen coordinates."},
+          "y": {"type": "integer", "description": "Top position of item that opens menu, screen coordinates."},
+          "width": {"type": "integer", "description": "Width of item that opens menu."},
+          "height": {"type": "integer", "description": "Height of item that opens menu."}
+        }
+      },
+      {
+        "id": "Item",
+        "type": "object",
+        "description": "One menu item.",
+        "properties": {
+          "id": {"type": "integer", "description": "The unique id of item."},
+          "label": {"type": "string", "description": "Text in item."},
+          "type": {"$ref": "ItemType", "optional": true, "description": "Defaults to 'normal'."},
+          "selected": {"type": "boolean", "optional": true, "description": "Whether item is initially selected. Default to false."},
+          "visible": {"type": "boolean", "optional": true, "description": "Whether item is visible or not. Defaults to true."},
+          "checked": {"type": "boolean", "optional": true, "description": "true if the checkbox is checked. Ignored unless type is 'checkbox' or 'radiobutton'."},
+          "group": {"type": "integer", "optional": true, "description": "The radiobutton group this item belongs to. Must be present for a radio button."},
+          "persistent": {"type": "boolean", "optional": true, "description": "If true the menu item will remain open after menu item is clicked with mouse."},
+          "disabled": {"type": "boolean", "optional": true, "description": "true if item should appear as grayed out."},
+          "emphasized": {"type": "boolean", "optional": true, "description": "true if the item should appear in an emphasized style (typically bold)."},
+          "shortcut": {"type": "string", "optional": true, "description": "Shortcut to be displayed next to label."},
+          "url": {"type": "string", "optional": true, "description": "Url that can be used to determine a corresponding icon."},
+          "parameter": {"type": "string", "optional": true, "description": "Parameter to command. Sent unaltered with the callback."},
+          "index": {"type": "integer", "optional": true, "description": "Index in menu list. Can only be used insert into an existing list."},
+          "icon": {"type": "string", "optional": true, "description": "Icon in PNG format encoded as base64."}
+        }
+      },
+      {
+        "id": "Icons",
+        "type": "array",
+        "description": "Icons encoded as base64.",
+        "items": { "type": "string" }
+      },
+      {
+        "id": "Separator",
+        "type": "object",
+        "description": "One separator",
+        "properties": {
+          "label": {"type": "string", "optional": true, "description": "Text in item."}
+        }
+      },
+      {
+        "id": "Container",
+        "type": "object",
+        "description": "A collection of items set up and expanded from chrome.",
+        "properties": {
+          "id": {"type": "string", "description": "Parent id of data to display."},
+          "type": {"$ref": "ContainerType", "description": "What kind of data to expand in this container."},
+          "offset": {"type": "integer", "description": "Offset into folder/parent data."},
+          "groupFolders": {"type": "boolean", "optional": true, "description": "If sorted, this flag will group any subfolders together."},
+          "sortField": {"$ref": "SortField", "optional": true, "description": "Sort key for elements."},
+          "sortOrder": {"$ref": "SortOrder", "optional": true, "description": "Sort order for elements."}
+        }
+      },
+      {
+        "id": "Element",
+        "type": "object",
+        "description": "One element in menu. All optional, but one and only one of 'item', 'separator' or 'container' should be set. 'children' is only considered when 'item' is set.",
+        "properties": {
+          "item": {"$ref": "Item", "optional": true},
+          "separator": {"$ref": "Separator", "optional": true},
+          "container": {"$ref": "Container", "optional": true},
+          "children": {"type": "array", "items": {"$ref": "Element"}, "optional": true, "description": "Child menu items."}
+        }
+      },
+      {
+        "id": "Menu",
+        "type": "object",
+        "description": "One menu with origin rect and a list if children.",
+        "properties": {
+          "id": {"type": "integer"},
+          "rect": {"$ref": "Rect"},
+          "children": {"type": "array", "items": {"$ref": "Element"}}
+         }
+      },
+      {
+        "id": "EventState",
+        "type": "object",
+        "description": "Describes keyboard modifiers and mouse button state.",
+        "properties": {
+          "ctrl": {
+            "type": "boolean",
+            "description": "true if the Ctrl key is pressed when activating the menu."
+          },
+          "shift": {
+            "type": "boolean",
+            "description": "true if the Shift key is pressed when activating the menu."
+          },
+          "alt": {
+            "type": "boolean",
+            "description": "true if the Alt key is pressed when activating the menu."
+          },
+          "command": {
+            "type": "boolean",
+            "description": "true if the Command key (Mac) is pressed when activating the menu."
+          },
+          "left": {
+            "type": "boolean",
+            "description": "true if the left mouse button activated the menu."
+          },
+          "right": {
+            "type": "boolean",
+            "description": "true if the right mouse button activated the menu."
+          },
+          "center": {
+            "type": "boolean",
+            "description": "true if the center mouse button activated the menu."
+          }
+        }
+      },
+      {
+        "id": "Disposition",
+        "type": "string",
+        "description": "Defines where a bookmark should be opened.",
+        "enum": [ "setting", "current", "new-tab", "new-window", "new-private-window" ]
+      },
+      {
+        "id": "BookmarkCommand",
+        "type": "string",
+        "description": "Defines a non-navigation bookmark action.",
+        "enum": [ "edit", "addactivetab", "addfolder", "addbookmark", "cut", "copy", "paste"]
+      },
+      {
+        "id": "BookmarkAction",
+        "type": "object",
+        "description": "Passed with bookmark activation",
+        "properties": {
+          "id": {"type": "string"},
+          "command": {"$ref": "BookmarkCommand", "description": "If set, disposition and background is ignored."},
+          "disposition": {"$ref": "Disposition"},
+          "background": {"type": "boolean", "description": "Extends disposition with a background option." },
+          "state": {"$ref": "EventState"}
+        }
+      },
+      {
+        "id": "Action",
+        "type": "object",
+        "description": "Passed with menu activation.",
+        "properties": {
+          "id": {"type": "integer", "description": "Command id."},
+          "state": {"$ref": "EventState"}
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "show",
+        "type": "function",
+        "description": "Shows a context menu.",
+        "parameters": [
+          {
+            "name": "properties",
+            "type": "object",
+            "properties": {
+              "id": {"type": "integer", "description": "Id of the menu in the 'siblings' list to open."},
+              "siblings": { "type": "array", "items": {"$ref": "Menu"}, "description": "List of menu entries."},
+              "icons": {"$ref": "Icons", "description": "Default and folder icons."}
+            }
+          },
+          {
+            "name": "callback",
+            "type": "function",
+            "optional": false,
+            "description": "Notifies caller that menu has closed."
+          }
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "onOpen",
+        "type": "function",
+        "description": "Fires before menu opens.",
+        "parameters": [
+          {
+            "name": "id",
+            "type": "integer",
+            "description": "Menu id of the menu that opens."
+          }
+        ]
+      },
+      {
+        "name": "onClose",
+        "type": "function",
+        "description": "Fires before menu closes.",
+        "parameters": []
+      },
+      {
+        "name": "onAction",
+        "type": "function",
+        "description": "Fired when menu item is activated.",
+        "parameters": [
+          {
+            "name": "action",
+            "$ref": "Action",
+            "description": "What action to execute."
+          }
+        ]
+      },
+      {
+        "name": "onOpenBookmark",
+        "type": "function",
+        "description": "Fired when bookmark menu item is activated.",
+        "parameters": [
+          {
+            "name": "action",
+            "$ref": "BookmarkAction"
+          }
+        ]
+      },
+      {
+        "name": "onBookmarkAction",
+        "type": "function",
+        "description": "Fired when bookmark command is activated.",
+        "parameters": [
+          {
+            "name": "action",
+            "$ref": "BookmarkAction"
+          }
+        ]
+      },
+      {
+        "name": "onHover",
+        "type": "function",
+        "description": "Fired when a menu item with a url is highlighted.",
+        "parameters": [
+          {
+            "name": "url",
+            "type": "string",
+            "description": "Url in menu item."
+          }
+        ]
+      },
+      {
+        "name": "onError",
+        "type": "function",
+        "description": "Fired if an error condtion occurs that can not be routed with a callback.",
+        "parameters": [
+          {
+            "name": "text",
+            "type": "string",
+            "description": "Error message for logging purposes."
+          }
+        ]
+      }
+    ]
+  }
+]

@@ -20,6 +20,7 @@
 #include "extensions/browser/guest_view/web_view/web_view_permission_helper_delegate.h"
 #include "extensions/browser/guest_view/web_view/web_view_permission_types.h"
 #include "ppapi/buildflags/buildflags.h"
+#include "third_party/blink/public/mojom/mediastream/media_stream.mojom-shared.h"
 
 #include "base/command_line.h"
 #include "browser/vivaldi_browser_finder.h"
@@ -175,11 +176,9 @@ WebViewPermissionHelper::WebViewPermissionHelper(WebViewGuest* web_view_guest)
     : content::WebContentsObserver(web_view_guest->web_contents()),
       next_permission_request_id_(guest_view::kInstanceIDNone),
       web_view_guest_(web_view_guest),
-      default_media_access_permission_(false),
-      weak_factory_(this) {
-      web_view_permission_helper_delegate_.reset(
-          ExtensionsAPIClient::Get()->CreateWebViewPermissionHelperDelegate(
-              this));
+      default_media_access_permission_(false) {
+  web_view_permission_helper_delegate_.reset(
+      ExtensionsAPIClient::Get()->CreateWebViewPermissionHelperDelegate(this));
 }
 
 WebViewPermissionHelper::WebViewPermissionHelper(GuestViewBase* web_view_guest)
@@ -240,8 +239,8 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
     content::MediaResponseCallback callback) {
   // Vivaldi
   // If this is a TabCast request.
-  if (request.video_type == blink::MEDIA_GUM_TAB_VIDEO_CAPTURE ||
-      request.audio_type == blink::MEDIA_GUM_TAB_AUDIO_CAPTURE) {
+  if (request.video_type == blink::mojom::MediaStreamType::GUM_TAB_VIDEO_CAPTURE ||
+      request.audio_type == blink::mojom::MediaStreamType::GUM_TAB_AUDIO_CAPTURE) {
     // Only allow the stable Google cast component extension...
     std::string extension_id = request.security_origin.host();
     if (extension_id == extension_misc::kMediaRouterStableExtensionId) {
@@ -253,23 +252,23 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
           tab_capture_registry->VerifyRequest(request.render_process_id,
                                               request.render_frame_id,
                                               extension_id)) {
-        if (request.audio_type == blink::MEDIA_GUM_TAB_AUDIO_CAPTURE) {
+        if (request.audio_type == blink::mojom::MediaStreamType::GUM_TAB_AUDIO_CAPTURE) {
           devices.push_back(
-              blink::MediaStreamDevice(blink::MEDIA_GUM_TAB_AUDIO_CAPTURE,
+              blink::MediaStreamDevice(blink::mojom::MediaStreamType::GUM_TAB_AUDIO_CAPTURE,
                                        std::string(), std::string()));
         }
-        if (request.video_type == blink::MEDIA_GUM_TAB_VIDEO_CAPTURE) {
+        if (request.video_type == blink::mojom::MediaStreamType::GUM_TAB_VIDEO_CAPTURE) {
           devices.push_back(
-              blink::MediaStreamDevice(blink::MEDIA_GUM_TAB_VIDEO_CAPTURE,
+              blink::MediaStreamDevice(blink::mojom::MediaStreamType::GUM_TAB_VIDEO_CAPTURE,
                                        std::string(), std::string()));
         }
       }
-      blink::MediaStreamRequestResult result =
-          blink::MEDIA_DEVICE_INVALID_STATE;
+      blink::mojom::MediaStreamRequestResult result =
+          blink::mojom::MediaStreamRequestResult::INVALID_STATE;
 
       std::unique_ptr<content::MediaStreamUI> ui;
       if (!devices.empty()) {
-        result = blink::MEDIA_DEVICE_OK;
+        result = blink::mojom::MediaStreamRequestResult::OK;
         ui = MediaCaptureDevicesDispatcher::GetInstance()
           ->GetMediaStreamCaptureIndicator()
           ->RegisterMediaStream(source, devices);
@@ -289,7 +288,7 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
     ContentSetting audio_setting = CONTENT_SETTING_DEFAULT;
     ContentSetting camera_setting = CONTENT_SETTING_DEFAULT;
 
-    if (request.audio_type != blink::MEDIA_NO_SERVICE) {
+    if (request.audio_type != blink::mojom::MediaStreamType::NO_SERVICE) {
       audio_setting = HostContentSettingsMapFactory::GetForProfile(profile)->
         GetContentSetting(
             request.security_origin, GURL(),
@@ -298,7 +297,7 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
           audio_setting != CONTENT_SETTING_BLOCK)
         break;
     }
-    if (request.video_type  != blink::MEDIA_NO_SERVICE) {
+    if (request.video_type  != blink::mojom::MediaStreamType::NO_SERVICE) {
       camera_setting = HostContentSettingsMapFactory::GetForProfile(profile)->
         GetContentSetting(
             request.security_origin, GURL(),
@@ -313,7 +312,7 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
     if (audio_setting == CONTENT_SETTING_BLOCK ||
         camera_setting == CONTENT_SETTING_BLOCK) {
       std::move(callback).Run(blink::MediaStreamDevices(),
-                              blink::MEDIA_DEVICE_PERMISSION_DENIED,
+                              blink::mojom::MediaStreamRequestResult::PERMISSION_DENIED,
                               std::unique_ptr<content::MediaStreamUI>());
       return;
     }
@@ -333,12 +332,12 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
 
   if (::vivaldi::IsVivaldiRunning()) {
     // camera , microphone and microphone_and_camera
-    if (request.audio_type == blink::MEDIA_DEVICE_AUDIO_CAPTURE &&
-        request.video_type == blink::MEDIA_DEVICE_VIDEO_CAPTURE) {
+    if (request.audio_type == blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE &&
+        request.video_type == blink::mojom::MediaStreamType::DEVICE_VIDEO_CAPTURE) {
       request_type = WEB_VIEW_PERMISSION_TYPE_MICROPHONE_AND_CAMERA;
-    } else if (request.video_type == blink::MEDIA_DEVICE_VIDEO_CAPTURE) {
+    } else if (request.video_type == blink::mojom::MediaStreamType::DEVICE_VIDEO_CAPTURE) {
       request_type = WEB_VIEW_PERMISSION_TYPE_CAMERA;
-    } else if (request.audio_type == blink::MEDIA_DEVICE_AUDIO_CAPTURE) {
+    } else if (request.audio_type == blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE) {
       request_type = WEB_VIEW_PERMISSION_TYPE_MICROPHONE;
     }
   }
@@ -356,7 +355,7 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
 bool WebViewPermissionHelper::CheckMediaAccessPermission(
     content::RenderFrameHost* render_frame_host,
     const GURL& security_origin,
-    blink::MediaStreamType type) {
+    blink::mojom::MediaStreamType type) {
   if (!web_view_guest()->attached() ||
       !web_view_guest()->embedder_web_contents()->GetDelegate()) {
     return false;
@@ -383,14 +382,14 @@ void WebViewPermissionHelper::OnMediaPermissionResponse(
     DCHECK(browser);
     Profile* profile = browser->profile();
 
-    if (request.audio_type != blink::MEDIA_NO_SERVICE) {
+    if (request.audio_type != blink::mojom::MediaStreamType::NO_SERVICE) {
       HostContentSettingsMapFactory::GetForProfile(profile)
           ->SetContentSettingCustomScope(
               primary_pattern, ContentSettingsPattern::Wildcard(),
               CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC, std::string(),
               allow ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK);
     }
-    if (request.video_type  != blink::MEDIA_NO_SERVICE) {
+    if (request.video_type  != blink::mojom::MediaStreamType::NO_SERVICE) {
       HostContentSettingsMapFactory::GetForProfile(profile)
           ->SetContentSettingCustomScope(
               primary_pattern, ContentSettingsPattern::Wildcard(),
@@ -400,16 +399,18 @@ void WebViewPermissionHelper::OnMediaPermissionResponse(
   }
 
   if (!allow) {
-    std::move(callback).Run(blink::MediaStreamDevices(),
-                            blink::MEDIA_DEVICE_PERMISSION_DENIED,
-                            std::unique_ptr<content::MediaStreamUI>());
+    std::move(callback).Run(
+        blink::MediaStreamDevices(),
+        blink::mojom::MediaStreamRequestResult::PERMISSION_DENIED,
+        std::unique_ptr<content::MediaStreamUI>());
     return;
   }
   if (!web_view_guest()->attached() ||
       !web_view_guest()->embedder_web_contents()->GetDelegate()) {
-    std::move(callback).Run(blink::MediaStreamDevices(),
-                            blink::MEDIA_DEVICE_INVALID_STATE,
-                            std::unique_ptr<content::MediaStreamUI>());
+    std::move(callback).Run(
+        blink::MediaStreamDevices(),
+        blink::mojom::MediaStreamRequestResult::INVALID_STATE,
+        std::unique_ptr<content::MediaStreamUI>());
     return;
   }
 

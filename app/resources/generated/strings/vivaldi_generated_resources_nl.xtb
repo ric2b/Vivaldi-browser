@@ -83,6 +83,7 @@
 <translation id="2482878487686419369">Meldingen</translation>
 <translation id="2509495747794740764">De waarde voor de schaal moet een getal tussen de 10 en 200 zijn.</translation>
 <translation id="253557089021624350">Aantal keepalive-activiteiten</translation>
+<translation id="2546283357679194313">Cookies en websitegegevens</translation>
 <translation id="2550212893339833758">Wisselgeheugen</translation>
 <translation id="2580924999637585241">Totaal: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="26224892172169984">Niet toestaan dat websites protocollen verwerken</translation>
@@ -92,7 +93,6 @@
 <translation id="2785873697295365461">Bestandsdescriptors</translation>
 <translation id="2809586584051668049">en <ph name="NUMBER_ADDITIONAL_DISABLED" /> andere</translation>
 <translation id="2812989263793994277">Geen afbeeldingen weergeven</translation>
-<translation id="2847759467426165163">Casten naar</translation>
 <translation id="2850541429955027218">Thema toevoegen</translation>
 <translation id="2861941300086904918">Beveiligingsbeheerder voor Native Client</translation>
 <translation id="2889064240420137087">Link openen met...</translation>
@@ -130,7 +130,6 @@
 <translation id="3341703758641437857">Toegang geven tot bestands-URL's</translation>
 <translation id="3347086966102161372">A&amp;dres van afbeelding kopiëren</translation>
 <translation id="3360297538363969800">Afdrukken is mislukt. Controleer de printer en probeer het opnieuw.</translation>
-<translation id="3378503599595235699">Lokale gegevens alleen bewaren totdat je je browser sluit</translation>
 <translation id="3378572629723696641">Deze extensie is mogelijk beschadigd.</translation>
 <translation id="3387614642886316601">Verbeterde spellingcontrole gebruiken</translation>
 <translation id="3432227430032737297">Alle weergegeven verwijderen</translation>
@@ -181,7 +180,7 @@
 <translation id="4131410914670010031">Zwart/wit</translation>
 <translation id="4176463684765177261">Uitgeschakeld</translation>
 <translation id="4200983522494130825">Nieuw &amp;tabblad</translation>
-<translation id="4225397296022057997">Op alle sites</translation>
+<translation id="4225397296022057997">Op alle websites</translation>
 <translation id="4278390842282768270">Toegestaan</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> kB (<ph name="NUM_KILOBYTES_LIVE" /> kB live)</translation>
 <translation id="4345587454538109430">Configureren...</translation>
@@ -198,7 +197,6 @@
 <translation id="4613271546271159013">Een extensie heeft de pagina gewijzigd die wordt weergegeven wanneer je een nieuwe tab opent.</translation>
 <translation id="4677772697204437347">GPU-geheugen</translation>
 <translation id="4681930562518940301">Open oorspronkelijke &amp;afbeelding in nieuwe tab</translation>
-<translation id="4688541352655220763">Je kunt deze functie gebruiken om het beeld van Vivaldi weer te geven op je tv of andere apparaten.</translation>
 <translation id="4711638718396952945">Instellingen herstellen</translation>
 <translation id="4726710629007580002">Het installeren van deze extensie leverde waarschuwingen op:</translation>
 <translation id="479536056609751218">Webpagina, alleen HTML</translation>
@@ -269,7 +267,6 @@
 <translation id="5978277834170881274">Eenvoudige spellingcontrole gebruiken</translation>
 <translation id="5979421442488174909">&amp;Vertalen in het <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">Websitegegevens wissen</translation>
-<translation id="6040143037577758943">Sluiten</translation>
 <translation id="6042308850641462728">Meer</translation>
 <translation id="6059925163896151826">USB-apparaten</translation>
 <translation id="6082651258230788217">In werkbalk weergeven</translation>
@@ -327,10 +324,8 @@
 <translation id="7270858098575133036">Goedkeuring vragen als een website berichten exclusief voor het systeem wil gebruiken om toegang te krijgen tot MIDI-apparaten</translation>
 <translation id="7287143125007575591">Toegang geweigerd.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="7293919849802650062">Welkom bij de Cast-functie in Vivaldi</translation>
 <translation id="7309257895202129721">Besturingselementen &amp;weergeven</translation>
 <translation id="7311079019872751559">Plug-in-toegang zonder sandbox</translation>
-<translation id="7346909386216857016">OK</translation>
 <translation id="7385854874724088939">Er is iets misgegaan bij het afdrukken. Controleer de printer en probeer het opnieuw.</translation>
 <translation id="7423098979219808738">Eerst vragen</translation>
 <translation id="7427348830195639090">Achtergrondpagina: <ph name="BACKGROUND_PAGE_URL" /></translation>
@@ -390,7 +385,6 @@ Bewaar je sleutelbestand op een veilige plaats. Je hebt het bestand nodig om nie
 <translation id="857943718398505171">Toegestaan (aanbevolen)</translation>
 <translation id="8584280235376696778">Video o&amp;penen in nieuwe tab</translation>
 <translation id="8615618338313291042">Privémodustoepassing: <ph name="APP_NAME" /></translation>
-<translation id="8627151598708688654">Selecteer bron</translation>
 <translation id="862750493060684461">CSS-cachegeheugen</translation>
 <translation id="8664389313780386848">&amp;Paginabron weergeven</translation>
 <translation id="8708000541097332489">Wissen bij het verlaten</translation>
@@ -414,7 +408,7 @@ Bewaar je sleutelbestand op een veilige plaats. Je hebt het bestand nodig om nie
 <translation id="8973557916016709913">Zoomniveau verwijderen</translation>
 <translation id="897939795688207351">Op <ph name="ORIGIN" /></translation>
 <translation id="8996526648899750015">Account toevoegen...</translation>
-<translation id="9003647077635673607">Toestaan op alle webpagina's</translation>
+<translation id="9003647077635673607">Toestaan op alle websites</translation>
 <translation id="9056810968620647706">Geen overeenkomsten gevonden.</translation>
 <translation id="9137916601698928395">Link openen als <ph name="USER" /></translation>
 <translation id="916607977885256133">Beeld-in-beeld</translation>

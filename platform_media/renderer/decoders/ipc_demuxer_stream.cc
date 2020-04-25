@@ -76,6 +76,10 @@ void IPCDemuxerStream::Read(const ReadCB& read_cb) {
       base::Bind(&IPCDemuxerStream::DataReady, weak_ptr_factory_.GetWeakPtr()));
 }
 
+bool IPCDemuxerStream::IsReadPending() const {
+  return !read_cb_.is_null();
+}
+
 bool IPCDemuxerStream::enabled() const {
   return is_enabled_;
 }
@@ -138,7 +142,7 @@ VideoDecoderConfig IPCDemuxerStream::video_decoder_config() {
   VideoDecoderConfig video_config;
   video_config.Initialize(
       VideoCodec::kCodecH264, VideoCodecProfile::H264PROFILE_MAIN,
-      VideoPixelFormat::PIXEL_FORMAT_YV12,
+      VideoDecoderConfig::AlphaMode::kIsOpaque,
       VideoColorSpace(VideoColorSpace::PrimaryID::UNSPECIFIED,
                       VideoColorSpace::TransferID::UNSPECIFIED,
                       VideoColorSpace::MatrixID::UNSPECIFIED,
@@ -152,9 +156,9 @@ VideoDecoderConfig IPCDemuxerStream::video_decoder_config() {
       Unencrypted());
 
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-          << " VideoCodecProfile : " << GetProfileName(video_config.profile())
-          << " VideoPixelFormat : "
-          << VideoPixelFormatToString(video_config.format());
+          << " VideoCodecProfile : " << GetProfileName(video_config.profile());
+       // << " VideoPixelFormat : "
+       // << VideoPixelFormatToString(video_config.format());
        // << " ColorSpace : " << video_config.color_space();
 
   return video_config;

@@ -83,6 +83,7 @@
 <translation id="2482878487686419369">Оповещения</translation>
 <translation id="2509495747794740764">Укажите значение от 10 до 200.</translation>
 <translation id="253557089021624350">Количество соединений keepalive</translation>
+<translation id="2546283357679194313">Cookie и данные сайтов</translation>
 <translation id="2550212893339833758">Память подкачки</translation>
 <translation id="2580924999637585241">Всего: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="26224892172169984">Запретить обработку протоколов на всех сайтах</translation>
@@ -92,7 +93,6 @@
 <translation id="2785873697295365461">Дескрипторы файлов</translation>
 <translation id="2809586584051668049">и ещё <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
 <translation id="2812989263793994277">Не показывать картинки</translation>
-<translation id="2847759467426165163">Выберите устройство</translation>
 <translation id="2850541429955027218">Добавить тему</translation>
 <translation id="2861941300086904918">Менеджер безопасности – Native Client</translation>
 <translation id="2889064240420137087">Открыть ссылку с помощью...</translation>
@@ -130,7 +130,6 @@
 <translation id="3341703758641437857">Разрешить для локальных файлов</translation>
 <translation id="3347086966102161372">Копировать адрес картинки</translation>
 <translation id="3360297538363969800">Печать не удалась. Проверьте принтер и повторите попытку.</translation>
-<translation id="3378503599595235699">Удалять локальные данные при закрытии браузера</translation>
 <translation id="3378572629723696641">Это расширение могло быть повреждено.</translation>
 <translation id="3387614642886316601">Расширенная проверка правописания</translation>
 <translation id="3432227430032737297">Удалить все видимые</translation>
@@ -198,7 +197,6 @@
 <translation id="4613271546271159013">Расширение изменило новую вкладку по умолчанию.</translation>
 <translation id="4677772697204437347">Память GPU</translation>
 <translation id="4681930562518940301">Открыть оригинал картинки в новой вкладке</translation>
-<translation id="4688541352655220763">Транслируйте контент из Vivaldi на телевизор и другие устройства.</translation>
 <translation id="4711638718396952945">Восстановить настройки</translation>
 <translation id="4726710629007580002">При установке расширения были следующие предупреждения:</translation>
 <translation id="479536056609751218">Веб-страница, только HTML</translation>
@@ -269,7 +267,6 @@
 <translation id="5978277834170881274">&amp;Базовая проверка правописания</translation>
 <translation id="5979421442488174909">Перевести на <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">Удаление данных сайтов</translation>
-<translation id="6040143037577758943">Закрыть</translation>
 <translation id="6042308850641462728">Подробнее</translation>
 <translation id="6059925163896151826">USB-устройства</translation>
 <translation id="6082651258230788217">Показать на панели</translation>
@@ -294,7 +291,7 @@
 <translation id="6398765197997659313">Обычный режим</translation>
 <translation id="6406303162637086258">Симулировать перезапуск браузера</translation>
 <translation id="6445450263907939268">Вы можете восстановить прежние настройки.</translation>
-<translation id="6447842834002726250">Файлы cookie</translation>
+<translation id="6447842834002726250">Файлы сookie</translation>
 <translation id="6452181791372256707">Отклонить</translation>
 <translation id="6498249116389603658">Все языки</translation>
 <translation id="6503077044568424649">Сайты</translation>
@@ -327,10 +324,8 @@
 <translation id="7270858098575133036">Уведомлять меня о сайтах, пытающихся использовать системные сообщения для доступа к MIDI-устройствам</translation>
 <translation id="7287143125007575591">Доступ запрещён.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="7293919849802650062">Добро пожаловать в Cast для Vivaldi!</translation>
 <translation id="7309257895202129721">Показать элементы управления</translation>
 <translation id="7311079019872751559">Доступ к плагинам вне тестовой среды</translation>
-<translation id="7346909386216857016">ОК</translation>
 <translation id="7385854874724088939">При печати произошла ошибка. Проверьте состояние принтера и повторите попытку.</translation>
 <translation id="7423098979219808738">Всегда спрашивать</translation>
 <translation id="7427348830195639090">Фоновая страница: <ph name="BACKGROUND_PAGE_URL" /></translation>
@@ -390,7 +385,6 @@
 <translation id="857943718398505171">Разрешено (рекомендуется)</translation>
 <translation id="8584280235376696778">Открыть видео на новой вкладке</translation>
 <translation id="8615618338313291042">Приложение в приватном режиме: <ph name="APP_NAME" /></translation>
-<translation id="8627151598708688654">Выбор источника</translation>
 <translation id="862750493060684461">Кэш CSS</translation>
 <translation id="8664389313780386848">Просмотр кода страницы</translation>
 <translation id="8708000541097332489">Удалять при выходе</translation>

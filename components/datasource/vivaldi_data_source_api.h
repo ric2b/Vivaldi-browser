@@ -19,6 +19,8 @@ class BrowserContext;
 
 namespace extensions {
 
+class VivaldiDataSourcesAPIHolder;
+
 /*
 This is used to setup and control the mapping between local images and the
 images exposed to the UI using the chrome://vivaldi-data/ protocol.
@@ -26,7 +28,11 @@ images exposed to the UI using the chrome://vivaldi-data/ protocol.
 class VivaldiDataSourcesAPI
     : public base::RefCountedThreadSafe<VivaldiDataSourcesAPI> {
  public:
-  explicit VivaldiDataSourcesAPI(base::FilePath user_data_dir);
+  explicit VivaldiDataSourcesAPI(Profile* profile);
+
+  // number and preferences containing data mapping urls.
+  static constexpr int kDataMappingPrefsCount = 2;
+  static const char* kDataMappingPrefs[kDataMappingPrefsCount];
 
   static void InitFactory();
 
@@ -49,16 +55,20 @@ class VivaldiDataSourcesAPI
   // spare the caller from calling FromBrowserContext and checking the result.
 
   // Creates a straight mapping between an absolute path and an id.
-  using AddMappingCallback =
-      base::OnceCallback<void(bool success, std::string image_url)>;
+  // In AddMappingCallback the profile argument is the original "recording"
+  // profile which is different from browser_context for incognito windows.
+  // profile is null during the shutdown.
+  using AddMappingCallback = base::OnceCallback<
+      void(Profile* profile, bool success, std::string image_url)>;
   static void AddMapping(content::BrowserContext* browser_context,
                          base::FilePath file_path,
                          AddMappingCallback callback);
 
-  using RemoveMappingCallback = base::OnceCallback<void(bool success)>;
-  static void RemoveMapping(content::BrowserContext* browser_context,
-                            std::string url,
-                            RemoveMappingCallback callback);
+  static void OnUrlChange(content::BrowserContext* browser_context,
+                          const std::string& old_url,
+                          const std::string& new_url);
+
+  void OnUrlChange(const std::string& old_url, const std::string& new_url);
 
   // Add image data to disk and set up a mapping so it can be requested
   // using the usual image data protocol.
@@ -69,14 +79,26 @@ class VivaldiDataSourcesAPI
       scoped_refptr<base::RefCountedMemory> png_data,
       AddBookmarkImageCallback callback);
 
+  // This can be called from any thread. The callback will be called from the UI
+  // thread.
+  void AddImageDataForBookmark(int64_t bookmark_id,
+                               scoped_refptr<base::RefCountedMemory> png_data,
+                               AddBookmarkImageCallback ui_thread_callback);
+
   // This method must be called from the IO thread.
   void GetDataForId(const std::string& id,
                     content::URLDataSource::GotDataCallback callback);
+
+  // During bulk changes the file mapping is not saved after each mutation
+  // operation.
+  static void SetBulkChangesMode(content::BrowserContext* browser_context,
+                                 bool enable);
 
   void LoadMappings();
 
  private:
   friend class base::RefCountedThreadSafe<VivaldiDataSourcesAPI>;
+  friend class VivaldiDataSourcesAPIHolder;
 
   class DataSourceItem {
    public:
@@ -107,8 +129,7 @@ class VivaldiDataSourcesAPI
                               AddMappingCallback callback);
   void FinishAddMappingOnUIThread(std::string id, AddMappingCallback callback);
 
-  void RemoveMappingOnFileThread(std::string url,
-                                 RemoveMappingCallback callback);
+  void RemoveMappingOnFileThread(std::string id);
 
   void SetCacheOnIOThread(std::string id,
                           scoped_refptr<base::RefCountedMemory> data);
@@ -128,12 +149,16 @@ class VivaldiDataSourcesAPI
 
   void LoadMappingsOnFileThread();
   void InitMappingsOnFileThread(const base::DictionaryValue* dict);
+  void SetBulkChangesModeOnFileThread(bool enable);
 
   std::string GetMappingJSONOnFileThread();
   void SaveMappingsOnFileThread();
 
   base::FilePath GetFileMappingFilePath();
   base::FilePath GetBookmarkThumbnailPath(int64_t bookmark_id);
+
+  // This must be accessed only on UI thread. It is reset to null on shutdown.
+  Profile* profile_;
 
   const base::FilePath user_data_dir_;
 
@@ -144,6 +169,11 @@ class VivaldiDataSourcesAPI
   // Outside constructor or destructor this must be accessed only from the
   // sequence_task_runner_.
   std::map<std::string, DataSourceItem> id_to_file_map_;
+
+  // Flags to prevent frequent writes on bulk changes. They must be accessed
+  // only from sequence_task_runner_.
+  bool bulk_changes_ = false;
+  bool unsaved_changes_ = false;
 
   // Outside constructor or destructor this must be accessed only from the IO
   // thread.

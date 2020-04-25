@@ -10,10 +10,9 @@
 <translation id="129863573139666797"><ph name="BEGIN_LINK" />Probeer je cookies te wissen<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">Over deze versie</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> heeft geen gegevens verzonden.</translation>
-<translation id="14171126816530869">De identiteit van <ph name="ORGANIZATION" /> op <ph name="LOCALITY" /> is geverifieerd door <ph name="ISSUER" />.</translation>
 <translation id="1559528461873125649">Dit bestand of deze directory bestaat niet</translation>
 <translation id="1620510694547887537">Camera</translation>
-<translation id="1640244768702815859">Probeer <ph name="BEGIN_LINK" />de homepage van de website te bezoeken<ph name="END_LINK" />.</translation>
+<translation id="1640244768702815859">Probeer <ph name="BEGIN_LINK" />de startpagina van de website te bezoeken<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Niet-ondersteund protocol</translation>
 <translation id="1710259589646384581">Besturingssysteem</translation>
 <translation id="1728677426644403582">Je bekijkt de bron van een webpagina</translation>
@@ -27,6 +26,7 @@
 <translation id="2030481566774242610">Bedoelde je <ph name="LINK" />?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Controleer de proxy en firewall<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">Geluid</translation>
+<translation id="2119505898009119320">Verleend aan: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2147827593068025794">Synchronisatie op de achtergrond</translation>
 <translation id="2166378884831602661">Deze website kan geen beveiligde verbinding leveren</translation>
 <translation id="2187317261103489799">Detecteren (standaard)</translation>
@@ -132,7 +132,7 @@
 <translation id="5810442152076338065">Je verbinding met <ph name="DOMAIN" /> is versleuteld via een verouderde versleuteling.</translation>
 <translation id="5838278095973806738">Je moet geen gevoelige gegevens (zoals wachtwoorden of creditcards) opgeven op deze website, omdat ze kunnen worden gestolen door aanvallers.</translation>
 <translation id="5869405914158311789">Deze website is niet bereikbaar</translation>
-<translation id="5932224571077948991">Site geeft opdringerige of misleidende advertenties weer</translation>
+<translation id="5932224571077948991">Website geeft opdringerige of misleidende advertenties weer</translation>
 <translation id="5990559369517809815">Verzoeken aan de server zijn door een extensie geblokkeerd.</translation>
 <translation id="6051221802930200923">Je kunt <ph name="SITE" /> momenteel niet bezoeken, omdat de website gebruikmaakt van certificaatpinning. Netwerkfouten en aanvallen zijn doorgaans tijdelijk, dus deze pagina werkt later waarschijnlijk correct.</translation>
 <translation id="6146055958333702838">Controleer alle kabels en start alle routers, modems of andere netwerkapparaten die je gebruikt, opnieuw op.</translation>
@@ -207,7 +207,7 @@
 <translation id="8740359287975076522">Het &lt;abbr id="dnsDefinition"&gt;DNS-adres&lt;/abbr&gt; van <ph name="HOST_NAME" /> kan niet worden gevonden. Er wordt een diagnose van het probleem uitgevoerd.</translation>
 <translation id="9001074447101275817">Voor de proxy <ph name="DOMAIN" /> is een gebruikersnaam en wachtwoord vereist.</translation>
 <translation id="9008201768610948239">Negeren</translation>
-<translation id="9011424611726486705">Site-instellingen openen</translation>
+<translation id="9011424611726486705">Website-instellingen openen</translation>
 <translation id="9025348182339809926">(Ongeldig)</translation>
 <translation id="9039213469156557790">Bovendien bevat deze pagina bronnen die niet beveiligd zijn. Deze bronnen kunnen tijdens verzending door anderen worden bekeken en kunnen door een aanvaller worden gewijzigd om het gedrag van de pagina aan te passen.</translation>
 <translation id="9069693763241529744">Geblokkeerd door een extensie</translation>

@@ -30,7 +30,10 @@ namespace {
 constexpr base::TimeDelta kMaxWaitForCapture = base::TimeDelta::FromSeconds(30);
 
 void ReleaseSharedMemoryPixels(void* addr, void* context) {
-  delete reinterpret_cast<base::SharedMemory*>(context);
+  // Let std::unique_ptr destructor to release the mapping.
+  std::unique_ptr<base::ReadOnlySharedMemoryMapping> mapping(
+      static_cast<base::ReadOnlySharedMemoryMapping*>(context));
+  DCHECK(mapping->memory() == addr);
 }
 
 }  // namespace
@@ -58,11 +61,13 @@ void CapturePage::CaptureImpl(content::WebContents* contents,
   capture_callback_ = std::move(callback);
   callback_id_ = ++s_callback_id;
   once_per_contents_ = input_params.once_per_contents;
+  target_size_ = input_params.target_size;
 
   VivaldiViewMsg_RequestThumbnailForFrame_Params param;
   param.callback_id = callback_id_;
   param.rect = input_params.rect;
   param.full_page = input_params.full_page;
+  param.target_size = input_params.target_size;
 
   WebContentsObserver::Observe(contents);
 
@@ -107,29 +112,42 @@ bool CapturePage::OnMessageReceived(const IPC::Message& message) {
 }
 
 void CapturePage::OnRequestThumbnailForFrameResponse(
-    base::SharedMemoryHandle handle,
-    gfx::Rect image_rect,
     int callback_id,
-    bool success) {
-  if (callback_id != callback_id_) {
-    if (once_per_contents_) {
-      LOG(ERROR) << "unexpected callback id " << callback_id << " when "
-                 << callback_id_ << " was expected";
-      RespondAndDelete();
-    }
-    return;
-  }
-
-  if (!success || !base::SharedMemory::IsHandleValid(handle)) {
-    LOG(ERROR) << "no data from the renderer process";
-    RespondAndDelete();
-    return;
-  }
-
+    gfx::Size image_size,
+    base::ReadOnlySharedMemoryRegion region) {
   Result captured;
-  captured.handle_ = std::move(handle);
-  captured.rect_ = image_rect;
-  captured.success_ = true;
+  do {
+    if (callback_id != callback_id_) {
+      if (!once_per_contents_)
+        return;
+      LOG(ERROR) << "unexpected callback id " << callback_id << " when "
+                << callback_id_ << " was expected";
+      break;
+    }
+
+    if (!region.IsValid() || image_size.IsEmpty()) {
+      LOG(ERROR) << "no data from the renderer process";
+      break;
+    }
+
+    if (!target_size_.IsEmpty() && target_size_ != image_size) {
+      LOG(ERROR) << "unexpected image size " << image_size.width() << "x"
+                 << image_size.height() << " when " << target_size_.width()
+                 << "x" << target_size_.height() << " was expected";
+      break;
+    }
+
+    SkImageInfo info =
+        SkImageInfo::MakeN32Premul(image_size.width(), image_size.height());
+    if (info.computeMinByteSize() != region.GetSize()) {
+      LOG(ERROR) << "The image size does not match allocated memory";
+      break;
+    }
+
+    captured.image_info_ = info;
+    captured.region_ = std::move(region);
+  } while (false);
+
   RespondAndDelete(std::move(captured));
 }
 
@@ -139,63 +157,40 @@ void CapturePage::OnCaptureTimeout() {
 }
 
 CapturePage::Result::Result() = default;
-
-CapturePage::Result::Result(Result&& other)
-    : handle_(other.handle_),
-      rect_(std::move(other.rect_)),
-      success_(std::move(other.success_)) {
-  // Workaround for lack of move sematics in SharedMemoryHandle to prevent
-  // calling Close() in destructor for other.
-  other.handle_ = base::SharedMemoryHandle();
-}
-
-CapturePage::Result& CapturePage::Result::operator=(Result&& other) {
-  handle_ = other.handle_;
-  other.handle_ = base::SharedMemoryHandle();
-  rect_ = std::move(other.rect_);
-  success_ = std::move(other.success_);
-  return *this;
-}
-
-CapturePage::Result::~Result() {
-  if (handle_.IsValid()) {
-    handle_.Close();
-  }
-}
+CapturePage::Result::~Result() = default;
+CapturePage::Result::Result(Result&& other) = default;
+CapturePage::Result& CapturePage::Result::operator=(Result&& other) = default;
 
 bool CapturePage::Result::MovePixelsToBitmap(SkBitmap* bitmap) {
-  if (!success_)
+  if (!region_.IsValid())
     return false;
 
-  // This should only be called once.
-  DCHECK(handle_.IsValid());
+  // We transfer the ownership of the mapping into the bitmap, hence we need
+  // an instance on the heap.
+  auto mapping =
+      std::make_unique<base::ReadOnlySharedMemoryMapping>(region_.Map());
 
-  // Let Skia do some sanity checking for (no negative widths/heights, no
-  // overflows while calculating bytes per row, etc).
-  if (!bitmap->setInfo(
-          SkImageInfo::MakeN32Premul(rect_.width(), rect_.height()))) {
-    LOG(ERROR) << "sanity check failed on captured image data";
-    return false;
-  }
-  auto bitmap_buffer = std::make_unique<base::SharedMemory>(handle_, true);
+  // Release the region now as the mapping is independent of it.
+  region_ = base::ReadOnlySharedMemoryRegion();
 
-  // bitmap_buffer now owns the handle and will close it in the destructor.
-  handle_ = base::SharedMemoryHandle();
-
-  if (!bitmap_buffer->Map(bitmap->computeByteSize())) {
-    LOG(ERROR) << "capture size mismatch";
+  if (!mapping->IsValid()) {
+    LOG(ERROR) << "failed to map the captured image data";
     return false;
   }
+
+  // installPixels uses void*, not const void* for pixels.
+  void* pixels = const_cast<void*>(mapping->memory());
 
   // SkBitmap calls the release function when it no longer access the memory
-  // including failure cases.
-  base::SharedMemory* buffer_pointer = bitmap_buffer.release();
-  if (!bitmap->installPixels(bitmap->info(), buffer_pointer->memory(),
-                              bitmap->rowBytes(), &ReleaseSharedMemoryPixels,
-                              buffer_pointer)) {
+  // including failure cases hence calling mapping.release() does not leak
+  // if installPixels returns false.
+  void* sk_release_context = mapping.release();
+  if (!bitmap->installPixels(image_info_, pixels, image_info_.minRowBytes(),
+                             ReleaseSharedMemoryPixels, sk_release_context)) {
     LOG(ERROR) << "data could not be copied to bitmap";
     return false;
   }
+
   return true;
 }
 

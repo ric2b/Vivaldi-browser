@@ -8,6 +8,7 @@
 
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "extensions/common/manifest_constants.h"
 #include "content/public/common/page_zoom.h"
 #include "components/zoom/zoom_controller.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -22,6 +23,141 @@
 
 namespace vivaldi {
 
+// These symbols do not not exist in chrome or the definition differs
+// from vivaldi.
+const char* kVivaldiKeyEsc = "Esc";
+const char* kVivaldiKeyDel = "Del";
+const char* kVivaldiKeyIns = "Ins";
+const char* kVivaldiKeyPgUp = "Pageup";
+const char* kVivaldiKeyPgDn = "Pagedown";
+const char* kVivaldiKeyMultiply = "*";
+const char* kVivaldiKeyDivide = "/";
+const char* kVivaldiKeySubtract = "-";
+const char* kVivaldiKeyPeriod = ".";
+const char* kVivaldiKeyComma = ",";
+
+
+ui::KeyboardCode GetFunctionKey(std::string token) {
+  int size = token.size();
+  if (size >= 2 && token[0] == 'F') {
+    if (size == 2 && token[1] >= '1' && token[1] <= '9')
+      return static_cast<ui::KeyboardCode>(ui::VKEY_F1 + (token[1] - '1'));
+    if (size == 3 && token[1] == '1' && token[2] >= '0' && token[2] <= '9')
+      return static_cast<ui::KeyboardCode>(ui::VKEY_F10 + (token[2] - '0'));
+    if (size == 3 && token[1] == '2' && token[2] >= '0' && token[2] <= '4')
+      return static_cast<ui::KeyboardCode>(ui::VKEY_F20 + (token[2] - '0'));
+  }
+  return ui::VKEY_UNKNOWN;
+}
+
+// Based on extensions/command.cc
+// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+ui::Accelerator ParseShortcut(const std::string& accelerator,
+                              bool should_parse_media_keys) {
+  namespace values = extensions::manifest_values;
+
+  std::vector<std::string> tokens = base::SplitString(
+      accelerator, "+", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+  if (tokens.size() == 0) {
+    return ui::Accelerator();
+  }
+
+  int modifiers = ui::EF_NONE;
+  ui::KeyboardCode key = ui::VKEY_UNKNOWN;
+  for (size_t i = 0; i < tokens.size(); i++) {
+    if (tokens[i] == values::kKeyCtrl) {
+      modifiers |= ui::EF_CONTROL_DOWN;
+    } else if (tokens[i] == values::kKeyAlt) {
+      modifiers |= ui::EF_ALT_DOWN;
+    } else if (tokens[i] == values::kKeyShift) {
+      modifiers |= ui::EF_SHIFT_DOWN;
+    } else if (tokens[i] == values::kKeyCommand) {
+      modifiers |= ui::EF_COMMAND_DOWN;
+    } else if (key == ui::VKEY_UNKNOWN) {
+      if (tokens[i] == values::kKeyUp) {
+        key = ui::VKEY_UP;
+      } else if (tokens[i] == values::kKeyDown) {
+        key = ui::VKEY_DOWN;
+      } else if (tokens[i] == values::kKeyLeft) {
+        key = ui::VKEY_LEFT;
+      } else if (tokens[i] == values::kKeyRight) {
+        key = ui::VKEY_RIGHT;
+      } else if (tokens[i] == values::kKeyIns) {
+        key = ui::VKEY_INSERT;
+      } else if (tokens[i] == values::kKeyDel) {
+        key = ui::VKEY_DELETE;
+      } else if (tokens[i] == values::kKeyHome) {
+        key = ui::VKEY_HOME;
+      } else if (tokens[i] == values::kKeyEnd) {
+        key = ui::VKEY_END;
+      } else if (tokens[i] == values::kKeyPgUp) {
+        key = ui::VKEY_PRIOR;
+      } else if (tokens[i] == values::kKeyPgDwn) {
+        key = ui::VKEY_NEXT;
+      } else if (tokens[i] == values::kKeySpace) {
+        key = ui::VKEY_SPACE;
+      } else if (tokens[i] == values::kKeyTab) {
+        key = ui::VKEY_TAB;
+      } else if (tokens[i] == kVivaldiKeyPeriod) {
+        key = ui::VKEY_OEM_PERIOD;
+      } else if (tokens[i] == kVivaldiKeyComma) {
+        key = ui::VKEY_OEM_COMMA;
+      } else if (tokens[i] == kVivaldiKeyEsc) {
+        key = ui::VKEY_ESCAPE;
+      } else if (tokens[i] == kVivaldiKeyDel) {
+        key = ui::VKEY_DELETE;
+      } else if (tokens[i] == kVivaldiKeyIns) {
+        key = ui::VKEY_ESCAPE;
+      } else if (tokens[i] == kVivaldiKeyPgUp) {
+        key = ui::VKEY_PRIOR;
+      } else if (tokens[i] == kVivaldiKeyPgDn) {
+        key = ui::VKEY_NEXT;
+      } else if (tokens[i] == kVivaldiKeyMultiply) {
+        key = ui::VKEY_MULTIPLY;
+      } else if (tokens[i] == kVivaldiKeyDivide) {
+        key = ui::VKEY_DIVIDE;
+      } else if (tokens[i] == kVivaldiKeySubtract) {
+        key = ui::VKEY_SUBTRACT;
+      } else if (tokens[i].size() == 0) {
+        // Nasty workaround. The parser does not handle "++"
+        key = ui::VKEY_ADD;
+      } else if (tokens[i] == values::kKeyMediaNextTrack &&
+                 should_parse_media_keys) {
+        key = ui::VKEY_MEDIA_NEXT_TRACK;
+      } else if (tokens[i] == values::kKeyMediaPlayPause &&
+                 should_parse_media_keys) {
+        key = ui::VKEY_MEDIA_PLAY_PAUSE;
+      } else if (tokens[i] == values::kKeyMediaPrevTrack &&
+                 should_parse_media_keys) {
+        key = ui::VKEY_MEDIA_PREV_TRACK;
+      } else if (tokens[i] == values::kKeyMediaStop &&
+                 should_parse_media_keys) {
+        key = ui::VKEY_MEDIA_STOP;
+      } else if (tokens[i].size() == 1 && tokens[i][0] >= 'A' &&
+                 tokens[i][0] <= 'Z') {
+        key = static_cast<ui::KeyboardCode>(ui::VKEY_A + (tokens[i][0] - 'A'));
+      } else if (tokens[i].size() == 1 && tokens[i][0] >= '0' &&
+                 tokens[i][0] <= '9') {
+        key = static_cast<ui::KeyboardCode>(ui::VKEY_0 + (tokens[i][0] - '0'));
+      } else if ((key = GetFunctionKey(tokens[i])) != ui::VKEY_UNKNOWN) {
+      } else {
+        // Keep this for now.
+        // printf("unknown key length=%lu, string=%s\n", tokens[i].size(),
+        // tokens[i].c_str()); for(int j=0; j<(int)tokens[i].size(); j++) {
+        //  printf("%02x ", tokens[i][j]);
+        //}
+        // printf("\n");
+      }
+    }
+  }
+  if (key == ui::VKEY_UNKNOWN) {
+    return ui::Accelerator();
+  } else {
+    return ui::Accelerator(key, modifiers);
+  }
+}
 
 SetPartnerUpgrade::SetPartnerUpgrade(content::BrowserContext* context,
                                      bool active)
@@ -274,5 +410,13 @@ std::string ShortcutText(int windows_key_code, int modifiers, int dom_code) {
   }
   return shortcutText;
 }
+
+
+
+
+
+
+
+
 
 }  // namespace vivaldi

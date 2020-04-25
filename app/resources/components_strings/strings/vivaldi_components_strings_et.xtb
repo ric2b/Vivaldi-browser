@@ -108,7 +108,7 @@
 <translation id="6165508094623778733">Lisateave</translation>
 <translation id="6177128806592000436">Ebaturvaline ühendus</translation>
 <translation id="6203231073485539293">Kontrolli Interneti-ühendust</translation>
-<translation id="6305205051461490394">URL-iga <ph name="URL" /> ei saa ühendust.</translation>
+<translation id="6305205051461490394"><ph name="URL" /> on kättesaamatu.</translation>
 <translation id="6321917430147971392">Kontrolli oma DNS-i seadeid</translation>
 <translation id="6328639280570009161">Proovi keelata võrguprognoos</translation>
 <translation id="6328786501058569169">See on petusait</translation>

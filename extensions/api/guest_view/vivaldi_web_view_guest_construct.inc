@@ -6,6 +6,4 @@
 // other variables
       is_visible_(false),
       is_fullscreen_(false),
-      window_state_prior_to_fullscreen_(ui::SHOW_STATE_NORMAL),
-
-//    weak_ptr_factory_(this)
+      window_state_prior_to_fullscreen_(ui::SHOW_STATE_NORMAL)

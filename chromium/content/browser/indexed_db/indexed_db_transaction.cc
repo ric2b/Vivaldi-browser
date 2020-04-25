@@ -116,8 +116,7 @@ IndexedDBTransaction::IndexedDBTransaction(
       mode_(mode),
       connection_(connection->GetWeakPtr()),
       error_callback_(std::move(error_callback)),
-      transaction_(backing_store_transaction),
-      ptr_factory_(this) {
+      transaction_(backing_store_transaction) {
   IDB_ASYNC_TRACE_BEGIN("IndexedDBTransaction::lifetime", this);
   callbacks_ = connection_->callbacks();
   database_ = connection_->database();
@@ -604,7 +603,7 @@ void IndexedDBTransaction::RemovePendingObservers(
   const auto& it = std::remove_if(
       pending_observers_.begin(), pending_observers_.end(),
       [&pending_observer_ids](const std::unique_ptr<IndexedDBObserver>& o) {
-        return base::ContainsValue(pending_observer_ids, o->id());
+        return base::Contains(pending_observer_ids, o->id());
       });
   if (it != pending_observers_.end())
     pending_observers_.erase(it, pending_observers_.end());
@@ -616,8 +615,7 @@ void IndexedDBTransaction::AddObservation(
   auto it = connection_changes_map_.find(connection_id);
   if (it == connection_changes_map_.end()) {
     it = connection_changes_map_
-             .insert(std::make_pair(connection_id,
-                                    blink::mojom::IDBObserverChanges::New()))
+             .insert({connection_id, blink::mojom::IDBObserverChanges::New()})
              .first;
   }
   it->second->observations.push_back(std::move(observation));

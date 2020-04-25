@@ -10,7 +10,7 @@ namespace vivaldi {
 
 NotesUIHTMLSource::NotesUIHTMLSource() {}
 
-std::string NotesUIHTMLSource::GetSource() const {
+std::string NotesUIHTMLSource::GetSource() {
   return "notes";
 }
 
@@ -24,7 +24,7 @@ void NotesUIHTMLSource::StartDataRequest(
   callback.Run(NULL);
 }
 
-std::string NotesUIHTMLSource::GetMimeType(const std::string& path) const {
+std::string NotesUIHTMLSource::GetMimeType(const std::string& path) {
   NOTREACHED() << "We should never get here since the extension should have"
                << "been triggered";
   return "text/html";

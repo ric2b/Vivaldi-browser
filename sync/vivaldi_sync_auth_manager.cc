@@ -45,7 +45,7 @@ syncer::SyncAccountInfo ToSyncAccountInfo(
 }  // anonymous namespace
 
 VivaldiSyncAuthManager::VivaldiSyncAuthManager(
-    identity::IdentityManager* identity_manager,
+    signin::IdentityManager* identity_manager,
     const AccountStateChangedCallback& account_state_changed,
     const CredentialsChangedCallback& credentials_changed,
     VivaldiAccountManager* account_manager)

@@ -49,8 +49,18 @@ class VivaldiProfileSyncService : public syncer::ProfileSyncService {
  private:
   void ShutdownImpl(syncer::ShutdownReason reason) override;
   void StartSyncingWithServer() override;
+  void OnEngineInitialized(
+    syncer::ModelTypeSet initial_types,
+    const syncer::WeakHandle<syncer::JsBackend>& js_backend,
+    const syncer::WeakHandle<syncer::DataTypeDebugInfoListener>& debug_info_listener,
+    const std::string& cache_guid,
+    const std::string& birthday,
+    const std::string& bag_of_chips,
+    bool success) override;
 
   void OnClearDataComplete(scoped_refptr<net::HttpResponseHeaders> headers);
+
+  bool force_local_data_reset_ = false;
 
   bool is_clearing_sync_data_ = false;
   std::unique_ptr<network::SimpleURLLoader> clear_data_url_loader_;

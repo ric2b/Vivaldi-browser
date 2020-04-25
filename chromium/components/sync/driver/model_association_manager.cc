@@ -48,7 +48,7 @@ static const ModelType kStartOrder[] = {
     NOTES,
     DEPRECATED_SUPERVISED_USERS, MOUNTAIN_SHARES,
     DEPRECATED_SUPERVISED_USER_SHARED_SETTINGS, DEPRECATED_ARTICLES,
-    SEND_TAB_TO_SELF, SECURITY_EVENTS, WIFI_CONFIGURATIONS};
+    SEND_TAB_TO_SELF, SECURITY_EVENTS, WEB_APPS, WIFI_CONFIGURATIONS};
 
 static_assert(base::size(kStartOrder) ==
                   ModelType::NUM_ENTRIES - FIRST_REAL_MODEL_TYPE,
@@ -100,8 +100,7 @@ ModelAssociationManager::ModelAssociationManager(
       controllers_(controllers),
       delegate_(processor),
       configure_status_(DataTypeManager::UNKNOWN),
-      notified_about_ready_for_configure_(false),
-      weak_ptr_factory_(this) {}
+      notified_about_ready_for_configure_(false) {}
 
 ModelAssociationManager::~ModelAssociationManager() {}
 
@@ -124,8 +123,14 @@ void ModelAssociationManager::Initialize(ModelTypeSet desired_types,
   // Only keep types that have controllers.
   desired_types_.Clear();
   for (ModelType type : desired_types) {
-    if (controllers_->find(type) != controllers_->end())
+    auto dtc_iter = controllers_->find(type);
+    if (dtc_iter != controllers_->end()) {
+      DataTypeController* dtc = dtc_iter->second.get();
+      // Controllers in a FAILED state should have been filtered out by the
+      // DataTypeManager.
+      DCHECK_NE(dtc->state(), DataTypeController::FAILED);
       desired_types_.Put(type);
+    }
   }
 
   DVLOG(1) << "ModelAssociationManager: Initializing for "

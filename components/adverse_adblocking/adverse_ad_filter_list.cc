@@ -79,6 +79,9 @@ void AdverseAdFilterListService::Observe(
 }
 
 void AdverseAdFilterListService::OnProfileAndServicesInitialized() {
+  // PathExists() triggers IO restriction.
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
+
   blocklist_file_exists_ = base::PathExists(GetDefaultFilePath());
 
   url_loader_factory_ =

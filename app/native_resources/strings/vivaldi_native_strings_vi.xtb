@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="vi">
 <translation id="1033008476608128425">Phong cảnh 3</translation>
+<translation id="1055184225775184556">H&amp;oàn tác thao tác Thêm</translation>
 <translation id="1118377629180821201">Phong cảnh 12</translation>
 <translation id="1158503667684816647">Không hiển thị lại thông báo xác nhận</translation>
 <translation id="1276145862619442150">Speed Dial</translation>
@@ -21,6 +22,7 @@
 <translation id="2441056087170876076">Quái vật 2</translation>
 <translation id="2444387452209867610">Chèn Ghi chú</translation>
 <translation id="2486841023299517366">Con vật 4</translation>
+<translation id="2556876185419854533">H&amp;oàn tác thao tác Hiệu chỉnh</translation>
 <translation id="2848085334714181751">Con vật 3</translation>
 <translation id="2873951654529031587">Thùng rác</translation>
 <translation id="292258461174562431">Quái vật 4</translation>
@@ -36,12 +38,15 @@
 <translation id="3302905971452834934">Quái vật 1</translation>
 <translation id="3334610655141903168">(Không tiêu đề)</translation>
 <translation id="3402602684546832928">Chọn tệp dấu trang Opera</translation>
+<translation id="3427342743765426898">&amp;Lặp lại thao tác Hiệu chỉnh</translation>
 <translation id="3451317331714872347">Phong cảnh 8</translation>
 <translation id="3516213908976398531">Phong cảnh 11</translation>
 <translation id="3540597690227428180">Con vật 9</translation>
 <translation id="3542768452570884558">Mở Liên kết trong Cửa sổ Mới</translation>
+<translation id="3583757800736429874">&amp;Lặp lại thao tác Di chuyển</translation>
 <translation id="3588820906588687999">Mở Hình ảnh trong Tab Mới</translation>
 <translation id="3601066750251199488">Quái vật 3</translation>
+<translation id="366643050267431920">Thêm dưới dạng Sự kiện</translation>
 <translation id="3732157130969736834">Đánh dấu Liên kết</translation>
 <translation id="3732388226447288666">Con vật 2</translation>
 <translation id="3732439195215136813">Con vật 5</translation>
@@ -87,6 +92,7 @@
 <translation id="6438786710866753178">Phong cảnh 4</translation>
 <translation id="6477028720702061455">Chọn thư mục hồ sơ Opera để nhập</translation>
 <translation id="6510706699590490869">Cập nhật &amp;Vivaldi</translation>
+<translation id="6529602333819889595">Lặp lại việc &amp;Xoá</translation>
 <translation id="6538338088414940408">Mở liên kết trong tab dưới nền</translation>
 <translation id="6551219277044048123">Thêm vào như một Công cụ Tìm &amp;kiếm...</translation>
 <translation id="6630781781151951863">Phong cảnh 18</translation>
@@ -100,6 +106,7 @@
 <translation id="7865983598101744945">Xác nhận thoát</translation>
 <translation id="8027581147000338959">Mở trong Cửa sổ Mới</translation>
 <translation id="8099620695029051217">Sao chép Địa chỉ Trang</translation>
+<translation id="8194797478851900357">H&amp;oàn tác thao tác Di chuyển</translation>
 <translation id="8197810018650377191">Đánh dấu Trang</translation>
 <translation id="8261506727792406068">Xoá</translation>
 <translation id="8331671104904436324">Mở trong Tab Chạy nền</translation>

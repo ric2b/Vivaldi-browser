@@ -52,18 +52,18 @@ git config --global user.email "..."
 git clone --depth=1 https://github.com/ric2b/Vivaldi-browser w
 
 wget https://vivaldi.com/source/vivaldi-source-2.0...tar.xz
-tar --xz -xf ...
-mv vivaldi-source v0
+tar --xz -xf ... && mv vivaldi-source v0 && ls -la
 ls -ld v0/.git
 # rm -rf v0/.git
 
-cp -r w/.git w/README.md v0
+cp -r w/{.git,README.md} v0
 cd v0
-git status | grep -v chromium | less -FX
+git status | grep -v chromium
 git add .
-git status | grep -v chromium | less -FX
-git commit -m 'Added version 2.0...' | grep -v chromium | less -FX
-git status | grep -v chromium | less -FX
+git status | grep -v chromium
+git commit -m 'Added version 2.0...' | grep -v chromium
+git status | grep -v chromium
+git log
 cd ..
 ```
 
@@ -71,12 +71,11 @@ cd ..
 
 ```
 wget https://vivaldi.com/source/vivaldi-source-2.1...tar.xz
-tar --xz -xf ...
-mv vivaldi-source v1
+tar --xz -xf ... && mv vivaldi-source v1 && ls -la
 ls -ld v1/.git
 # rm -rf v1/.git
 
-cp -r v0/.git w/README.md v1
+cp -r v0/{.git,README.md} v1
 ...
 ```
 

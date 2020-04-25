@@ -117,20 +117,20 @@ void NotesCodec::ExtractSpecialNode(Notes_Node::Type type,
   DCHECK(target);
 
   std::unique_ptr<Notes_Node> item;
-  for (int i = 0; i < source->child_count(); ++i) {
-    Notes_Node* child = source->GetChild(i);
+  for (size_t i = 0; i < source->children().size(); ++i) {
+    Notes_Node* child = source->children()[i].get();
     if (child->type() == type) {
       // Remove the special childnode from the node, moving into a separate node
-      item = source->Remove(child);
+      item = source->Remove(i);
       break;
     }
   }
 
   if (item) {
-    // Using variable instead of relying on child_count() decrement
-    int count = item->child_count();
+    // Using variable instead of relying on children().size() decrement
+    size_t count = item->children().size();
     while (count-- > 0) {
-      target->Add(item->Remove(item->GetChild(0)), 0);
+      target->Add(item->Remove(0), 0);
     }
     target->set_id(item->id());
     target->SetTitle(item->GetTitle());
@@ -191,8 +191,8 @@ void NotesCodec::ReassignIDs(Notes_Node* notes_node,
 void NotesCodec::ReassignIDsHelper(Notes_Node* node) {
   DCHECK(node);
   node->set_id(++maximum_id_);
-  for (int i = 0; i < node->child_count(); ++i)
-    ReassignIDsHelper(node->GetChild(i));
+  for (auto& it: node->children())
+    ReassignIDsHelper(it.get());
 }
 
 void NotesCodec::UpdateChecksum(const std::string& str) {

@@ -119,14 +119,14 @@ IN_PROC_BROWSER_TEST_F(SingleClientNotesSyncTest, Sanity) {
   ASSERT_TRUE(ModelMatchesVerifier(0));
 
   ASSERT_EQ(1, tier1_a_url0->parent()->GetIndexOf(tier1_a_url0));
-  Move(0, tier1_a_url0, top, top->child_count());
-  const Notes_Node* boa = AddNote(0, top, top->child_count(), "Bank of America",
+  Move(0, tier1_a_url0, top, top->children().size());
+  const Notes_Node* boa = AddNote(0, top, top->children().size(), "Bank of America",
                                   GURL("https://www.bankofamerica.com"));
   ASSERT_TRUE(boa != NULL);
   const Notes_Node* bubble =
-      AddNote(0, top, top->child_count(), "Seattle Bubble",
+      AddNote(0, top, top->children().size(), "Seattle Bubble",
               GURL("http://seattlebubble.com"));
-  Move(0, tier1_a_url0, top, top->child_count());
+  Move(0, tier1_a_url0, top, top->children().size());
   ASSERT_TRUE(bubble != NULL);
   const Notes_Node* wired =
       AddNote(0, top, 2, "Wired News", GURL("http://www.wired.com"));
@@ -140,8 +140,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientNotesSyncTest, Sanity) {
   ASSERT_TRUE(UpdatedProgressMarkerChecker(GetSyncService(0)).Wait());
   ASSERT_TRUE(ModelMatchesVerifier(0));
 
-  ASSERT_EQ(tier1_a_url0->id(), top->GetChild(top->child_count() - 1)->id());
-  Remove(0, top, top->child_count() - 1);
+  ASSERT_EQ(tier1_a_url0->id(), top->children()[top->children().size() - 1]->id());
+  Remove(0, top, top->children().size() - 1);
   Move(0, wired, tier1_b, 0);
   Move(0, porsche, top, 3);
   const Notes_Node* tier3_b = AddFolder(0, tier2_b, 1, "tier3_b");
@@ -163,9 +163,9 @@ IN_PROC_BROWSER_TEST_F(SingleClientNotesSyncTest, Sanity) {
   ASSERT_TRUE(UpdatedProgressMarkerChecker(GetSyncService(0)).Wait());
   ASSERT_TRUE(ModelMatchesVerifier(0));
 
-  ASSERT_EQ(trash_node->GetChild(0)->id(), trash_1_url0->id());
+  ASSERT_EQ(trash_node->children()[0]->id(), trash_1_url0->id());
   Remove(0, trash_node, 0);
-  ASSERT_EQ(trash_node->GetChild(0)->id(), tier1_b_url1->id());
+  ASSERT_EQ(trash_node->children()[0]->id(), tier1_b_url1->id());
 
   // Wait for newly deleted notes to sync.
   ASSERT_TRUE(UpdatedProgressMarkerChecker(GetSyncService(0)).Wait());
@@ -224,7 +224,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientNotesSyncTest, NotesAllNodesRemovedEvent) {
   RemoveAll(0);
   ASSERT_TRUE(UpdatedProgressMarkerChecker(GetSyncService(0)).Wait());
   // Verify other node has no children now.
-  EXPECT_EQ(0, GetNotesTopNode(0)->child_count());
+  EXPECT_EQ(0u, GetNotesTopNode(0)->children().size());
   // Verify model matches verifier.
   ASSERT_TRUE(ModelMatchesVerifier(0));
 }

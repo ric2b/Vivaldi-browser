@@ -92,7 +92,6 @@
 <translation id="2785873697295365461">文件描述符数量</translation>
 <translation id="2809586584051668049">及另外<ph name="NUMBER_ADDITIONAL_DISABLED" />个扩展程序</translation>
 <translation id="2812989263793994277">不显示任何图片</translation>
-<translation id="2847759467426165163">投射到</translation>
 <translation id="2850541429955027218">添加主题背景</translation>
 <translation id="2861941300086904918">Native Client 安全管理器</translation>
 <translation id="2889064240420137087">链接打开方式...</translation>
@@ -130,7 +129,6 @@
 <translation id="3341703758641437857">允许访问本地文件 URL</translation>
 <translation id="3347086966102161372">复制图片地址(&amp;O)</translation>
 <translation id="3360297538363969800">打印失败。请检查您的打印机，然后重试。</translation>
-<translation id="3378503599595235699">仅将本地数据保留到您退出浏览器为止</translation>
 <translation id="3378572629723696641">此扩展程序可能已损坏。</translation>
 <translation id="3387614642886316601">使用增强的“拼写检查”功能</translation>
 <translation id="3432227430032737297">移除显示的所有 Cookie</translation>
@@ -198,7 +196,6 @@
 <translation id="4613271546271159013">某个扩展程序更改了您打开新标签页时系统显示的页面。</translation>
 <translation id="4677772697204437347">GPU内存</translation>
 <translation id="4681930562518940301">在新标签中打开原始图片(&amp;I)</translation>
-<translation id="4688541352655220763">您可以将 Vivaldi 上的内容显示在您的电视或其他设备上。</translation>
 <translation id="4711638718396952945">恢复设置</translation>
 <translation id="4726710629007580002">安装扩展程序时告警：</translation>
 <translation id="479536056609751218">网页，仅 HTML</translation>
@@ -269,7 +266,6 @@
 <translation id="5978277834170881274">使用基本拼写检查(&amp;U)</translation>
 <translation id="5979421442488174909">译为<ph name="LANGUAGE" />(&amp;T)</translation>
 <translation id="6011449291337289699">清除网站数据</translation>
-<translation id="6040143037577758943">关闭</translation>
 <translation id="6042308850641462728">更多</translation>
 <translation id="6059925163896151826">USB 设备</translation>
 <translation id="6082651258230788217">显示于工具栏</translation>
@@ -327,10 +323,8 @@
 <translation id="7270858098575133036">当网站要使用系统专有消息访问 MIDI 设备时询问您</translation>
 <translation id="7287143125007575591">访问遭拒。</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="7293919849802650062">欢迎体验 Vivaldi 中的投射功能！</translation>
 <translation id="7309257895202129721">显示控件(&amp;C)</translation>
 <translation id="7311079019872751559">未经沙盒屏蔽的插件访问</translation>
-<translation id="7346909386216857016">知道了</translation>
 <translation id="7385854874724088939">尝试打印时出现错误。请检查您的打印机，然后重试。</translation>
 <translation id="7423098979219808738">先询问</translation>
 <translation id="7427348830195639090">后台网页：<ph name="BACKGROUND_PAGE_URL" /></translation>
@@ -390,7 +384,6 @@
 <translation id="857943718398505171">已允许（推荐）</translation>
 <translation id="8584280235376696778">在新标签中打开视频(&amp;O)</translation>
 <translation id="8615618338313291042">隐身模式下启用的应用...<ph name="APP_NAME" /></translation>
-<translation id="8627151598708688654">选择来源</translation>
 <translation id="862750493060684461">CSS 缓存</translation>
 <translation id="8664389313780386848">查看网页源码(&amp;V)</translation>
 <translation id="8708000541097332489">退出时清除</translation>

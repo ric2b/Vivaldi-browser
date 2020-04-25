@@ -1,0 +1,4 @@
+
+update_template_instance("//chrome/renderer:renderer") {
+  deps += [ "//vivaldi/ui:skia_utils" ]
+}

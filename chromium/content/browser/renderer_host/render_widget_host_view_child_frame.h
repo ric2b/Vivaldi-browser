@@ -17,7 +17,7 @@
 #include "build/build_config.h"
 #include "cc/input/touch_action.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
-#include "components/viz/common/presentation_feedback_map.h"
+#include "components/viz/common/frame_timing_details_map.h"
 #include "components/viz/common/resources/returned_resource.h"
 #include "components/viz/common/surfaces/surface_info.h"
 #include "components/viz/host/host_frame_sink_client.h"
@@ -141,16 +141,14 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   const viz::FrameSinkId& GetFrameSinkId() const override;
   const viz::LocalSurfaceIdAllocation& GetLocalSurfaceIdAllocation()
       const override;
+  void NotifyHitTestRegionUpdated(const viz::AggregatedHitTestRegion&) override;
+  bool ScreenRectIsUnstableFor(const blink::WebInputEvent& event) override;
   void PreProcessTouchEvent(const blink::WebTouchEvent& event) override;
   viz::FrameSinkId GetRootFrameSinkId() override;
   viz::SurfaceId GetCurrentSurfaceId() const override;
   bool HasSize() const override;
   gfx::PointF TransformPointToRootCoordSpaceF(
       const gfx::PointF& point) override;
-  bool TransformPointToLocalCoordSpaceLegacy(
-      const gfx::PointF& point,
-      const viz::SurfaceId& original_surface,
-      gfx::PointF* transformed_point) override;
   bool TransformPointToCoordSpaceForView(
       const gfx::PointF& point,
       RenderWidgetHostViewBase* target_view,
@@ -195,7 +193,7 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   void DidReceiveCompositorFrameAck(
       const std::vector<viz::ReturnedResource>& resources) override;
   void OnBeginFrame(const viz::BeginFrameArgs& args,
-                    const viz::PresentationFeedbackMap& feedbacks) override;
+                    const viz::FrameTimingDetailsMap& timing_details) override;
   void ReclaimResources(
       const std::vector<viz::ReturnedResource>& resources) override;
   void OnBeginFramePausedChanged(bool paused) override;
@@ -314,6 +312,9 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   viz::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink_ =
       nullptr;
 
+  gfx::RectF last_stable_screen_rect_;
+  base::TimeTicks screen_rect_stable_since_;
+
   gfx::Insets insets_;
 
   std::unique_ptr<TouchSelectionControllerClientChildFrame>
@@ -322,7 +323,7 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   // True if there is currently a scroll sequence being bubbled to our parent.
   bool is_scroll_sequence_bubbling_ = false;
 
-  base::WeakPtrFactory<RenderWidgetHostViewChildFrame> weak_factory_;
+  base::WeakPtrFactory<RenderWidgetHostViewChildFrame> weak_factory_{this};
   DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewChildFrame);
 };
 

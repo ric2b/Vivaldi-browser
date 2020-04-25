@@ -9,7 +9,8 @@
 
 #include "base/memory/shared_memory_handle.h"
 #include "browser/thumbnails/capture_page.h"
-#include "chrome/browser/extensions/chrome_extension_function.h"
+#include "components/datasource/vivaldi_data_source_api.h"
+#include "extensions/browser/extension_function.h"
 #include "extensions/common/api/extension_types.h"
 #include "extensions/schema/thumbnails.h"
 
@@ -26,30 +27,23 @@ using extensions::api::extension_types::ImageFormat;
 
 namespace extensions {
 
-class ThumbnailsCaptureUIFunction : public ChromeAsyncExtensionFunction {
+class ThumbnailsCaptureUIFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("thumbnails.captureUI", THUMBNAILS_CAPTUREUI)
 
   ThumbnailsCaptureUIFunction();
 
-  enum FailureReason {
-    FAILURE_REASON_UNKNOWN,
-    FAILURE_REASON_ENCODING_FAILED,
-    FAILURE_REASON_VIEW_INVISIBLE
-  };
-
- protected:
-  ~ThumbnailsCaptureUIFunction() override;
-  bool CaptureAsync(content::WebContents *web_contents,
-                    const gfx::Rect &capture_area,
-                    base::OnceCallback<void(const SkBitmap &)> callback);
-  void OnCaptureSuccess(const SkBitmap& bitmap);
-  void OnCaptureFailure(FailureReason reason);
-  void CopyFromBackingStoreComplete(const SkBitmap& bitmap);
-  // ExtensionFunction:
-  bool RunAsync() override;
-
  private:
+  ~ThumbnailsCaptureUIFunction() override;
+  void CaptureAsync(content::RenderWidgetHostView* view,
+                    const gfx::Rect& capture_area);
+  void OnCaptureSuccess(const SkBitmap& bitmap);
+  void CopyFromBackingStoreComplete(const SkBitmap& bitmap);
+  std::string CaptureError(base::StringPiece details = base::StringPiece());
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
   ImageFormat image_format_ = ImageFormat::IMAGE_FORMAT_PNG;
   int encode_quality_ = 90;
   bool show_file_in_path_ = false;
@@ -65,37 +59,33 @@ class ThumbnailsCaptureUIFunction : public ChromeAsyncExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(ThumbnailsCaptureUIFunction);
 };
 
-class ThumbnailsCaptureTabFunction : public ChromeAsyncExtensionFunction {
+class ThumbnailsCaptureTabFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("thumbnails.captureTab", THUMBNAILS_CAPTURETAB)
 
   ThumbnailsCaptureTabFunction();
 
- protected:
+ private:
   ~ThumbnailsCaptureTabFunction() override;
 
   void OnThumbnailsCaptureCompleted(::vivaldi::CapturePage::Result captured);
 
-  void ScaleAndConvertImage(::vivaldi::CapturePage::Result captured);
+  void ConvertImageOnWorkerThread(::vivaldi::CapturePage::Result captured);
 
-  void ScaleAndConvertImageDoneOnUIThread(const SkBitmap& bitmap,
-                                          const std::string& image_data,
-                                          bool success);
+  void OnImageConverted(const SkBitmap& bitmap,
+                        const std::string& image_data,
+                        bool success);
 
   // ExtensionFunction:
-  bool RunAsync() override;
+  ResponseAction Run() override;
 
- private:
   ImageFormat image_format_ = ImageFormat::IMAGE_FORMAT_PNG;
   int encode_quality_ = 90;
-  bool capture_full_page_ = false;
   bool show_file_in_path_ = false;
   bool copy_to_clipboard_ = false;
   bool save_to_disk_ = false;
   base::FilePath file_path_;
   std::string save_folder_;
-  gfx::Rect rect_;
-  gfx::Size out_dimension_;
   std::string save_file_pattern_;
   GURL url_;
   std::string title_;
@@ -116,16 +106,12 @@ class ThumbnailsCaptureUrlFunction : public UIThreadExtensionFunction {
 
   void OnCaptured(::vivaldi::CapturePage::Result captured);
 
-  void ScaleAndConvertImageOnWorkerThread(
-      ::vivaldi::CapturePage::Result captured);
-
-  void OnCapturedAndScaled(scoped_refptr<base::RefCountedMemory> thumbnail,
-                           bool success);
+  void ConvertImageOnWorkerThread(scoped_refptr<VivaldiDataSourcesAPI> api,
+                                  ::vivaldi::CapturePage::Result captured);
 
   void SendResult(bool success);
 
   int64_t bookmark_id_ = 0;
-  gfx::Size scaled_size_;
   GURL url_;
 
   DISALLOW_COPY_AND_ASSIGN(ThumbnailsCaptureUrlFunction);

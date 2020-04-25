@@ -64,7 +64,7 @@ bool NeedsExtensionWebUI(Profile* profile, const GURL& url) {
 
 WebUI::TypeID VivaldiWebUIControllerFactory::GetWebUIType(
     content::BrowserContext* browser_context,
-    const GURL& url) const {
+    const GURL& url) {
   Profile* profile = Profile::FromBrowserContext(browser_context);
   WebUIFactoryFunction function =
       GetVivaldiWebUIFactoryFunction(NULL, profile, url);
@@ -73,13 +73,13 @@ WebUI::TypeID VivaldiWebUIControllerFactory::GetWebUIType(
 
 bool VivaldiWebUIControllerFactory::UseWebUIForURL(
     content::BrowserContext* browser_context,
-    const GURL& url) const {
+    const GURL& url) {
   return GetWebUIType(browser_context, url) != WebUI::kNoWebUI;
 }
 
 bool VivaldiWebUIControllerFactory::UseWebUIBindingsForURL(
     content::BrowserContext* browser_context,
-    const GURL& url) const {
+    const GURL& url) {
   // Extensions are rendered via WebUI in tabs, but don't actually need WebUI
   // bindings (see the ExtensionWebUI constructor).
   return
@@ -92,7 +92,7 @@ bool VivaldiWebUIControllerFactory::UseWebUIBindingsForURL(
 std::unique_ptr<content::WebUIController>
 VivaldiWebUIControllerFactory::CreateWebUIControllerForURL(
     content::WebUI* web_ui,
-    const GURL& url) const {
+    const GURL& url) {
   Profile* profile = Profile::FromWebUI(web_ui);
   WebUIFactoryFunction function =
       GetVivaldiWebUIFactoryFunction(web_ui, profile, url);

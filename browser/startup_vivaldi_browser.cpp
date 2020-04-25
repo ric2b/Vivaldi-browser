@@ -90,9 +90,10 @@ bool LaunchVivaldi(const base::CommandLine& command_line,
   }
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  AppLaunchParams params(profile, extension, extensions::LAUNCH_CONTAINER_NONE,
+  AppLaunchParams params(profile, extension->name(),
+                         extensions::LaunchContainer::kLaunchContainerNone,
                          WindowOpenDisposition::NEW_WINDOW,
-                         extensions::SOURCE_EXTENSIONS_PAGE);
+                         apps::mojom::AppLaunchSource::kSourceExtensionsPage);
   params.command_line = command_line;
   params.current_directory = cur_dir;
 

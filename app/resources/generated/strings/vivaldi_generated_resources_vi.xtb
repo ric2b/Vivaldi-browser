@@ -57,6 +57,7 @@
 <translation id="220138918934036434">Ẩn Nút bấm</translation>
 <translation id="2218515861914035131">Dán dưới dạng văn bản thuần túy</translation>
 <translation id="2249605167705922988">ví dụ: 1-5, 8, 11-13</translation>
+<translation id="225240747099314620">Cho phép định danh trên nội dung được bảo vệ (có thể cần phải khởi động lại máy tính)</translation>
 <translation id="2263497240924215535">(Đã vô hiệu hoá)</translation>
 <translation id="2277255602909579701">Tất cả cookie và dữ liệu trang web</translation>
 <translation id="2280486287150724112">Lề phải</translation>
@@ -91,7 +92,6 @@
 <translation id="2785873697295365461">Phần mô tả tệp</translation>
 <translation id="2809586584051668049">và <ph name="NUMBER_ADDITIONAL_DISABLED" /> mục khác</translation>
 <translation id="2812989263793994277">Không hiển thị bất kỳ hình ảnh nào</translation>
-<translation id="2847759467426165163">Truyền tới</translation>
 <translation id="2850541429955027218">Thêm chủ đề</translation>
 <translation id="2861941300086904918">Trình quản lý bảo mật Native Client</translation>
 <translation id="2889064240420137087">Mở liên kết bằng...</translation>
@@ -129,7 +129,6 @@
 <translation id="3341703758641437857">Cho phép truy cập vào URL của tệp</translation>
 <translation id="3347086966102161372">S&amp;ao chép địa chỉ hình ảnh</translation>
 <translation id="3360297538363969800">Không in được. Vui lòng kiểm tra máy in và thử lại.</translation>
-<translation id="3378503599595235699">Chỉ lưu dữ liệu trên máy cho đến khi bạn thoát trình duyệt của mình</translation>
 <translation id="3378572629723696641">Tiện ích này có thể đã bị hỏng.</translation>
 <translation id="3387614642886316601">Sử dụng tính năng kiểm tra lỗi chính tả nâng cao</translation>
 <translation id="3432227430032737297">Xóa Tất cả cookie Hiển thị</translation>
@@ -174,6 +173,7 @@
 <translation id="4096508467498758490">Vô hiệu hóa tiện ích chế độ nhà phát triển</translation>
 <translation id="4100839878934973028">Một chương trình khác trên máy tính của bạn đã thêm một ứng dụng có thể thay đổi cách Vivaldi hoạt động.</translation>
 <translation id="4109898769411476438">Đóng Trình duyệt Trước khi Nhập</translation>
+<translation id="4115080753528843955">Một số dịch vụ nội dung sử dụng mã định danh duy nhất phục vụ mục đích cho phép truy cập vào nội dung được bảo vệ</translation>
 <translation id="4130207949184424187">Tiện ích này đã thay đổi trang nào được hiển thị khi bạn tìm kiếm từ Thanh địa chỉ.</translation>
 <translation id="4131410914670010031">Đen và trắng</translation>
 <translation id="4176463684765177261">Đã bị vô hiệu</translation>
@@ -195,7 +195,6 @@
 <translation id="4613271546271159013">Tiện ích đã thay đổi trang nào sẽ được hiển thị khi bạn mở một tab mới.</translation>
 <translation id="4677772697204437347">Bộ nhớ GPU</translation>
 <translation id="4681930562518940301">Mở &amp;hình ảnh gốc trong tab mới</translation>
-<translation id="4688541352655220763">Bạn có thể sử dụng tính năng này để hiển thị nội dung từ Vivaldi trên TV hoặc các thiết bị khác của bạn.</translation>
 <translation id="4711638718396952945">Khôi phục cài đặt</translation>
 <translation id="4726710629007580002">Đã xuất hiện cảnh báo khi cài đặt tiện ích này:</translation>
 <translation id="479536056609751218">Trang web, chỉ HTML</translation>
@@ -204,6 +203,7 @@
 <translation id="488785315393301722">Hiển thị chi tiết</translation>
 <translation id="4907306957610201395">Danh mục Quyền</translation>
 <translation id="4918086044614829423">Chấp nhận</translation>
+<translation id="4927753642311223124">Không có lỗi.</translation>
 <translation id="4988526792673242964">Trang</translation>
 <translation id="49896407730300355">Xoay &amp;ngược chiều kim đồng hồ</translation>
 <translation id="4989966318180235467">Kiểm tra trang &amp;nền</translation>
@@ -265,7 +265,6 @@
 <translation id="5978277834170881274">&amp;Sử dụng tính năng kiểm tra lỗi chính tả cơ bản</translation>
 <translation id="5979421442488174909">&amp;Dịch sang <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">Xóa dữ liệu trang web</translation>
-<translation id="6040143037577758943">Đóng</translation>
 <translation id="6042308850641462728">Thêm</translation>
 <translation id="6059925163896151826">Thiết bị USB</translation>
 <translation id="6082651258230788217">Hiển thị trên thanh công cụ</translation>
@@ -323,10 +322,8 @@
 <translation id="7270858098575133036">Hỏi tôi khi có trang web muốn sử dụng thông báo dành riêng cho hệ thống để truy cập thiết bị MIDI</translation>
 <translation id="7287143125007575591">Truy cập bị từ chối.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="7293919849802650062">Chào mừng bạn đến với trải nghiệm Truyền trong Vivaldi!</translation>
 <translation id="7309257895202129721">Hiển thị &amp;các điều khiển</translation>
 <translation id="7311079019872751559">Truy cập plugin không có hộp cát</translation>
-<translation id="7346909386216857016">Ok</translation>
 <translation id="7385854874724088939">Có trục trặc xảy ra khi in. Hãy kiểm tra máy in của bạn và thử lại.</translation>
 <translation id="7423098979219808738">Hỏi trước</translation>
 <translation id="7427348830195639090">Trang nền: <ph name="BACKGROUND_PAGE_URL" /></translation>
@@ -386,7 +383,6 @@ Giữ tệp khóa của bạn ở nơi an toàn. Bạn sẽ cần tệp khóa đ
 <translation id="857943718398505171">Được phép (được đề xuất)</translation>
 <translation id="8584280235376696778">&amp;Mở video trong tab mới</translation>
 <translation id="8615618338313291042">Ứng dụng Ẩn danh: <ph name="APP_NAME" /></translation>
-<translation id="8627151598708688654">Chọn nguồn</translation>
 <translation id="862750493060684461">Bộ nhớ cache CSS</translation>
 <translation id="8664389313780386848">X&amp;em nguồn trang</translation>
 <translation id="8708000541097332489">Xóa khi thoát</translation>

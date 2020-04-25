@@ -112,8 +112,8 @@ class VivaldiAppWindowContentsImpl : public AppWindowContents,
       content::MediaResponseCallback callback) override;
   bool CheckMediaAccessPermission(content::RenderFrameHost* render_frame_host,
                                   const GURL& security_origin,
-                                  blink::MediaStreamType type) override;
-  gfx::Size EnterPictureInPicture(content::WebContents* web_contents,
+                                  blink::mojom::MediaStreamType type) override;
+  content::PictureInPictureResult EnterPictureInPicture(content::WebContents* web_contents,
                                   const viz::SurfaceId& surface_id,
                                   const gfx::Size& natural_size) override;
   void ExitPictureInPicture() override;
@@ -241,8 +241,6 @@ class VivaldiBrowserWindow
   void Deactivate() override;
   bool IsActive() const override;
   void FlashFrame(bool flash) override {}
-  bool IsAlwaysOnTop() const override;
-  void SetAlwaysOnTop(bool always_on_top) override {}
   gfx::NativeWindow GetNativeWindow() const override;
   StatusBubble* GetStatusBubble() override;
   void UpdateTitleBar() override;
@@ -327,7 +325,7 @@ class VivaldiBrowserWindow
   void ShowHatsBubbleFromAppMenuButton() override {}
 #endif
   bool CanUserExitFullscreen() const override;
-  FindBar* CreateFindBar() override;
+  std::unique_ptr<FindBar> CreateFindBar() override;
   web_modal::WebContentsModalDialogHost* GetWebContentsModalDialogHost()
       override;
   void ExecuteExtensionCommand(const extensions::Extension* extension,
@@ -350,10 +348,8 @@ class VivaldiBrowserWindow
   }
   void TabDraggingStatusChanged(bool is_dragging) override {}
   void UpdateToolbarVisibility(bool visible, bool animate) override {}
-#if BUILDFLAG(ENABLE_DESKTOP_IN_PRODUCT_HELP)
   // Shows in-product help for the given feature.
   void ShowInProductHelpPromo(InProductHelpFeature iph_feature) override {}
-#endif
   void UpdateFrameColor() override {}
 #if !defined(OS_ANDROID)
   void ShowIntentPickerBubble(
@@ -413,6 +409,10 @@ class VivaldiBrowserWindow
 
   bool IsToolbarShowing() const override;
 
+  ClickToCallDialog* ShowClickToCallDialog(
+    content::WebContents* contents,
+    ClickToCallSharingDialogController* controller) override;
+
   void UpdateDraggableRegions(
       const std::vector<extensions::DraggableRegion>& regions);
 
@@ -457,6 +457,11 @@ class VivaldiBrowserWindow
   WindowType type() {
     return window_type_;
   }
+
+  ExtensionsContainer* GetExtensionsContainer() override;
+
+  ui::ZOrderLevel GetZOrderLevel() const override;
+  void SetZOrderLevel(ui::ZOrderLevel order) override {}
 
  protected:
   void DestroyBrowser() override;

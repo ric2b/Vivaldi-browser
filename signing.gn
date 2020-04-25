@@ -17,6 +17,7 @@ if(is_mac) {
   }
 }
 
+import("//build/config/mac/mac_sdk_overrides.gni")
 import("//vivaldi/gn/config/signer_features.gni")
 
 declare_args() {

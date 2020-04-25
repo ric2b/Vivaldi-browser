@@ -17,10 +17,6 @@ class WebViewGuest;
 
 class VivaldiBrowserWindow;
 
-namespace thumbnails {
-enum class ClipResult;
-}
-
 namespace vivaldi {
 namespace ui_tools {
 
@@ -53,13 +49,6 @@ extern bool EncodeBitmap(
     std::string* mime_type,
     extensions::api::extension_types::ImageFormat image_format,
     int image_quality);
-
-extern gfx::Rect GetClippingRect(const gfx::Size& source_size,
-                                 const gfx::Size& desired_size,
-                                 thumbnails::ClipResult* clip_result);
-extern SkBitmap SmartCropAndSize(const SkBitmap& capture,
-                                 int target_width,
-                                 int target_height);
 
 extern Browser* FindBrowserForPinnedTabs(Browser* current_browser);
 extern bool MoveTabToWindow(Browser* source_browser,

@@ -94,10 +94,10 @@ void GetBookmarkNodes(const BookmarkNode* node,
   flags.InitFromPrefs();
   vivaldi::BookmarkSorter sorter(flags.field_, flags.order_, true);
 
-  nodes.reserve(node->child_count());
-  for (int i = 0; i < node->child_count(); ++i) {
+  nodes.reserve(node->children().size());
+  for (auto& it: node->children()) {
     BookmarkNode* child =
-        const_cast<bookmarks::BookmarkNode*>(node->GetChild(i));
+        const_cast<bookmarks::BookmarkNode*>(it.get());
     if (flags.order_ == ::vivaldi::BookmarkSorter::ORDER_NONE ||
         !IsBookmarkSeparator(child)) {
       nodes.push_back(child);

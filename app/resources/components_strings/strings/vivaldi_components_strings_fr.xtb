@@ -10,7 +10,6 @@
 <translation id="129863573139666797"><ph name="BEGIN_LINK" />Essayer de supprimer les cookies.<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">À propos de la version</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> n’a envoyé aucune donnée.</translation>
-<translation id="14171126816530869">L’identité de <ph name="ORGANIZATION" /> situé à <ph name="LOCALITY" /> a été vérifiée par <ph name="ISSUER" />.</translation>
 <translation id="1559528461873125649">Fichier ou répertoire inexistant</translation>
 <translation id="1620510694547887537">Caméra</translation>
 <translation id="1640244768702815859">Essayez de <ph name="BEGIN_LINK" />consulter la page d’accueil du site<ph name="END_LINK" />.</translation>
@@ -27,6 +26,7 @@
 <translation id="2030481566774242610">Souhaitez-vous plutôt accéder à ce lien : <ph name="LINK" /> ?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Vérifier le proxy et le pare-feu<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">Son</translation>
+<translation id="2119505898009119320">Émis pour : <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2147827593068025794">Synchronisation en arrière-plan</translation>
 <translation id="2166378884831602661">Ce site ne peut pas fournir de connexion sécurisée</translation>
 <translation id="2187317261103489799">Détecter (par défaut)</translation>

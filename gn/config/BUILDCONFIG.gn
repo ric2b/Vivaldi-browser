@@ -10,4 +10,6 @@ declare_args() {
   vivaldi_signing_id = ""
   vivaldi_signing_key = ""
   vivaldi_signing_command = ""
+  vivaldi_notarize_account = ""
+  vivaldi_notarize_password = ""
 }

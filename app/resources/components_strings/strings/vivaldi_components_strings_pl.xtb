@@ -10,7 +10,6 @@
 <translation id="129863573139666797"><ph name="BEGIN_LINK" />Usuń pliki cookie<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">Wersja Vivaldi – informacje</translation>
 <translation id="139305205187523129">Serwer <ph name="HOST_NAME" /> nie wysłał żadnych danych.</translation>
-<translation id="14171126816530869">Tożsamość organizacji <ph name="ORGANIZATION" /> (<ph name="LOCALITY" />) została zweryfikowana przed wystawcę <ph name="ISSUER" />.</translation>
 <translation id="1559528461873125649">Podany plik lub folder nie istnieje</translation>
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1640244768702815859">Otwórz <ph name="BEGIN_LINK" />stronę główną witryny<ph name="END_LINK" />.</translation>
@@ -27,6 +26,7 @@
 <translation id="2030481566774242610">Czy chodziło ci o <ph name="LINK" />?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Sprawdź serwer proxy i zaporę sieciową<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">Dźwięk</translation>
+<translation id="2119505898009119320">Wystawiony dla: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2147827593068025794">Synchronizacja w tle</translation>
 <translation id="2166378884831602661">Ta witryna nie umożliwia bezpiecznego połączenia</translation>
 <translation id="2187317261103489799">Wykrywaj (domyślnie)</translation>

@@ -366,7 +366,7 @@ void WebViewGuest::NavigationStateChanged(
   }
 }
 
-bool WebViewGuest::EmbedsFullscreenWidget() const {
+bool WebViewGuest::EmbedsFullscreenWidget() {
   // If WebContents::GetFullscreenRenderWidgetHostView is present there is a
   // window other than this handling the fullscreen operation.
   return web_contents()->GetFullscreenRenderWidgetHostView() == NULL;
@@ -665,9 +665,10 @@ void WebViewGuest::ShowRepostFormWarningDialog(WebContents* source) {
                                 source);
 }
 
-gfx::Size WebViewGuest::EnterPictureInPicture(WebContents* web_contents,
-                                              const viz::SurfaceId& surface_id,
-                                              const gfx::Size& natural_size) {
+content::PictureInPictureResult WebViewGuest::EnterPictureInPicture(
+    WebContents* web_contents,
+    const viz::SurfaceId& surface_id,
+    const gfx::Size& natural_size) {
   return PictureInPictureWindowManager::GetInstance()->EnterPictureInPicture(
       web_contents, surface_id, natural_size);
 }

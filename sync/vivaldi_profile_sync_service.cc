@@ -4,6 +4,7 @@
 
 #include <utility>
 
+#include "base/version.h"
 #include "components/sync/driver/sync_util.h"
 #include "components/sync/engine_impl/net/url_translator.h"
 #include "components/sync/protocol/sync.pb.h"
@@ -34,6 +35,15 @@ VivaldiProfileSyncService::VivaldiProfileSyncService(
       base::BindRepeating(&VivaldiProfileSyncService::CredentialsChanged,
                           base::Unretained(this)),
       account_manager);
+
+  // Notes must be re-synchronized to correct the note-duplication issues.
+  base::Version last_seen_version(
+      profile_->GetPrefs()->GetString(vivaldiprefs::kStartupLastSeenVersion));
+
+  base::Version up_to_date_version(std::vector<uint32_t>({2, 8, 0, 0}));
+
+  if (last_seen_version.IsValid() && last_seen_version < up_to_date_version)
+    force_local_data_reset_ = true;
 }
 
 VivaldiProfileSyncService::~VivaldiProfileSyncService() {}
@@ -125,6 +135,31 @@ void VivaldiProfileSyncService::StartSyncingWithServer() {
   if (user_settings_->IsEncryptEverythingEnabled()) {
     ProfileSyncService::StartSyncingWithServer();
   }
+}
+
+void VivaldiProfileSyncService::OnEngineInitialized(
+    syncer::ModelTypeSet initial_types,
+    const syncer::WeakHandle<syncer::JsBackend>& js_backend,
+    const syncer::WeakHandle<syncer::DataTypeDebugInfoListener>&
+        debug_info_listener,
+    const std::string& cache_guid,
+    const std::string& birthday,
+    const std::string& bag_of_chips,
+    bool success) {
+  ProfileSyncService::OnEngineInitialized(initial_types, js_backend,
+                                          debug_info_listener, cache_guid,
+                                          birthday, bag_of_chips, success);
+
+  if (!force_local_data_reset_)
+    return;
+  force_local_data_reset_ = false;
+  syncer::SyncProtocolError error;
+  error.error_type = syncer::CLIENT_DATA_OBSOLETE;
+  error.action = syncer::RESET_LOCAL_SYNC_DATA;
+
+  base::PostTaskWithTraits(FROM_HERE, {content::BrowserThread::UI},
+                           base::Bind(&ProfileSyncService::OnActionableError,
+                                      base::Unretained(this), error));
 }
 
 void VivaldiProfileSyncService::ShutdownImpl(syncer::ShutdownReason reason) {

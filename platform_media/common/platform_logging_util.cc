@@ -25,7 +25,9 @@ std::string Loggable(const VideoDecoderConfig & config) {
   std::ostringstream s;
   s << "\n VideoDecoderConfig is Valid : " << (config.IsValidConfig() ? "true" : "false")
     << "\n Codec : " << GetCodecName(config.codec())
-    << "\n VideoPixelFormat : " << VideoPixelFormatToString(config.format())
+    << "\n Alpha mode : "
+    << (config.alpha_mode() != VideoDecoderConfig::AlphaMode::kIsOpaque ? "true" : "false")
+    //<< "\n VideoPixelFormat : " << VideoPixelFormatToString(config.format())
     //<< "\n ColorSpace : " << config.color_space_info()
     << "\n VideoCodecProfile : " << GetProfileName(config.profile())
     << "\n Coded Size: ["

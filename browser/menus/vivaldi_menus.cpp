@@ -18,6 +18,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/renderer_context_menu/render_view_context_menu_views.h"
 #include "chrome/common/pref_names.h"
+#include "components/datasource/vivaldi_data_source_api.h"
 #include "components/search_engines/template_url.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/render_view_host.h"
@@ -25,6 +26,7 @@
 #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "net/base/escape.h"
+#include "prefs/vivaldi_gen_prefs.h"
 #include "third_party/blink/public/web/web_context_menu_data.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/clipboard/clipboard.h"
@@ -369,7 +371,7 @@ bool IsVivaldiCommandIdEnabled(const SimpleMenuModel& menu,
       std::vector<base::string16> types;
       bool ignore;
       ui::Clipboard::GetForCurrentThread()->ReadAvailableTypes(
-          ui::CLIPBOARD_TYPE_COPY_PASTE, &types, &ignore);
+          ui::ClipboardType::kCopyPaste, &types, &ignore);
       *enabled = !types.empty();
       break;
     }
@@ -404,6 +406,59 @@ bool IsVivaldiCommandIdEnabled(const SimpleMenuModel& menu,
   return true;
 }
 
+void OnLocalImageAsBackgroundDataMappingReady(Profile* profile,
+                                              bool success,
+                                              std::string data_mapping_url) {
+  if (profile && success) {
+    profile->GetPrefs()->SetString(vivaldiprefs::kStartpageImagePathCustom,
+                                   data_mapping_url);
+  }
+}
+
+void OnUseLocalImageAsBackground(content::WebContents* web_contents,
+                                 int event_flags,
+                                 const GURL& src_url) {
+  // PathExists() triggers IO restriction.
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
+
+  // Strip any url encoding.
+  std::string filename = net::UnescapeURLComponent(
+      src_url.GetContent(),
+      net::UnescapeRule::NORMAL | net::UnescapeRule::SPACES |
+          net::UnescapeRule::REPLACE_PLUS_WITH_SPACE |
+          net::UnescapeRule::URL_SPECIAL_CHARS_EXCEPT_PATH_SEPARATORS);
+#if defined(OS_POSIX)
+  base::FilePath path(filename);
+#elif defined(OS_WIN)
+  base::FilePath path(base::UTF8ToWide(filename));
+#endif
+  if (!base::PathExists(path)) {
+    if (filename[0] == '/') {
+      // It might be in a format /D:/somefile.png so strip the first
+      // slash.
+      filename = filename.substr(1, std::string::npos);
+#if defined(OS_POSIX)
+      path = base::FilePath(filename);
+#elif defined(OS_WIN)
+      path = base::FilePath(base::UTF8ToWide(filename));
+#endif
+    }
+  }
+  // Call AddMapping and send a notification to JS to switch to use the custom
+  // background image in parallel. In the very unlikely case when the former
+  // will access the custom image preference before we set its URL in the
+  // AddMapping callback the user may briefly see the older background.
+  //
+  // If we will need to ensure that useLocalImageAsBackground will always be
+  // called after AddMapping calls our callback, we will need a weak pointer
+  // for WebContents, which is messy until https://crbug.com/952390 is
+  // resolved.
+  extensions::VivaldiDataSourcesAPI::AddMapping(
+      web_contents->GetBrowserContext(), std::move(path),
+      base::BindOnce(&OnLocalImageAsBackgroundDataMappingReady));
+  SendSimpleAction(web_contents, event_flags, "useLocalImageAsBackground");
+}
+
 bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
                            const ContextMenuParams& params,
                            WebContents* source_web_contents,
@@ -423,13 +478,14 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
                   WindowOpenDisposition::NEW_BACKGROUND_TAB,
                   ui::PAGE_TRANSITION_LINK);
       break;
-    case IDC_CONTENT_CONTEXT_RELOADIMAGE:
-    {
+    case IDC_CONTENT_CONTEXT_RELOADIMAGE: {
       // params.x and params.y position the context menu and are always in root
-      // root coordinates. Convert to content coordinates.
-      gfx::PointF p = source_web_contents->GetRenderViewHost()->GetWidget()->
-          GetView()->TransformRootPointToViewCoordSpace(gfx::PointF(
-              params.x, params.y));
+      // coordinates. Convert to content coordinates.
+      gfx::PointF p = source_web_contents->GetRenderViewHost()
+                          ->GetWidget()
+                          ->GetView()
+                          ->TransformRootPointToViewCoordSpace(
+                              gfx::PointF(params.x, params.y));
       source_web_contents->GetRenderViewHost()->LoadImageAt(
           static_cast<int>(p.x()), static_cast<int>(p.y()));
       break;
@@ -461,7 +517,7 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
       if (IsVivaldiRunning()) {
         base::string16 text;
         ui::Clipboard::GetForCurrentThread()->ReadText(
-            ui::CLIPBOARD_TYPE_COPY_PASTE, &text);
+            ui::ClipboardType::kCopyPaste, &text);
         std::string target;
         if (params.vivaldi_input_type == "vivaldi-addressfield")
           target = "url";
@@ -568,30 +624,8 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
         // The app does not have access to file:// schemes, so handle it
         // differently.
         if (params.src_url.SchemeIs(url::kFileScheme)) {
-          // PathExists() triggers IO restriction.
-          base::ThreadRestrictions::ScopedAllowIO allow_io;
-
-          // Strip any url encoding.
-          std::string filename = net::UnescapeURLComponent(
-              params.src_url.GetContent(),
-              net::UnescapeRule::NORMAL | net::UnescapeRule::SPACES |
-                  net::UnescapeRule::REPLACE_PLUS_WITH_SPACE |
-                  net::UnescapeRule::URL_SPECIAL_CHARS_EXCEPT_PATH_SEPARATORS);
-#if defined(OS_POSIX)
-          base::FilePath path(filename);
-#elif defined(OS_WIN)
-          base::FilePath path(base::UTF8ToWide(filename));
-#endif
-          if (!base::PathExists(path)) {
-            if (filename[0] == '/') {
-              // It might be in a format /D:/somefile.png so strip the first
-              // slash.
-              filename = filename.substr(1, std::string::npos);
-            }
-          }
-          SendSimpleAction(source_web_contents, event_flags,
-                           "useLocalImageAsBackground", "",
-                           filename);
+          OnUseLocalImageAsBackground(source_web_contents, event_flags,
+                                      params.src_url);
         } else {
           SendSimpleAction(source_web_contents, event_flags,
                            "useImageAsBackground", "",

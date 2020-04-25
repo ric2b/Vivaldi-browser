@@ -32,6 +32,7 @@
 #include "chrome/common/extensions/api/tabs.h"
 #include "chrome/common/extensions/command.h"
 #include "components/prefs/pref_service.h"
+#include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "components/zoom/zoom_controller.h"
 #include "content/browser/renderer_host/render_view_host_delegate_view.h"
 #include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
@@ -679,7 +680,19 @@ bool VivaldiEventHooksImpl::HandleMouseEvent(
     content::RenderWidgetHostViewBase* root_view,
     const blink::WebMouseEvent& event) {
   bool eat_event = false;
-  if (TabsPrivateAPIPrivate* priv = GetTabsAPIPriv()) {
+  bool is_blocked = false;
+  const web_modal::WebContentsModalDialogManager* manager =
+      web_modal::WebContentsModalDialogManager::FromWebContents(web_contents_);
+  if (manager) {
+    // Avoid dangling modal dialogs that will crash if the tab is closed
+    // through a gesture.
+    // TODO(pettern): There is still a chance a tab will be able to close
+    // before this check, so investigate blocking on the api level after
+    // the tab close rewrite on the js side.
+    is_blocked = manager->IsDialogActive();
+  }
+  if (!is_blocked) {
+    TabsPrivateAPIPrivate* priv = GetTabsAPIPriv();
     // Rocker gestures take priority over any other mouse gestures.
     eat_event = CheckRockerGesture(priv, web_contents_, event);
     if (!eat_event) {
@@ -923,7 +936,8 @@ void VivaldiPrivateTabObserver::RenderViewCreated(
     }
   }
 
-  base::Optional<bool> mute = json ? json->FindBoolKey(kVivaldiTabMuted) : base::nullopt;
+  base::Optional<bool> mute =
+      json ? json->FindBoolKey(kVivaldiTabMuted) : base::nullopt;
   if (mute) {
     mute_ = *mute;
   }
@@ -1075,7 +1089,7 @@ void VivaldiPrivateTabObserver::OnZoomChanged(
       content::BrowserContext::GetStoragePartition(
           web_contents->GetBrowserContext(), web_contents->GetSiteInstance(),
           false);
-  if (!::vivaldi::isTabZoomEnabled(web_contents)) {
+  if (!::vivaldi::isTabZoomEnabled(web_contents) || tab_zoom_level_ == -1) {
     return;
   }
 
@@ -1085,10 +1099,12 @@ void VivaldiPrivateTabObserver::OnZoomChanged(
     SetZoomLevelForTab(data.new_zoom_level, data.old_zoom_level);
 }
 
-void VivaldiPrivateTabObserver::SetZoomLevelForTab(double new_level, double old_level) {
+void VivaldiPrivateTabObserver::SetZoomLevelForTab(double new_level,
+                                                   double old_level) {
   // Only update zoomlevel to new level if the tab_level is in sync. This was
   // added because restoring a tab from a session would fire a zoom-update when
-  // the document finished loading through ZoomController::DidFinishNavigation().
+  // the document finished loading through
+  // ZoomController::DidFinishNavigation().
   if (old_level == tab_zoom_level_ && new_level != tab_zoom_level_) {
     tab_zoom_level_ = new_level;
     SaveZoomLevelToExtData(new_level);
@@ -1099,11 +1115,10 @@ void VivaldiPrivateTabObserver::SetZoomLevelForTab(double new_level, double old_
     int process_id = rvh->GetProcess()->GetID();
 
     content::HostZoomMap* host_zoom_map_ =
-      content::HostZoomMap::GetForWebContents(web_contents());
+        content::HostZoomMap::GetForWebContents(web_contents());
 
     host_zoom_map_->SetTemporaryZoomLevel(process_id, render_view_id,
-      tab_zoom_level_);
-
+                                          tab_zoom_level_);
   }
 }
 

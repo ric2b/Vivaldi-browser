@@ -92,7 +92,6 @@
 <translation id="2785873697295365461">Dosya açıklayıcıları</translation>
 <translation id="2809586584051668049">ve diğer <ph name="NUMBER_ADDITIONAL_DISABLED" /> öğe</translation>
 <translation id="2812989263793994277">Hiçbir resmi gösterme</translation>
-<translation id="2847759467426165163">Şuraya yayınla</translation>
 <translation id="2850541429955027218">Tema ekle</translation>
 <translation id="2861941300086904918">Yerel İstemci güvenlik yöneticisi</translation>
 <translation id="2889064240420137087">Bağlantıyı şununla aç...</translation>
@@ -130,7 +129,6 @@
 <translation id="3341703758641437857">Dosya adresi erişimine izin ver</translation>
 <translation id="3347086966102161372">Resim adresini k&amp;opyala</translation>
 <translation id="3360297538363969800">Yazdırma işlemi başarısız oldu. Lütfen yazıcınızı kontrol edin ve tekrar deneyin.</translation>
-<translation id="3378503599595235699">Yerel verileri sadece tarayıcıdan çıkana kadar tut</translation>
 <translation id="3378572629723696641">Bu eklenti bozuk olabilir.</translation>
 <translation id="3387614642886316601">Gelişmiş yazım denetimini kullan</translation>
 <translation id="3432227430032737297">Tüm Gösterilenleri Kaldır</translation>
@@ -198,7 +196,6 @@
 <translation id="4613271546271159013">Bir eklenti, yeni sekme açtığınızda hangi sayfanın görüntüleneceğini değiştirdi.</translation>
 <translation id="4677772697204437347">GPU belleği</translation>
 <translation id="4681930562518940301">Orijinal &amp;resmi yeni sekmede aç</translation>
-<translation id="4688541352655220763">Bu özelliği, Vivaldi'deki içerikleri TV'nizde ve diğer cihazlarda görüntülemek için kullanabilirsiniz.</translation>
 <translation id="4711638718396952945">Ayarları geri yükle</translation>
 <translation id="4726710629007580002">Bu eklentiyi yüklerken bazı uyarılar var:</translation>
 <translation id="479536056609751218">Web Sayfası, Sadece HTML</translation>
@@ -269,7 +266,6 @@
 <translation id="5978277834170881274">&amp;Temel yazım denetimini kullan</translation>
 <translation id="5979421442488174909"><ph name="LANGUAGE" /> Diline Çe&amp;vir</translation>
 <translation id="6011449291337289699">Site verilerini temizle</translation>
-<translation id="6040143037577758943">Kapat</translation>
 <translation id="6042308850641462728">Daha Fazla</translation>
 <translation id="6059925163896151826">USB cihazları</translation>
 <translation id="6082651258230788217">Araç çubuğunda göster</translation>
@@ -327,10 +323,8 @@
 <translation id="7270858098575133036">Bir site MIDI cihazlarına erişmek için sisteme özgü mesajları kullanmak istediğinde sor</translation>
 <translation id="7287143125007575591">Erişim reddedildi.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="7293919849802650062">Vivaldi'de Yayınlama deneyimine hoş geldiniz!</translation>
 <translation id="7309257895202129721">Denetimleri &amp;göster</translation>
 <translation id="7311079019872751559">Korumalı alan içinde olmayan eklenti erişimi</translation>
-<translation id="7346909386216857016">Tamam, anladım</translation>
 <translation id="7385854874724088939">Yazdırmaya çalışırken bir sorun oluştu. Lütfen yazıcınızı kontrol edin ve tekrar deneyin.</translation>
 <translation id="7423098979219808738">Önce sor</translation>
 <translation id="7427348830195639090">Arka Plan Sayfası: <ph name="BACKGROUND_PAGE_URL" /></translation>
@@ -391,7 +385,6 @@ Anahtar dosyanızı güvenli bir yerde saklayın. Eklentinizin yeni sürümlerin
 <translation id="857943718398505171">İzin verildi (önerilen)</translation>
 <translation id="8584280235376696778">Videoyu yeni sekmede &amp;aç</translation>
 <translation id="8615618338313291042">Gizli Mod Uygulaması: <ph name="APP_NAME" /></translation>
-<translation id="8627151598708688654">Kaynak seç</translation>
 <translation id="862750493060684461">CSS önbelleği</translation>
 <translation id="8664389313780386848">&amp;Sayfa Kaynağını Göster</translation>
 <translation id="8708000541097332489">Çıkışta temizle</translation>

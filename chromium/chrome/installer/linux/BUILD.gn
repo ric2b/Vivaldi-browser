@@ -182,6 +182,7 @@ action("strip_chrome_binary") {
   ]
   script = "//build/gn_run_binary.py"
   sources = [
+    "//buildtools/third_party/eu-strip/bin/eu-strip",
     prog_name,
   ]
   outputs = [
@@ -308,8 +309,6 @@ copy("theme_files") {
       "$branding_dir/linux/product_logo_32_dev.xpm",
       "$branding_dir/product_logo_128_beta.png",
       "$branding_dir/product_logo_128_dev.png",
-      "$branding_dir/product_logo_22_beta.png",
-      "$branding_dir/product_logo_22_dev.png",
       "$branding_dir/product_logo_24_beta.png",
       "$branding_dir/product_logo_24_dev.png",
       "$branding_dir/product_logo_256_beta.png",

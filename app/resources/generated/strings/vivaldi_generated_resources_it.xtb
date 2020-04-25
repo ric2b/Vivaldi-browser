@@ -83,6 +83,7 @@
 <translation id="2482878487686419369">Notifiche</translation>
 <translation id="2509495747794740764">Il valore Scala deve essere un numero compreso tra 10 e 200.</translation>
 <translation id="253557089021624350">Numero attività keep-alive</translation>
+<translation id="2546283357679194313">Cookie e dati dei siti</translation>
 <translation id="2550212893339833758">Memoria scambiata</translation>
 <translation id="2580924999637585241">Totale: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="26224892172169984">Non consentire ad alcun sito di gestire i protocolli</translation>
@@ -92,7 +93,6 @@
 <translation id="2785873697295365461">Descrittori di file</translation>
 <translation id="2809586584051668049">e altre <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
 <translation id="2812989263793994277">Non mostrare le immagini</translation>
-<translation id="2847759467426165163">Trasmetti a</translation>
 <translation id="2850541429955027218">Aggiungi tema</translation>
 <translation id="2861941300086904918">Gestione sicurezza Native Client</translation>
 <translation id="2889064240420137087">Apri link con...</translation>
@@ -130,7 +130,6 @@
 <translation id="3341703758641437857">Consentire l'accesso agli URL del file</translation>
 <translation id="3347086966102161372">C&amp;opia l'indirizzo dell'immagine</translation>
 <translation id="3360297538363969800">Errore di stampa. Controlla la stampante e riprova.</translation>
-<translation id="3378503599595235699">Memorizza dati locali solo fino a chiusura del browser</translation>
 <translation id="3378572629723696641">Questa estensione potrebbe essere stata danneggiata.</translation>
 <translation id="3387614642886316601">Usa il controllo ortografico avanzato</translation>
 <translation id="3432227430032737297">Rimuovi tutti i cookie visualizzati</translation>
@@ -198,7 +197,6 @@
 <translation id="4613271546271159013">Un'estensione ha cambiato la pagina visualizzata all'apertura di una nuova scheda.</translation>
 <translation id="4677772697204437347">Memoria GPU</translation>
 <translation id="4681930562518940301">Apri &amp;immagine originale in una nuova scheda</translation>
-<translation id="4688541352655220763">Puoi utilizzare questa funzione per visualizzare i contenuti di Vivaldi sulla TV o su altri dispositivi.</translation>
 <translation id="4711638718396952945">Ripristina impostazioni</translation>
 <translation id="4726710629007580002">Ci sono messaggi di avviso quando si tenta di installare questa estensione:</translation>
 <translation id="479536056609751218">Pagina web, solo HTML</translation>
@@ -269,7 +267,6 @@
 <translation id="5978277834170881274">&amp;Usa il controllo ortografico di base</translation>
 <translation id="5979421442488174909">&amp;Traduci in <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">Cancella i dati del sito</translation>
-<translation id="6040143037577758943">Chiudi</translation>
 <translation id="6042308850641462728">Di più</translation>
 <translation id="6059925163896151826">Dispositivi USB</translation>
 <translation id="6082651258230788217">Visualizza nella barra degli strumenti</translation>
@@ -299,7 +296,7 @@
 <translation id="6498249116389603658">&amp;Tutte le tue lingue</translation>
 <translation id="6503077044568424649">Più visitati</translation>
 <translation id="6508261954199872201">Applicazione: <ph name="APP_NAME" /></translation>
-<translation id="6516243500644829484">Nuova f&amp;inestra riservata</translation>
+<translation id="6516243500644829484">Nuova f&amp;inestra privata</translation>
 <translation id="6518014396551869914">Cop&amp;ia immagine</translation>
 <translation id="6550675742724504774">Opzioni</translation>
 <translation id="6612358246767739896">Contenuto protetto</translation>
@@ -327,10 +324,8 @@
 <translation id="7270858098575133036">Chiedi conferma quando un sito vuole utilizzare messaggi esclusivi di sistema per accedere a dispositivi MIDI</translation>
 <translation id="7287143125007575591">Accesso negato.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="7293919849802650062">Benvenuto nella funzione di trasmissione di Vivaldi!</translation>
 <translation id="7309257895202129721">Visualizza &amp;comandi</translation>
 <translation id="7311079019872751559">Accesso con plug-in senza sandbox</translation>
-<translation id="7346909386216857016">OK</translation>
 <translation id="7385854874724088939">Si è verificato un problema durante il tentativo di stampa. Controlla la stampante e riprova.</translation>
 <translation id="7423098979219808738">Chiedi prima</translation>
 <translation id="7427348830195639090">Pagina di sfondo: <ph name="BACKGROUND_PAGE_URL" /></translation>
@@ -391,7 +386,6 @@ Conserva il file di chiave in un luogo sicuro. Ti servirà per creare nuove vers
 <translation id="857943718398505171">Consenti (opzione consigliata)</translation>
 <translation id="8584280235376696778">&amp;Apri video in nuova scheda</translation>
 <translation id="8615618338313291042">Applicazione in incognito: <ph name="APP_NAME" /></translation>
-<translation id="8627151598708688654">Seleziona sorgente</translation>
 <translation id="862750493060684461">Cache CSS</translation>
 <translation id="8664389313780386848">&amp;Visualizza sorgente pagina</translation>
 <translation id="8708000541097332489">Cancella all'uscita</translation>

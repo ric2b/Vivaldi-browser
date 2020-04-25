@@ -382,8 +382,10 @@ void VivaldiSessionService::RestoreTabsToBrowser(
       if (!contents)
         continue;
 
+      base::Optional<base::Token> group;
       SessionRestoreDelegate::RestoredTab restored_tab(
-          contents, is_selected_tab, tab.extension_app_id.empty(), tab.pinned);
+          contents, is_selected_tab, tab.extension_app_id.empty(), tab.pinned,
+          group);
       created_contents->push_back(restored_tab);
 
       // If this isn't the selected tab, there's nothing else to do.
@@ -403,9 +405,10 @@ void VivaldiSessionService::RestoreTabsToBrowser(
       content::WebContents* contents =
           RestoreTab(tab, tab_index_offset + i, browser, false);
       if (contents) {
+        base::Optional<base::Token> group;
         // Sanitize the last active time.
         SessionRestoreDelegate::RestoredTab restored_tab(
-            contents, false, tab.extension_app_id.empty(), tab.pinned);
+            contents, false, tab.extension_app_id.empty(), tab.pinned, group);
         created_contents->push_back(restored_tab);
       }
     }
@@ -439,9 +442,10 @@ content::WebContents* VivaldiSessionService::RestoreTab(
             ->GetDOMStorageContext()
             ->RecreateSessionStorage(tab.session_storage_persistent_id);
   }
+  base::Optional<base::Token> group;
   content::WebContents* web_contents = chrome::AddRestoredTab(
       browser, tab.navigations, tab_index, selected_index, tab.extension_app_id,
-      false,  // select
+      group, false,  // select
       tab.pinned, true, base::TimeTicks(), session_storage_namespace.get(),
       tab.user_agent_override, true /* from_session_restore */, tab.ext_data);
   // Regression check: check that the tab didn't start loading right away. The

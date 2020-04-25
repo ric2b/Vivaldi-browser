@@ -275,7 +275,7 @@ class NotesModelAssociator
 
   // Helper method for creating a new native notes node.
   const Notes_Node* CreateNotesNode(const Notes_Node* parent_node,
-                                    int note_index,
+                                    size_t note_index,
                                     const syncer::BaseNode* sync_child_node,
                                     const GURL& url,
                                     Context* context,

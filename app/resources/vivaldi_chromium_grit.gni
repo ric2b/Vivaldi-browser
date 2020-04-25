@@ -70,8 +70,22 @@ template("chromium_merge_grit_action") {
   combined_target_file = "$combined_target_dir/$target_filename"
   translation_stamp = "${combined_target_file}.translation.stamp"
 
+  search_path_list = [
+    combined_target_dir,
+    get_path_info(invoker.vivaldi_resource_path, "dir"),
+    get_path_info(main_resource_path, "dir"),
+  ]
+
+  search_paths = []
+  foreach(p, search_path_list) {
+    search_paths += [
+      "-I",
+      rebase_path(p, root_build_dir),
+    ]
+  }
+
   command_parameters =
-      grit_flags + grit_defines + extra_grit_defines + grit_additional_defines +
+      grit_flags + grit_defines + extra_grit_defines + grit_additional_defines + search_paths +
       [
         "--updatejson",
         rebase_path(_update_json_path, root_build_dir),

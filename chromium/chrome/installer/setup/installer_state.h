@@ -77,12 +77,6 @@ class InstallerState {
   // flag is set is to be operated on.
   bool is_msi() const { return msi_; }
 
-  // True if the process is running at a reduced "background" priority.
-  bool is_background_mode() const { return background_mode_; }
-
-  // Indicate that the process is or is not running in the background.
-  void set_background_mode(bool bg) { background_mode_ = bg; }
-
   // True if this installer is started with the "--vivaldi" option
   bool is_vivaldi() const { return is_vivaldi_; }
 
@@ -163,7 +157,6 @@ class InstallerState {
   Level level_;
   HKEY root_key_;
   bool msi_;
-  bool background_mode_;
   bool verbose_logging_;
   bool is_migrating_to_single_;
 

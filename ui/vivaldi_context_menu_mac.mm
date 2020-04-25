@@ -59,28 +59,33 @@ VivaldiContextMenu* CreateVivaldiContextMenu(
   return new VivaldiContextMenuMac(web_contents, menu_model, params);
 }
 
-
-void ConvertBookmarkButtonRectToScreen(
+void ConvertContainerRectToScreen(
     content::WebContents* web_contents,
-    vivaldi::BookmarkMenuParams& params) {
-  views::Widget* widget = views::Widget::GetTopLevelWidgetForNativeView(
+    vivaldi::BookmarkMenuContainer& container) {
+
+views::Widget* widget = views::Widget::GetTopLevelWidgetForNativeView(
       VivaldiBookmarkMenuViews::GetActiveNativeViewFromWebContents(
           web_contents));
   gfx::Point screen_loc;
   views::View::ConvertPointToScreen(widget->GetContentsView(), &screen_loc);
   // Adjust for the button positions within content area.
-  for (::vivaldi::FolderEntry& e: params.siblings) {
-    e.x += screen_loc.x();
-    e.y += screen_loc.y();
+  for (::vivaldi::BookmarkMenuContainerEntry& e: container.siblings) {
+    gfx::Point point(e.rect.origin());
+    point.Offset(screen_loc.x(), screen_loc.y());
+    e.rect.set_origin(point);
   }
 }
 
 VivaldiBookmarkMenu* CreateVivaldiBookmarkMenu(
     content::WebContents* web_contents,
-    const vivaldi::BookmarkMenuParams& params,
+    const BookmarkMenuContainer* container,
+    const bookmarks::BookmarkNode* node,
+    int offset,
     const gfx::Rect& button_rect) {
-  return new VivaldiBookmarkMenuViews(web_contents, params, button_rect);
+  return new VivaldiBookmarkMenuViews(web_contents, container, node, offset,
+                                      button_rect);
 }
+
 }  // vivialdi
 
 VivaldiContextMenuMac::VivaldiContextMenuMac(

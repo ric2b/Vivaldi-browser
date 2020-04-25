@@ -35,6 +35,7 @@
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/scrollbar_size.h"
 #include "ui/gfx/skbitmap_operations.h"
+#include "ui/vivaldi_skia_utils.h"
 #include "ui/vivaldi_ui_utils.h"
 
 using content::BrowserPluginGuest;
@@ -43,7 +44,7 @@ using content::RenderViewHostImpl;
 using content::WebContents;
 using content::WebContentsImpl;
 using vivaldi::ui_tools::EncodeBitmap;
-using vivaldi::ui_tools::SmartCropAndSize;
+using vivaldi::skia_utils::SmartCropAndSize;
 
 namespace extensions {
 namespace vivaldi {
@@ -53,7 +54,7 @@ namespace vivaldi {
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-bool VivaldiWebViewChromeAsyncExtensionFunction::PreRunValidation(
+bool VivaldiWebViewWithGuestFunction::PreRunValidation(
     std::string* error) {
   if (!UIThreadExtensionFunction::PreRunValidation(error))
     return false;
@@ -70,17 +71,14 @@ bool VivaldiWebViewChromeAsyncExtensionFunction::PreRunValidation(
   return true;
 }
 
-WebViewPrivateSetVisibleFunction::WebViewPrivateSetVisibleFunction() {}
+ExtensionFunction::ResponseAction WebViewPrivateSetVisibleFunction::Run() {
+  using vivaldi::web_view_private::SetVisible::Params;
 
-WebViewPrivateSetVisibleFunction::~WebViewPrivateSetVisibleFunction() {}
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params);
 
-bool WebViewPrivateSetVisibleFunction::RunAsync() {
-  std::unique_ptr<vivaldi::web_view_private::SetVisible::Params> params(
-      vivaldi::web_view_private::SetVisible::Params::Create(*args_));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
   guest_->SetVisible(params->is_visible);
-  SendResponse(true);
-  return true;
+  return RespondNow(NoArguments());
 }
 
 namespace {
@@ -97,14 +95,19 @@ WebViewPrivateGetThumbnailFunction::WebViewPrivateGetThumbnailFunction()
                                                               // PNG.
 {}
 
-WebViewPrivateGetThumbnailFunction::~WebViewPrivateGetThumbnailFunction() {
-  if (!did_respond()) {
-    error_ = "Internal Thumbnail error";
-    SendResponse(false);
-  }
+WebViewPrivateGetThumbnailFunction::~WebViewPrivateGetThumbnailFunction() =
+    default;
+
+ExtensionFunction::ResponseAction WebViewPrivateGetThumbnailFunction::Run() {
+  using vivaldi::web_view_private::GetThumbnail::Params;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  return RunImpl(params->params);
 }
 
-bool WebViewPrivateGetThumbnailFunction::InternalRunAsyncSafe(
+ExtensionFunction::ResponseAction WebViewPrivateGetThumbnailFunction::RunImpl(
     const vivaldi::web_view_private::ThumbnailParams& params) {
   if (params.scale) {
     scale_ = *params.scale;
@@ -121,20 +124,17 @@ bool WebViewPrivateGetThumbnailFunction::InternalRunAsyncSafe(
   content::RenderWidgetHostView* view = web_contents->GetRenderWidgetHostView();
 
   if (!view) {
-    error_ = "Error: View is not available, no screenshot taken.";
-    return false;
+    return RespondNow(Error("View is not available, no screenshot taken."));
   }
   if (!guest_->IsVisible()) {
-    error_ = "Error: Guest is not visible, no screenshot taken.";
-    return false;
+    return RespondNow(Error("Guest is not visible, no screenshot taken."));
   }
   // If this happens, the guest view is not attached to a window for some
   // reason. See also VB-23154.
   DCHECK(guest_->embedder_web_contents());
   if (!guest_->embedder_web_contents()) {
-    error_ =
-        "Error: Guest view is not attached to a window, no screenshot taken.";
-    return false;
+    return RespondNow(
+        Error("Guest view is not attached to a window, no screenshot taken."));
   }
   content::RenderWidgetHostView* embedder_view =
       guest_->embedder_web_contents()->GetRenderWidgetHostView();
@@ -150,162 +150,149 @@ bool WebViewPrivateGetThumbnailFunction::InternalRunAsyncSafe(
 
   embedder_view->CopyFromSurface(
       source_rect, source_rect.size(),
-      base::Bind(
+      base::BindOnce(
           &WebViewPrivateGetThumbnailFunction::CopyFromBackingStoreComplete,
           this));
 
-  return true;
+  return RespondLater();
 }
 
 void WebViewPrivateGetThumbnailFunction::CopyFromBackingStoreComplete(
     const SkBitmap& bitmap) {
-  if (!bitmap.drawsNothing()) {
-    VLOG(1) << "captureVisibleTab() got image from backing store.";
-    SendResultFromBitmap(bitmap);
-    return;
-  }
+  base::PostTaskWithTraits(
+      FROM_HERE,
+      {base::TaskPriority::USER_VISIBLE, base::MayBlock(),
+       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+      base::BindOnce(
+          &WebViewPrivateGetThumbnailFunction::ScaleAndEncodeOnWorkerThread,
+          this, bitmap));
 }
 
-bool WebViewPrivateGetThumbnailFunction::RunAsync() {
-  std::unique_ptr<vivaldi::web_view_private::GetThumbnail::Params> params(
-      vivaldi::web_view_private::GetThumbnail::Params::Create(*args_));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
-
-  return InternalRunAsyncSafe(params->params);
-}
-
-// Turn a bitmap of the screen into an image, set that image as the result,
-// and call SendResponse().
-void WebViewPrivateGetThumbnailFunction::SendResultFromBitmap(
-    const SkBitmap& screen_capture) {
-  std::vector<unsigned char> data;
-  std::string mime_type;
-  gfx::Size dst_size_pixels;
-  SkBitmap bitmap;
-
-  // TODO(igor@vivaldi.com): scale and encode on a worker thread.
-  if (scale_ != kDefaultThumbnailScale) {
-    // Scale has changed, use that.
-    dst_size_pixels = gfx::ScaleToRoundedSize(
-        gfx::Size(screen_capture.width(), screen_capture.height()), scale_);
-    bitmap = skia::ImageOperations::Resize(
-        screen_capture, skia::ImageOperations::RESIZE_BEST,
-        dst_size_pixels.width(), dst_size_pixels.height());
-  } else if (width_ != 0 && height_ != 0) {
-    bitmap = SmartCropAndSize(screen_capture, width_, height_);
-  } else {
-    bitmap = screen_capture;
-  }
-  bool encoded = EncodeBitmap(bitmap, &data, &mime_type, image_format_,
-                              image_quality_);
-  if (!encoded) {
-    error_ = "Internal Thumbnail error";
-    SendResponse(false);
-    return;
-  }
+void WebViewPrivateGetThumbnailFunction::ScaleAndEncodeOnWorkerThread(
+    SkBitmap bitmap) {
+  bool success = false;
   std::string base64_result;
-  base::StringPiece stream_as_string(reinterpret_cast<const char*>(data.data()),
-                                     data.size());
+  do {
+    if (bitmap.drawsNothing()) {
+      LOG(ERROR) << "No image from backing store.";
+      break;
+    }
+    VLOG(1) << "captureVisibleTab() got image from backing store.";
 
-  base::Base64Encode(stream_as_string, &base64_result);
-  base64_result.insert(
-      0, base::StringPrintf("data:%s;base64,", mime_type.c_str()));
-  SetResult(std::make_unique<base::Value>(base64_result));
-  SendResponse(true);
+    if (scale_ != kDefaultThumbnailScale) {
+      // Scale has changed, use that.
+      gfx::Size dst_size_pixels = gfx::ScaleToRoundedSize(
+          gfx::Size(bitmap.width(), bitmap.height()), scale_);
+      bitmap = skia::ImageOperations::Resize(
+          bitmap, skia::ImageOperations::RESIZE_BEST, dst_size_pixels.width(),
+          dst_size_pixels.height());
+    } else if (width_ != 0 && height_ != 0) {
+      bitmap = SmartCropAndSize(bitmap, width_, height_);
+    }
+
+    std::vector<unsigned char> data;
+    std::string mime_type;
+    bool encoded = EncodeBitmap(bitmap, &data, &mime_type, image_format_,
+                                image_quality_);
+    if (!encoded)
+      break;
+
+    // Release no longer needed bitmap.
+    bitmap = SkBitmap();
+    base::StringPiece stream_as_string(reinterpret_cast<const char*>(data.data()),
+                                      data.size());
+
+    base::Base64Encode(stream_as_string, &base64_result);
+    base64_result.insert(
+        0, base::StringPrintf("data:%s;base64,", mime_type.c_str()));
+    success = true;
+  } while (false);
+
+  base::PostTaskWithTraits(
+      FROM_HERE, {content::BrowserThread::UI},
+      base::BindOnce(
+          &WebViewPrivateGetThumbnailFunction::SendResult,
+          this, success, std::move(base64_result)));
 }
 
-WebViewPrivateShowPageInfoFunction::WebViewPrivateShowPageInfoFunction() {}
+void WebViewPrivateGetThumbnailFunction::SendResult(
+    bool success,
+    const std::string& base64_result) {
+  namespace Results = vivaldi::web_view_private::GetThumbnail::Results;
 
-WebViewPrivateShowPageInfoFunction::~WebViewPrivateShowPageInfoFunction() {
-  Respond(NoArguments());
+  if (!success) {
+    Respond(Error("Internal Thumbnail error"));
+    return;
+  }
+  Respond(ArgumentList(Results::Create(base64_result)));
 }
 
-bool WebViewPrivateShowPageInfoFunction::RunAsync() {
-  std::unique_ptr<vivaldi::web_view_private::ShowPageInfo::Params> params(
-      vivaldi::web_view_private::ShowPageInfo::Params::Create(*args_));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+ExtensionFunction::ResponseAction WebViewPrivateShowPageInfoFunction::Run() {
+  using vivaldi::web_view_private::ShowPageInfo::Params;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params);
+
   gfx::Point pos(params->position.left, params->position.top);
   guest_->ShowPageInfo(pos);
-  return true;
+  return RespondNow(NoArguments());
 }
 
-WebViewPrivateSetIsFullscreenFunction::WebViewPrivateSetIsFullscreenFunction() {
-}
+ExtensionFunction::ResponseAction WebViewPrivateSetIsFullscreenFunction::Run() {
+  using vivaldi::web_view_private::SetIsFullscreen::Params;
 
-WebViewPrivateSetIsFullscreenFunction::
-    ~WebViewPrivateSetIsFullscreenFunction() {}
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params);
 
-bool WebViewPrivateSetIsFullscreenFunction::RunAsync() {
-  std::unique_ptr<vivaldi::web_view_private::SetIsFullscreen::Params> params(
-      vivaldi::web_view_private::SetIsFullscreen::Params::Create(*args_));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
   guest_->SetIsFullscreen(params->is_fullscreen, params->skip_window_state);
-  SendResponse(true);
-  return true;
+  return RespondNow(NoArguments());
 }
 
-WebViewPrivateGetPageHistoryFunction::WebViewPrivateGetPageHistoryFunction() {}
+ExtensionFunction::ResponseAction WebViewPrivateGetPageHistoryFunction::Run() {
+  using vivaldi::web_view_private::GetPageHistory::Params;
+  namespace Results = vivaldi::web_view_private::GetPageHistory::Results;
 
-WebViewPrivateGetPageHistoryFunction::~WebViewPrivateGetPageHistoryFunction() {}
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params);
 
-bool WebViewPrivateGetPageHistoryFunction::RunAsync() {
-  std::unique_ptr<vivaldi::web_view_private::GetPageHistory::Params> params(
-      vivaldi::web_view_private::GetPageHistory::Params::Create(*args_));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
   content::NavigationController& controller =
       guest_->web_contents()->GetController();
 
   int currentEntryIndex = controller.GetCurrentEntryIndex();
 
-  std::vector<
-      vivaldi::web_view_private::GetPageHistory::Results::PageHistoryType>
-      history;
-
+  std::vector<Results::PageHistoryType> history(controller.GetEntryCount());
   for (int i = 0; i < controller.GetEntryCount(); i++) {
     content::NavigationEntry* entry = controller.GetEntryAtIndex(i);
     base::string16 name = entry->GetTitleForDisplay();
-    std::unique_ptr<
-        vivaldi::web_view_private::GetPageHistory::Results::PageHistoryType>
-        history_entry(new vivaldi::web_view_private::GetPageHistory::Results::
-                          PageHistoryType);
+    Results::PageHistoryType* history_entry = &history[i];
     history_entry->name = base::UTF16ToUTF8(name);
     std::string urlstr = entry->GetVirtualURL().spec();
     history_entry->url = urlstr;
     history_entry->index = i;
-    history.push_back(std::move(*history_entry));
   }
-  results_ = vivaldi::web_view_private::GetPageHistory::Results::Create(
-      currentEntryIndex, history);
-
-  SendResponse(true);
-  return true;
+  return RespondNow(ArgumentList(Results::Create(currentEntryIndex, history)));
 }
 
-WebViewPrivateAllowBlockedInsecureContentFunction::
-    WebViewPrivateAllowBlockedInsecureContentFunction() {}
+ExtensionFunction::ResponseAction
+WebViewPrivateAllowBlockedInsecureContentFunction::Run() {
+  using vivaldi::web_view_private::AllowBlockedInsecureContent::Params;
 
-WebViewPrivateAllowBlockedInsecureContentFunction::
-    ~WebViewPrivateAllowBlockedInsecureContentFunction() {}
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params);
 
-bool WebViewPrivateAllowBlockedInsecureContentFunction::RunAsync() {
   guest_->AllowRunningInsecureContent();
-  SendResponse(true);
-  return true;
+  return  RespondNow(NoArguments());
 }
 
-WebViewPrivateGetFocusedElementInfoFunction::
-    WebViewPrivateGetFocusedElementInfoFunction() {}
+ExtensionFunction::ResponseAction
+WebViewPrivateGetFocusedElementInfoFunction::Run() {
+  using vivaldi::web_view_private::GetFocusedElementInfo::Params;
+  namespace Results = vivaldi::web_view_private::GetFocusedElementInfo::Results;
 
-WebViewPrivateGetFocusedElementInfoFunction::
-    ~WebViewPrivateGetFocusedElementInfoFunction() {}
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params);
 
-bool WebViewPrivateGetFocusedElementInfoFunction::RunAsync() {
-  std::unique_ptr<vivaldi::web_view_private::GetFocusedElementInfo::Params>
-      params(vivaldi::web_view_private::GetFocusedElementInfo::Params::Create(
-          *args_));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
-
-  ::vivaldi::VivaldiFrameObserver* frame_observer = NULL;
+  ::vivaldi::VivaldiFrameObserver* frame_observer = nullptr;
 
   // A plugin like the PDF viewer will have its own embedded web contents,
   // so we need to explicitly get the focused one.
@@ -322,23 +309,18 @@ bool WebViewPrivateGetFocusedElementInfoFunction::RunAsync() {
   std::string type = "";
   bool editable = false;
   std::string role = "";
-  if (frame_observer != NULL) {
+  if (frame_observer) {
     frame_observer->GetFocusedElementInfo(&tagname, &type, &editable, &role);
   }
-  results_ = vivaldi::web_view_private::GetFocusedElementInfo ::Results::Create(
-      tagname, type, editable, role);
-  SendResponse(true);
-  return true;
+  return RespondNow(
+      ArgumentList(Results::Create(tagname, type, editable, role)));
 }
 
-WebViewPrivateSendRequestFunction::WebViewPrivateSendRequestFunction() {}
+ExtensionFunction::ResponseAction WebViewPrivateSendRequestFunction::Run() {
+  using vivaldi::web_view_private::SendRequest::Params;
 
-WebViewPrivateSendRequestFunction::~WebViewPrivateSendRequestFunction() {}
-
-bool WebViewPrivateSendRequestFunction::RunAsync() {
-  std::unique_ptr<vivaldi::web_view_private::SendRequest::Params> params(
-      vivaldi::web_view_private::SendRequest::Params::Create(*args_));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   ui::PageTransition transition =
       HistoryPrivateAPI::PrivateHistoryTransitionToUiTransition(
@@ -354,8 +336,7 @@ bool WebViewPrivateSendRequestFunction::RunAsync() {
   url_params.extra_headers = params->extra_headers;
 
   guest_->NavigateGuest(params->url, true, transition, nullptr, &url_params);
-  SendResponse(true);
-  return true;
+  return RespondNow(NoArguments());
 }
 
 }  // namespace vivaldi

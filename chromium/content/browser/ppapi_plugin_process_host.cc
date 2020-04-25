@@ -155,9 +155,7 @@ class PpapiPluginProcessHost::PluginNetworkObserver
     : public network::NetworkConnectionTracker::NetworkConnectionObserver {
  public:
   explicit PluginNetworkObserver(PpapiPluginProcessHost* process_host)
-      : process_host_(process_host),
-        network_connection_tracker_(nullptr),
-        weak_factory_(this) {
+      : process_host_(process_host), network_connection_tracker_(nullptr) {
     GetNetworkConnectionTrackerFromUIThread(
         base::BindOnce(&PluginNetworkObserver::SetNetworkConnectionTracker,
                        weak_factory_.GetWeakPtr()));
@@ -183,7 +181,7 @@ class PpapiPluginProcessHost::PluginNetworkObserver
  private:
   PpapiPluginProcessHost* const process_host_;
   network::NetworkConnectionTracker* network_connection_tracker_;
-  base::WeakPtrFactory<PluginNetworkObserver> weak_factory_;
+  base::WeakPtrFactory<PluginNetworkObserver> weak_factory_{this};
 };
 
 PpapiPluginProcessHost::~PpapiPluginProcessHost() {
@@ -367,6 +365,8 @@ bool PpapiPluginProcessHost::Init(const PepperPluginInfo& info) {
 #if defined(OS_LINUX)
   int flags = plugin_launcher.empty() ? ChildProcessHost::CHILD_ALLOW_SELF :
                                         ChildProcessHost::CHILD_NORMAL;
+#elif defined(OS_MACOSX)
+  int flags = ChildProcessHost::CHILD_PLUGIN;
 #else
   int flags = ChildProcessHost::CHILD_NORMAL;
 #endif

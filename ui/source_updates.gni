@@ -72,6 +72,8 @@ update_template_instance("//chrome/browser/ui:ui") {
       "//vivaldi/ui/vivaldi_app_window_desktop_native_widget_aura_win.h",
       "//vivaldi/ui/vivaldi_app_window_desktop_window_tree_host_win.cc",
       "//vivaldi/ui/vivaldi_app_window_desktop_window_tree_host_win.h",
+      "//vivaldi/ui/views/vivaldi_menubar_menu_views.h",
+      "//vivaldi/ui/views/vivaldi_menubar_menu_views.cc",
       "//vivaldi/ui/vivaldi_native_app_window_views_aura.cc",
       "//vivaldi/ui/vivaldi_native_app_window_views_aura.h",
       "//vivaldi/ui/vivaldi_native_app_window_views_win.cc",
@@ -91,7 +93,9 @@ update_target("//ui/base:base") {
 if (!is_android) {
   update_target("//ui/views:views") {
     sources += [
+      "//vivaldi/ui/views/vivaldi_menu_controller_views.cc",
       "//vivaldi/ui/views/vivaldi_menu_model_adapter.cc",
+      "//vivaldi/ui/views/vivaldi_menu_config.cc",
     ]
   }
 }

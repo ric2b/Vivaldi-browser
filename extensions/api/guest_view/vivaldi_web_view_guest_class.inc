@@ -16,7 +16,7 @@
                                    int loaded_elements,
                                    int total_elements) override;
 
-  bool EmbedsFullscreenWidget() const override;
+  bool EmbedsFullscreenWidget() override;
   void NavigationStateChanged(content::WebContents* source,
                               content::InvalidateTypes changed_flags) override;
   void UpdateTargetURL(content::WebContents* source, const GURL& url) override;
@@ -65,9 +65,10 @@
   // WebContentsDelegate
   void ShowRepostFormWarningDialog(content::WebContents* source) override;
   bool HasOwnerShipOfContents() override;
-  gfx::Size EnterPictureInPicture(content::WebContents* web_contents,
-                                  const viz::SurfaceId&,
-                                  const gfx::Size& natural_size) override;
+  content::PictureInPictureResult EnterPictureInPicture(
+      content::WebContents* web_contents,
+      const viz::SurfaceId&,
+      const gfx::Size& natural_size) override;
   void ExitPictureInPicture() override;
 
   const std::string& sourceSpec() { return src_.spec(); }

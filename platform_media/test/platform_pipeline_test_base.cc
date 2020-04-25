@@ -15,7 +15,6 @@
 #include "platform_media/renderer/decoders/win/wmf_audio_decoder.h"
 #include "platform_media/renderer/decoders/win/wmf_video_decoder.h"
 #endif
-#include "media/filters/gpu_video_decoder.h"
 #include "platform_media/common/platform_mime_util.h"
 #include "platform_media/renderer/decoders/ipc_demuxer.h"
 #include "platform_media/renderer/decoders/pass_through_audio_decoder.h"
@@ -114,19 +113,10 @@ void PlatformPipelineTestBase::AppendPlatformVideoDecoders(
       std::make_unique<WMFVideoDecoder>(media_task_runner));
 #endif
 
-  video_decoders.push_back(std::make_unique<GpuVideoDecoder>(
-      mock_video_accelerator_factories_.get(), RequestOverlayInfoCB(),
-      gfx::ColorSpace(), media_log));
-
   VideoDecodeAccelerator::Capabilities capabilities;
   capabilities.supported_profiles = GetSupportedProfiles();
 
   EXPECT_CALL(*mock_video_accelerator_factories_, GetTaskRunner())
       .WillRepeatedly(testing::Return(media_task_runner));
-  EXPECT_CALL(*mock_video_accelerator_factories_,
-              GetVideoDecodeAcceleratorCapabilities())
-      .WillRepeatedly(testing::Return(capabilities));
-  EXPECT_CALL(*mock_video_accelerator_factories_, WaitSyncToken(_))
-      .Times(testing::AnyNumber());
 }
 }

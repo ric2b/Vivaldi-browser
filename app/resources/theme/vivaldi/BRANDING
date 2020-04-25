@@ -7,3 +7,4 @@ PRODUCT_INSTALLER_SHORTNAME=Vivaldi Installer
 COPYRIGHT=Copyright 2019 Vivaldi Technologies AS. All rights reserved.
 MAC_BUNDLE_ID=com.vivaldi.Vivaldi
 MAC_CREATOR_CODE=Vivl
+MAC_TEAM_ID=4XF3XNRN6Y

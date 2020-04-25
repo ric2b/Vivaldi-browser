@@ -183,9 +183,8 @@ NoteTreeNode MakeTreeNode(Notes_Node* node) {
 
   if (node->is_folder()) {
     std::vector<NoteTreeNode> children;
-    for (int i = 0; i < node->child_count(); ++i) {
-      Notes_Node* child = node->GetChild(i);
-      children.push_back(MakeTreeNode(child));
+    for (auto& it: node->children()) {
+      children.push_back(MakeTreeNode(it.get()));
     }
     notes_tree_node.children.reset(
         new std::vector<NoteTreeNode>(std::move(children)));
@@ -201,9 +200,8 @@ Notes_Node* GetNodeFromId(Notes_Node* node, int64_t id) {
   if (node->id() == id) {
     return node;
   }
-  int number_of_notes = node->child_count();
-  for (int i = 0; i < number_of_notes; i++) {
-    Notes_Node* childnode = GetNodeFromId(node->GetChild(i), id);
+  for (auto& it: node->children()) {
+    Notes_Node* childnode = GetNodeFromId(it.get(), id);
     if (childnode) {
       return childnode;
     }
@@ -362,7 +360,7 @@ ExtensionFunction::ResponseAction NotesCreateFunction::Run() {
     parent = model->main_node();
   }
   if (parent == model->main_node()) {
-    int64_t maxIndex = parent->child_count();
+    int64_t maxIndex = parent->children().size();
     int64_t newIndex = maxIndex;
     if (params->note.index.get()) {
       newIndex = *params->note.index.get();
@@ -372,7 +370,7 @@ ExtensionFunction::ResponseAction NotesCreateFunction::Run() {
     }
     model->AddNode(parent, newIndex, std::move(newnode));
   } else {
-    int64_t newIndex = parent->child_count();
+    int64_t newIndex = parent->children().size();
     if (params->note.index.get()) {
       newIndex = *params->note.index.get();
     }
@@ -586,15 +584,15 @@ ExtensionFunction::ResponseAction NotesMoveFunction::Run() {
     }
   }
 
-  int index;
+  size_t index;
   if (params->destination.index.get()) {  // Optional (defaults to end).
     index = *params->destination.index;
-    if (index > parent->child_count() || index < 0) {
+    if (index > parent->children().size() || index < 0) {
        // Todo move to constant
       return RespondNow(Error("Index out of bounds."));
     }
   } else {
-    index = parent->child_count();
+    index = parent->children().size();
   }
 
   Notes_Node* old_parent = node->parent();
@@ -623,8 +621,8 @@ ExtensionFunction::ResponseAction NotesEmptyTrashFunction::Run() {
   Notes_Model* model = GetNotesModel(this);
   Notes_Node* trash_node = model->trash_node();
   if (trash_node) {
-    while (trash_node->child_count()) {
-      Notes_Node* node = trash_node->GetChild(0);
+    while (!trash_node->children().empty()) {
+      Notes_Node* node = trash_node->children()[0].get();
       int64_t removed_node_id = node->id();
       model->Remove(trash_node, 0);
       SendRemoved(browser_context(), removed_node_id, trash_node->id(), 0);

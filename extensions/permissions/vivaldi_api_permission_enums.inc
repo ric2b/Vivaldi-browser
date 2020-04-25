@@ -23,6 +23,7 @@
     kEditCommand,
     kMailPrivate,
     kMenubar,
+    kMenubarMenu,
     kNotes,
     kPrefs,
     kRuntimePrivate,

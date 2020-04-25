@@ -83,6 +83,7 @@
 <translation id="2482878487686419369">通知</translation>
 <translation id="2509495747794740764">倍率は10～200の数値で指定してください。</translation>
 <translation id="253557089021624350">キープアライブ (カウント数)</translation>
+<translation id="2546283357679194313">Cookie とサイトデータ</translation>
 <translation id="2550212893339833758">スワップ済みメモリー</translation>
 <translation id="2580924999637585241">総ページ数: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="26224892172169984">すべてのサイトに対してプロトコルの処理を許可しない</translation>
@@ -92,7 +93,6 @@
 <translation id="2785873697295365461">ファイル記述子</translation>
 <translation id="2809586584051668049">、他<ph name="NUMBER_ADDITIONAL_DISABLED" />件</translation>
 <translation id="2812989263793994277">すべての画像を表示しない</translation>
-<translation id="2847759467426165163">キャスト先</translation>
 <translation id="2850541429955027218">テーマを追加</translation>
 <translation id="2861941300086904918">ネイティブクライアントセキュリティマネージャー</translation>
 <translation id="2889064240420137087">次のプログラムでリンクを開く...</translation>
@@ -130,7 +130,6 @@
 <translation id="3341703758641437857">ファイルのURLへのアクセスを許可</translation>
 <translation id="3347086966102161372">画像のアドレスをコピー (&amp;O)</translation>
 <translation id="3360297538363969800">印刷できませんでした。プリンターを確認してもう一度お試しください。</translation>
-<translation id="3378503599595235699">ブラウザーを終了するまでローカル データを保持する</translation>
 <translation id="3378572629723696641">この拡張機能は破損している可能性があります。</translation>
 <translation id="3387614642886316601">拡張スペルチェックを使用する</translation>
 <translation id="3432227430032737297">表示中のサイトをすべて削除</translation>
@@ -198,7 +197,6 @@
 <translation id="4613271546271159013">拡張機能によって、新しいタブを開いたときに表示されるページが変更されました。</translation>
 <translation id="4677772697204437347">GPUメモリー</translation>
 <translation id="4681930562518940301">元の画像を新しいタブで開く (&amp;I)</translation>
-<translation id="4688541352655220763">この機能を使用すると、テレビや他の端末にVivaldiのコンテンツを表示できます。</translation>
 <translation id="4711638718396952945">設定を復元</translation>
 <translation id="4726710629007580002">この拡張機能をインストールしようとした際、警告がありました：</translation>
 <translation id="479536056609751218">ウェブページ、HTMLのみ</translation>
@@ -269,7 +267,6 @@
 <translation id="5978277834170881274">基本スペルチェックを使用(&amp;U)</translation>
 <translation id="5979421442488174909"><ph name="LANGUAGE" />に翻訳 (&amp;T)</translation>
 <translation id="6011449291337289699">サイトデータの削除</translation>
-<translation id="6040143037577758943">閉じる</translation>
 <translation id="6042308850641462728">もっと見る</translation>
 <translation id="6059925163896151826">USB デバイス</translation>
 <translation id="6082651258230788217">ツールバーに表示</translation>
@@ -327,10 +324,8 @@
 <translation id="7270858098575133036">サイトがシステム エクスクルーシブ メッセージを使用してMIDIデバイスにアクセスする際に確認する</translation>
 <translation id="7287143125007575591">アクセスが拒否されました。</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="7293919849802650062">Vivaldiのキャストへようこそ！</translation>
 <translation id="7309257895202129721">コントロールを表示 (&amp;C)</translation>
 <translation id="7311079019872751559">サンドボックス化されていないプラグインへのアクセス</translation>
-<translation id="7346909386216857016">分かりました</translation>
 <translation id="7385854874724088939">印刷中に問題が発生しました。プリンターを確認してからもう一度お試しください。</translation>
 <translation id="7423098979219808738">最初に確認する</translation>
 <translation id="7427348830195639090">バックグラウンドページ: <ph name="BACKGROUND_PAGE_URL" /></translation>
@@ -390,7 +385,6 @@
 <translation id="857943718398505171">許可（推奨）</translation>
 <translation id="8584280235376696778">動画を新しいタブで開く (&amp;O)</translation>
 <translation id="8615618338313291042">プライベートアプリ: <ph name="APP_NAME" /></translation>
-<translation id="8627151598708688654">ソースを選択</translation>
 <translation id="862750493060684461">CSSキャッシュ</translation>
 <translation id="8664389313780386848">ページのソースを表示 (&amp;V)</translation>
 <translation id="8708000541097332489">終了時に消去</translation>

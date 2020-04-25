@@ -34,7 +34,6 @@ class VivaldiNativeAppWindowViewsAura : public VivaldiNativeAppWindowViews {
 
   // ui::BaseWindow implementation.
   ui::WindowShowState GetRestoredState() const override;
-  bool IsAlwaysOnTop() const override;
 
   // NativeAppWindow implementation.
   void UpdateShape(std::unique_ptr<ShapeRects> rects) override;

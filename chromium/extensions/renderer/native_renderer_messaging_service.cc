@@ -354,7 +354,7 @@ bool NativeRendererMessagingService::ContextHasMessagePort(
   v8::HandleScope handle_scope(script_context->isolate());
   MessagingPerContextData* data = GetPerContextData<MessagingPerContextData>(
       script_context->v8_context(), kDontCreateIfMissing);
-  return data && base::ContainsKey(data->ports, port_id);
+  return data && base::Contains(data->ports, port_id);
 }
 
 void NativeRendererMessagingService::DispatchOnConnectToListeners(
@@ -533,7 +533,7 @@ gin::Handle<GinPort> NativeRendererMessagingService::CreatePort(
   MessagingPerContextData* data =
       GetPerContextData<MessagingPerContextData>(context, kCreateIfMissing);
   DCHECK(data);
-  DCHECK(!base::ContainsKey(data->ports, port_id));
+  DCHECK(!base::Contains(data->ports, port_id));
 
   gin::Handle<GinPort> port_handle = gin::CreateHandle(
       isolate,
@@ -556,7 +556,7 @@ gin::Handle<GinPort> NativeRendererMessagingService::GetPort(
   MessagingPerContextData* data = GetPerContextData<MessagingPerContextData>(
       script_context->v8_context(), kDontCreateIfMissing);
   DCHECK(data);
-  DCHECK(base::ContainsKey(data->ports, port_id));
+  DCHECK(base::Contains(data->ports, port_id));
 
   GinPort* port = nullptr;
   gin::Converter<GinPort*>::FromV8(context->GetIsolate(),

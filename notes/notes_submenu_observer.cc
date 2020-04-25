@@ -40,8 +40,8 @@ void NotesSubMenuObserver::InitMenu(const content::ContextMenuParams& params) {
         NotesModelFactory::GetForBrowserContext(browser_context);
 
     vivaldi::Notes_Node* node = model->main_node();
-    for (int i = 0; i < node->child_count(); i++) {
-      this->AddMenuItems(node->GetChild(i), &submenu_model_);
+    for (auto& it: node->children()) {
+      this->AddMenuItems(it.get(), &submenu_model_);
     }
 
     proxy_->AddSubMenu(IDC_VIV_CONTENT_INSERT_NOTE,
@@ -99,8 +99,8 @@ void NotesSubMenuObserver::AddMenuItems(vivaldi::Notes_Node* node,
       ui::SimpleMenuModel* child_menu_model
           = new ui::SimpleMenuModel(delegate_);
       menu_model->AddSubMenu(node->id(), title, child_menu_model);
-      for (int i = 0; i < node->child_count(); i++) {
-        this->AddMenuItems(node->GetChild(i), child_menu_model);
+      for (auto& it: node->children()) {
+        this->AddMenuItems(it.get(), child_menu_model);
       }
     } else {
       menu_model->AddItem(node->id(), title);
@@ -133,9 +133,8 @@ vivaldi::Notes_Node* GetNodeFromId(vivaldi::Notes_Node* node, int id) {
   if (node->id() == id) {
     return node;
   }
-  int number_of_notes = node->child_count();
-  for (int i = 0; i < number_of_notes; i++) {
-    vivaldi::Notes_Node* childnode = GetNodeFromId(node->GetChild(i), id);
+  for (auto& it: node->children()) {
+    vivaldi::Notes_Node* childnode = GetNodeFromId(it.get(), id);
     if (childnode) {
       return childnode;
     }

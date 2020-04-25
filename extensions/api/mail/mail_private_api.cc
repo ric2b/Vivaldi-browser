@@ -13,13 +13,11 @@ using base::Value;
 
 namespace {
 const base::FilePath::CharType kMailDirectory[] = FILE_PATH_LITERAL("Mail");
-const base::FilePath::CharType kMailFileEnding[] = FILE_PATH_LITERAL(".eml");
 
 bool deleteFile(base::FilePath file_path,
-                base::FilePath::StringType file_name,
-                base::FilePath::StringType ending) {
+                base::FilePath::StringType file_name) {
   if (file_name.length() > 0) {
-    file_path = file_path.Append(file_name).AddExtension(ending);
+    file_path = file_path.Append(file_name);
   }
 
   if (!file_path.IsAbsolute()) {
@@ -275,7 +273,7 @@ void MailPrivateSaveBufferFunction::OnFinished(bool result) {
 }
 
 bool Delete(base::FilePath file_path, base::FilePath::StringType file_name) {
-  return deleteFile(file_path, file_name, kMailFileEnding);
+  return deleteFile(file_path, file_name);
 }
 
 ExtensionFunction::ResponseAction MailPrivateDeleteFunction::Run() {

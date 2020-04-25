@@ -14,12 +14,12 @@ class NotesUIHTMLSource : public content::URLDataSource {
   NotesUIHTMLSource();
   ~NotesUIHTMLSource() override;
 
-  std::string GetSource() const override;
+  std::string GetSource() override;
   void StartDataRequest(
       const std::string& path,
       const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
       const GotDataCallback& callback) override;
-  std::string GetMimeType(const std::string& path) const override;
+  std::string GetMimeType(const std::string& path) override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(NotesUIHTMLSource);

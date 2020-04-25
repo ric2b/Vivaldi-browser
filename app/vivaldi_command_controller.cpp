@@ -68,6 +68,12 @@ bool NeedsDisabledMacMenuItem(int action) {
     case IDC_VIV_DEVTOOLS_INSPECTOR:
     case IDC_VIV_DEVTOOLS_CONSOLE:
     case IDC_VIV_COMMAND_IMPORT_CALENDAR:
+    case IDC_VIV_SET_LOAD_IMAGES_ALWAYS:
+    case IDC_VIV_SET_LOAD_IMAGES_NEVER:
+    case IDC_VIV_SET_LOAD_IMAGES_CACHE:
+    case IDC_VIV_SET_ANIMATIONS_LOOP:
+    case IDC_VIV_SET_ANIMATIONS_NEVER:
+    case IDC_VIV_SET_ANIMATIONS_ONCE:
       return true;
     break;
   }
@@ -153,6 +159,12 @@ void UpdateCommandsForVivaldi(CommandUpdater* command_updater_) {
                                          true);
   command_updater_->UpdateCommandEnabled(
       IDC_VIV_MAIL_MARK_READ_AND_GOTO_NEXT_UNREAD, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_SET_LOAD_IMAGES_ALWAYS, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_SET_LOAD_IMAGES_NEVER, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_SET_LOAD_IMAGES_CACHE, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_SET_ANIMATIONS_LOOP, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_SET_ANIMATIONS_NEVER, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_SET_ANIMATIONS_ONCE, true);
 }
 
 bool ExecuteVivaldiCommands(Browser* browser, int id) {
@@ -225,7 +237,13 @@ bool ExecuteVivaldiCommands(Browser* browser, int id) {
     case IDC_VIV_MAIL_MARK_UNREAD:
     case IDC_VIV_MAIL_ENABLE_SENDER_VIEW:
     case IDC_VIV_MAIL_ENABLE_THREADED_VIEW:
-    case IDC_VIV_MAIL_MARK_READ_AND_GOTO_NEXT_UNREAD: {
+    case IDC_VIV_MAIL_MARK_READ_AND_GOTO_NEXT_UNREAD:
+    case IDC_VIV_SET_LOAD_IMAGES_ALWAYS:
+    case IDC_VIV_SET_LOAD_IMAGES_NEVER:
+    case IDC_VIV_SET_LOAD_IMAGES_CACHE:
+    case IDC_VIV_SET_ANIMATIONS_LOOP:
+    case IDC_VIV_SET_ANIMATIONS_NEVER:
+    case IDC_VIV_SET_ANIMATIONS_ONCE: {
       // The API is registered with a regular profile.
       Profile* profile = browser->profile()->GetOriginalProfile();
       extensions::MenubarAPI::SendOnActivated(

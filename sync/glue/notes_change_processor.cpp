@@ -256,9 +256,9 @@ void NotesChangeProcessor::NotesModelBeingDeleted(Notes_Model* model) {
 
 void NotesChangeProcessor::NotesNodeAdded(Notes_Model* model,
                                           const Notes_Node* parent,
-                                          int index) {
+                                          size_t index) {
   DCHECK(share_handle());
-  const Notes_Node* node = parent->GetChild(index);
+  const Notes_Node* node = parent->children()[index].get();
   CreateOrUpdateSyncNode(node);
 }
 
@@ -266,11 +266,11 @@ void NotesChangeProcessor::NotesNodeAdded(Notes_Model* model,
 int64_t NotesChangeProcessor::CreateSyncNode(
     const Notes_Node* parent,
     Notes_Model* model,
-    int index,
+    size_t index,
     syncer::WriteTransaction* trans,
     NotesModelAssociator* associator,
     syncer::DataTypeErrorHandler* error_handler) {
-  const Notes_Node* child = parent->GetChild(index);
+  const Notes_Node* child = parent->children()[index].get();
   DCHECK(child);
 
   // Create a WriteNode container to hold the new node.
@@ -295,7 +295,7 @@ int64_t NotesChangeProcessor::CreateSyncNode(
 
 void NotesChangeProcessor::OnWillRemoveNotes(Notes_Model* model,
                                              const Notes_Node* parent,
-                                             int old_index,
+                                             size_t old_index,
                                              const Notes_Node* node) {
   if (CanSyncNode(node))
     RemoveSyncNodeHierarchy(node);
@@ -303,7 +303,7 @@ void NotesChangeProcessor::OnWillRemoveNotes(Notes_Model* model,
 
 void NotesChangeProcessor::NotesNodeRemoved(Notes_Model* model,
                                             const Notes_Node* parent,
-                                            int index,
+                                            size_t index,
                                             const Notes_Node* node) {
   // All the work should have already been done in OnWillRemoveNotes.
   DCHECK_EQ(syncer::kInvalidId,
@@ -352,10 +352,10 @@ int64_t NotesChangeProcessor::UpdateSyncNode(
 
 void NotesChangeProcessor::NotesNodeMoved(Notes_Model* model,
                                           const Notes_Node* old_parent,
-                                          int old_index,
+                                          size_t old_index,
                                           const Notes_Node* new_parent,
-                                          int new_index) {
-  const Notes_Node* child = new_parent->GetChild(new_index);
+                                          size_t new_index) {
+  const Notes_Node* child = new_parent->children()[new_index].get();
 
   if (!CanSyncNode(child))
     return;
@@ -411,8 +411,8 @@ void NotesChangeProcessor::NotesNodeChildrenReordered(Notes_Model* model,
 
     // The given node's children got reordered. We need to reorder all the
     // children of the corresponding sync node.
-    for (int i = 0; i < node->child_count(); ++i) {
-      const Notes_Node* child = node->GetChild(i);
+    for (size_t i = 0; i < node->children().size(); ++i) {
+      const Notes_Node* child = node->children()[i].get();
       children.push_back(child);
 
       syncer::WriteNode sync_child(&trans);
@@ -444,7 +444,7 @@ void NotesChangeProcessor::NotesNodeChildrenReordered(Notes_Model* model,
 // static
 bool NotesChangeProcessor::PlaceSyncNode(MoveOrCreate operation,
                                          const Notes_Node* parent,
-                                         int index,
+                                         size_t index,
                                          syncer::WriteTransaction* trans,
                                          syncer::WriteNode* dst,
                                          NotesModelAssociator* associator) {
@@ -467,7 +467,7 @@ bool NotesChangeProcessor::PlaceSyncNode(MoveOrCreate operation,
     }
   } else {
     // Find the notes model predecessor, and insert after it.
-    const Notes_Node* prev = parent->GetChild(index - 1);
+    const Notes_Node* prev = parent->children()[index - 1].get();
     syncer::ReadNode sync_prev(trans);
     if (!associator->InitSyncNodeFromChromeId(prev->id(), &sync_prev)) {
       LOG(WARNING) << "Predecessor lookup failed";
@@ -547,7 +547,7 @@ void NotesChangeProcessor::ApplyChangesFromSyncModel(
     if (!dst->children().empty()) {
       if (!foster_parent) {
         foster_parent = model->AddFolder(model->other_node(),
-                                         model->other_node()->child_count(),
+                                         model->other_node()->children().size(),
                                          base::string16());
         if (!foster_parent) {
           syncer::SyncError error(FROM_HERE, syncer::SyncError::DATATYPE_ERROR,
@@ -557,19 +557,19 @@ void NotesChangeProcessor::ApplyChangesFromSyncModel(
           return;
         }
       }
-      for (int i = dst->child_count() - 1; i >= 0; --i) {
-        model->Move(dst->GetChild(i), foster_parent,
-                    foster_parent->child_count());
+      for (auto it = dst->children().rbegin(); it != dst->children().rend(); ++it) {
+        model->Move(it->get(), foster_parent,
+                    foster_parent->children().size());
       }
     }
-    DCHECK_EQ(dst->child_count(), 0) << "Node being deleted has children";
+    DCHECK_EQ(dst->children().size(), 0u) << "Node being deleted has children";
 
     model_associator_->Disassociate(it->id);
 
     const Notes_Node* parent = dst->parent();
     int index = parent->GetIndexOf(dst);
     if (index > -1)
-      model->Remove(parent->GetChild(index));
+      model->Remove(parent->children()[index].get());
   }
 
   // A map to keep track of some reordering work we defer until later.
@@ -612,13 +612,13 @@ void NotesChangeProcessor::ApplyChangesFromSyncModel(
       UpdateNoteWithSyncData(src, model, dst, sync_client_);
 
       // Move all modified entries to the right.  We'll fix it later.
-      model->Move(dst, parent, parent->child_count());
+      model->Move(dst, parent, parent->children().size());
     } else {
       DCHECK(it->action == ChangeRecord::ACTION_ADD)
           << "ACTION_ADD should be seen if and only if the node is unknown.";
 
       dst = CreateNotesEntry(&src, parent, model, sync_client_,
-                             parent->child_count());
+                             parent->children().size());
       if (!dst) {
         // We ignore notes we can't add. Chances are this is caused by
         // a note that was not fully associated.
@@ -645,7 +645,7 @@ void NotesChangeProcessor::ApplyChangesFromSyncModel(
   // Clean up the temporary node.
   if (foster_parent) {
     // There should be no nodes left under the foster parent.
-    DCHECK_EQ(foster_parent->child_count(), 0);
+    DCHECK_EQ(foster_parent->children().size(), 0u);
     model->Remove(foster_parent);
     foster_parent = NULL;
   }
@@ -733,7 +733,7 @@ const Notes_Node* NotesChangeProcessor::CreateNotesEntry(
     const Notes_Node* parent,
     Notes_Model* model,
     syncer::SyncClient* sync_client,
-    int index) {
+    size_t index) {
   return CreateNotesEntry(base::UTF8ToUTF16(sync_node->GetTitle()),
                           GURL(sync_node->GetNotesSpecifics().url()), sync_node,
                           parent, model, sync_client, index);
@@ -749,7 +749,7 @@ const Notes_Node* NotesChangeProcessor::CreateNotesEntry(
     const Notes_Node* parent,
     Notes_Model* model,
     syncer::SyncClient* sync_client,
-    int index) {
+    size_t index) {
   DCHECK(parent);
 
   const Notes_Node* node;

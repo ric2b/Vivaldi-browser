@@ -70,7 +70,7 @@ if (is_android) {
       jumbo_excluded_sources = []
     }
     jumbo_excluded_sources += [
-      "android/foreign_session_helper.cc",
+      "android/webapk/webapk_update_data_fetcher.cc",
     ]
   }
 }

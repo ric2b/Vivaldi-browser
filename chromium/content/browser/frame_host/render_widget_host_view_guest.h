@@ -82,10 +82,6 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
   GetTouchSelectionControllerClientManager() override;
   gfx::PointF TransformPointToRootCoordSpaceF(
       const gfx::PointF& point) override;
-  bool TransformPointToLocalCoordSpaceLegacy(
-      const gfx::PointF& point,
-      const viz::SurfaceId& original_surface,
-      gfx::PointF* transformed_point) override;
   gfx::PointF TransformRootPointToViewCoordSpace(
       const gfx::PointF& point) override;
 
@@ -202,7 +198,7 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
   // session.
   bool should_forward_text_selection_ = false;
 
-  base::WeakPtrFactory<RenderWidgetHostViewGuest> weak_ptr_factory_;
+  base::WeakPtrFactory<RenderWidgetHostViewGuest> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewGuest);
 };

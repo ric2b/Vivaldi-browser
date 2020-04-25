@@ -49,12 +49,6 @@ constexpr base::FilePath::CharType kChromeProxyExecutable[] =
     FILE_PATH_LITERAL("chrome_proxy.exe");
 #endif  // VIVALDI_BUILD
 
-base::FilePath GetChromeProxyPath() {
-  base::FilePath chrome_dir;
-  CHECK(base::PathService::Get(base::DIR_EXE, &chrome_dir));
-  return chrome_dir.Append(kChromeProxyExecutable);
-}
-
 // Calculates checksum of an icon family using MD5.
 // The checksum is derived from all of the icons in the family.
 void GetImageCheckSum(const gfx::ImageFamily& image, base::MD5Digest* digest) {
@@ -200,7 +194,7 @@ bool CreateShortcutsInPaths(const base::FilePath& web_app_path,
     return false;
   }
 
-  base::FilePath chrome_proxy_path = GetChromeProxyPath();
+  base::FilePath chrome_proxy_path = web_app::GetChromeProxyPath();
 
   // Working directory.
   base::FilePath working_dir(chrome_proxy_path.DirName());
@@ -351,7 +345,7 @@ void CreateIconAndSetRelaunchDetails(
                                                     shortcut_info.extension_id,
                                                     shortcut_info.profile_path);
 
-  command_line.SetProgram(GetChromeProxyPath());
+  command_line.SetProgram(web_app::GetChromeProxyPath());
   ui::win::SetRelaunchDetailsForWindow(command_line.GetCommandLineString(),
                                        shortcut_info.title, hwnd);
 
@@ -365,6 +359,12 @@ void CreateIconAndSetRelaunchDetails(
 }  // namespace
 
 namespace web_app {
+
+base::FilePath GetChromeProxyPath() {
+  base::FilePath chrome_dir;
+  CHECK(base::PathService::Get(base::DIR_EXE, &chrome_dir));
+  return chrome_dir.Append(kChromeProxyExecutable);
+}
 
 namespace internals {
 

@@ -16,12 +16,10 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/thumbnails/thumbnail_utils.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/codec/png_codec.h"
-#include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/scrollbar_size.h"
 #include "ui/gfx/skbitmap_operations.h"
@@ -141,101 +139,6 @@ bool EncodeBitmap(const SkBitmap& bitmap,
   return encoded;
 }
 
-using ::thumbnails::ClipResult;
-
-gfx::Rect GetClippingRect(const gfx::Size& source_size,
-                          const gfx::Size& desired_size,
-                          thumbnails::ClipResult* clip_result) {
-  DCHECK(clip_result);
-
-  float desired_aspect =
-      static_cast<float>(desired_size.width()) / desired_size.height();
-
-  // Get the clipping rect so that we can preserve the aspect ratio while
-  // filling the destination.
-  gfx::Rect clipping_rect;
-  if (source_size.width() < desired_size.width() ||
-      source_size.height() < desired_size.height()) {
-    // Source image is smaller: we clip the part of source image within the
-    // dest rect, and then stretch it to fill the dest rect. We don't respect
-    // the aspect ratio in this case.
-    clipping_rect = gfx::Rect(desired_size);
-    *clip_result = ClipResult::kSourceSmallerThanTarget;
-  } else {
-    float src_aspect =
-        static_cast<float>(source_size.width()) / source_size.height();
-    if (src_aspect > desired_aspect) {
-      // Wider than tall, clip horizontally: we center the smaller
-      // thumbnail in the wider screen.
-      int new_width = static_cast<int>(source_size.height() * desired_aspect);
-      int x_offset = (source_size.width() - new_width) / 2;
-      clipping_rect.SetRect(x_offset, 0, new_width, source_size.height());
-      *clip_result =
-          (src_aspect >= history::ThumbnailScore::kTooWideAspectRatio)
-              ? ClipResult::kSourceMuchWiderThanTall
-              : ClipResult::kSourceWiderThanTall;
-    } else if (src_aspect < desired_aspect) {
-      clipping_rect =
-          gfx::Rect(source_size.width(), source_size.width() / desired_aspect);
-      *clip_result = ClipResult::kSourceTallerThanWide;
-    } else {
-      clipping_rect = gfx::Rect(source_size);
-      *clip_result = ClipResult::kSourceNotClipped;
-    }
-  }
-  return clipping_rect;
-}
-
-SkBitmap GetClippedBitmap(const SkBitmap& bitmap,
-                          int desired_width,
-                          int desired_height,
-                          thumbnails::ClipResult* clip_result) {
-  gfx::Rect clipping_rect =
-      GetClippingRect(gfx::Size(bitmap.width(), bitmap.height()),
-                      gfx::Size(desired_width, desired_height), clip_result);
-  SkIRect src_rect = {clipping_rect.x(), clipping_rect.y(),
-                      clipping_rect.right(), clipping_rect.bottom()};
-  SkBitmap clipped_bitmap;
-  bitmap.extractSubset(&clipped_bitmap, src_rect);
-  return clipped_bitmap;
-}
-
-SkBitmap SmartCropAndSize(const SkBitmap& capture,
-                          int target_width,
-                          int target_height) {
-  ClipResult clip_result = ClipResult::kSourceNotClipped;
-  // Clip it to a more reasonable position.
-  SkBitmap clipped_bitmap =
-      GetClippedBitmap(capture, target_width, target_height, &clip_result);
-  // Resize the result to the target size.
-  SkBitmap result = skia::ImageOperations::Resize(
-      clipped_bitmap, skia::ImageOperations::RESIZE_BEST, target_width,
-      target_height);
-
-// NOTE(pettern): Copied from SimpleThumbnailCrop::CreateThumbnail():
-#if !defined(USE_AURA)
-  // This is a bit subtle. SkBitmaps are refcounted, but the magic
-  // ones in PlatformCanvas can't be assigned to SkBitmap with proper
-  // refcounting.  If the bitmap doesn't change, then the downsampler
-  // will return the input bitmap, which will be the reference to the
-  // weird PlatformCanvas one insetad of a regular one. To get a
-  // regular refcounted bitmap, we need to copy it.
-  //
-  // On Aura, the PlatformCanvas is platform-independent and does not have
-  // any native platform resources that can't be refounted, so this issue does
-  // not occur.
-  //
-  // Note that GetClippedBitmap() does extractSubset() but it won't copy
-  // the pixels, hence we check result size == clipped_bitmap size here.
-  if (clipped_bitmap.width() == result.width() &&
-      clipped_bitmap.height() == result.height()) {
-    clipped_bitmap.readPixels(result.info(), result.getPixels(),
-                              result.rowBytes(), 0, 0);
-  }
-#endif
-  return result;
-}
-
 bool IsMainVivaldiBrowserWindow(Browser* browser) {
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
   base::Optional<base::Value> json =
@@ -259,7 +162,6 @@ bool IsMainVivaldiBrowserWindow(Browser* browser) {
   }
   return false;
 }
-
 
 Browser* FindBrowserForPinnedTabs(Browser* current_browser) {
   if (current_browser->profile()->IsOffTheRecord()) {

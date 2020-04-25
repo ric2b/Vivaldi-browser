@@ -126,6 +126,14 @@
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
+  "menubarMenu": {
+    "vivaldi": true,
+    "channel": "stable",
+    "extension_types": [ "platform_app" ],
+    "whitelist": [
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
+    ]
+  },
   "notes": {
     "vivaldi": true,
     "channel": "stable",

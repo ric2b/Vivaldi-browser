@@ -31,7 +31,7 @@ VivaldiWebSource::VivaldiWebSource(Profile* profile)
 VivaldiWebSource::~VivaldiWebSource() {
 }
 
-std::string VivaldiWebSource::GetSource() const {
+std::string VivaldiWebSource::GetSource() {
   return vivaldi::kVivaldiWebUIHost;
 }
 
@@ -95,18 +95,18 @@ void VivaldiWebSource::ExtractRequestTypeAndData(const std::string& path,
   }
 }
 
-std::string VivaldiWebSource::GetMimeType(const std::string&) const {
+std::string VivaldiWebSource::GetMimeType(const std::string&) {
   return "text/html";
 }
 
-bool VivaldiWebSource::AllowCaching() const {
+bool VivaldiWebSource::AllowCaching() {
   return false;
 }
 
 bool VivaldiWebSource::ShouldServiceRequest(
     const GURL& url,
     content::ResourceContext* resource_context,
-    int render_process_id) const {
+    int render_process_id) {
   return URLDataSource::ShouldServiceRequest(url, resource_context,
                                              render_process_id);
 }

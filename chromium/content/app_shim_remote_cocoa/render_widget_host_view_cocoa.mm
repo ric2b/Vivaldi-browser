@@ -22,6 +22,7 @@
 #import "content/browser/renderer_host/render_widget_host_view_mac_editcommand_helper.h"
 #import "content/public/browser/render_widget_host_view_mac_delegate.h"
 #include "content/public/common/content_features.h"
+#include "third_party/blink/public/platform/web_text_input_type.h"
 #include "ui/accessibility/platform/ax_platform_node.h"
 #import "ui/base/clipboard/clipboard_util_mac.h"
 #import "ui/base/cocoa/appkit_utils.h"
@@ -42,8 +43,6 @@
 using content::EditCommand;
 using content::InputEvent;
 using content::NativeWebKeyboardEvent;
-using content::mojom::RenderWidgetHostNSViewClient;
-using content::RenderWidgetHostNSViewClientHelper;
 using content::RenderWidgetHostViewMacEditCommandHelper;
 using content::WebGestureEventBuilder;
 using content::WebMouseEventBuilder;
@@ -54,17 +53,26 @@ using blink::WebMouseEvent;
 using blink::WebMouseWheelEvent;
 using blink::WebGestureEvent;
 using blink::WebTouchEvent;
+using remote_cocoa::mojom::RenderWidgetHostNSViewHost;
+using remote_cocoa::RenderWidgetHostNSViewHostHelper;
 
 namespace {
 
-// A dummy RenderWidgetHostNSViewClientHelper implementation which no-ops all
+constexpr NSString* WebAutomaticQuoteSubstitutionEnabled =
+    @"WebAutomaticQuoteSubstitutionEnabled";
+constexpr NSString* const WebAutomaticDashSubstitutionEnabled =
+    @"WebAutomaticDashSubstitutionEnabled";
+constexpr NSString* const WebAutomaticTextReplacementEnabled =
+    @"WebAutomaticTextReplacementEnabled";
+
+// A dummy RenderWidgetHostNSViewHostHelper implementation which no-ops all
 // functions.
-class DummyClientHelper : public RenderWidgetHostNSViewClientHelper {
+class DummyHostHelper : public RenderWidgetHostNSViewHostHelper {
  public:
-  explicit DummyClientHelper() {}
+  explicit DummyHostHelper() {}
 
  private:
-  // RenderWidgetHostNSViewClientHelper implementation.
+  // RenderWidgetHostNSViewHostHelper implementation.
   id GetRootBrowserAccessibilityElement() override { return nil; }
   id GetFocusedBrowserAccessibilityElement() override { return nil; }
   void SetAccessibilityWindow(NSWindow* window) override {}
@@ -88,11 +96,13 @@ class DummyClientHelper : public RenderWidgetHostNSViewClientHelper {
   void GestureEnd(blink::WebGestureEvent end_event) override {}
   void SmartMagnify(const blink::WebGestureEvent& web_event) override {}
 
-  DISALLOW_COPY_AND_ASSIGN(DummyClientHelper);
+  DISALLOW_COPY_AND_ASSIGN(DummyHostHelper);
 };
 
 // Touch bar identifier.
 NSString* const kWebContentTouchBarId = @"web-content";
+
+constexpr int wrap_around_distance = 10000;
 
 // Whether a keyboard event has been reserved by OSX.
 BOOL EventIsReservedBySystem(NSEvent* event) {
@@ -163,7 +173,17 @@ void ExtractUnderlines(NSAttributedString* string,
   API_AVAILABLE(macos(10.12.2))
   base::scoped_nsobject<NSCandidateListTouchBarItem> candidateListTouchBarItem_;
   NSInteger textSuggestionsSequenceNumber_;
+  BOOL shouldRequestTextSubstitutions_;
+  BOOL substitutionWasApplied_;
 }
+@property(readonly) NSSpellChecker* spellChecker;
+@property(getter=isAutomaticTextReplacementEnabled)
+    BOOL automaticTextReplacementEnabled;
+@property(getter=isAutomaticQuoteSubstitutionEnabled)
+    BOOL automaticQuoteSubstitutionEnabled;
+@property(getter=isAutomaticDashSubstitutionEnabled)
+    BOOL automaticDashSubstitutionEnabled;
+
 - (void)processedWheelEvent:(const blink::WebMouseWheelEvent&)event
                    consumed:(BOOL)consumed;
 - (void)keyEvent:(NSEvent*)theEvent wasKeyEquivalent:(BOOL)equiv;
@@ -171,10 +191,11 @@ void ExtractUnderlines(NSAttributedString* string,
 - (void)windowChangedGlobalFrame:(NSNotification*)notification;
 - (void)windowDidBecomeKey:(NSNotification*)notification;
 - (void)windowDidResignKey:(NSNotification*)notification;
-- (void)sendViewBoundsInWindowToClient;
+- (void)sendViewBoundsInWindowToHost;
+- (void)requestTextSubstitutions;
 - (void)requestTextSuggestions API_AVAILABLE(macos(10.12.2));
-- (void)sendWindowFrameInScreenToClient;
-- (bool)clientIsDisconnected;
+- (void)sendWindowFrameInScreenToHost;
+- (bool)hostIsDisconnected;
 - (void)invalidateTouchBar API_AVAILABLE(macos(10.12.2));
 
 // NSCandidateListTouchBarItemDelegate implementation
@@ -189,18 +210,19 @@ void ExtractUnderlines(NSAttributedString* string,
 @implementation RenderWidgetHostViewCocoa
 @synthesize markedRange = markedRange_;
 @synthesize textInputType = textInputType_;
+@synthesize textInputFlags = textInputFlags_;
 @synthesize spellCheckerForTesting = spellCheckerForTesting_;
 
-- (id)initWithClient:(RenderWidgetHostNSViewClient*)client
-    withClientHelper:(RenderWidgetHostNSViewClientHelper*)clientHelper {
+- (id)initWithHost:(RenderWidgetHostNSViewHost*)host
+    withHostHelper:(RenderWidgetHostNSViewHostHelper*)hostHelper {
   self = [super initWithFrame:NSZeroRect];
   if (self) {
     self.acceptsTouchEvents = YES;
     editCommandHelper_.reset(new RenderWidgetHostViewMacEditCommandHelper);
     editCommandHelper_->AddEditingSelectorsToClass([self class]);
 
-    client_ = client;
-    clientHelper_ = clientHelper;
+    host_ = host;
+    hostHelper_ = hostHelper;
     canBeKeyView_ = YES;
     isStylusEnteringProximity_ = false;
     keyboardLockActive_ = false;
@@ -213,7 +235,7 @@ void ExtractUnderlines(NSAttributedString* string,
 }
 
 - (void)dealloc {
-  DCHECK([self clientIsDisconnected]);
+  DCHECK([self hostIsDisconnected]);
   [[NSNotificationCenter defaultCenter] removeObserver:self];
 
   // Update and cache the new input context. Otherwise,
@@ -226,16 +248,16 @@ void ExtractUnderlines(NSAttributedString* string,
   [super dealloc];
 }
 
-- (void)sendViewBoundsInWindowToClient {
+- (void)sendViewBoundsInWindowToHost {
   TRACE_EVENT0("browser",
-               "RenderWidgetHostViewCocoa::sendViewBoundsInWindowToClient");
+               "RenderWidgetHostViewCocoa::sendViewBoundsInWindowToHost");
   if (inSetFrame_)
     return;
 
   NSRect viewBoundsInView = [self bounds];
   NSWindow* enclosingWindow = [self window];
   if (!enclosingWindow) {
-    client_->OnBoundsInWindowChanged(gfx::Rect(viewBoundsInView), false);
+    host_->OnBoundsInWindowChanged(gfx::Rect(viewBoundsInView), false);
     return;
   }
 
@@ -243,7 +265,117 @@ void ExtractUnderlines(NSAttributedString* string,
   gfx::Rect gfxViewBoundsInWindow(viewBoundsInWindow);
   gfxViewBoundsInWindow.set_y(NSHeight([enclosingWindow frame]) -
                               NSMaxY(viewBoundsInWindow));
-  client_->OnBoundsInWindowChanged(gfxViewBoundsInWindow, true);
+  host_->OnBoundsInWindowChanged(gfxViewBoundsInWindow, true);
+}
+
+- (NSSpellChecker*)spellChecker {
+  if (spellCheckerForTesting_)
+    return spellCheckerForTesting_;
+  return NSSpellChecker.sharedSpellChecker;
+}
+
+- (void)requestTextSubstitutions {
+  NSTextCheckingType textCheckingTypes =
+      self.allowedTextCheckingTypes & self.enabledTextCheckingTypes;
+  if (!textCheckingTypes)
+    return;
+
+  NSString* availableText = base::SysUTF16ToNSString(textSelectionText_);
+
+  if (!availableText)
+    return;
+
+  auto* textCheckingResults =
+      [self.spellChecker checkString:availableText
+                               range:NSMakeRange(0, availableText.length)
+                               types:textCheckingTypes
+                             options:nil
+              inSpellDocumentWithTag:0
+                         orthography:nullptr
+                           wordCount:nullptr];
+
+  NSUInteger cursorLocation = textSelectionRange_.start();
+  base::scoped_nsobject<NSTextCheckingResult> scopedCandidateResult;
+  for (NSTextCheckingResult* result in textCheckingResults) {
+    NSTextCheckingResult* adjustedResult =
+        [result resultByAdjustingRangesWithOffset:textSelectionOffset_];
+    if (!NSLocationInRange(cursorLocation,
+                           NSMakeRange(adjustedResult.range.location,
+                                       adjustedResult.range.length + 1)))
+      continue;
+    constexpr NSTextCheckingType textCheckingTypesToReplaceImmediately =
+        NSTextCheckingTypeQuote | NSTextCheckingTypeDash;
+    if (adjustedResult.resultType & textCheckingTypesToReplaceImmediately) {
+      [self insertText:adjustedResult.replacementString
+          replacementRange:adjustedResult.range];
+      continue;
+    }
+    scopedCandidateResult.reset([adjustedResult retain]);
+  }
+  NSTextCheckingResult* candidateResult = scopedCandidateResult.get();
+  if (!candidateResult)
+    return;
+
+  NSRect textRectInScreenCoordinates =
+      [self firstRectForCharacterRange:candidateResult.range
+                           actualRange:nullptr];
+  NSRect textRectInWindowCoordinates =
+      [self.window convertRectFromScreen:textRectInScreenCoordinates];
+  NSRect textRectInViewCoordinates =
+      [self convertRect:textRectInWindowCoordinates fromView:nil];
+
+  [self.spellChecker
+      showCorrectionIndicatorOfType:NSCorrectionIndicatorTypeDefault
+                      primaryString:candidateResult.replacementString
+                 alternativeStrings:candidateResult.alternativeStrings
+                    forStringInRect:textRectInViewCoordinates
+                               view:self
+                  completionHandler:^(NSString* acceptedString) {
+                    [self didAcceptReplacementString:acceptedString
+                               forTextCheckingResult:candidateResult];
+                  }];
+}
+
+- (void)didAcceptReplacementString:(NSString*)acceptedString
+             forTextCheckingResult:(NSTextCheckingResult*)correction {
+  // TODO: Keep NSSpellChecker up to date on the user's response via
+  // -recordResponse:toCorrection:forWord:language:inSpellDocumentWithTag:.
+  // Call it to report whether they initially accepted or rejected the
+  // suggestion, but also if they edit, revert, etc. later.
+
+  if (acceptedString == nil)
+    return;
+
+  NSRange availableTextRange =
+      NSMakeRange(textSelectionOffset_, textSelectionText_.length());
+
+  if (NSMaxRange(correction.range) > NSMaxRange(availableTextRange))
+    return;
+
+  NSAttributedString* attString = [[[NSAttributedString alloc]
+      initWithString:base::SysUTF16ToNSString(textSelectionText_)] autorelease];
+  NSRange trailingRange = NSMakeRange(
+      NSMaxRange(correction.range),
+      NSMaxRange(availableTextRange) - NSMaxRange(correction.range));
+
+  if (trailingRange.length > 0 &&
+      trailingRange.location < NSMaxRange(availableTextRange)) {
+    NSRange trailingRangeInAvailableText = NSMakeRange(
+        trailingRange.location - textSelectionOffset_, trailingRange.length);
+    if (@available(macOS 10.12, *)) {
+      NSString* trailingString =
+          [attString.string substringWithRange:trailingRangeInAvailableText];
+      if ([self.spellChecker preventsAutocorrectionBeforeString:trailingString
+                                                       language:nil])
+        return;
+    }
+    if ([attString doubleClickAtIndex:trailingRangeInAvailableText.location]
+            .location < trailingRangeInAvailableText.location)
+      return;
+  }
+
+  substitutionWasApplied_ = YES;
+  [self insertText:acceptedString replacementRange:correction.range];
 }
 
 - (void)requestTextSuggestions {
@@ -263,10 +395,9 @@ void ExtractUnderlines(NSAttributedString* string,
   selectionRange.location -= textSelectionOffset_;
   if (NSMaxRange(selectionRange) > selectionText.length)
     return;
-  NSSpellChecker* spell_checker = spellCheckerForTesting_
-                                      ? spellCheckerForTesting_
-                                      : [NSSpellChecker sharedSpellChecker];
-  textSuggestionsSequenceNumber_ = [spell_checker
+
+  // TODO: Fetch the spell document tag from the renderer (or equivalent).
+  textSuggestionsSequenceNumber_ = [self.spellChecker
       requestCandidatesForSelectedRange:selectionRange
                                inString:selectionText
                                   types:NSTextCheckingAllSystemTypes
@@ -285,12 +416,47 @@ void ExtractUnderlines(NSAttributedString* string,
                       }];
 }
 
+- (NSTextCheckingType)allowedTextCheckingTypes {
+  if (textInputType_ == ui::TEXT_INPUT_TYPE_NONE)
+    return 0;
+  if (textInputType_ == ui::TEXT_INPUT_TYPE_PASSWORD)
+    return 0;
+  if (textInputFlags_ & blink::kWebTextInputFlagAutocorrectOff)
+    return 0;
+  NSTextCheckingType checkingTypes = NSTextCheckingTypeReplacement;
+  if (!(textInputFlags_ & blink::kWebTextInputFlagSpellcheckOff))
+    checkingTypes |= NSTextCheckingTypeQuote | NSTextCheckingTypeDash;
+  return checkingTypes;
+}
+
+- (NSTextCheckingType)enabledTextCheckingTypes {
+  NSTextCheckingType checkingTypes = 0;
+  if (self.automaticQuoteSubstitutionEnabled)
+    checkingTypes |= NSTextCheckingTypeQuote;
+  if (self.automaticDashSubstitutionEnabled)
+    checkingTypes |= NSTextCheckingTypeDash;
+  if (self.automaticTextReplacementEnabled)
+    checkingTypes |= NSTextCheckingTypeReplacement;
+  return checkingTypes;
+}
+
+- (void)orderFrontSubstitutionsPanel:(id)sender {
+  [NSSpellChecker.sharedSpellChecker.substitutionsPanel orderFront:sender];
+}
+
 - (void)setTextSelectionText:(base::string16)text
                       offset:(size_t)offset
                        range:(gfx::Range)range {
   textSelectionText_ = text;
   textSelectionOffset_ = offset;
   textSelectionRange_ = range;
+  substitutionWasApplied_ = NO;
+  [NSSpellChecker.sharedSpellChecker dismissCorrectionIndicatorForView:self];
+  if (shouldRequestTextSubstitutions_ && !substitutionWasApplied_ &&
+      textSelectionRange_.is_empty()) {
+    shouldRequestTextSubstitutions_ = NO;
+    [self requestTextSubstitutions];
+  }
   if (@available(macOS 10.12.2, *))
     [self requestTextSuggestions];
 }
@@ -337,13 +503,13 @@ void ExtractUnderlines(NSAttributedString* string,
   compositionRange_ = range;
 }
 
-- (void)sendWindowFrameInScreenToClient {
+- (void)sendWindowFrameInScreenToHost {
   TRACE_EVENT0("browser",
-               "RenderWidgetHostViewCocoa::sendWindowFrameInScreenToClient");
+               "RenderWidgetHostViewCocoa::sendWindowFrameInScreenToHost");
   NSWindow* enclosingWindow = [self window];
   if (!enclosingWindow)
     return;
-  client_->OnWindowFrameInScreenChanged(
+  host_->OnWindowFrameInScreenChanged(
       gfx::ScreenRectFromNSRect([enclosingWindow frame]));
 }
 
@@ -414,27 +580,27 @@ void ExtractUnderlines(NSAttributedString* string,
   closeOnDeactivate_ = b;
 }
 
-- (void)setClientDisconnected {
-  // Set the client to be an abandoned message pipe, and set the clientHelper
-  // to forward messages to that client.
-  content::mojom::RenderWidgetHostNSViewClientRequest dummyClientRequest =
-      mojo::MakeRequest(&dummyClient_);
-  dummyClientHelper_ = std::make_unique<DummyClientHelper>();
-  client_ = dummyClient_.get();
-  clientHelper_ = dummyClientHelper_.get();
+- (void)setHostDisconnected {
+  // Set the host to be an abandoned message pipe, and set the hostHelper
+  // to forward messages to that host.
+  remote_cocoa::mojom::RenderWidgetHostNSViewHostRequest dummyHostRequest =
+      mojo::MakeRequest(&dummyHost_);
+  dummyHostHelper_ = std::make_unique<DummyHostHelper>();
+  host_ = dummyHost_.get();
+  hostHelper_ = dummyHostHelper_.get();
 
   // |responderDelegate_| may attempt to access the RenderWidgetHostViewMac
   // through its internal pointers, so detach it here.
-  // TODO(ccameron): Force |responderDelegate_| to use the |client_| as well,
-  // and the viewGone method to clientGone.
+  // TODO(ccameron): Force |responderDelegate_| to use the |host_| as well,
+  // and the viewGone method to hostGone.
   if (responderDelegate_ &&
       [responderDelegate_ respondsToSelector:@selector(viewGone:)])
     [responderDelegate_ viewGone:self];
   responderDelegate_.reset();
 }
 
-- (bool)clientIsDisconnected {
-  return client_ == dummyClient_.get();
+- (bool)hostIsDisconnected {
+  return host_ == dummyHost_.get();
 }
 
 - (void)setShowingContextMenu:(BOOL)showing {
@@ -464,7 +630,7 @@ void ExtractUnderlines(NSAttributedString* string,
   WebMouseEvent web_event = WebMouseEventBuilder::Build(event, self);
   web_event.SetModifiers(web_event.GetModifiers() |
                          WebInputEvent::kRelativeMotionEvent);
-  clientHelper_->ForwardMouseEvent(web_event);
+  hostHelper_->ForwardMouseEvent(web_event);
 }
 
 - (BOOL)shouldIgnoreMouseEvent:(NSEvent*)theEvent {
@@ -560,7 +726,7 @@ void ExtractUnderlines(NSAttributedString* string,
           WebMouseEventBuilder::Build(theEvent, self, pointerType_);
       exitEvent.SetType(WebInputEvent::kMouseLeave);
       exitEvent.button = WebMouseEvent::Button::kNoButton;
-      clientHelper_->ForwardMouseEvent(exitEvent);
+      hostHelper_->ForwardMouseEvent(exitEvent);
     }
     mouseEventWasIgnored_ = YES;
     [self updateCursor:nil];
@@ -574,14 +740,14 @@ void ExtractUnderlines(NSAttributedString* string,
         WebMouseEventBuilder::Build(theEvent, self, pointerType_);
     enterEvent.SetType(WebInputEvent::kMouseMove);
     enterEvent.button = WebMouseEvent::Button::kNoButton;
-    clientHelper_->RouteOrProcessMouseEvent(enterEvent);
+    hostHelper_->RouteOrProcessMouseEvent(enterEvent);
   }
   mouseEventWasIgnored_ = NO;
 
   // Don't cancel child popups; killing them on a mouse click would prevent the
   // user from positioning the insertion point in the text field spawning the
   // popup. A click outside the text field would cause the text field to drop
-  // the focus, and then EditorClientImpl::textFieldDidEndEditing() would cancel
+  // the focus, and then EditorHostImpl::textFieldDidEndEditing() would cancel
   // the popup anyway, so we're OK.
   if (type == NSLeftMouseDown)
     hasOpenMouseDown_ = YES;
@@ -628,11 +794,48 @@ void ExtractUnderlines(NSAttributedString* string,
   if (!send_touch) {
     WebMouseEvent event =
         WebMouseEventBuilder::Build(theEvent, self, pointerType_);
+
+    if (mouse_locked_ &&
+        base::FeatureList::IsEnabled(features::kConsolidatedMovementXY)) {
+      // When mouse is locked, we keep increasing |last_mouse_screen_position|
+      // by movement_x/y so that we can still use PositionInScreen to calculate
+      // movements in blink. We need to keep |last_mouse_screen_position_| from
+      // getting too large because it will lose some precision. So whenever it
+      // exceed the |wrap_around_distance|, we start again from the current
+      // mouse position (locked position), and also send a synthesized event to
+      // update the blink-side status.
+      if (std::abs(last_mouse_screen_position_.x()) > wrap_around_distance ||
+          std::abs(last_mouse_screen_position_.y()) > wrap_around_distance) {
+        NSWindow* window = [self window];
+        NSPoint location = [window mouseLocationOutsideOfEventStream];
+        int window_number = window ? [window windowNumber] : -1;
+        NSEvent* nsevent = [NSEvent mouseEventWithType:NSMouseMoved
+                                              location:location
+                                         modifierFlags:[theEvent modifierFlags]
+                                             timestamp:[theEvent timestamp]
+                                          windowNumber:window_number
+                                               context:nil
+                                           eventNumber:0
+                                            clickCount:[theEvent clickCount]
+                                              pressure:0];
+        WebMouseEvent wrap_around_event =
+            WebMouseEventBuilder::Build(nsevent, self, pointerType_);
+        last_mouse_screen_position_ = wrap_around_event.PositionInScreen();
+        wrap_around_event.SetModifiers(
+            event.GetModifiers() |
+            blink::WebInputEvent::Modifiers::kRelativeMotionEvent);
+        hostHelper_->RouteOrProcessMouseEvent(wrap_around_event);
+      }
+      event.SetPositionInScreen(
+          last_mouse_screen_position_ +
+          gfx::Vector2dF(event.movement_x, event.movement_y));
+    }
+
     last_mouse_screen_position_ = event.PositionInScreen();
-    clientHelper_->RouteOrProcessMouseEvent(event);
+    hostHelper_->RouteOrProcessMouseEvent(event);
   } else {
     WebTouchEvent event = WebTouchEventBuilder::Build(theEvent, self);
-    clientHelper_->RouteOrProcessTouchEvent(event);
+    hostHelper_->RouteOrProcessTouchEvent(event);
   }
 }
 
@@ -677,7 +880,7 @@ void ExtractUnderlines(NSAttributedString* string,
   // to exit fullscreen and we don't want to prevent them from exiting.
   ui::DomCode domCode = ui::KeycodeConverter::NativeKeycodeToDomCode(keyCode);
   return keyboardLockActive_ && domCode != ui::DomCode::ESCAPE &&
-         (!lockedKeys_ || base::ContainsKey(lockedKeys_.value(), domCode));
+         (!lockedKeys_ || base::Contains(lockedKeys_.value(), domCode));
 }
 
 - (BOOL)performKeyEquivalent:(NSEvent*)theEvent {
@@ -780,10 +983,10 @@ void ExtractUnderlines(NSAttributedString* string,
       return;
   }
 
-  // Tell the client that we are beginning a keyboard event. This ensures that
+  // Tell the host that we are beginning a keyboard event. This ensures that
   // all event and Ime messages target the same RenderWidgetHost throughout this
   // function call.
-  client_->BeginKeyboardEvent();
+  host_->BeginKeyboardEvent();
 
   bool shouldAutohideCursor = textInputType_ != ui::TEXT_INPUT_TYPE_NONE &&
                               eventType == NSKeyDown &&
@@ -791,7 +994,7 @@ void ExtractUnderlines(NSAttributedString* string,
 
   // We only handle key down events and just simply forward other events.
   if (eventType != NSKeyDown) {
-    clientHelper_->ForwardKeyboardEvent(event, latency_info);
+    hostHelper_->ForwardKeyboardEvent(event, latency_info);
 
     // Possibly autohide the cursor.
     if (shouldAutohideCursor) {
@@ -799,7 +1002,7 @@ void ExtractUnderlines(NSAttributedString* string,
       cursorHidden_ = YES;
     }
 
-    client_->EndKeyboardEvent();
+    host_->EndKeyboardEvent();
     return;
   }
 
@@ -849,7 +1052,7 @@ void ExtractUnderlines(NSAttributedString* string,
     NativeWebKeyboardEvent fakeEvent = event;
     fakeEvent.windows_key_code = 0xE5;  // VKEY_PROCESSKEY
     fakeEvent.skip_in_browser = true;
-    clientHelper_->ForwardKeyboardEvent(fakeEvent, latency_info);
+    hostHelper_->ForwardKeyboardEvent(fakeEvent, latency_info);
     // If this key event was handled by the input method, but
     // -doCommandBySelector: (invoked by the call to -interpretKeyEvents: above)
     // enqueued edit commands, then in order to let webkit handle them
@@ -860,8 +1063,8 @@ void ExtractUnderlines(NSAttributedString* string,
     if (hasEditCommands_ && !hasMarkedText_)
       delayEventUntilAfterImeCompostion = YES;
   } else {
-    clientHelper_->ForwardKeyboardEventWithCommands(event, latency_info,
-                                                    editCommands_);
+    hostHelper_->ForwardKeyboardEventWithCommands(event, latency_info,
+                                                  editCommands_);
   }
 
   // Then send keypress and/or composition related events.
@@ -878,7 +1081,7 @@ void ExtractUnderlines(NSAttributedString* string,
   BOOL textInserted = NO;
   if (textToBeInserted_.length() >
       ((hasMarkedText_ || oldHasMarkedText) ? 0u : 1u)) {
-    client_->ImeCommitText(textToBeInserted_, gfx::Range::InvalidRange());
+    host_->ImeCommitText(textToBeInserted_, gfx::Range::InvalidRange());
     textInserted = YES;
   }
 
@@ -889,15 +1092,15 @@ void ExtractUnderlines(NSAttributedString* string,
     // composition node in WebKit.
     // When marked text is available, |markedTextSelectedRange_| will be the
     // range being selected inside the marked text.
-    client_->ImeSetComposition(markedText_, ime_text_spans_,
-                               setMarkedTextReplacementRange_,
-                               markedTextSelectedRange_.location,
-                               NSMaxRange(markedTextSelectedRange_));
+    host_->ImeSetComposition(markedText_, ime_text_spans_,
+                             setMarkedTextReplacementRange_,
+                             markedTextSelectedRange_.location,
+                             NSMaxRange(markedTextSelectedRange_));
   } else if (oldHasMarkedText && !hasMarkedText_ && !textInserted) {
     if (unmarkTextCalled_) {
-      client_->ImeFinishComposingText();
+      host_->ImeFinishComposingText();
     } else {
-      client_->ImeCancelCompositionFromCocoa();
+      host_->ImeCancelCompositionFromCocoa();
     }
   }
 
@@ -919,8 +1122,8 @@ void ExtractUnderlines(NSAttributedString* string,
     fakeEvent.skip_in_browser = true;
     ui::LatencyInfo fake_event_latency_info = latency_info;
     fake_event_latency_info.set_source_event_type(ui::SourceEventType::OTHER);
-    clientHelper_->ForwardKeyboardEvent(fakeEvent, fake_event_latency_info);
-    clientHelper_->ForwardKeyboardEventWithCommands(
+    hostHelper_->ForwardKeyboardEvent(fakeEvent, fake_event_latency_info);
+    hostHelper_->ForwardKeyboardEventWithCommands(
         event, fake_event_latency_info, editCommands_);
   }
 
@@ -934,7 +1137,7 @@ void ExtractUnderlines(NSAttributedString* string,
       event.text[0] = textToBeInserted_[0];
       event.text[1] = 0;
       event.skip_in_browser = true;
-      clientHelper_->ForwardKeyboardEvent(event, latency_info);
+      hostHelper_->ForwardKeyboardEvent(event, latency_info);
     } else if ((!textInserted || delayEventUntilAfterImeCompostion) &&
                event.text[0] != '\0' &&
                ((modifierFlags & kCtrlCmdKeyMask) ||
@@ -944,7 +1147,7 @@ void ExtractUnderlines(NSAttributedString* string,
       // cases, unless the key event generated any other command.
       event.SetType(blink::WebInputEvent::kChar);
       event.skip_in_browser = true;
-      clientHelper_->ForwardKeyboardEvent(event, latency_info);
+      hostHelper_->ForwardKeyboardEvent(event, latency_info);
     }
   }
 
@@ -954,7 +1157,7 @@ void ExtractUnderlines(NSAttributedString* string,
     cursorHidden_ = YES;
   }
 
-  client_->EndKeyboardEvent();
+  host_->EndKeyboardEvent();
 }
 
 - (BOOL)suppressNextKeyUpForTesting:(int)keyCode {
@@ -975,7 +1178,7 @@ void ExtractUnderlines(NSAttributedString* string,
   // History-swiping is not possible if the logic reaches this point.
   WebMouseWheelEvent webEvent = WebMouseWheelEventBuilder::Build(event, self);
   webEvent.rails_mode = mouseWheelFilter_.UpdateRailsMode(webEvent);
-  clientHelper_->ForwardWheelEvent(webEvent);
+  hostHelper_->ForwardWheelEvent(webEvent);
 
   if (endWheelMonitor_) {
     [NSEvent removeMonitor:endWheelMonitor_];
@@ -989,7 +1192,7 @@ void ExtractUnderlines(NSAttributedString* string,
 
   WebGestureEvent gestureBeginEvent(WebGestureEventBuilder::Build(event, self));
 
-  clientHelper_->GestureBegin(gestureBeginEvent, isSyntheticallyInjected);
+  hostHelper_->GestureBegin(gestureBeginEvent, isSyntheticallyInjected);
 }
 
 - (void)handleEndGestureWithEvent:(NSEvent*)event {
@@ -1004,7 +1207,7 @@ void ExtractUnderlines(NSAttributedString* string,
     endEvent.SetType(WebInputEvent::kGesturePinchEnd);
     endEvent.SetSourceDevice(blink::WebGestureDevice::kTouchpad);
     endEvent.SetNeedsWheelEvent(true);
-    clientHelper_->GestureEnd(endEvent);
+    hostHelper_->GestureEnd(endEvent);
   }
 }
 
@@ -1075,11 +1278,11 @@ void ExtractUnderlines(NSAttributedString* string,
 - (void)smartMagnifyWithEvent:(NSEvent*)event {
   const WebGestureEvent& smartMagnifyEvent =
       WebGestureEventBuilder::Build(event, self);
-  clientHelper_->SmartMagnify(smartMagnifyEvent);
+  hostHelper_->SmartMagnify(smartMagnifyEvent);
 }
 
 - (void)showLookUpDictionaryOverlayFromRange:(NSRange)range {
-  client_->LookUpDictionaryOverlayFromRange(gfx::Range(range));
+  host_->LookUpDictionaryOverlayFromRange(gfx::Range(range));
 }
 
 // This is invoked only on 10.8 or newer when the user taps a word using
@@ -1087,7 +1290,7 @@ void ExtractUnderlines(NSAttributedString* string,
 - (void)quickLookWithEvent:(NSEvent*)event {
   NSPoint point = [self convertPoint:[event locationInWindow] fromView:nil];
   gfx::PointF rootPoint(point.x, NSHeight([self frame]) - point.y);
-  client_->LookUpDictionaryOverlayAtPoint(rootPoint);
+  host_->LookUpDictionaryOverlayAtPoint(rootPoint);
 }
 
 // This method handles 2 different types of hardware events.
@@ -1168,7 +1371,7 @@ void ExtractUnderlines(NSAttributedString* string,
   // This is responsible for content scrolling!
   WebMouseWheelEvent webEvent = WebMouseWheelEventBuilder::Build(event, self);
   webEvent.rails_mode = mouseWheelFilter_.UpdateRailsMode(webEvent);
-  clientHelper_->RouteOrProcessWheelEvent(webEvent);
+  hostHelper_->RouteOrProcessWheelEvent(webEvent);
 }
 
 // Called repeatedly during a pinch gesture, with incremental change values.
@@ -1201,7 +1404,7 @@ void ExtractUnderlines(NSAttributedString* string,
   }
 
   WebGestureEvent updateEvent = WebGestureEventBuilder::Build(event, self);
-  clientHelper_->GestureUpdate(updateEvent);
+  hostHelper_->GestureUpdate(updateEvent);
 }
 
 - (void)viewWillMoveToWindow:(NSWindow*)newWindow {
@@ -1252,8 +1455,8 @@ void ExtractUnderlines(NSAttributedString* string,
                              object:newWindow];
   }
 
-  clientHelper_->SetAccessibilityWindow(newWindow);
-  [self sendWindowFrameInScreenToClient];
+  hostHelper_->SetAccessibilityWindow(newWindow);
+  [self sendWindowFrameInScreenToHost];
 }
 
 - (void)updateScreenProperties {
@@ -1262,10 +1465,10 @@ void ExtractUnderlines(NSAttributedString* string,
     return;
 
   // TODO(ccameron): This will call [enclosingWindow screen], which may return
-  // nil. Do that call here to avoid sending bogus display info to the client.
+  // nil. Do that call here to avoid sending bogus display info to the host.
   display::Display display =
       display::Screen::GetScreen()->GetDisplayNearestView(self);
-  client_->OnDisplayChanged(display);
+  host_->OnDisplayChanged(display);
 }
 
 // This will be called when the NSView's NSWindow moves from one NSScreen to
@@ -1281,42 +1484,42 @@ void ExtractUnderlines(NSAttributedString* string,
 }
 
 - (void)windowChangedGlobalFrame:(NSNotification*)notification {
-  [self sendWindowFrameInScreenToClient];
+  [self sendWindowFrameInScreenToHost];
   // Update the view bounds relative to the window, as they may have changed
   // during layout, and we don't explicitly listen for re-layout of parent
   // views.
-  [self sendViewBoundsInWindowToClient];
+  [self sendViewBoundsInWindowToHost];
 }
 
 - (void)setFrame:(NSRect)r {
   // Note that -setFrame: calls through -setFrameSize: and -setFrameOrigin. To
-  // avoid spamming the client with transiently invalid states, only send one
+  // avoid spamming the host with transiently invalid states, only send one
   // message at the end.
   inSetFrame_ = YES;
   [super setFrame:r];
   inSetFrame_ = NO;
-  [self sendViewBoundsInWindowToClient];
+  [self sendViewBoundsInWindowToHost];
 }
 
 - (void)setFrameOrigin:(NSPoint)newOrigin {
   [super setFrameOrigin:newOrigin];
-  [self sendViewBoundsInWindowToClient];
+  [self sendViewBoundsInWindowToHost];
 }
 
 - (void)setFrameSize:(NSSize)newSize {
   [super setFrameSize:newSize];
-  [self sendViewBoundsInWindowToClient];
+  [self sendViewBoundsInWindowToHost];
 }
 
 - (BOOL)canBecomeKeyView {
-  if ([self clientIsDisconnected])
+  if ([self hostIsDisconnected])
     return NO;
 
   return canBeKeyView_;
 }
 
 - (BOOL)acceptsFirstResponder {
-  if ([self clientIsDisconnected])
+  if ([self hostIsDisconnected])
     return NO;
 
   return canBeKeyView_;
@@ -1328,7 +1531,7 @@ void ExtractUnderlines(NSAttributedString* string,
   if ([responderDelegate_ respondsToSelector:@selector(windowDidBecomeKey)])
     [responderDelegate_ windowDidBecomeKey];
   if ([self window].isKeyWindow)
-    client_->OnWindowIsKeyChanged(true);
+    host_->OnWindowIsKeyChanged(true);
 }
 
 - (void)windowDidResignKey:(NSNotification*)notification {
@@ -1342,16 +1545,16 @@ void ExtractUnderlines(NSAttributedString* string,
   if ([NSApp isActive] && ([NSApp keyWindow] == [self window]))
     return;
 
-  client_->OnWindowIsKeyChanged(false);
+  host_->OnWindowIsKeyChanged(false);
 }
 
 - (BOOL)becomeFirstResponder {
-  if ([self clientIsDisconnected])
+  if ([self hostIsDisconnected])
     return NO;
   if ([responderDelegate_ respondsToSelector:@selector(becomeFirstResponder)])
     [responderDelegate_ becomeFirstResponder];
 
-  client_->OnFirstResponderChanged(true);
+  host_->OnFirstResponderChanged(true);
 
   // Cancel any onging composition text which was left before we lost focus.
   // TODO(suzhe): We should do it in -resignFirstResponder: method, but
@@ -1375,10 +1578,10 @@ void ExtractUnderlines(NSAttributedString* string,
   if ([responderDelegate_ respondsToSelector:@selector(resignFirstResponder)])
     [responderDelegate_ resignFirstResponder];
 
-  client_->OnFirstResponderChanged(false);
+  host_->OnFirstResponderChanged(false);
   if (closeOnDeactivate_) {
     [self setHidden:YES];
-    client_->RequestShutdown();
+    host_->RequestShutdown();
   }
 
   // We should cancel any onging composition whenever RWH's Blur() method gets
@@ -1389,7 +1592,73 @@ void ExtractUnderlines(NSAttributedString* string,
   return YES;
 }
 
+- (BOOL)isAutomaticQuoteSubstitutionEnabled {
+  return [NSUserDefaults.standardUserDefaults
+      boolForKey:WebAutomaticQuoteSubstitutionEnabled];
+}
+
+- (void)setAutomaticQuoteSubstitutionEnabled:(BOOL)enabled {
+  [NSUserDefaults.standardUserDefaults
+      setBool:enabled
+       forKey:WebAutomaticQuoteSubstitutionEnabled];
+}
+
+- (void)toggleAutomaticQuoteSubstitution:(id)sender {
+  self.automaticQuoteSubstitutionEnabled =
+      !self.automaticQuoteSubstitutionEnabled;
+}
+
+- (BOOL)isAutomaticDashSubstitutionEnabled {
+  return [NSUserDefaults.standardUserDefaults
+      boolForKey:WebAutomaticDashSubstitutionEnabled];
+}
+
+- (void)setAutomaticDashSubstitutionEnabled:(BOOL)enabled {
+  [NSUserDefaults.standardUserDefaults
+      setBool:enabled
+       forKey:WebAutomaticDashSubstitutionEnabled];
+}
+
+- (void)toggleAutomaticDashSubstitution:(id)sender {
+  self.automaticDashSubstitutionEnabled =
+      !self.automaticDashSubstitutionEnabled;
+}
+
+- (BOOL)isAutomaticTextReplacementEnabled {
+  if (![NSUserDefaults.standardUserDefaults
+          objectForKey:WebAutomaticTextReplacementEnabled]) {
+    return NSSpellChecker.automaticTextReplacementEnabled;
+  }
+  return [NSUserDefaults.standardUserDefaults
+      boolForKey:WebAutomaticTextReplacementEnabled];
+}
+
+- (void)setAutomaticTextReplacementEnabled:(BOOL)enabled {
+  [NSUserDefaults.standardUserDefaults
+      setBool:enabled
+       forKey:WebAutomaticTextReplacementEnabled];
+}
+
+- (void)toggleAutomaticTextReplacement:(id)sender {
+  self.automaticTextReplacementEnabled = !self.automaticTextReplacementEnabled;
+}
+
 - (BOOL)validateUserInterfaceItem:(id<NSValidatedUserInterfaceItem>)item {
+  if (item.action == @selector(orderFrontSubstitutionsPanel:))
+    return YES;
+  if (NSMenuItem* menuItem = base::mac::ObjCCast<NSMenuItem>(item)) {
+    if (item.action == @selector(toggleAutomaticQuoteSubstitution:)) {
+      menuItem.state = self.automaticQuoteSubstitutionEnabled;
+      return !!(self.allowedTextCheckingTypes & NSTextCheckingTypeQuote);
+    } else if (item.action == @selector(toggleAutomaticDashSubstitution:)) {
+      menuItem.state = self.automaticDashSubstitutionEnabled;
+      return !!(self.allowedTextCheckingTypes & NSTextCheckingTypeDash);
+    } else if (item.action == @selector(toggleAutomaticTextReplacement:)) {
+      menuItem.state = self.automaticTextReplacementEnabled;
+      return !!(self.allowedTextCheckingTypes & NSTextCheckingTypeReplacement);
+    }
+  }
+
   if (responderDelegate_ &&
       [responderDelegate_ respondsToSelector:@selector
                           (validateUserInterfaceItem:isValidItem:)]) {
@@ -1401,10 +1670,10 @@ void ExtractUnderlines(NSAttributedString* string,
   }
 
   bool is_for_main_frame = false;
-  client_->SyncIsWidgetForMainFrame(&is_for_main_frame);
+  host_->SyncIsWidgetForMainFrame(&is_for_main_frame);
 
   bool is_speaking = false;
-  client_->SyncIsSpeaking(&is_speaking);
+  host_->SyncIsSpeaking(&is_speaking);
 
   SEL action = [item action];
 
@@ -1427,8 +1696,8 @@ void ExtractUnderlines(NSAttributedString* string,
   return editCommandHelper_->IsMenuItemEnabled(action, self);
 }
 
-- (RenderWidgetHostNSViewClient*)renderWidgetHostNSViewClient {
-  return client_;
+- (RenderWidgetHostNSViewHost*)renderWidgetHostNSViewHost {
+  return host_;
 }
 
 - (void)setAccessibilityParentElement:(id)accessibilityParent {
@@ -1436,7 +1705,7 @@ void ExtractUnderlines(NSAttributedString* string,
 }
 
 - (id)accessibilityHitTest:(NSPoint)point {
-  id root_element = clientHelper_->GetRootBrowserAccessibilityElement();
+  id root_element = hostHelper_->GetRootBrowserAccessibilityElement();
   if (!root_element)
     return self;
   NSPoint pointInWindow =
@@ -1448,13 +1717,13 @@ void ExtractUnderlines(NSAttributedString* string,
 }
 
 - (id)accessibilityFocusedUIElement {
-  return clientHelper_->GetFocusedBrowserAccessibilityElement();
+  return hostHelper_->GetFocusedBrowserAccessibilityElement();
 }
 
 // NSAccessibility formal protocol:
 
 - (NSArray*)accessibilityChildren {
-  id root = clientHelper_->GetRootBrowserAccessibilityElement();
+  id root = hostHelper_->GetRootBrowserAccessibilityElement();
   if (root)
     return @[ root ];
   return nil;
@@ -1482,7 +1751,7 @@ void ExtractUnderlines(NSAttributedString* string,
 // [WebHTMLView keyDown] ->
 //     EventHandler::keyEvent() ->
 //     ...
-//     [WebEditorClient handleKeyboardEvent] ->
+//     [WebEditorHost handleKeyboardEvent] ->
 //     [WebHTMLView _interceptEditingKeyEvent] ->
 //     [NSResponder interpretKeyEvents] ->
 //     [WebHTMLView insertText] ->
@@ -1499,7 +1768,7 @@ void ExtractUnderlines(NSAttributedString* string,
 //     |Sync IPC (KeyDown)| (*1) ->
 //     EventHandler::keyEvent() (renderer) ->
 //     ...
-//     EditorClientImpl::handleKeyboardEvent() (renderer) ->
+//     EditorHostImpl::handleKeyboardEvent() (renderer) ->
 //     |Sync IPC| (*2) ->
 //     [RenderWidgetHostViewMac _interceptEditingKeyEvent] (browser) ->
 //     [self interpretKeyEvents] ->
@@ -1509,7 +1778,7 @@ void ExtractUnderlines(NSAttributedString* string,
 //
 // (*1) we need to wait until this call finishes since WebHTMLView uses the
 // result of EventHandler::keyEvent().
-// (*2) we need to wait until this call finishes since WebEditorClient uses
+// (*2) we need to wait until this call finishes since WebEditorHost uses
 // the result of [WebHTMLView _interceptEditingKeyEvent].
 //
 // This needs many sync IPC messages sent between a browser and a renderer for
@@ -1556,7 +1825,7 @@ extern NSString* NSTextInputReplacementRangeAttributeName;
   gfx::PointF rootPoint(thePoint.x, thePoint.y);
 
   uint32_t index = UINT32_MAX;
-  client_->SyncGetCharacterIndexAtPoint(rootPoint, &index);
+  host_->SyncGetCharacterIndexAtPoint(rootPoint, &index);
   // |index| could be WTF::notFound (-1) and its value is different from
   // NSNotFound so we need to convert it.
   if (index == UINT32_MAX)
@@ -1572,9 +1841,8 @@ extern NSString* NSTextInputReplacementRangeAttributeName;
   bool success = false;
   if (actualRange)
     gfxActualRange = gfx::Range(*actualRange);
-  client_->SyncGetFirstRectForRange(gfx::Range(theRange), gfxRect,
-                                    gfxActualRange, &gfxRect, &gfxActualRange,
-                                    &success);
+  host_->SyncGetFirstRectForRange(gfx::Range(theRange), gfxRect, gfxActualRange,
+                                  &gfxRect, &gfxActualRange, &success);
   if (!success) {
     // The call to cancelComposition comes from https://crrev.com/350261.
     [self cancelComposition];
@@ -1697,7 +1965,7 @@ extern NSString* NSTextInputReplacementRangeAttributeName;
   // If we are handling a key down event, then FinishComposingText() will be
   // called in keyEvent: method.
   if (!handlingKeyDown_) {
-    client_->ImeFinishComposingText();
+    host_->ImeFinishComposingText();
   } else {
     unmarkTextCalled_ = YES;
   }
@@ -1740,9 +2008,9 @@ extern NSString* NSTextInputReplacementRangeAttributeName;
   if (handlingKeyDown_) {
     setMarkedTextReplacementRange_ = gfx::Range(replacementRange);
   } else {
-    client_->ImeSetComposition(markedText_, ime_text_spans_,
-                               gfx::Range(replacementRange),
-                               newSelRange.location, NSMaxRange(newSelRange));
+    host_->ImeSetComposition(markedText_, ime_text_spans_,
+                             gfx::Range(replacementRange), newSelRange.location,
+                             NSMaxRange(newSelRange));
   }
 }
 
@@ -1768,7 +2036,7 @@ extern NSString* NSTextInputReplacementRangeAttributeName;
                           base::CompareCase::INSENSITIVE_ASCII))
       editCommands_.push_back(EditCommand(command, ""));
   } else {
-    client_->ExecuteEditCommand(command);
+    host_->ExecuteEditCommand(command);
   }
 }
 
@@ -1792,10 +2060,10 @@ extern NSString* NSTextInputReplacementRangeAttributeName;
   NSString* im_text = isAttributedString ? [string string] : string;
   if (handlingKeyDown_) {
     textToBeInserted_.append(base::SysNSStringToUTF16(im_text));
+    shouldRequestTextSubstitutions_ = YES;
   } else {
     gfx::Range replacement_range(replacementRange);
-    client_->ImeCommitText(base::SysNSStringToUTF16(im_text),
-                           replacement_range);
+    host_->ImeCommitText(base::SysNSStringToUTF16(im_text), replacement_range);
   }
 
   // Inserting text will delete all marked text automatically.
@@ -1809,11 +2077,11 @@ extern NSString* NSTextInputReplacementRangeAttributeName;
 - (void)viewDidMoveToWindow {
   // Update the window's frame, the view's bounds, focus, and the display info,
   // as they have not been updated while unattached to a window.
-  [self sendWindowFrameInScreenToClient];
-  [self sendViewBoundsInWindowToClient];
+  [self sendWindowFrameInScreenToHost];
+  [self sendViewBoundsInWindowToHost];
   [self updateScreenProperties];
-  client_->OnWindowIsKeyChanged([[self window] isKeyWindow]);
-  client_->OnFirstResponderChanged([[self window] firstResponder] == self);
+  host_->OnWindowIsKeyChanged([[self window] isKeyWindow]);
+  host_->OnFirstResponderChanged([[self window] firstResponder] == self);
 
   // If we switch windows (or are removed from the view hierarchy), cancel any
   // open mouse-downs.
@@ -1821,41 +2089,41 @@ extern NSString* NSTextInputReplacementRangeAttributeName;
     WebMouseEvent event(WebInputEvent::kMouseUp, WebInputEvent::kNoModifiers,
                         ui::EventTimeForNow());
     event.button = WebMouseEvent::Button::kLeft;
-    clientHelper_->ForwardMouseEvent(event);
+    hostHelper_->ForwardMouseEvent(event);
     hasOpenMouseDown_ = NO;
   }
 }
 
 - (void)undo:(id)sender {
-  client_->Undo();
+  host_->Undo();
 }
 
 - (void)redo:(id)sender {
-  client_->Redo();
+  host_->Redo();
 }
 
 - (void)cut:(id)sender {
-  client_->Cut();
+  host_->Cut();
 }
 
 - (void)copy:(id)sender {
-  client_->Copy();
+  host_->Copy();
 }
 
 - (void)copyToFindPboard:(id)sender {
-  client_->CopyToFindPboard();
+  host_->CopyToFindPboard();
 }
 
 - (void)paste:(id)sender {
-  client_->Paste();
+  host_->Paste();
 }
 
 - (void)delete:(id)sender {
-  client_->Delete();
+  host_->Delete();
 }
 
 - (void)pasteAndMatchStyle:(id)sender {
-  client_->PasteAndMatchStyle();
+  host_->PasteAndMatchStyle();
 }
 
 - (void)selectAll:(id)sender {
@@ -1866,18 +2134,20 @@ extern NSString* NSTextInputReplacementRangeAttributeName;
   // menu handler, neither is true.
   // Explicitly call SelectAll() here to make sure the renderer returns
   // selection results.
-  client_->SelectAll();
+  host_->SelectAll();
 }
 
 - (void)startSpeaking:(id)sender {
-  client_->StartSpeaking();
+  host_->StartSpeaking();
 }
 
 - (void)stopSpeaking:(id)sender {
-  client_->StopSpeaking();
+  host_->StopSpeaking();
 }
 
 - (void)cancelComposition {
+  [NSSpellChecker.sharedSpellChecker dismissCorrectionIndicatorForView:self];
+
   if (!hasMarkedText_)
     return;
 
@@ -1893,7 +2163,7 @@ extern NSString* NSTextInputReplacementRangeAttributeName;
   if (!hasMarkedText_)
     return;
 
-  client_->ImeFinishComposingText();
+  host_->ImeFinishComposingText();
   [self cancelComposition];
 }
 
@@ -1953,7 +2223,7 @@ extern NSString* NSTextInputReplacementRangeAttributeName;
 
 - (void)popupWindowWillClose:(NSNotification*)notification {
   [self setHidden:YES];
-  client_->RequestShutdown();
+  host_->RequestShutdown();
 }
 
 - (void)invalidateTouchBar {

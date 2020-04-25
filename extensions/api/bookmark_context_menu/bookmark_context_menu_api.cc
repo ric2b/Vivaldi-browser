@@ -11,6 +11,7 @@
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/context_menu_params.h"
+#include "extensions/api/menubar_menu/menubar_menu_api.h"
 #include "extensions/browser/extension_function_dispatcher.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "ui/base/accelerators/accelerator.h"
@@ -25,55 +26,6 @@ static base::LazyInstance<BrowserContextKeyedAPIFactory<
     BookmarkContextMenuAPI>>::DestructorAtExit g_bookmark_context_menu =
         LAZY_INSTANCE_INITIALIZER;
 
-// Helper
-static vivaldi::bookmark_context_menu::Disposition
-    CommandToDisposition(int command) {
-  switch(command) {
-    case IDC_VIV_BOOKMARK_BAR_OPEN_CURRENT_TAB:
-      return vivaldi::bookmark_context_menu::DISPOSITION_CURRENT;
-    case IDC_VIV_BOOKMARK_BAR_OPEN_NEW_TAB:
-    case IDC_VIV_BOOKMARK_BAR_OPEN_BACKGROUND_TAB:
-      return vivaldi::bookmark_context_menu::DISPOSITION_NEW_TAB;
-    case IDC_VIV_BOOKMARK_BAR_OPEN_NEW_WINDOW:
-      return vivaldi::bookmark_context_menu::DISPOSITION_NEW_WINDOW;
-    case IDC_VIV_BOOKMARK_BAR_OPEN_NEW_PRIVATE_WINDOW:
-      return vivaldi::bookmark_context_menu::DISPOSITION_NEW_PRIVATE_WINDOW;
-    default:
-      return vivaldi::bookmark_context_menu::DISPOSITION_NONE;
-  }
-}
-
-// Helper
-static bool IsBackgroundCommand(int command) {
-  switch(command) {
-    case IDC_VIV_BOOKMARK_BAR_OPEN_BACKGROUND_TAB:
-      return true;
-    default:
-      return false;
-  }
-}
-
-// Helper
-static vivaldi::bookmark_context_menu::Action CommandToAction(int command) {
-  switch(command) {
-    case IDC_VIV_BOOKMARK_BAR_ADD_ACTIVE_TAB:
-      return vivaldi::bookmark_context_menu::ACTION_ADDACTIVETAB;
-    case IDC_BOOKMARK_BAR_ADD_NEW_BOOKMARK:
-      return vivaldi::bookmark_context_menu::ACTION_ADDBOOKMARK;
-    case IDC_BOOKMARK_BAR_NEW_FOLDER:
-      return vivaldi::bookmark_context_menu::ACTION_ADDFOLDER;
-    case IDC_BOOKMARK_BAR_EDIT:
-      return vivaldi::bookmark_context_menu::ACTION_EDIT;
-    case IDC_CUT:
-      return vivaldi::bookmark_context_menu::ACTION_CUT;
-    case IDC_COPY:
-      return vivaldi::bookmark_context_menu::ACTION_COPY;
-    case IDC_PASTE:
-      return vivaldi::bookmark_context_menu::ACTION_PASTE;
-    default:
-      return vivaldi::bookmark_context_menu::ACTION_NONE;
-  }
-}
 
 BookmarkContextMenuAPI::BookmarkContextMenuAPI(BrowserContext* context) {}
 
@@ -83,58 +35,6 @@ BookmarkContextMenuAPI::~BookmarkContextMenuAPI() {}
 BrowserContextKeyedAPIFactory<BookmarkContextMenuAPI>*
     BookmarkContextMenuAPI::GetFactoryInstance() {
   return g_bookmark_context_menu.Pointer();
-}
-
-// static
-void BookmarkContextMenuAPI::SendActivated(
-    content::BrowserContext* browser_context,
-    int id,
-    int event_state) {
-  vivaldi::bookmark_context_menu::Disposition disposition =
-      vivaldi::bookmark_context_menu::DISPOSITION_SETTING;
-  vivaldi::bookmark_context_menu::EventState state;
-  state.ctrl = event_state & ui::EF_CONTROL_DOWN ? true : false;
-  state.shift = event_state & ui::EF_SHIFT_DOWN ? true : false;
-  state.alt = event_state & ui::EF_ALT_DOWN ? true : false;
-  state.command = event_state & ui::EF_COMMAND_DOWN ? true : false;
-  state.left = event_state & ui::EF_LEFT_MOUSE_BUTTON ? true : false;
-  state.right = event_state & ui::EF_RIGHT_MOUSE_BUTTON ? true : false;
-  state.center = event_state & ui::EF_MIDDLE_MOUSE_BUTTON ? true : false;
-  ::vivaldi::BroadcastEvent(
-      vivaldi::bookmark_context_menu::OnActivated::kEventName,
-      vivaldi::bookmark_context_menu::OnActivated::Create(
-          std::to_string(id), disposition, false, state),
-      browser_context);
-}
-
-// static
-void BookmarkContextMenuAPI::SendAction(
-    content::BrowserContext* browser_context,
-    int id,
-    int index,
-    int command) {
-  // Test for "bookmark open commands" first.
-  vivaldi::bookmark_context_menu::Disposition disposition =
-      CommandToDisposition(command);
-  if (disposition != vivaldi::bookmark_context_menu::DISPOSITION_NONE) {
-    vivaldi::bookmark_context_menu::EventState state;
-    ::vivaldi::BroadcastEvent(
-        vivaldi::bookmark_context_menu::OnActivated::kEventName,
-        vivaldi::bookmark_context_menu::OnActivated::Create(
-            std::to_string(id), disposition, IsBackgroundCommand(command),
-            state),
-        browser_context);
-    return;
-  }
-  // Then admin commands
-  vivaldi::bookmark_context_menu::Action action = CommandToAction(command);
-  if (action != vivaldi::bookmark_context_menu::ACTION_NONE) {
-    ::vivaldi::BroadcastEvent(
-        vivaldi::bookmark_context_menu::OnAction::kEventName,
-        vivaldi::bookmark_context_menu::OnAction::Create(std::to_string(id),
-                                                         action),
-        browser_context);
-  }
 }
 
 // static
@@ -152,23 +52,6 @@ void BookmarkContextMenuAPI::SendClose(
   ::vivaldi::BroadcastEvent(vivaldi::bookmark_context_menu::OnClose::kEventName,
                             vivaldi::bookmark_context_menu::OnClose::Create(),
                             browser_context);
-}
-
-// static
-void BookmarkContextMenuAPI::SendHover(
-    content::BrowserContext* browser_context,
-    const std::string& url) {
-  BookmarkContextMenuAPI* api = GetFactoryInstance()->Get(browser_context);
-  DCHECK(api);
-  if (!api)
-    return;
-  if (api->hover_url_ != url) {
-    api->hover_url_ = url;
-    ::vivaldi::BroadcastEvent(
-        vivaldi::bookmark_context_menu::OnHover::kEventName,
-        vivaldi::bookmark_context_menu::OnHover::Create(url),
-        browser_context);
-  }
 }
 
 BookmarkContextMenuShowFunction::BookmarkContextMenuShowFunction() = default;
@@ -216,33 +99,29 @@ ExtensionFunction::ResponseAction BookmarkContextMenuShowFunction::Run() {
       break;
   }
 
-  // menuParams_ is a field in the function, not automatic variable, as
-  // ::vivaldi::CreateVivaldiBookmarkMenu stores a pointer to it that must be
-  // valid until at least BookmarkMenuClosed call.
-  menuParams_.support.initIcons(params->properties.icons);
-  menuParams_.sort_field = sortField;
-  menuParams_.sort_order = sortOrder;
-
-  menuParams_.siblings.reserve(params->properties.siblings.size());
-
+  bookmark_menu_container_.reset(new ::vivaldi::BookmarkMenuContainer(this));
+  bookmark_menu_container_->support.initIcons(params->properties.icons);
+  bookmark_menu_container_->sort_field = sortField;
+  bookmark_menu_container_->sort_order = sortOrder;
+  bookmark_menu_container_->siblings.reserve(
+      params->properties.siblings.size());
   for (const vivaldi::bookmark_context_menu::FolderEntry& e:
        params->properties.siblings) {
-    menuParams_.siblings.emplace_back();
-    ::vivaldi::FolderEntry* entry = &menuParams_.siblings.back();
-    if (!base::StringToInt64(e.id, &entry->id) || entry->id <= 0) {
+    bookmark_menu_container_->siblings.emplace_back();
+    ::vivaldi::BookmarkMenuContainerEntry* sibling =
+        &bookmark_menu_container_->siblings.back();
+    if (!base::StringToInt64(e.id, &sibling->id) || sibling->id <= 0) {
       return RespondNow(Error("id is not a valid bookmark id - " + e.id));
     }
-    entry->offset = e.offset;
-    entry->folder_group = e.folder_group;
-    entry->x = e.x;
-    entry->y = e.y;
-    entry->width = e.width;
-    entry->height = e.height;
+    sibling->offset = e.offset;
+    sibling->folder_group = e.folder_group;
+    sibling->rect = gfx::Rect(e.rect.x, e.rect.y, e.rect.width, e.rect.height);
   }
 
   content::WebContents* web_contents = dispatcher()->GetAssociatedWebContents();
   if (web_contents) {
-    ::vivaldi::ConvertBookmarkButtonRectToScreen(web_contents, menuParams_);
+    ::vivaldi::ConvertContainerRectToScreen(web_contents,
+        *bookmark_menu_container_);
   }
 
   std::string error = Open(params->properties.id);
@@ -265,8 +144,9 @@ std::string BookmarkContextMenuShowFunction::Open(const std::string& id) {
     return "id is not a valid int64 - " + id;
   }
 
-  const ::vivaldi::FolderEntry* entry = nullptr;
-  for (const ::vivaldi::FolderEntry& e: menuParams_.siblings) {
+  const ::vivaldi::BookmarkMenuContainerEntry* entry = nullptr;
+  for (const ::vivaldi::BookmarkMenuContainerEntry& e:
+       bookmark_menu_container_->siblings) {
      if (node_id == e.id) {
       entry = &e;
       break;
@@ -286,13 +166,9 @@ std::string BookmarkContextMenuShowFunction::Open(const std::string& id) {
     return "Node with id " + id + "does not exist";
   }
 
-  menuParams_.node = node;
-  menuParams_.offset = entry->offset;
-  menuParams_.folder_group = entry->folder_group;
-
   ::vivaldi::VivaldiBookmarkMenu* menu =
-      ::vivaldi::CreateVivaldiBookmarkMenu(web_contents, menuParams_,
-          gfx::Rect(entry->x, entry->y, entry->width, entry->height));
+      ::vivaldi::CreateVivaldiBookmarkMenu(web_contents,
+          bookmark_menu_container_.get(), node, entry->offset, entry->rect);
   if (!menu->CanShow()) {
     return "Can not show menu";
   }
@@ -302,6 +178,24 @@ std::string BookmarkContextMenuShowFunction::Open(const std::string& id) {
   menu->Show();
 
   return "";
+}
+
+void BookmarkContextMenuShowFunction::OnHover(const std::string& url) {
+  MenubarMenuAPI::SendHover(browser_context(), url);
+}
+
+void BookmarkContextMenuShowFunction::OnOpenBookmark(int64_t bookmark_id,
+                                                     int event_state) {
+  MenubarMenuAPI::SendOpenBookmark(browser_context(), bookmark_id, event_state);
+}
+
+void BookmarkContextMenuShowFunction::OnBookmarkAction(int64_t bookmark_id,
+                                                       int command) {
+  MenubarMenuAPI::SendBookmarkAction(browser_context(), bookmark_id, command);
+}
+
+void BookmarkContextMenuShowFunction::OnOpenMenu(int64_t bookmark_id) {
+   BookmarkContextMenuAPI::SendOpen(browser_context(), bookmark_id);
 }
 
 void BookmarkContextMenuShowFunction::BookmarkMenuClosed(

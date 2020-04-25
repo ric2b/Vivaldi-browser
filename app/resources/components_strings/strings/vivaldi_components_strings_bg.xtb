@@ -10,7 +10,6 @@
 <translation id="129863573139666797"><ph name="BEGIN_LINK" />Опитайте да изчистите бисквитките<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">За Vivaldi</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> не изпраща никакви данни.</translation>
-<translation id="14171126816530869">Самоличността на <ph name="ORGANIZATION" /> от <ph name="LOCALITY" /> е потвърдена от <ph name="ISSUER" />.</translation>
 <translation id="1559528461873125649">Няма такъв файл или директория</translation>
 <translation id="1620510694547887537">Камера</translation>
 <translation id="1640244768702815859">Опитайте да <ph name="BEGIN_LINK" />отворите началната страница на сайта<ph name="END_LINK" />.</translation>
@@ -27,6 +26,7 @@
 <translation id="2030481566774242610">Имате предвид <ph name="LINK" />?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Да проверите посредника и защитната стена<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">Звук</translation>
+<translation id="2119505898009119320">Издадено на: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2147827593068025794">Фоново сверяване</translation>
 <translation id="2166378884831602661">Сайт без защитено свързване</translation>
 <translation id="2187317261103489799">Установи (фабрично)</translation>
@@ -208,7 +208,7 @@
 <translation id="8503813439785031346">Потребител</translation>
 <translation id="859285277496340001">Удостоверението не указва механизъм, чрез който да се провери дали не е било отзовано.</translation>
 <translation id="8703575177326907206">Свързването със <ph name="DOMAIN" /> не се шифрова.</translation>
-<translation id="8740359287975076522">Намиране на &lt;abbr id="dnsDefinition"&gt;адрес DNS&lt;/abbr&gt; на <ph name="HOST_NAME" /> е невъзможно. Проблемът се диагностицира.</translation>
+<translation id="8740359287975076522">Намиране на &lt;abbr id="dnsDefinition"&gt;адрес DNS&lt;/abbr&gt; на <ph name="HOST_NAME" /> е невъзможно. Диагностициране в ход…</translation>
 <translation id="9001074447101275817">Посредникът <ph name="DOMAIN" /> изисква потребител и парола.</translation>
 <translation id="9008201768610948239">Подмини</translation>
 <translation id="9011424611726486705">Отваряне на настройките на сайта</translation>

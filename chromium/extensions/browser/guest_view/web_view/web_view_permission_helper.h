@@ -74,7 +74,7 @@ class WebViewPermissionHelper
                                     content::MediaResponseCallback callback);
   virtual bool CheckMediaAccessPermission(content::RenderFrameHost* render_frame_host,
                                   const GURL& security_origin,
-                                  blink::MediaStreamType type);
+                                  blink::mojom::MediaStreamType type);
   virtual void CanDownload(const GURL& url,
                    const std::string& request_method,
                    base::OnceCallback<void(bool)> callback);
@@ -169,7 +169,7 @@ class WebViewPermissionHelper
 
   bool default_media_access_permission_;
 
-  base::WeakPtrFactory<WebViewPermissionHelper> weak_factory_;
+  base::WeakPtrFactory<WebViewPermissionHelper> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(WebViewPermissionHelper);
 };

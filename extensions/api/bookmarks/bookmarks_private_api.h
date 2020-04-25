@@ -17,6 +17,8 @@ using bookmarks::BookmarkNode;
 
 namespace extensions {
 
+class MetaInfoChangeFilter;
+
 class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
                             public BrowserContextKeyedAPI {
  public:
@@ -38,24 +40,26 @@ class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
   // bookmarks::BookmarkModelObserver
   void BookmarkNodeMoved(BookmarkModel* model,
                          const BookmarkNode* old_parent,
-                         int old_index,
+                         size_t old_index,
                          const BookmarkNode* new_parent,
-                         int new_index) override;
+                         size_t new_index) override;
   void BookmarkNodeRemoved(BookmarkModel* model,
                            const BookmarkNode* parent,
-                           int old_index,
+                           size_t old_index,
                            const BookmarkNode* node,
                            const std::set<GURL>& no_longer_bookmarked) override;
 
   void BookmarkNodeAdded(BookmarkModel* model,
                          const BookmarkNode* parent,
-                         int index) override {}
+                         size_t index) override {}
 
   void BookmarkModelLoaded(BookmarkModel* model, bool ids_reassigned) override {
   }
   // Invoked when the title or url of a node changes.
   void BookmarkNodeChanged(BookmarkModel* model,
                            const BookmarkNode* node) override;
+  void OnWillChangeBookmarkMetaInfo(BookmarkModel* model,
+                                    const BookmarkNode* node) override;
   void BookmarkMetaInfoChanged(BookmarkModel* model,
                                const BookmarkNode* node) override;
   void BookmarkNodeFaviconChanged(BookmarkModel* model,
@@ -73,6 +77,11 @@ class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
   bookmarks::BookmarkModel* bookmark_model_;
 
   bool partner_upgrade_active_;
+  std::unique_ptr<MetaInfoChangeFilter> change_filter_;
+
+  // Helper to detect thumbnail change between OnWillChangeBookmarkMetaInfo and
+  // BookmarkMetaInfoChanged calls.
+  std::string saved_thumbnail_url_;
 
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "VivaldiBookmarksAPI"; }

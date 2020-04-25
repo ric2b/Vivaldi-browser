@@ -25,67 +25,111 @@ class Rect;
 }
 
 namespace ui {
+class Accelerator;
 class SimpleMenuModel;
 }
 
 namespace vivaldi {
 class VivaldiBookmarkMenu;
-}
-
-namespace vivaldi {
 class VivaldiContextMenu;
+class VivaldiMenubarMenu;
+struct BookmarkMenuContainer;
 }
 
 namespace vivaldi {
 
-struct FolderEntry {
+struct MenubarMenuEntry {
+  // Menu id
+  int id;
+  // Size and position of main menu element that opens menu.
+  gfx::Rect rect;
+};
+
+struct MenubarMenuParams {
+  class Delegate {
+   public:
+    virtual void PopulateModel(int menu_id, ui::SimpleMenuModel** menu_model) {}
+    virtual void OnMenuOpened(int menu_id) {}
+    virtual void OnMenuClosed() {}
+    virtual void OnAction(int id, int state) {}
+    virtual bool IsBookmarkMenu(int menu_id);
+    virtual bool IsItemChecked(int id);
+    virtual bool IsItemPersistent(int id);
+    virtual bool GetAccelerator(int id,
+        ui::Accelerator* accelerator);
+    virtual bool GetUrl(int id, std::string* url);
+    virtual BookmarkMenuContainer* GetBookmarkMenuContainer();
+  };
+
+  MenubarMenuParams(Delegate* delegate);
+  ~MenubarMenuParams();
+  MenubarMenuEntry* GetSibling(int id);
+  // All menus that can be opened.
+  std::vector<MenubarMenuEntry> siblings;
+  Delegate* delegate;
+};
+
+struct BookmarkMenuContainerEntry {
   // Bookmark folder id
   int64_t id;
   // Offset into folder
   int offset;
   // When true, sorted content will have folders first or last in list
   bool folder_group;
-  // Left position of item that opens menu, screen coordinates.
-  int x;
-  // Top position of item that opens menu, screen coordinates.
-  int y;
-  // Width of item that opens menu.
-  int width;
-  // Height of item that opens menu.
-  int height;
+  // Size and position of main menu element that opens menu.
+  gfx::Rect rect;
 };
 
-struct BookmarkMenuParams {
-  BookmarkMenuParams();
-  ~BookmarkMenuParams();
+// Used by main menu bar and bookmark bar context menu
+struct BookmarkMenuContainer {
+  class Delegate {
+   public:
+    virtual void OnHover(const std::string& url) {}
+    virtual void OnOpenBookmark(int64_t bookmark_id, int event_state) {}
+    virtual void OnBookmarkAction(int64_t bookmark_id, int command) {}
+    // To inform JS that a new menu has been made visible. For bookmark bar.
+    virtual void OnOpenMenu(int64_t bookmark_id) {}
+  };
 
-  // The folder to display
-  const bookmarks::BookmarkNode* node;
-  // Offset into the folder
-  int offset;
-  // Place all subfolders together
-  bool folder_group;
+  BookmarkMenuContainer(Delegate* delegate);
+  ~BookmarkMenuContainer();
+
   // Icons to use for folders and bookmarks missing a fav icon
   BookmarkSupport support;
-  // What to sort for and order
+  // Sort options
   vivaldi::BookmarkSorter::SortField sort_field;
   vivaldi::BookmarkSorter::SortOrder sort_order;
   // All folders that can be opnend
-  std::vector<FolderEntry> siblings;
+  std::vector<BookmarkMenuContainerEntry> siblings;
+  // Delegate that will execute commands
+  Delegate* delegate;
 };
+
 
 VivaldiContextMenu* CreateVivaldiContextMenu(
     content::WebContents* web_contents,
     ui::SimpleMenuModel* menu_model,
     const content::ContextMenuParams& params);
 
-void ConvertBookmarkButtonRectToScreen(
-    content::WebContents* web_contents,
-    vivaldi::BookmarkMenuParams& params);
 VivaldiBookmarkMenu* CreateVivaldiBookmarkMenu(
     content::WebContents* web_contents,
-    const BookmarkMenuParams& params,
+    const BookmarkMenuContainer* container,
+    const bookmarks::BookmarkNode* node,
+    int offset,
     const gfx::Rect& button_rect);
+
+void ConvertMenubarButtonRectToScreen(
+    content::WebContents* web_contents,
+    vivaldi::MenubarMenuParams& params);
+
+void ConvertContainerRectToScreen(
+    content::WebContents* web_contents,
+    vivaldi::BookmarkMenuContainer& container);
+
+VivaldiMenubarMenu* CreateVivaldiMenubarMenu(
+    content::WebContents* web_contents,
+    MenubarMenuParams& params,
+    int id);
 
 class VivaldiBookmarkMenuObserver {
  public:
@@ -112,6 +156,12 @@ class VivaldiBookmarkMenu {
   virtual void set_observer(VivaldiBookmarkMenuObserver* observer) {}
 };
 
+class VivaldiMenubarMenu {
+ public:
+  virtual ~VivaldiMenubarMenu() {}
+  virtual bool CanShow() = 0;
+  virtual void Show() = 0;
+};
 
 }  // namespace vivaldi
 

@@ -83,6 +83,7 @@
 <translation id="2482878487686419369">Известяване</translation>
 <translation id="2509495747794740764">Мащабът е число между 10 и 200.</translation>
 <translation id="253557089021624350">Брой пакети Keepalive</translation>
+<translation id="2546283357679194313">Бисквитки и данни на сайта</translation>
 <translation id="2550212893339833758">Разменна памет</translation>
 <translation id="2580924999637585241">Всичко: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="26224892172169984">Не позволявай на никой сайт да обработва протоколи</translation>
@@ -92,7 +93,6 @@
 <translation id="2785873697295365461">Файлови дескриптори</translation>
 <translation id="2809586584051668049">и още <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
 <translation id="2812989263793994277">Не показвай картини</translation>
-<translation id="2847759467426165163">Прехвърли към</translation>
 <translation id="2850541429955027218">Добави темата</translation>
 <translation id="2861941300086904918">Диспечер на сигурността в Native Client</translation>
 <translation id="2889064240420137087">Отвори препратката в…</translation>
@@ -130,7 +130,6 @@
 <translation id="3341703758641437857">Позволи достъп до локалните файлове</translation>
 <translation id="3347086966102161372">Копирай &amp;адреса на картината</translation>
 <translation id="3360297538363969800">Отпечатването се провали. Моля, проверете принтера и опитайте отново.</translation>
-<translation id="3378503599595235699">Пази локално данните само до изход от браузъра</translation>
 <translation id="3378572629723696641">Вероятно разширението е повредено.</translation>
 <translation id="3387614642886316601">Ползвай подобрена проверка на правописа</translation>
 <translation id="3432227430032737297">Премахни показаните</translation>
@@ -198,7 +197,6 @@
 <translation id="4613271546271159013">Разширение промени страницата, показвана при отваряне на нов раздел.</translation>
 <translation id="4677772697204437347">Памет на ГПУ</translation>
 <translation id="4681930562518940301">Отвори оригиналната карт&amp;ина в нов раздел</translation>
-<translation id="4688541352655220763">С тази възможност показвате съдържание от Vivaldi на вашия телевизор или други устройства.</translation>
 <translation id="4711638718396952945">Възстанови настройките</translation>
 <translation id="4726710629007580002">Опитът за инсталиране на разширението изведе предупреждения:</translation>
 <translation id="479536056609751218">Страницата само в HTML</translation>
@@ -269,7 +267,6 @@
 <translation id="5978277834170881274">&amp;Ползвай основна проверка на правописа</translation>
 <translation id="5979421442488174909">Преве&amp;ди на <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">Изчистване на данните на сайта</translation>
-<translation id="6040143037577758943">Затвори</translation>
 <translation id="6042308850641462728">Още</translation>
 <translation id="6059925163896151826">Устройства USB</translation>
 <translation id="6082651258230788217">Показвай в лентата</translation>
@@ -327,10 +324,8 @@
 <translation id="7270858098575133036">Питай при опит на сайт да ползва монополни за системата съобщения за достъп до устройства MIDI</translation>
 <translation id="7287143125007575591">Достъпът е отказан.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> тни</translation>
-<translation id="7293919849802650062">Добре дошли в прехвърляне по Vivaldi!</translation>
 <translation id="7309257895202129721">Покажи &amp;контролите</translation>
 <translation id="7311079019872751559">Неограничен достъп на приставки</translation>
-<translation id="7346909386216857016">ДА, ясно</translation>
 <translation id="7385854874724088939">Нещо се обърка при опита за отпечатване. Моля, проверете принтера и опитайте отново.</translation>
 <translation id="7423098979219808738">Питай първо</translation>
 <translation id="7427348830195639090">Фонова страница: <ph name="BACKGROUND_PAGE_URL" /></translation>
@@ -391,7 +386,6 @@
 <translation id="857943718398505171">Позволи (препоръчително)</translation>
 <translation id="8584280235376696778">&amp;Отвори клипа в нов раздел</translation>
 <translation id="8615618338313291042">Частно приложение: <ph name="APP_NAME" /></translation>
-<translation id="8627151598708688654">Избиране на източник</translation>
 <translation id="862750493060684461">Кеш за CSS</translation>
 <translation id="8664389313780386848">&amp;Покажи кода на страницата</translation>
 <translation id="8708000541097332489">Изчиствай при изход</translation>

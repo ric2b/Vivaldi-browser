@@ -257,7 +257,7 @@ void UpdateNigoriFromEncryptedTypes(ModelTypeSet encrypted_types,
                                     bool encrypt_everything,
                                     sync_pb::NigoriSpecifics* nigori) {
   nigori->set_encrypt_everything(encrypt_everything);
-  static_assert(45 + 1 /* notes */ == ModelType::NUM_ENTRIES,
+  static_assert(46 + 1 /* notes */ == ModelType::NUM_ENTRIES,
                 "If adding an encryptable type, update handling below.");
   nigori->set_encrypt_bookmarks(encrypted_types.Has(BOOKMARKS));
   nigori->set_encrypt_preferences(encrypted_types.Has(PREFERENCES));
@@ -286,6 +286,7 @@ void UpdateNigoriFromEncryptedTypes(ModelTypeSet encrypted_types,
   nigori->set_encrypt_reading_list(encrypted_types.Has(READING_LIST));
   nigori->set_encrypt_mountain_shares(encrypted_types.Has(MOUNTAIN_SHARES));
   nigori->set_encrypt_send_tab_to_self(encrypted_types.Has(SEND_TAB_TO_SELF));
+  nigori->set_encrypt_web_apps(encrypted_types.Has(WEB_APPS));
   nigori->set_encrypt_notes(encrypted_types.Has(NOTES));
 }
 
@@ -295,7 +296,7 @@ ModelTypeSet GetEncryptedTypesFromNigori(
     return ModelTypeSet::All();
 
   ModelTypeSet encrypted_types;
-  static_assert(45 + 1 /* notes */ == ModelType::NUM_ENTRIES,
+  static_assert(46 + 1 /* notes */ == ModelType::NUM_ENTRIES,
                 "If adding an encryptable type, update handling below.");
   if (nigori.encrypt_bookmarks())
     encrypted_types.Put(BOOKMARKS);
@@ -345,6 +346,8 @@ ModelTypeSet GetEncryptedTypesFromNigori(
     encrypted_types.Put(MOUNTAIN_SHARES);
   if (nigori.encrypt_send_tab_to_self())
     encrypted_types.Put(SEND_TAB_TO_SELF);
+  if (nigori.encrypt_web_apps())
+    encrypted_types.Put(WEB_APPS);
   if (nigori.encrypt_notes())
     encrypted_types.Put(NOTES);
   return encrypted_types;

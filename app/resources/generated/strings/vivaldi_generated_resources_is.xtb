@@ -90,7 +90,6 @@
 <translation id="2785873697295365461">Skráalýsingar</translation>
 <translation id="2809586584051668049">ásamt <ph name="NUMBER_ADDITIONAL_DISABLED" /> öðrum</translation>
 <translation id="2812989263793994277">Ekki sýna neinar myndir</translation>
-<translation id="2847759467426165163">Varpa á</translation>
 <translation id="2850541429955027218">Bættu við þema</translation>
 <translation id="2889064240420137087">Opna hlekk með...</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> gat ekki haft samband við  þenna prentara. Athugaðu að prentarinn sé í gangi og reyndu svo aftur.</translation>
@@ -126,7 +125,6 @@
 <translation id="3341703758641437857">Leyfa aðgengi í viðfang skráa</translation>
 <translation id="3347086966102161372">A&amp;frita veffang myndar</translation>
 <translation id="3360297538363969800">Prentun mistókst. Athugaðu prentarann og reyndu svo aftur.</translation>
-<translation id="3378503599595235699">Geyma staðbundin gögn aðeins þar til vafra er lokað</translation>
 <translation id="3378572629723696641">Þessi viðbót virðist hafa skemmst.</translation>
 <translation id="3387614642886316601">Nota stafsetningavilluleit Google</translation>
 <translation id="3432227430032737297">Fjarlægja alla sýnda</translation>
@@ -136,6 +134,7 @@
 <translation id="3505030558724226696">Afturkalla aðgang tækis</translation>
 <translation id="3523642406908660543">Spyrja hvenær síða vill nota íforrit til þess að tengjast tölvunni þinni (mælt með)</translation>
 <translation id="354068948465830244">Getur lesið og breytt gögnum síðu</translation>
+<translation id="3560034655160545939">&amp;villuleit</translation>
 <translation id="3574917942258583917">Loka samt í einkaglugga?</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; vill deila prentaranum, &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt;, með hópi sem þú stýrir: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Ef þú samþykkir það, munu allir í hópnum geta prentað með þessum prentara.</translation>
 <translation id="3587482841069643663">Allar</translation>
@@ -192,7 +191,6 @@
 <translation id="4613271546271159013">Vafraviðbót hefur breytt því hvaða síða er sýnd þegar þú opnar nýjan flipa.</translation>
 <translation id="4677772697204437347">GPU minni</translation>
 <translation id="4681930562518940301">Opna upphaflega &amp;mynd í nýjum flipa</translation>
-<translation id="4688541352655220763">Þú getur notað þennan eiginleika til þess að sýna efni frá Vivaldi á sjónvarpinu þínu og á öðrum tækjum.</translation>
 <translation id="4711638718396952945">Skipta í fyrri stillingar</translation>
 <translation id="4726710629007580002">Upp komu viðvaranir við uppsetningu viðbótar:</translation>
 <translation id="479536056609751218">Vefsíður, einungis HTML</translation>
@@ -263,7 +261,6 @@
 <translation id="5978277834170881274">&amp;Nota hefðbundna stafsetningarvilluleit</translation>
 <translation id="5979421442488174909">&amp;Þýða á <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">Eyða gögnum síðu</translation>
-<translation id="6040143037577758943">Loka</translation>
 <translation id="6042308850641462728">Meira</translation>
 <translation id="6059925163896151826">USB tæki</translation>
 <translation id="6082651258230788217">Sýna í veffangsstiku</translation>
@@ -288,7 +285,7 @@
 <translation id="6398765197997659313">Hætta í fullum skjá</translation>
 <translation id="6406303162637086258">Líkja eftir endurræsingu vafra</translation>
 <translation id="6445450263907939268">If þú vildir ekki þessar breytingar getur þú skipt aftur í fyrri stillingar þínar.</translation>
-<translation id="6447842834002726250">Kökur</translation>
+<translation id="6447842834002726250">Vafrakökur</translation>
 <translation id="6452181791372256707">Vísa frá</translation>
 <translation id="6498249116389603658">&amp;Öll þín tungumál</translation>
 <translation id="6503077044568424649">Mest heimsóttar</translation>
@@ -321,10 +318,8 @@
 <translation id="7270858098575133036">Spyrja ef síða vill nota kerfistilkynningar fyrir aðgang að MIDI tækjum</translation>
 <translation id="7287143125007575591">Aðgangi hafnað.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /><ph name="VERTICAL_DPI" />punktar á tommu</translation>
-<translation id="7293919849802650062">Velkomin/n í vörpunarupplifun Vivaldi!</translation>
 <translation id="7309257895202129721">Sýna &amp;stjórntæki</translation>
 <translation id="7311079019872751559">Viðbót hefur aðgang út fyrir sandkassa vafrans</translation>
-<translation id="7346909386216857016">Allt í lagi, ég skil</translation>
 <translation id="7385854874724088939">Mistókst að prenta. Athugið prentara og reynið aftur.</translation>
 <translation id="7423098979219808738">Spurðu fyrst</translation>
 <translation id="7427348830195639090">Bakgrunnssíða: <ph name="BACKGROUND_PAGE_URL" /></translation>
@@ -385,7 +380,6 @@ Geymdu lyklaskrána þína á öruggum stað. Þú munt þurfa á henni að hald
 <translation id="857943718398505171">Leyft (mælt með)</translation>
 <translation id="8584280235376696778">&amp;Opna myndband í nýjum flipa</translation>
 <translation id="8615618338313291042">Hulið forrit: <ph name="APP_NAME" /></translation>
-<translation id="8627151598708688654">Velja uppruna</translation>
 <translation id="862750493060684461">Skyndiminni fyrir CSS</translation>
 <translation id="8664389313780386848">&amp;Skoða frumgögn síðu</translation>
 <translation id="8708000541097332489">Henda við lokun</translation>

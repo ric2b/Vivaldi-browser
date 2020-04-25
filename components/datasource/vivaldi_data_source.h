@@ -47,18 +47,18 @@ class VivaldiDataSource : public content::URLDataSource {
   ~VivaldiDataSource() override;
 
   // content::URLDataSource implementation.
-  std::string GetSource() const override;
+  std::string GetSource() override;
   void StartDataRequest(
       const std::string& path,
       const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
       const content::URLDataSource::GotDataCallback& callback) override;
-  std::string GetMimeType(const std::string& path) const override;
-  bool AllowCaching() const override;
+  std::string GetMimeType(const std::string& path) override;
+  bool AllowCaching() override;
   bool ShouldServiceRequest(const GURL& url,
                             content::ResourceContext* resource_context,
-                            int render_process_id) const override;
+                            int render_process_id) override;
   scoped_refptr<base::SingleThreadTaskRunner> TaskRunnerForRequestPath(
-      const std::string& path) const override;
+      const std::string& path) override;
 
  protected:
   bool IsCSSRequest(const std::string& path) const;
@@ -83,7 +83,7 @@ class VivaldiThumbDataSource : public VivaldiDataSource {
   ~VivaldiThumbDataSource() override;
 
     // content::URLDataSource implementation.
-  std::string GetSource() const override;
+  std::string GetSource() override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(VivaldiThumbDataSource);

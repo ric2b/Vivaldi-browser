@@ -19,6 +19,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/no_destructor.h"
+#include "base/optional.h"
 #include "base/process/process_handle.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
@@ -31,8 +32,8 @@
 #include "content/browser/child_process_launcher.h"
 #include "content/browser/gpu/gpu_process_host.h"
 #include "content/browser/service_manager/common_browser_interfaces.h"
+#include "content/browser/system_connector_impl.h"
 #include "content/browser/utility_process_host.h"
-#include "content/browser/utility_process_host_client.h"
 #include "content/browser/wake_lock/wake_lock_context_host.h"
 #include "content/common/service_manager/service_manager_connection_impl.h"
 #include "content/public/app/content_browser_manifest.h"
@@ -42,6 +43,7 @@
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/gpu_service_registry.h"
 #include "content/public/browser/network_service_instance.h"
+#include "content/public/browser/service_process_host.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
@@ -56,6 +58,7 @@
 #include "mojo/public/cpp/platform/platform_channel.h"
 #include "mojo/public/cpp/system/invitation.h"
 #include "services/audio/public/mojom/constants.mojom.h"
+#include "services/audio/service.h"
 #include "services/audio/service_factory.h"
 #include "services/data_decoder/public/mojom/constants.mojom.h"
 #include "services/device/device_service.h"
@@ -86,19 +89,18 @@
 #include "services/tracing/tracing_service.h"
 #include "services/video_capture/public/mojom/constants.mojom.h"
 #include "services/video_capture/service_impl.h"
-#include "services/viz/public/interfaces/constants.mojom.h"
 #include "ui/base/buildflags.h"
 #include "ui/base/ui_base_features.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/jni_android.h"
 #include "base/android/scoped_java_ref.h"
-#include "jni/ContentNfcDelegate_jni.h"
+#include "content/public/android/content_jni_headers/ContentNfcDelegate_jni.h"
 #endif
 
 #if defined(OS_LINUX)
 #include "components/services/font/font_service_app.h"
-#include "components/services/font/public/interfaces/constants.mojom.h"  // nogncheck
+#include "components/services/font/public/mojom/constants.mojom.h"  // nogncheck
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -160,8 +162,9 @@ void DestroyConnectorOnIOThread() { g_io_thread_connector.Get().reset(); }
 class ContentChildServiceProcessHost
     : public service_manager::ServiceProcessHost {
  public:
-  explicit ContentChildServiceProcessHost(bool run_in_gpu_process)
-      : run_in_gpu_process_(run_in_gpu_process) {}
+  ContentChildServiceProcessHost(bool run_in_gpu_process,
+                                 base::Optional<int> child_flags)
+      : run_in_gpu_process_(run_in_gpu_process), child_flags_(child_flags) {}
   ~ContentChildServiceProcessHost() override = default;
 
   // service_manager::ServiceProcessHost:
@@ -195,11 +198,13 @@ class ContentChildServiceProcessHost
     }
 
     // Start a new process for this service.
-    UtilityProcessHost* process_host = new UtilityProcessHost(nullptr, nullptr);
+    UtilityProcessHost* process_host = new UtilityProcessHost();
     process_host->SetName(display_name);
     process_host->SetMetricsName(identity.name());
     process_host->SetServiceIdentity(identity);
     process_host->SetSandboxType(sandbox_type);
+    if (child_flags_.has_value())
+      process_host->set_child_flags(child_flags_.value());
     process_host->Start();
     process_host->RunService(
         identity.name(), std::move(receiver),
@@ -214,6 +219,7 @@ class ContentChildServiceProcessHost
 
  private:
   const bool run_in_gpu_process_;
+  const base::Optional<int> child_flags_;
   DISALLOW_COPY_AND_ASSIGN(ContentChildServiceProcessHost);
 };
 
@@ -265,8 +271,7 @@ std::unique_ptr<service_manager::Service> CreateNetworkService(
   registry->AddInterface(base::BindRepeating(
       [](network::mojom::NetworkServiceTestRequest request) {}));
   return std::make_unique<network::NetworkService>(
-      std::move(registry), nullptr /* request */, nullptr /* net_log */,
-      std::move(service_request));
+      std::move(registry), nullptr /* request */, std::move(service_request));
 }
 
 bool AudioServiceOutOfProcess() {
@@ -365,7 +370,7 @@ void RunServiceInstanceOnIOThread(
     mojo::PendingReceiver<service_manager::mojom::Service>* receiver) {
   if (!AudioServiceOutOfProcess() &&
       identity.name() == audio::mojom::kServiceName) {
-    CreateInProcessAudioService(ServiceManagerContext::GetAudioServiceRunner(),
+    CreateInProcessAudioService(audio::Service::GetInProcessTaskRunner(),
                                 std::move(*receiver));
     return;
   }
@@ -450,13 +455,15 @@ class BrowserServiceManagerDelegate
     // TODO(crbug.com/895615): Package these services in content_gpu instead
     // of using this hack.
     bool run_in_gpu_process = false;
+    base::Optional<int> child_flags;
 #if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_GPU_PROCESS)
     if (identity.name() == media::mojom::kMediaServiceName)
       run_in_gpu_process = true;
 #endif
     if (identity.name() == shape_detection::mojom::kServiceName)
       run_in_gpu_process = true;
-    return std::make_unique<ContentChildServiceProcessHost>(run_in_gpu_process);
+    return std::make_unique<ContentChildServiceProcessHost>(run_in_gpu_process,
+                                                            child_flags);
   }
 
   std::unique_ptr<service_manager::ServiceProcessHost>
@@ -517,7 +524,7 @@ class ServiceManagerContext::InProcessServiceManagerContext
  private:
   friend class base::RefCountedThreadSafe<InProcessServiceManagerContext>;
 
-  ~InProcessServiceManagerContext() {}
+  ~InProcessServiceManagerContext() = default;
 
   void StartOnServiceManagerThread(
       std::vector<service_manager::Manifest> manifests,
@@ -618,6 +625,7 @@ ServiceManagerContext::ServiceManagerContext(
       system_remote.InitWithNewPipeAndPassReceiver(),
       service_manager_thread_task_runner_));
   auto* system_connection = ServiceManagerConnection::GetForProcess();
+  SetSystemConnector(system_connection->GetConnector()->Clone());
 
   RegisterInProcessService(
       resource_coordinator::mojom::kServiceName,
@@ -731,28 +739,6 @@ bool ServiceManagerContext::HasValidProcessForProcessGroup(
   if (iter == g_active_process_groups.Get().end() || !iter->second)
     return false;
   return iter->second->GetData().GetProcess().IsValid();
-}
-
-// static
-void ServiceManagerContext::StartBrowserConnection() {
-  auto* system_connection = ServiceManagerConnection::GetForProcess();
-  RegisterCommonBrowserInterfaces(system_connection);
-  system_connection->Start();
-
-  if (base::FeatureList::IsEnabled(network::features::kNetworkService))
-    return;
-
-  // Create the in-process NetworkService object so that its getter is
-  // available on the IO thread.
-  GetNetworkService();
-}
-
-// static
-base::DeferredSequencedTaskRunner*
-ServiceManagerContext::GetAudioServiceRunner() {
-  static base::NoDestructor<scoped_refptr<base::DeferredSequencedTaskRunner>>
-      instance(new base::DeferredSequencedTaskRunner);
-  return (*instance).get();
 }
 
 void ServiceManagerContext::RunServiceInstance(

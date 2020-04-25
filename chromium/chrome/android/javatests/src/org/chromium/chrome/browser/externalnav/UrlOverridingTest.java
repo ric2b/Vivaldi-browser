@@ -145,7 +145,7 @@ public class UrlOverridingTest {
             boolean shouldLaunchExternalIntent) throws InterruptedException {
         loadUrlAndWaitForIntentUrl(url, needClick, 0, shouldLaunchExternalIntent, url, null);
     }
-
+  
     private void loadUrlAndWaitForIntentUrl(final String url, boolean needClick,
             int expectedNewTabCount, boolean shouldLaunchExternalIntent,
             final String expectedFinalUrl) throws InterruptedException {

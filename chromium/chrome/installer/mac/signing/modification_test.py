@@ -15,8 +15,7 @@ def plist_read(*args):
         '$W/App Product.app/Contents/Info.plist': {
             'CFBundleIdentifier': bundle_id,
             'KSProductID': 'test.ksproduct',
-            'KSChannelID': 'stable',
-            'KSChannelID-full': 'stable',
+            'KSChannelID-full': '-full',
         },
         '$W/App Product Canary.app/Contents/Frameworks/Product Framework.framework/XPCServices/AlertNotificationService.xpc/Contents/Info.plist':
             {
@@ -26,6 +25,9 @@ def plist_read(*args):
         '$W/app-entitlements.plist': {
             'com.apple.application-identifier': bundle_id
         },
+        '$W/helper-renderer-entitlements.plist': {},
+        '$W/helper-gpu-entitlements.plist': {},
+        '$W/helper-plugin-entitlements.plist': {},
         '$W/App Product Canary.app/Contents/Resources/test.signing.bundle_id.canary.manifest/Contents/Resources/test.signing.bundle_id.canary.manifest':
             {
                 'pfm_domain': bundle_id
@@ -49,6 +51,34 @@ class TestModification(unittest.TestCase):
         self.paths = model.Paths('$I', '$O', '$W')
         self.config = test_config.TestConfig()
 
+    def _is_framework_unchanged(self, plistlib, mocks):
+        # Determines whether any modifications were made within the framework
+        # according to calls to plistlib.writePlist or any of the mocked calls
+        # in |mocks|. This is done by examining the calls' arguments for a
+        # substring pointing into the framework.
+
+        def _do_mock_calls_mention_framework(mock_calls):
+            for call in mock_calls:
+                for tup in call:
+                    for arg in tup:
+                        # Don't anchor this substring in a particular directory
+                        # because it may appear in any of $I, $O, or $W. Don't
+                        # anchor it with App Product.app either, because it may
+                        # be renamed (to App Product Canary.app).
+                        if 'Contents/Frameworks/Product Framework.framework' in arg:
+                            return True
+
+            return False
+
+        if _do_mock_calls_mention_framework(plistlib.writePlist.mock_calls):
+            return False
+
+        for mocked in mocks.values():
+            if _do_mock_calls_mention_framework(mocked):
+                return False
+
+        return True
+
     def test_base_distribution(self, plistlib, **kwargs):
         dist = model.Distribution()
         config = dist.to_config(self.config)
@@ -59,16 +89,27 @@ class TestModification(unittest.TestCase):
         plistlib.writePlist.assert_called_with(
             {
                 'CFBundleIdentifier': config.base_bundle_id,
-                'KSProductID': 'test.ksproduct'
+                'KSProductID': 'test.ksproduct',
+                'KSChannelID-full': '-full'
             },
             '$W/App Product.app/Contents/Info.plist',
         )
 
-        kwargs['copy_files'].assert_called_once_with(
-            '$I/Product Packaging/app-entitlements.plist',
-            '$W/app-entitlements.plist')
+        self.assertEqual(4, kwargs['copy_files'].call_count)
+        kwargs['copy_files'].assert_has_calls([
+            mock.call('$I/Product Packaging/app-entitlements.plist',
+                      '$W/app-entitlements.plist'),
+            mock.call('$I/Product Packaging/helper-gpu-entitlements.plist',
+                      '$W/helper-gpu-entitlements.plist'),
+            mock.call('$I/Product Packaging/helper-renderer-entitlements.plist',
+                      '$W/helper-renderer-entitlements.plist'),
+            mock.call('$I/Product Packaging/helper-plugin-entitlements.plist',
+                      '$W/helper-plugin-entitlements.plist')
+        ])
         self.assertEqual(0, kwargs['move_file'].call_count)
         self.assertEqual(0, kwargs['write_file'].call_count)
+
+        self.assertTrue(self._is_framework_unchanged(plistlib, kwargs))
 
     def test_distribution_with_brand(self, plistlib, **kwargs):
         dist = model.Distribution(branding_code='MOO')
@@ -81,15 +122,26 @@ class TestModification(unittest.TestCase):
             {
                 'CFBundleIdentifier': config.base_bundle_id,
                 'KSProductID': 'test.ksproduct',
-                'KSBrandID': 'MOO'
+                'KSBrandID': 'MOO',
+                'KSChannelID-full': '-full'
             },
             '$W/App Product.app/Contents/Info.plist',
         )
 
-        kwargs['copy_files'].assert_called_once_with(
-            '$I/Product Packaging/app-entitlements.plist',
-            '$W/app-entitlements.plist')
+        self.assertEqual(4, kwargs['copy_files'].call_count)
+        kwargs['copy_files'].assert_has_calls([
+            mock.call('$I/Product Packaging/app-entitlements.plist',
+                      '$W/app-entitlements.plist'),
+            mock.call('$I/Product Packaging/helper-gpu-entitlements.plist',
+                      '$W/helper-gpu-entitlements.plist'),
+            mock.call('$I/Product Packaging/helper-renderer-entitlements.plist',
+                      '$W/helper-renderer-entitlements.plist'),
+            mock.call('$I/Product Packaging/helper-plugin-entitlements.plist',
+                      '$W/helper-plugin-entitlements.plist')
+        ])
         self.assertEqual(0, kwargs['move_file'].call_count)
+
+        self.assertTrue(self._is_framework_unchanged(plistlib, kwargs))
 
     def test_distribution_with_channel(self, plistlib, **kwargs):
         dist = model.Distribution(channel='dev')
@@ -108,11 +160,21 @@ class TestModification(unittest.TestCase):
             '$W/App Product.app/Contents/Info.plist',
         )
 
-        kwargs['copy_files'].assert_called_once_with(
-            '$I/Product Packaging/app-entitlements.plist',
-            '$W/app-entitlements.plist')
+        self.assertEqual(4, kwargs['copy_files'].call_count)
+        kwargs['copy_files'].assert_has_calls([
+            mock.call('$I/Product Packaging/app-entitlements.plist',
+                      '$W/app-entitlements.plist'),
+            mock.call('$I/Product Packaging/helper-gpu-entitlements.plist',
+                      '$W/helper-gpu-entitlements.plist'),
+            mock.call('$I/Product Packaging/helper-renderer-entitlements.plist',
+                      '$W/helper-renderer-entitlements.plist'),
+            mock.call('$I/Product Packaging/helper-plugin-entitlements.plist',
+                      '$W/helper-plugin-entitlements.plist')
+        ])
         self.assertEqual(0, kwargs['move_file'].call_count)
         self.assertEqual(0, kwargs['write_file'].call_count)
+
+        self.assertTrue(self._is_framework_unchanged(plistlib, kwargs))
 
     def test_distribution_with_product_dirname(self, plistlib, **kwargs):
         dist = model.Distribution(product_dirname='Farmland/Cows')
@@ -125,16 +187,27 @@ class TestModification(unittest.TestCase):
             {
                 'CFBundleIdentifier': config.base_bundle_id,
                 'KSProductID': 'test.ksproduct',
+                'KSChannelID-full': '-full',
                 'CrProductDirName': 'Farmland/Cows'
             },
             '$W/App Product.app/Contents/Info.plist',
         )
 
-        kwargs['copy_files'].assert_called_once_with(
-            '$I/Product Packaging/app-entitlements.plist',
-            '$W/app-entitlements.plist')
+        self.assertEqual(4, kwargs['copy_files'].call_count)
+        kwargs['copy_files'].assert_has_calls([
+            mock.call('$I/Product Packaging/app-entitlements.plist',
+                      '$W/app-entitlements.plist'),
+            mock.call('$I/Product Packaging/helper-gpu-entitlements.plist',
+                      '$W/helper-gpu-entitlements.plist'),
+            mock.call('$I/Product Packaging/helper-renderer-entitlements.plist',
+                      '$W/helper-renderer-entitlements.plist'),
+            mock.call('$I/Product Packaging/helper-plugin-entitlements.plist',
+                      '$W/helper-plugin-entitlements.plist')
+        ])
         self.assertEqual(0, kwargs['move_file'].call_count)
         self.assertEqual(0, kwargs['write_file'].call_count)
+
+        self.assertTrue(self._is_framework_unchanged(plistlib, kwargs))
 
     def test_distribution_with_creator_code(self, plistlib, **kwargs):
         dist = model.Distribution(creator_code='Mooo')
@@ -147,14 +220,23 @@ class TestModification(unittest.TestCase):
             {
                 'CFBundleIdentifier': config.base_bundle_id,
                 'KSProductID': 'test.ksproduct',
+                'KSChannelID-full': '-full',
                 'CFBundleSignature': 'Mooo'
             },
             '$W/App Product.app/Contents/Info.plist',
         )
 
-        kwargs['copy_files'].assert_called_once_with(
-            '$I/Product Packaging/app-entitlements.plist',
-            '$W/app-entitlements.plist')
+        self.assertEqual(4, kwargs['copy_files'].call_count)
+        kwargs['copy_files'].assert_has_calls([
+            mock.call('$I/Product Packaging/app-entitlements.plist',
+                      '$W/app-entitlements.plist'),
+            mock.call('$I/Product Packaging/helper-gpu-entitlements.plist',
+                      '$W/helper-gpu-entitlements.plist'),
+            mock.call('$I/Product Packaging/helper-renderer-entitlements.plist',
+                      '$W/helper-renderer-entitlements.plist'),
+            mock.call('$I/Product Packaging/helper-plugin-entitlements.plist',
+                      '$W/helper-plugin-entitlements.plist')
+        ])
         kwargs['write_file'].assert_called_once_with(
             '$W/App Product.app/Contents/PkgInfo', 'APPLMooo')
         self.assertEqual(0, kwargs['move_file'].call_count)
@@ -177,9 +259,17 @@ class TestModification(unittest.TestCase):
             '$W/App Product.app/Contents/Info.plist',
         )
 
-        kwargs['copy_files'].assert_called_once_with(
-            '$I/Product Packaging/app-entitlements.plist',
-            '$W/app-entitlements.plist')
+        self.assertEqual(4, kwargs['copy_files'].call_count)
+        kwargs['copy_files'].assert_has_calls([
+            mock.call('$I/Product Packaging/app-entitlements.plist',
+                      '$W/app-entitlements.plist'),
+            mock.call('$I/Product Packaging/helper-gpu-entitlements.plist',
+                      '$W/helper-gpu-entitlements.plist'),
+            mock.call('$I/Product Packaging/helper-renderer-entitlements.plist',
+                      '$W/helper-renderer-entitlements.plist'),
+            mock.call('$I/Product Packaging/helper-plugin-entitlements.plist',
+                      '$W/helper-plugin-entitlements.plist')
+        ])
         self.assertEqual(0, kwargs['move_file'].call_count)
         self.assertEqual(0, kwargs['write_file'].call_count)
 
@@ -210,10 +300,16 @@ class TestModification(unittest.TestCase):
             ),
         ])
 
-        self.assertEqual(3, kwargs['copy_files'].call_count)
+        self.assertEqual(6, kwargs['copy_files'].call_count)
         kwargs['copy_files'].assert_has_calls([
             mock.call('$I/Product Packaging/app-entitlements.plist',
                       '$W/app-entitlements.plist'),
+            mock.call('$I/Product Packaging/helper-gpu-entitlements.plist',
+                      '$W/helper-gpu-entitlements.plist'),
+            mock.call('$I/Product Packaging/helper-renderer-entitlements.plist',
+                      '$W/helper-renderer-entitlements.plist'),
+            mock.call('$I/Product Packaging/helper-plugin-entitlements.plist',
+                      '$W/helper-plugin-entitlements.plist'),
             mock.call('$I/Product Packaging/app_canary.icns',
                       '$W/App Product Canary.app/Contents/Resources/app.icns'),
             mock.call(
@@ -223,7 +319,7 @@ class TestModification(unittest.TestCase):
         kwargs['write_file'].assert_called_once_with(
             '$W/App Product Canary.app/Contents/PkgInfo', 'APPLMooo')
 
-        self.assertEqual(4, plistlib.writePlist.call_count)
+        self.assertEqual(7, plistlib.writePlist.call_count)
         plistlib.writePlist.assert_has_calls([
             mock.call({
                 'CFBundleIdentifier':
@@ -243,8 +339,13 @@ class TestModification(unittest.TestCase):
                 'com.apple.application-identifier':
                     'test.signing.bundle_id.canary'
             }, '$W/app-entitlements.plist'),
+            mock.call({}, '$W/helper-gpu-entitlements.plist'),
+            mock.call({}, '$W/helper-renderer-entitlements.plist'),
+            mock.call({}, '$W/helper-plugin-entitlements.plist'),
             mock.call({
                 'pfm_domain': 'test.signing.bundle_id.canary'
             }, '$W/App Product Canary.app/Contents/Resources/test.signing.bundle_id.canary.manifest/Contents/Resources/test.signing.bundle_id.canary.manifest'
                      )
         ])
+
+        self.assertFalse(self._is_framework_unchanged(plistlib, kwargs))

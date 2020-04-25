@@ -39,5 +39,5 @@ bool VivaldiAdverseAdFilterListFactory::ServiceIsCreatedWithBrowserContext()
 content::BrowserContext*
 VivaldiAdverseAdFilterListFactory::GetBrowserContextToUse(
     content::BrowserContext* context) const {
-  return chrome::GetBrowserContextOwnInstanceInIncognito(context);
+  return chrome::GetBrowserContextRedirectedInIncognito(context);
 }

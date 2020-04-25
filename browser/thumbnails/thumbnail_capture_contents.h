@@ -46,6 +46,7 @@ class ThumbnailCaptureContents
   static void Start(content::BrowserContext* browser_context,
                     const GURL& start_url,
                     gfx::Size initial_size,
+                    gfx::Size target_size,
                     CapturePage::DoneCallback callback);
 
  private:
@@ -55,6 +56,7 @@ class ThumbnailCaptureContents
   void StartImpl(content::BrowserContext* browser_context,
                  const GURL& start_url,
                  gfx::Size initial_size,
+                 gfx::Size target_size,
                  CapturePage::DoneCallback callback);
 
   // content::WebContentsDelegate overrides to provide the desired behaviors.
@@ -88,14 +90,14 @@ class ThumbnailCaptureContents
       const GURL& target_url,
       const std::string& partition_id,
       content::SessionStorageNamespace* session_storage_namespace) override;
-  bool EmbedsFullscreenWidget() const override;
+  bool EmbedsFullscreenWidget() override;
   void RequestMediaAccessPermission(
       content::WebContents* contents,
       const content::MediaStreamRequest& request,
       content::MediaResponseCallback callback) override;
   bool CheckMediaAccessPermission(content::RenderFrameHost* render_frame_host,
                                   const GURL& security_origin,
-                                  blink::MediaStreamType type) override;
+                                  blink::mojom::MediaStreamType type) override;
 
   // content::WebContentsObserver overrides
   void DidStartLoading() override;
@@ -118,6 +120,9 @@ class ThumbnailCaptureContents
   // The initial navigation URL, which may or may not match the current URL if
   // page-initiated navigations have occurred.
   GURL start_url_;
+
+  // Size of the resulting bitmap.
+  gfx::Size target_size_;
 
   // The WebContents containing the off-screen tab's page.
   std::unique_ptr<content::WebContents> offscreen_tab_web_contents_;

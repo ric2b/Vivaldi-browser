@@ -17,12 +17,15 @@ import("//vivaldi/importer/deps_updates.gni")
 import("//vivaldi/installer/deps_updates.gni")
 import("//vivaldi/notes/deps_updates.gni")
 import("//vivaldi/prefs/deps_updates.gni")
+import("//vivaldi/renderer/deps_updates.gni")
 import("//vivaldi/sync/deps_updates.gni")
 import("//vivaldi/third_party/deps_updates.gni")
 import("//vivaldi/vivapp/deps_updates.gni")
 
-update_target("//chrome/browser:test_support_ui") {
-  deps += [ "//chrome/common" ]
+if (!is_android) {
+  update_target("//chrome/browser:test_support_ui") {
+    deps += [ "//chrome/common" ]
+  }
 }
 
 update_target("//content/common:common") {
@@ -49,14 +52,6 @@ foreach(_target,
         ]) {
   update_target(_target) {
     deps = []
-  }
-}
-
-if (!is_android) {
-  update_template_instance("//chrome/test:interactive_ui_tests") {
-    deps -= [
-      ":captured_sites_interactive_tests",
-    ]
   }
 }
 

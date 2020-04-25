@@ -109,10 +109,6 @@ ui::WindowShowState VivaldiNativeAppWindowViewsAura::GetRestoredState() const {
   return GetRestorableState(restore_state);
 }
 
-bool VivaldiNativeAppWindowViewsAura::IsAlwaysOnTop() const {
-  return widget()->IsAlwaysOnTop();
-}
-
 void VivaldiNativeAppWindowViewsAura::UpdateShape(
     std::unique_ptr<ShapeRects> rects) {
   // Not used in Vivaldi.

@@ -33,6 +33,7 @@
 
 #include <unicode/uscript.h>
 
+#include "third_party/blink/public/common/css/forced_colors.h"
 #include "third_party/blink/public/common/css/preferred_color_scheme.h"
 #include "third_party/blink/public/platform/pointer_properties.h"
 #include "third_party/blink/public/platform/web_common.h"
@@ -136,6 +137,7 @@ class WebSettings {
   virtual void SetAntialiasedClips2dCanvasEnabled(bool) = 0;
   virtual void SetAutoplayPolicy(AutoplayPolicy) = 0;
   virtual void SetAutoZoomFocusedNodeToLegibleScale(bool) = 0;
+  virtual void SetCaretBrowsingEnabled(bool) = 0;
   virtual void SetClobberUserAgentInitialScaleQuirk(bool) = 0;
   virtual void SetCookieEnabled(bool) = 0;
   virtual void SetNavigateOnDragDrop(bool) = 0;
@@ -255,6 +257,9 @@ class WebSettings {
   virtual void SetTextTrackTextColor(const WebString&) = 0;
   virtual void SetTextTrackTextShadow(const WebString&) = 0;
   virtual void SetTextTrackTextSize(const WebString&) = 0;
+  virtual void SetTextTrackWindowColor(const WebString&) = 0;
+  virtual void SetTextTrackWindowPadding(const WebString&) = 0;
+  virtual void SetTextTrackWindowRadius(const WebString&) = 0;
   virtual void SetThreadedScrollingEnabled(bool) = 0;
   virtual void SetTouchDragDropEnabled(bool) = 0;
   virtual void SetBarrelButtonForDragEnabled(bool) = 0;
@@ -292,6 +297,7 @@ class WebSettings {
   virtual void SetLazyImageLoadingDistanceThresholdPx4G(int) = 0;
   virtual void SetForceDarkModeEnabled(bool) = 0;
   virtual void SetPreferredColorScheme(PreferredColorScheme) = 0;
+  virtual void SetForcedColors(ForcedColors) = 0;
 
   virtual void SetVivaldiShowContextMenuOnDoubleClick(bool) = 0;
 

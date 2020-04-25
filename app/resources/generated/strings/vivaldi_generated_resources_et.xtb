@@ -88,6 +88,7 @@
 <translation id="3341703758641437857">Lubatud ligipääs faili-URLidele</translation>
 <translation id="3347086966102161372">K&amp;opeeri pildi aadress</translation>
 <translation id="3378572629723696641">See laiendus võib olla rikutud.</translation>
+<translation id="3387614642886316601">&amp;Täiustatud õigekirjakontroll</translation>
 <translation id="345693547134384690">Ava pilt uuel &amp;vahelehel</translation>
 <translation id="3505030558724226696">Tühista juurdepääs seadmele</translation>
 <translation id="3574917942258583917">Kas tahad privaatse akna siiski sulgeda?</translation>
@@ -173,10 +174,11 @@
 <translation id="5780973441651030252">Protsessi prioriteet</translation>
 <translation id="5828633471261496623">Printimine...</translation>
 <translation id="583281660410589416">Tundmatu</translation>
+<translation id="5860491529813859533">Lülita sisse</translation>
 <translation id="5956585768868398362">Kas see on otsinguleht, mida ootasid?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (tipp <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="5965661248935608907">Lisaks juhib see seda, mis leht kuvatakse avalehe nupul klõpsamisel või omnikastikeses otsingu tegemisel.</translation>
-<translation id="6040143037577758943">Sulge</translation>
+<translation id="5978277834170881274">&amp;Lihtne õigekirjakontroll</translation>
 <translation id="6059925163896151826">USB-seadmed</translation>
 <translation id="6082651258230788217">Kuva &amp;juhtelemendid</translation>
 <translation id="6101226222197207147">Lisati uus rakendus (<ph name="EXTENSION_NAME" />)</translation>
@@ -224,6 +226,7 @@
 <translation id="7564847347806291057">Lõpeta toiming</translation>
 <translation id="7576690715254076113">Õiges järjestuses</translation>
 <translation id="7629827748548208700">Kaart: <ph name="TAB_NAME" /></translation>
+<translation id="7658239707568436148">Loobu</translation>
 <translation id="7663719505383602579">Saaja: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7685049629764448582">JavaScripti mälu</translation>
 <translation id="7701040980221191251">Puuduvad</translation>

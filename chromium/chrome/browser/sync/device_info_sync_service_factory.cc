@@ -22,6 +22,7 @@
 #include "components/send_tab_to_self/features.h"
 #include "components/sync/base/sync_prefs.h"
 #include "components/sync/model/model_type_store_service.h"
+#include "components/sync_device_info/device_info_prefs.h"
 #include "components/sync_device_info/device_info_sync_service_impl.h"
 #include "components/sync_device_info/local_device_info_provider_impl.h"
 
@@ -107,9 +108,14 @@ KeyedService* DeviceInfoSyncServiceFactory::BuildServiceInstanceFor(
           chrome::GetChannel(), chrome::GetVersionString(),
           signin_scoped_device_id_callback,
           send_tab_to_self_receiving_enabled_callback);
+
   local_device_info_provider->set_session_name_override_callback(
     session_name_override_callback);
+
+  auto device_prefs =
+      std::make_unique<syncer::DeviceInfoPrefs>(profile->GetPrefs());
+
   return new syncer::DeviceInfoSyncServiceImpl(
       ModelTypeStoreServiceFactory::GetForProfile(profile)->GetStoreFactory(),
-      std::move(local_device_info_provider));
+      std::move(local_device_info_provider), std::move(device_prefs));
 }

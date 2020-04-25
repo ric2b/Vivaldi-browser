@@ -51,7 +51,6 @@
 <translation id="2721037002783622288">&amp;Traži sliku uz <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2785873697295365461">Deskriptori datoteke</translation>
 <translation id="2809586584051668049">i još <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
-<translation id="2847759467426165163">Emitiranje na</translation>
 <translation id="2850541429955027218">Dodaj temu</translation>
 <translation id="2861941300086904918">Sigurnosni upravitelj izvornog klijenta</translation>
 <translation id="2913331724188855103">Dopuštanje web-lokacijama da spremaju i čitaju podatke kolačića (preporučeno)</translation>
@@ -105,7 +104,6 @@
 <translation id="4595560905247879544">Aplikacije i proširenja može mijenjati samo voditelj (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Proširenje je promijenilo stranicu koja se prikazuje kada otvorite novu karticu.</translation>
 <translation id="4677772697204437347">Memorija grafičkog procesora</translation>
-<translation id="4688541352655220763">Pomoću te značajke možete prikazivati sadržaj iz Vivaldija na televizoru ili drugim uređajima.</translation>
 <translation id="4711638718396952945">Vrati postavke</translation>
 <translation id="4839303808932127586">Sp&amp;remi videozapis kao...</translation>
 <translation id="488785315393301722">Pokaži pojedinosti</translation>
@@ -142,7 +140,6 @@
 <translation id="5956585768868398362">Je li to stranica pretraživanja koju ste očekivali?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (najviše <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="5965661248935608907">Upravlja i time koja se stranica prikazuje kada se klikne gumb Početna ili prilikom pretraživanja putem višenamjenskog okvira.</translation>
-<translation id="6040143037577758943">Zatvori</translation>
 <translation id="6042308850641462728">Više</translation>
 <translation id="6059925163896151826">USB uređaji</translation>
 <translation id="6101226222197207147">Dodana je nova aplikacija (<ph name="EXTENSION_NAME" />)</translation>
@@ -179,9 +176,7 @@
 <translation id="7175353351958621980">Učitano s lokacije:</translation>
 <translation id="7270858098575133036">Pitaj kada web-lokacija želi upotrijebiti posebne sistemske poruke za pristup MIDI uređajima</translation>
 <translation id="7287143125007575591">Pristup je odbijen.</translation>
-<translation id="7293919849802650062">Dobro došli u značajku emitiranja na Vivaldi!</translation>
 <translation id="7309257895202129721">Prikaži &amp;upravljačke gumbe</translation>
-<translation id="7346909386216857016">Dobro, shvaćam</translation>
 <translation id="7423098979219808738">Prvo pitaj</translation>
 <translation id="7427348830195639090">Pozadinska stranica: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7521387064766892559">JavaScript</translation>
@@ -220,14 +215,12 @@ Ključnu datoteku čuvajte na sigurnom mjestu. Trebat će vam za stvaranje novih
 <translation id="8546306075665861288">Predmemorija slike</translation>
 <translation id="8584280235376696778">&amp;Otvori video na novoj kartici</translation>
 <translation id="8615618338313291042">Anonimna aplikacija: <ph name="APP_NAME" /></translation>
-<translation id="8627151598708688654">Odaberite izvor</translation>
 <translation id="862750493060684461">CSS predmemorija</translation>
 <translation id="8664389313780386848">&amp;Pogledaj izvor stranice</translation>
 <translation id="8757090071857742562">Nije moguće emitirati radnu površinu.  Provjerite jeste li potvrdili upit za početak dijeljenja zaslona.</translation>
 <translation id="8808478386290700967">Internet trgovina</translation>
 <translation id="8859174528519900719">Podokvir: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Otvori vezu u novom &amp;prozoru</translation>
-<translation id="8910146161325739742">Dijelite svoj zaslon</translation>
 <translation id="8916476537757519021">Anonimni podokvir: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8962083179518285172">Sakrij pojedinosti</translation>
 <translation id="8973557916016709913">Onemogući kontrolu povećanja</translation>

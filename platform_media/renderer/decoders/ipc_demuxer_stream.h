@@ -31,6 +31,7 @@ class IPCDemuxerStream : public DemuxerStream {
 
   // DemuxerStream's implementation.
   void Read(const ReadCB& read_cb) override;
+  bool IsReadPending() const override;
   AudioDecoderConfig audio_decoder_config() override;
   VideoDecoderConfig video_decoder_config() override;
   Type type() const override;

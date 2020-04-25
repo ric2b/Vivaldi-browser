@@ -260,13 +260,15 @@ class APIPermission {
     kEnterpriseHardwarePlatform = 216,
     kLoginScreenUi = 217,
     kDeclarativeNetRequestFeedback = 218,
+    kTransientBackground = 219,
+    kLogin = 220,
 
     // vivaldi permissions
 
 #   include "extensions/permissions/vivaldi_api_permission_enums.inc"
 
     // Last entry: Add new entries above and ensure to update the
-    // "ExtensionPermission3" enum in tools/metrics/histograms/histograms.xml
+    // "ExtensionPermission3" enum in tools/metrics/histograms/enums.xml
     // (by running update_extension_permission.py).
     kEnumBoundary,
   };

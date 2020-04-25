@@ -10,9 +10,12 @@
 
 #include <string>
 #include <vector>
+
+#include "app/vivaldi_resources.h"
 #include "base/strings/utf_string_conversions.h"
 #include "calendar/calendar_type.h"
 #include "sql/statement.h"
+#include "ui/base/l10n/l10n_util.h"
 
 namespace calendar {
 
@@ -62,7 +65,7 @@ bool CalendarTable::CreateDefaultCalendar() {
     return false;
 
   CalendarRow row;
-  row.set_name(base::UTF8ToUTF16("Default"));
+  row.set_name(l10n_util::GetStringUTF16(IDS_DEFAULT_CALENDAR_NAME));
   row.set_color("#C2EBAE");
   CalendarID id = CreateCalendar(row);
   if (id)

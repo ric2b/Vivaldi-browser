@@ -83,6 +83,7 @@
 <translation id="2482878487686419369">آگاه‌سازی‌ها</translation>
 <translation id="2509495747794740764">مقیاس باید عددی بین ۱۰ تا ۲۰۰ باشد.</translation>
 <translation id="253557089021624350">شمارش استفاده</translation>
+<translation id="2546283357679194313">کوکی‌ها و داده‌های سایت</translation>
 <translation id="2550212893339833758">حافظه جابه‌جاشده</translation>
 <translation id="2580924999637585241">مجموع: <ph name="SHEETS_LABEL" /><ph name="NUMBER_OF_SHEETS" /></translation>
 <translation id="26224892172169984">به هیچ سایتی برای کنترل پروتکل‌ها اجازه داده نشود</translation>
@@ -92,7 +93,6 @@
 <translation id="2785873697295365461">توصیف‌گرهای فایل</translation>
 <translation id="2809586584051668049">و <ph name="NUMBER_ADDITIONAL_DISABLED" /> مورد دیگر</translation>
 <translation id="2812989263793994277">تصویری نشان داده نشود</translation>
-<translation id="2847759467426165163">Cast to</translation>
 <translation id="2850541429955027218">افزودن طرح زمینه</translation>
 <translation id="2861941300086904918">‏مدیر امنیت Native Client</translation>
 <translation id="2889064240420137087">بازکردن پیوند با...</translation>
@@ -130,7 +130,6 @@
 <translation id="3341703758641437857">اجازه‌ی دسترسی به آدرس فایل‌ها</translation>
 <translation id="3347086966102161372">کپی آدرس تصویر</translation>
 <translation id="3360297538363969800">چاپ ناموفق بود. لطفاً چاپگرتان را بررسی کنید و دوباره امتحان کنید.</translation>
-<translation id="3378503599595235699">داده‌های محلی فقط تا وقتی از مرورگرتان خارج نشده‌اید، حفظ شود</translation>
 <translation id="3378572629723696641">ممکن است این برنامه افزودنی خراب شده باشد.</translation>
 <translation id="3387614642886316601">استفاده از غلط‌گیر املایی بهبودیافته</translation>
 <translation id="3432227430032737297">حذف همه‌ی موارد نشان‌ داده شده</translation>
@@ -198,7 +197,6 @@
 <translation id="4613271546271159013">یک برنامه افزودنی صفحه‌ای را که موقع باز کردن برگه جدید نشان داده می‌شود، تغییر داده است.</translation>
 <translation id="4677772697204437347">‏حافظه GPU</translation>
 <translation id="4681930562518940301">باز کردن تصویر اصلی در برگه جدید</translation>
-<translation id="4688541352655220763">‏می‌توانید از این قابلیت برای نمایش محتوا از Vivaldi روی تلویزیون یا دستگاه‌های دیگر استفاده کنید.</translation>
 <translation id="4711638718396952945">بازیابی تنظیمات</translation>
 <translation id="4726710629007580002">هشدارهایی هنگام نصب این افزونه وجود دارد:</translation>
 <translation id="479536056609751218">‏صفحه وب، فقط HTML</translation>
@@ -269,7 +267,6 @@
 <translation id="5978277834170881274">&amp;استفاده از غلط‌گیر املای پایه</translation>
 <translation id="5979421442488174909">ترجمه به <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">پاک کردن داده‌های سایت</translation>
-<translation id="6040143037577758943">بستن</translation>
 <translation id="6042308850641462728">بیشتر</translation>
 <translation id="6059925163896151826">‏دستگاه‌های USB</translation>
 <translation id="6082651258230788217">نمایش در نوار ابزار</translation>
@@ -327,10 +324,8 @@
 <translation id="7270858098575133036">‏اگر سایتی می‌خواهد از پیام‌های انحصاری سیستم برای دسترسی به دستگاه‌های MIDI استفاده کند سؤال شود</translation>
 <translation id="7287143125007575591">دسترسی رد شد.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />×<ph name="VERTICAL_DPI" /> نقطه در اینچ</translation>
-<translation id="7293919849802650062">‏به تجربه ارسال محتوا در Vivaldi خوش آمدید!</translation>
 <translation id="7309257895202129721">نمایش &amp;کنترل‌ها</translation>
 <translation id="7311079019872751559">دسترسی خارج از محیط امن به افزونه</translation>
-<translation id="7346909386216857016">بله، متوجه شدم</translation>
 <translation id="7385854874724088939">هنگام چاپ، اشتباهی رخ داده است. لطفاً چاپگر خود را بررسی کنید و دوباره امتحان کنید.</translation>
 <translation id="7423098979219808738">ابتدا سؤال شود</translation>
 <translation id="7427348830195639090">صفحه پس‌زمینه: <ph name="BACKGROUND_PAGE_URL" /></translation>
@@ -391,7 +386,6 @@
 <translation id="857943718398505171">مجاز (توصیه می‌شود)</translation>
 <translation id="8584280235376696778">&amp;باز کردن فایل ویدئویی در برگهٔ جدید</translation>
 <translation id="8615618338313291042">برنامه ناشناس: <ph name="APP_NAME" /></translation>
-<translation id="8627151598708688654">انتخاب منبع</translation>
 <translation id="862750493060684461">‏حافظهٔ پنهان CSS</translation>
 <translation id="8664389313780386848">&amp;مشاهده منبع صفحه</translation>
 <translation id="8708000541097332489">پاک‌سازی در هنگام خروج</translation>

@@ -15,15 +15,18 @@ mac_app_name = "$root_build_dir/$mac_product_name.app"
 perform_signing = vivaldi_signing_key != "" && vivaldi_signing_id != ""
 
 signing_deps = []
+dmg__signing_deps = []
 if (perform_signing) {
   signing_deps += [ ":sign_mac" ]
+  dmg__signing_deps += [ ":sign_dmg" ]
+
   mac_packaging_dir = "$root_build_dir/${mac_product_name}_Packaging"
 
   mac_app_name = "$root_build_dir/$mac_product_name-$vivaldi_version_full"
 }
 
 group("mac") {
-  deps = [ ":build_dmg" ] + signing_deps
+  deps = [ ":build_dmg" ] + signing_deps + dmg__signing_deps
 }
 
 command_bash("build_dmg") {
@@ -100,10 +103,48 @@ if (perform_signing) {
       "--input", ".",
       "--output", ".",
       "--no-dmg",
-      # Vivaldi does not use entitlements_plist or provisioning_profile
-      # so using this flag to disable that part of the code
-      "--development",
     ]
+
+    # hardening and notarization and disabled due to VB-58183
+    if (false && is_full_mac_signer) {
+      assert(vivaldi_notarize_account != "")
+      assert(vivaldi_notarize_password != "")
+      args += [
+        "--notarize",
+        "--notary-user", vivaldi_notarize_account,
+        "--notary-password", vivaldi_notarize_password
+      ]
+    } else {
+      args += [
+        # Vivaldi does not use entitlements_plist or provisioning_profile
+        # so using this flag to disable that part of the code
+        "--development",
+      ]
+    }
+  }
+
+  action("sign_dmg") {
+    deps = [
+      ":build_dmg",
+    ]
+    script = "sign_dmg.py"
+    inputs = ["$root_build_dir/$dmg_name"]
+    outputs = ["$root_gen_dir/signed_dmg.done"]
+    args = [
+      "--keychain", vivaldi_signing_key,
+      "--identity", vivaldi_signing_id,
+    ]
+
+    if (is_full_mac_signer) {
+      assert(vivaldi_notarize_account != "")
+      assert(vivaldi_notarize_password != "")
+      args += [
+        "--notarize",
+        "--notary-user", vivaldi_notarize_account,
+        "--notary-password", vivaldi_notarize_password
+      ]
+    }
+    args += [ dmg_name ]
   }
 
   #correct permissions in app before tar-ing it.

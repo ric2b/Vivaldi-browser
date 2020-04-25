@@ -23,6 +23,7 @@
 <translation id="1588438908519853928">Normaal</translation>
 <translation id="1601560923496285236">Pas toe</translation>
 <translation id="1603914832182249871">(Privaat)</translation>
+<translation id="1620510694547887537">Kamera</translation>
 <translation id="1635033183663317347">Deur u voog geïnstalleer.</translation>
 <translation id="1708338024780164500">(Onaktief)</translation>
 <translation id="1723824996674794290">&amp;Nuwe venster</translation>
@@ -61,6 +62,8 @@
 <translation id="2439110203301358333">’n Ander program op u rekenaar het ’n uitbreiding toegevoeg wat Vivaldi se werkswyse kan verander.</translation>
 <translation id="2445081178310039857">Uitbreidingstamgids word vereis.</translation>
 <translation id="2470702053775288986">Onondersteunde uitbreidings gedeaktiveer</translation>
+<translation id="2476578072172137802">Werfinstellings</translation>
+<translation id="2482878487686419369">Kennisgewings</translation>
 <translation id="2509495747794740764">Die waarde van die skaal moet ’n getal tussen 10 en 200 wees.</translation>
 <translation id="253557089021624350">Keepalive-telling</translation>
 <translation id="2550212893339833758">Wisselgeheue</translation>
@@ -70,7 +73,6 @@
 <translation id="2721037002783622288">&amp;Deursoek <ph name="SEARCH_ENGINE" /> vir beeld</translation>
 <translation id="2785873697295365461">Lêerbeskrywers</translation>
 <translation id="2809586584051668049">en nog <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
-<translation id="2847759467426165163">Send na</translation>
 <translation id="2850541429955027218">Voeg tema toe</translation>
 <translation id="2861941300086904918">Eie Kliënt-sekuriteitsbestuurder</translation>
 <translation id="2889064240420137087">Open skakel met…</translation>
@@ -92,6 +94,7 @@
 <translation id="3144647712221361880">Open skakel as</translation>
 <translation id="3154429428035006212">Vanlyn vir meer as ’n maand</translation>
 <translation id="3222066309010235055">Voorverbeeld: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
+<translation id="3227137524299004712">Mikrofoon</translation>
 <translation id="3241680850019875542">Kies die stamgids van die uitbreidings om in te pak. Om ’n uitbreiding by te werk, kies ook die privaatsleutellêer om dit weer te gebruik.</translation>
 <translation id="3280237271814976245">Bewaar &amp;as…</translation>
 <translation id="3288047731229977326">Uitbreidings wat in ontwikkelaarsmodus loop kan u rekenaar beskadig. Indien u nie ’n ontwikkelaar is nie moet u die uitbreidings veiligheidshalwe deaktiveer.</translation>
@@ -112,6 +115,7 @@
 <translation id="3683524264665795342"><ph name="APP_NAME" /> Skermdeelversoek</translation>
 <translation id="3725367690636977613">bladsye</translation>
 <translation id="3727187387656390258">Inspekteer opwip</translation>
+<translation id="3744111561329211289">Agtergrondsinchronisering</translation>
 <translation id="3797900183766075808">&amp;Deursoek <ph name="SEARCH_ENGINE" /> vir “<ph name="SEARCH_TERMS" />”</translation>
 <translation id="385051799172605136">Terug</translation>
 <translation id="3899879303189199559">Vanlyn vir meer as ’n jaar</translation>
@@ -142,19 +146,20 @@
 <translation id="4384652540891215547">Aktiveer die uitbreiding</translation>
 <translation id="4394049700291259645">Deaktiveer</translation>
 <translation id="4409697491990005945">Kantlyne</translation>
+<translation id="4552089082226364758">Flash</translation>
 <translation id="4579581181964204535">Kan nie <ph name="HOST_NAME" /> send nie.</translation>
 <translation id="4593021220803146968">&amp;Gaan na <ph name="URL" /></translation>
 <translation id="4595560905247879544">Toeps en uitbreidings kan slegs deur die bestuurder (<ph name="CUSTODIAN_NAME" />) aangepas word.</translation>
 <translation id="4613271546271159013">’n Uitbreiding het die blad wat vertoon word wanneer u ’n nuwe oortjie open, verander.</translation>
 <translation id="4677772697204437347">GVE-hegeue</translation>
 <translation id="4681930562518940301">Open oorspronklike &amp;beeld in nuwe oortjie</translation>
-<translation id="4688541352655220763">U kan hierdie funksie gebruik om inhoud van Vivaldi op u TV of ander toestelle te vertoon.</translation>
 <translation id="4711638718396952945">Stel instellings terug</translation>
 <translation id="4726710629007580002">Die installasie van hierdie uitbreiding het waarskuwings opgelewer:</translation>
 <translation id="479536056609751218">Webblad, slegs HTML</translation>
 <translation id="4816492930507672669">Pas by bladsy aan</translation>
 <translation id="4839303808932127586">Be&amp;waar video as…</translation>
 <translation id="488785315393301722">Toon Details</translation>
+<translation id="4907306957610201395">Toestemmingskategorie</translation>
 <translation id="4918086044614829423">Aanvaar</translation>
 <translation id="4927753642311223124">Hier is niks te sien nie, beweeg aan.</translation>
 <translation id="4988526792673242964">Bladsye</translation>
@@ -185,6 +190,8 @@
 <translation id="5575473780076478375">Privaatmodusuitbreiding: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5623842676595125836">Log</translation>
 <translation id="5627086634964711283">Dit beheer ook die blad wat vertoon word wanneer u die Tuis-knop klik.</translation>
+<translation id="5649053991847567735">Outomatiese aflaaie</translation>
+<translation id="5689516760719285838">Ligging</translation>
 <translation id="5707185214361380026">Fout by laai van die uitbreiding vanaf:</translation>
 <translation id="5715711091495208045">Inpropmakelaar: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Bewaar as PDF</translation>
@@ -197,7 +204,6 @@
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> piek)</translation>
 <translation id="5965661248935608907">Dit beheer ook die blad wat vertoon word wanneer u die Tuis-knop klik of vanuit die adresveld soek.</translation>
 <translation id="5979421442488174909">&amp;Vertaal na <ph name="LANGUAGE" /></translation>
-<translation id="6040143037577758943">Sluit</translation>
 <translation id="6042308850641462728">Nog</translation>
 <translation id="6082651258230788217">Toon in nutsbalk</translation>
 <translation id="6086846494333236931">Deur u administrateur geïnstalleer</translation>
@@ -213,6 +219,7 @@
 <translation id="6251870443722440887">GDI-handvatsels</translation>
 <translation id="6268252012308737255">Open met <ph name="APP" /></translation>
 <translation id="6273677812470008672">Kwaliteit</translation>
+<translation id="6295158916970320988">Alle werwe</translation>
 <translation id="6295855836753816081">Bewaar tans…</translation>
 <translation id="6308937455967653460">Bewaar &amp;skakel as…</translation>
 <translation id="6398765197997659313">Verlaat volskerm</translation>
@@ -242,13 +249,12 @@
 <translation id="7175353351958621980">Gelaai vanaf:</translation>
 <translation id="7287143125007575591">Toegang geweier.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="7293919849802650062">Welkom by die Send-funksie in Vivaldi!</translation>
 <translation id="7309257895202129721">Toon &amp;kontroles</translation>
-<translation id="7346909386216857016">Goed, ek het dit</translation>
 <translation id="7385854874724088939">Iets het skeefgeloop tydens afdruk.  Gaan u drukker na en probeer weer.</translation>
 <translation id="7427348830195639090">Agtergrondblad: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7453008956351770337">Deur hierdie drukker te kies kry die volgende uitbreiding toestemming vir toegang tot u drukker:</translation>
 <translation id="749028671485790643">Persoon <ph name="VALUE" /></translation>
+<translation id="7521387064766892559">JavaScript</translation>
 <translation id="7564847347806291057">Beëindig proses</translation>
 <translation id="7576690715254076113">Sorteer</translation>
 <translation id="7629827748548208700">Oortjie: <ph name="TAB_NAME" /></translation>
@@ -285,13 +291,13 @@ Bewaar u sleutellêer op ’n veilige plek. U benodig dit om nuwe weergawes van 
 <translation id="8137559199583651773">Bestuur uitbreidings</translation>
 <translation id="8180239481735238521">bladsy</translation>
 <translation id="8261378640211443080">Hierdie uitbreiding is nie in die <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> gelys nie en is dalk sonder u medewete toegevoeg.</translation>
+<translation id="8270242299912238708">PDF-dokumente</translation>
 <translation id="8351419472474436977">Hierdie uitbreiding het beheer oor u instaanbedienerinstellings oorgeneem, wat beteken dat dit enigiets wat u aanlyn doen kan verander, breek of afluister. Indien u onseker is oor waarom dit gebeur het, wil u dit waarskynlik nie hê nie.</translation>
 <translation id="8382913212082956454">Kopieer &amp;e-posadres</translation>
 <translation id="8546306075665861288">Beeldkasgeheue</translation>
 <translation id="8569682776816196752">Geen bestemmings gevind</translation>
 <translation id="8584280235376696778">&amp;Open video in nuwe oortjie</translation>
 <translation id="8615618338313291042">Privaatmodustoep: <ph name="APP_NAME" /></translation>
-<translation id="8627151598708688654">Kies bron</translation>
 <translation id="862750493060684461">CSS-kasgeheue</translation>
 <translation id="8664389313780386848">&amp;Bekyk bladsybron</translation>
 <translation id="8714838604780058252">Agtergrondgrafika</translation>
@@ -315,6 +321,7 @@ Bewaar u sleutellêer op ’n veilige plek. U benodig dit om nuwe weergawes van 
 <translation id="9137916601698928395">Open skakel as <ph name="USER" /></translation>
 <translation id="9170848237812810038">&amp;Ontdaan</translation>
 <translation id="9215293857209265904">“<ph name="EXTENSION_NAME" />” toegevoeg</translation>
+<translation id="9219103736887031265">Beelde</translation>
 <translation id="93766956588638423">Repareer uitbreiding</translation>
 <translation id="98515147261107953">Landskap</translation>
 <translation id="994289308992179865">&amp;Lus</translation>

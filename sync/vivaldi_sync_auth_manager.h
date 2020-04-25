@@ -8,7 +8,6 @@
 
 #include <string>
 
-#include "components/signin/core/browser/account_info.h"
 #include "components/sync/driver/sync_auth_manager.h"
 #include "vivaldi_account/vivaldi_account_manager.h"
 
@@ -22,7 +21,7 @@ class VivaldiSyncAuthManager : public syncer::SyncAuthManager,
   using NotifyTokenRequestedCallback = base::RepeatingClosure;
 
   VivaldiSyncAuthManager(
-      identity::IdentityManager* identity_manager,
+      signin::IdentityManager* identity_manager,
       const AccountStateChangedCallback& account_state_changed,
       const CredentialsChangedCallback& credentials_changed,
       VivaldiAccountManager* account_manager);

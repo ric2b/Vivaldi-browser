@@ -135,6 +135,11 @@ MenuItemView* MenuDelegate::GetVivaldiSiblingMenu(
   return nullptr;
 }
 
+MenuItemView* MenuDelegate::GetNextSiblingMenu(bool next, bool* has_mnemonics,
+                                               gfx::Rect* rect) {
+  return nullptr;
+}
+
 int MenuDelegate::GetMaxWidthForMenu(MenuItemView* menu) {
   // NOTE: this needs to be large enough to accommodate the wrench menu with
   // big fonts.

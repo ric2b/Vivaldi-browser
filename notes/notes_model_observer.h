@@ -26,14 +26,14 @@ class NotesModelObserver : public base::CheckedObserver {
   // Invoked when a node has moved.
   virtual void NotesNodeMoved(Notes_Model* model,
                               const Notes_Node* old_parent,
-                              int old_index,
+                              size_t old_index,
                               const Notes_Node* new_parent,
-                              int new_index) {}
+                              size_t new_index) {}
 
   // Invoked when a node has been added.
   virtual void NotesNodeAdded(Notes_Model* model,
                               const Notes_Node* parent,
-                              int index) {}
+                              size_t index) {}
 
   // Invoked before a node is removed.
   // |parent| the parent of the node that will be removed.
@@ -41,7 +41,7 @@ class NotesModelObserver : public base::CheckedObserver {
   // |node| is the node to be removed.
   virtual void OnWillRemoveNotes(Notes_Model* model,
                                  const Notes_Node* parent,
-                                 int old_index,
+                                 size_t old_index,
                                  const Notes_Node* node) {}
 
   // Invoked when a node has been removed, the item may still be starred though.
@@ -51,7 +51,7 @@ class NotesModelObserver : public base::CheckedObserver {
   // |node| is the node that was removed.
   virtual void NotesNodeRemoved(Notes_Model* model,
                                 const Notes_Node* parent,
-                                int old_index,
+                                size_t old_index,
                                 const Notes_Node* node) {}
 
   // Invoked before the title or url of a node is changed.

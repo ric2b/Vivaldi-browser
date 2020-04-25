@@ -91,11 +91,11 @@ class Notes_Model : public KeyedService {
   }
 
   Notes_Node* AddFolder(const Notes_Node* parent,
-                        int index,
+                        size_t index,
                         const base::string16& name);
 
   Notes_Node* AddNote(const Notes_Node* parent,
-                      int index,
+                      size_t index,
                       const base::string16& subject,
                       const GURL& url,
                       const base::string16& content);
@@ -105,14 +105,14 @@ class Notes_Model : public KeyedService {
                       std::unique_ptr<Notes_Node> node);
 
   Notes_Node* AddNote(const Notes_Node* parent,
-                      int index,
+                      size_t index,
                       bool is_folder,
                       const ImportedNotesEntry& node);
 
   // Removes the node at the given |index| from |parent|. Removing a folder node
   // recursively removes all nodes.
   void Remove(const Notes_Node* node);
-  bool Remove(Notes_Node* parent, int index);
+  bool Remove(Notes_Node* parent, size_t index);
 
   // Removes all the non-permanent notes nodes that are editable by the user.
   // Observers are only notified when all nodes have been removed. There is no
@@ -120,7 +120,7 @@ class Notes_Model : public KeyedService {
   void RemoveAllUserNotes();
 
   // Moves |node| to |new_parent| and inserts it at the given |index|.
-  bool Move(const Notes_Node* node, const Notes_Node* new_parent, int index);
+  bool Move(const Notes_Node* node, const Notes_Node* new_parent, size_t index);
 
   void DoneLoading(std::unique_ptr<NotesLoadDetails> details);
 
@@ -155,7 +155,7 @@ class Notes_Model : public KeyedService {
   void SetNodeSyncTransactionVersion(const Notes_Node* node,
                                      int64_t sync_transaction_version);
   // Returns true if the parent and index are valid.
-  bool IsValidIndex(const Notes_Node* parent, int index, bool allow_end);
+  bool IsValidIndex(const Notes_Node* parent, size_t index, bool allow_end);
 
   bool is_root_node(const Notes_Node* node) const { return node == &root_; }
   bool is_main_node(const Notes_Node* node) const { return node == main_node_; }
@@ -208,7 +208,7 @@ class Notes_Model : public KeyedService {
   // Remove |node| and all its children from |nodes_ordered_by_url_set_|.
   void RemoveNodeTreeFromURLSet(Notes_Node* node);
 
-  void RemoveAndDeleteNode(Notes_Node* parent, int index, Notes_Node* node_ptr);
+  void RemoveAndDeleteNode(Notes_Node* parent, size_t index, Notes_Node* node_ptr);
 
   content::BrowserContext* context_;
   Notes_Node root_;

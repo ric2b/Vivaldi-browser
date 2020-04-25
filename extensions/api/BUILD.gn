@@ -27,6 +27,7 @@ jumbo_static_library("apis") {
     "//vivaldi/app/resources",
     "//vivaldi/extensions/schema",
     "//vivaldi/prefs:prefs_files_generator",
+    "//vivaldi/ui:skia_utils",
   ]
   sources = [
     "access_keys/access_keys_api.cc",
@@ -65,6 +66,8 @@ jumbo_static_library("apis") {
     "mail/mail_private_api.h",
     "menubar/menubar_api.cc",
     "menubar/menubar_api.h",
+    "menubar_menu/menubar_menu_api.cc",
+    "menubar_menu/menubar_menu_api.h",
     "notes/notes_api.cc",
     "notes/notes_api.h",
     "prefs/prefs_api.cc",

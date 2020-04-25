@@ -12,6 +12,7 @@
 #include "chrome/browser/bookmarks/managed_bookmark_service_factory.h"
 #include "chrome/browser/favicon/favicon_utils.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/bookmarks/bookmark_drag_drop.h"
 #include "chrome/browser/ui/bookmarks/bookmark_utils.h"
@@ -99,7 +100,7 @@ BookmarkMenuDelegate::~BookmarkMenuDelegate() {
 void BookmarkMenuDelegate::Init(views::MenuDelegate* real_delegate,
                                 MenuItemView* parent,
                                 const BookmarkNode* node,
-                                int start_child_index,
+                                size_t start_child_index,
                                 ShowOptions show_options,
                                 BookmarkLaunchLocation location) {
   GetBookmarkModel()->AddObserver(this);
@@ -131,7 +132,7 @@ void BookmarkMenuDelegate::Init(views::MenuDelegate* real_delegate,
     bool show_managed =
         show_forced_folders && !managed->managed_node()->children().empty();
     bool has_children =
-        (start_child_index < node->child_count()) || show_managed;
+        (start_child_index < node->children().size()) || show_managed;
     if (has_children && parent->GetSubmenu() &&
         !parent->GetSubmenu()->GetMenuItems().empty())
       parent->AppendSeparator();
@@ -162,7 +163,7 @@ BookmarkMenuDelegate::GetManagedBookmarkService() {
 }
 
 void BookmarkMenuDelegate::SetActiveMenu(const BookmarkNode* node,
-                                         int start_index) {
+                                         size_t start_index) {
   DCHECK(!parent_menu_item_);
   if (!node_to_menu_map_[node])
     CreateMenu(node, start_index, HIDE_PERMANENT_FOLDERS);
@@ -219,11 +220,10 @@ void BookmarkMenuDelegate::ExecuteCommand(int id, int mouse_event_flags) {
     return;
   }
 
-  const BookmarkNode* node = menu_id_to_node_map_[id];
-  std::vector<const BookmarkNode*> selection;
-  selection.push_back(node);
+  std::vector<const BookmarkNode*> selection = {menu_id_to_node_map_[id]};
 
-  RecordBookmarkLaunch(node, location_);
+  RecordBookmarkLaunch(location_,
+                       ProfileMetrics::GetBrowserProfileType(profile_));
   chrome::OpenAll(parent_->GetNativeWindow(), page_navigator_, selection,
                   ui::DispositionFromEventFlags(mouse_event_flags),
                   profile_);
@@ -299,27 +299,27 @@ int BookmarkMenuDelegate::GetDropOperation(
 
   const BookmarkNode* node = menu_id_to_node_map_[item->GetCommand()];
   const BookmarkNode* drop_parent = node->parent();
-  int index_to_drop_at = drop_parent->GetIndexOf(node);
+  size_t index_to_drop_at = size_t{drop_parent->GetIndexOf(node)};
   BookmarkModel* model = GetBookmarkModel();
   switch (*position) {
-    case views::MenuDelegate::DROP_AFTER:
+    case views::MenuDelegate::DropPosition::kAfter:
       if (node == model->other_node() || node == model->mobile_node()) {
         // Dropping after these nodes makes no sense.
-        *position = views::MenuDelegate::DROP_NONE;
+        *position = views::MenuDelegate::DropPosition::kNone;
       }
       index_to_drop_at++;
       break;
 
-    case views::MenuDelegate::DROP_BEFORE:
+    case views::MenuDelegate::DropPosition::kBefore:
       if (node == model->mobile_node()) {
         // Dropping before this node makes no sense.
-        *position = views::MenuDelegate::DROP_NONE;
+        *position = views::MenuDelegate::DropPosition::kNone;
       }
       break;
 
-    case views::MenuDelegate::DROP_ON:
+    case views::MenuDelegate::DropPosition::kOn:
       drop_parent = node;
-      index_to_drop_at = node->child_count();
+      index_to_drop_at = node->children().size();
       break;
 
     default:
@@ -340,24 +340,24 @@ int BookmarkMenuDelegate::OnPerformDrop(
   DCHECK(model);
   const BookmarkNode* drop_parent = drop_node->parent();
   DCHECK(drop_parent);
-  int index_to_drop_at = drop_parent->GetIndexOf(drop_node);
+  size_t index_to_drop_at = size_t{drop_parent->GetIndexOf(drop_node)};
   switch (position) {
-    case views::MenuDelegate::DROP_AFTER:
+    case views::MenuDelegate::DropPosition::kAfter:
       index_to_drop_at++;
       break;
 
-    case views::MenuDelegate::DROP_ON:
+    case views::MenuDelegate::DropPosition::kOn:
       DCHECK(drop_node->is_folder());
       drop_parent = drop_node;
-      index_to_drop_at = drop_node->child_count();
+      index_to_drop_at = drop_node->children().size();
       break;
 
-    case views::MenuDelegate::DROP_BEFORE:
+    case views::MenuDelegate::DropPosition::kBefore:
       if (drop_node == model->other_node() ||
           drop_node == model->mobile_node()) {
         // This can happen with SHOW_PERMANENT_FOLDERS.
         drop_parent = model->bookmark_bar_node();
-        index_to_drop_at = drop_parent->child_count();
+        index_to_drop_at = drop_parent->children().size();
       }
       break;
 
@@ -421,7 +421,8 @@ int BookmarkMenuDelegate::GetMaxWidthForMenu(MenuItemView* menu) {
 
 void BookmarkMenuDelegate::WillShowMenu(MenuItemView* menu) {
   auto iter = menu_id_to_node_map_.find(menu->GetCommand());
-  if ((iter != menu_id_to_node_map_.end()) && iter->second->child_count() &&
+  if ((iter != menu_id_to_node_map_.end()) &&
+      !iter->second->children().empty() &&
       menu->GetSubmenu()->GetMenuItems().empty())
     BuildMenu(iter->second, 0, menu);
 }
@@ -516,8 +517,8 @@ bool BookmarkMenuDelegate::ShouldCloseOnRemove(const BookmarkNode* node) const {
     return false;
 
   const bool is_only_child_of_other_folder =
-      (node->parent() == GetBookmarkModel()->other_node() &&
-       node->parent()->child_count() == 1);
+      node->parent() == GetBookmarkModel()->other_node() &&
+      node->parent()->children().size() == 1;
   const bool is_child_of_bookmark_bar =
       node->parent() == GetBookmarkModel()->bookmark_bar_node();
   // The 'other' bookmarks folder hides when it has no more items, so we need
@@ -529,7 +530,7 @@ bool BookmarkMenuDelegate::ShouldCloseOnRemove(const BookmarkNode* node) const {
 }
 
 MenuItemView* BookmarkMenuDelegate::CreateMenu(const BookmarkNode* parent,
-                                               int start_child_index,
+                                               size_t start_child_index,
                                                ShowOptions show_options) {
   MenuItemView* menu = new MenuItemView(real_delegate_);
   menu->SetCommand(next_menu_id_++);
@@ -586,10 +587,9 @@ void BookmarkMenuDelegate::BuildMenuForManagedNode(MenuItemView* menu) {
 }
 
 void BookmarkMenuDelegate::BuildMenu(const BookmarkNode* parent,
-                                     int start_child_index,
+                                     size_t start_child_index,
                                      MenuItemView* menu) {
-  DCHECK(parent->children().empty() ||
-         start_child_index < parent->child_count());
+  DCHECK_LE(start_child_index, parent->children().size());
   ui::ResourceBundle* rb = &ui::ResourceBundle::GetSharedInstance();
   const gfx::ImageSkia folder_icon =
       vivaldi::IsVivaldiRunning() ?
@@ -600,12 +600,13 @@ void BookmarkMenuDelegate::BuildMenu(const BookmarkNode* parent,
   if (vivaldi::IsVivaldiRunning()) {
     vivaldi::SortBookmarkNodes(parent, nodes);
     // Call vivaldi::AddVivaldiBookmarkMenuItems here if in front of bookmarks.
-    vivaldi::AddSeparator(menu);
+    // And this separator vivaldi::AddSeparator(menu);
   }
 
-  for (int i = start_child_index; i < parent->child_count(); ++i) {
-    const BookmarkNode* node = vivaldi::IsVivaldiRunning() ? nodes[i] :
-        parent->GetChild(i);
+  size_t j = start_child_index;
+  for (auto i = parent->children().cbegin() + start_child_index;
+       i != parent->children().cend(); ++i, ++j) {
+    const BookmarkNode* node = vivaldi::IsVivaldiRunning() ? nodes[j] : i->get();
     if (vivaldi::IsVivaldiRunning()) {
       if (vivaldi::AddIfSeparator(node, menu))
         continue;

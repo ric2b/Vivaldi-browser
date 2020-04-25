@@ -77,14 +77,14 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, Sanity) {
   Notes_Node* trash_node_1 = GetNotesModel(1)->trash_node();
   ASSERT_TRUE(AddNote(0, trash_node_0, 0, "trash_1_url0",
                       GURL("http://www.microsoft.com")));
-  ASSERT_EQ(1, trash_node_0->child_count());
+  ASSERT_EQ(1u, trash_node_0->children().size());
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
-  ASSERT_EQ(1, trash_node_1->child_count());
+  ASSERT_EQ(1u, trash_node_1->children().size());
   ASSERT_TRUE(AllModelsMatchVerifier());
 
   const Notes_Node* new_folder = AddFolder(0, 2, "New Folder");
   Move(0, GetUniqueNodeByURL(0, google_url), new_folder, 0);
-  SetTitle(0, GetNotesTopNode(0)->GetChild(0), "Yahoo!!");
+  SetTitle(0, GetNotesTopNode(0)->children()[0].get(), "Yahoo!!");
   ASSERT_TRUE(AddNote(0, GetNotesTopNode(0), 1, "CNN",
                       GURL("http://www.cnn.com")) != NULL);
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
@@ -95,9 +95,9 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, Sanity) {
   ASSERT_TRUE(AllModelsMatchVerifier());
 
   Remove(1, trash_node_1, 0);
-  ASSERT_EQ(0, trash_node_1->child_count());
+  ASSERT_EQ(0u, trash_node_1->children().size());
   ASSERT_TRUE(GetClient(1)->AwaitMutualSyncCycleCompletion(GetClient(0)));
-  ASSERT_EQ(0, trash_node_0->child_count());
+  ASSERT_EQ(0u, trash_node_0->children().size());
   ASSERT_TRUE(AllModelsMatchVerifier());
 
   SortChildren(1, GetNotesTopNode(1));
@@ -130,7 +130,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SimultaneousURLChanges) {
   ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(AllModelsMatch());
 
-  SetTitle(0, GetNotesTopNode(0)->GetChild(0), "Google1");
+  SetTitle(0, GetNotesTopNode(0)->children()[0].get(), "Google1");
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatch());
 }
@@ -534,7 +534,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
 
-  Remove(0, folder, folder->child_count() - 1);
+  Remove(0, folder, folder->children().size() - 1);
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
 }
@@ -576,8 +576,8 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
 
-  int child_count = folder->child_count();
-  for (int i = 0; i < child_count; ++i) {
+  size_t child_count = folder->children().size();
+  for (size_t i = 0; i < child_count; ++i) {
     Remove(0, folder, 0);
   }
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
@@ -795,9 +795,10 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
 
-  int num_notes_to_move = GetNotesTopNode(0)->child_count() - 2;
-  for (int i = 0; i < num_notes_to_move; ++i) {
-    Move(0, GetNotesTopNode(0)->GetChild(2), folder, i);
+  ASSERT_TRUE(GetNotesTopNode(0)->children().size() >= 2);
+  size_t num_notes_to_move = GetNotesTopNode(0)->children().size() - 2;
+  for (size_t i = 0; i < num_notes_to_move; ++i) {
+    Move(0, GetNotesTopNode(0)->children()[2].get(), folder, i);
     ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
     ASSERT_TRUE(AllModelsMatchVerifier());
   }
@@ -819,9 +820,9 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_MovingBMsFromBMFoldToBMBar) {
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
 
-  int num_notes_to_move = folder->child_count() - 2;
+  int num_notes_to_move = folder->children().size() - 2;
   for (int i = 0; i < num_notes_to_move; ++i) {
-    Move(0, folder->GetChild(0), GetNotesTopNode(0), i);
+    Move(0, folder->children()[0].get(), GetNotesTopNode(0), i);
     ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
     ASSERT_TRUE(AllModelsMatchVerifier());
   }
@@ -905,7 +906,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_HoistBMs10LevelUp) {
       ASSERT_TRUE(AddNote(0, folder, i, title, url) != NULL);
     }
     std::string title = IndexedFolderName(level);
-    folder = AddFolder(0, folder, folder->child_count(), title);
+    folder = AddFolder(0, folder, folder->children().size(), title);
     ASSERT_TRUE(folder != NULL);
     if (level == 0)
       folder_L0 = folder;
@@ -921,7 +922,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_HoistBMs10LevelUp) {
   ASSERT_TRUE(AllModelsMatchVerifier());
 
   GURL url10 = GURL(IndexedURL(10));
-  Move(0, GetUniqueNodeByURL(0, url10), folder_L0, folder_L0->child_count());
+  Move(0, GetUniqueNodeByURL(0, url10), folder_L0, folder_L0->children().size());
   GURL url11 = GURL(IndexedURL(11));
   Move(0, GetUniqueNodeByURL(0, url11), folder_L0, 0);
   GURL url12 = GURL(IndexedURL(12));
@@ -947,7 +948,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_SinkBMs10LevelDown) {
       ASSERT_TRUE(AddNote(0, folder, i, title, url) != NULL);
     }
     std::string title = IndexedFolderName(level);
-    folder = AddFolder(0, folder, folder->child_count(), title);
+    folder = AddFolder(0, folder, folder->children().size(), title);
     ASSERT_TRUE(folder != NULL);
     if (level == 0)
       folder_L0 = folder;
@@ -963,7 +964,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_SinkBMs10LevelDown) {
   ASSERT_TRUE(AllModelsMatchVerifier());
 
   GURL url10 = GURL(IndexedURL(10));
-  Move(0, GetUniqueNodeByURL(0, url10), folder_L10, folder_L10->child_count());
+  Move(0, GetUniqueNodeByURL(0, url10), folder_L10, folder_L10->children().size());
   GURL url11 = GURL(IndexedURL(11));
   Move(0, GetUniqueNodeByURL(0, url11), folder_L10, 0);
   GURL url12 = GURL(IndexedURL(12));
@@ -987,17 +988,17 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_SinkEmptyBMFold5LevelsDown) {
       ASSERT_TRUE(AddNote(0, folder, i, title, url) != NULL);
     }
     std::string title = IndexedFolderName(level);
-    folder = AddFolder(0, folder, folder->child_count(), title);
+    folder = AddFolder(0, folder, folder->children().size(), title);
     ASSERT_TRUE(folder != NULL);
     if (level == 5)
       folder_L5 = folder;
   }
-  folder = AddFolder(0, GetNotesTopNode(0)->child_count(), kGenericFolderName);
+  folder = AddFolder(0, GetNotesTopNode(0)->children().size(), kGenericFolderName);
   ASSERT_TRUE(folder != NULL);
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
 
-  Move(0, folder, folder_L5, folder_L5->child_count());
+  Move(0, folder, folder_L5, folder_L5->children().size());
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
 }
@@ -1018,12 +1019,12 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
       ASSERT_TRUE(AddNote(0, folder, i, title, url) != NULL);
     }
     std::string title = IndexedFolderName(level);
-    folder = AddFolder(0, folder, folder->child_count(), title);
+    folder = AddFolder(0, folder, folder->children().size(), title);
     ASSERT_TRUE(folder != NULL);
     if (level == 5)
       folder_L5 = folder;
   }
-  folder = AddFolder(0, GetNotesTopNode(0)->child_count(), kGenericFolderName);
+  folder = AddFolder(0, GetNotesTopNode(0)->children().size(), kGenericFolderName);
   ASSERT_TRUE(folder != NULL);
   for (int i = 0; i < 10; ++i) {
     std::string title = IndexedURLTitle(i);
@@ -1033,7 +1034,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
 
-  Move(0, folder, folder_L5, folder_L5->child_count());
+  Move(0, folder, folder_L5, folder_L5->children().size());
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
 }
@@ -1053,13 +1054,13 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_HoistFolder5LevelsUp) {
       ASSERT_TRUE(AddNote(0, folder, i, title, url) != NULL);
     }
     std::string title = IndexedFolderName(level);
-    folder = AddFolder(0, folder, folder->child_count(), title);
+    folder = AddFolder(0, folder, folder->children().size(), title);
     ASSERT_TRUE(folder != NULL);
     if (level == 5)
       folder_L5 = folder;
   }
   folder =
-      AddFolder(0, folder_L5, folder_L5->child_count(), kGenericFolderName);
+      AddFolder(0, folder_L5, folder_L5->children().size(), kGenericFolderName);
   ASSERT_TRUE(folder != NULL);
   for (int i = 0; i < 10; ++i) {
     std::string title = IndexedURLTitle(i);
@@ -1069,7 +1070,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, SC_HoistFolder5LevelsUp) {
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
 
-  Move(0, folder, GetNotesTopNode(0), GetNotesTopNode(0)->child_count());
+  Move(0, folder, GetNotesTopNode(0), GetNotesTopNode(0)->children().size());
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   ASSERT_TRUE(AllModelsMatchVerifier());
 }
@@ -1491,9 +1492,9 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest,
     ASSERT_TRUE(AddNote(1, i, title, url) != NULL);
   }
 
-  ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
+  // Commit sequentially to make sure there is no race condition.
+  SetupSyncOneClientAfterAnother();
   ASSERT_TRUE(AwaitQuiescence());
-  ASSERT_TRUE(AllModelsMatch());
 
   for (int i = 1; i < 5; ++i) {
     ASSERT_TRUE(CountNotesWithTitlesMatching(1, IndexedURLTitle(i)) == i);
@@ -1884,7 +1885,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientNotesSyncTest, NoteAllNodesRemovedEvent) {
 
   ASSERT_TRUE(GetClient(0)->AwaitMutualSyncCycleCompletion(GetClient(1)));
   // Verify other node has no children now.
-  EXPECT_EQ(0, GetNotesTopNode(0)->child_count());
-  EXPECT_EQ(0, GetNotesTopNode(0)->child_count());
+  EXPECT_EQ(0u, GetNotesTopNode(0)->children().size());
+  EXPECT_EQ(0u, GetNotesTopNode(0)->children().size());
   ASSERT_TRUE(AllModelsMatch());
 }

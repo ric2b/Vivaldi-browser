@@ -62,7 +62,7 @@ about:version template page
 <if expr="is_android">
             <span>$i18n{os_version}</span>
 </if>
-<if expr="is_win">
+<if expr="is_win or is_macosx">
             <span id="os_version"></span>
 </if>
           </td>
@@ -90,6 +90,16 @@ about:version template page
         <tr><td class="label">$i18n{profile_path_name}</td>
           <td class="version" id="profile_path">$i18n{profile_path}</td>
         </tr>
+        <tr id="sanitizer-section" hidden>
+          <td class="label">Sanitizer</td>
+          <td class="version" id="sanitizer">$i18n{sanitizer}</td>
+        </tr>
+<if expr="is_ios">
+        <tr id="compiler-section">
+          <td class="label">Compiler</td>
+          <td class="version" id="compiler">$i18n{compiler}</td>
+        </tr>
+</if>
       </table>
     </div>
   </body>

@@ -44,7 +44,6 @@ InstallerState::InstallerState()
       level_(UNKNOWN_LEVEL),
       root_key_(NULL),
       msi_(false),
-      background_mode_(false),
       verbose_logging_(false),
       is_migrating_to_single_(false) {}
 
@@ -53,7 +52,6 @@ InstallerState::InstallerState(Level level)
       level_(UNKNOWN_LEVEL),
       root_key_(NULL),
       msi_(false),
-      background_mode_(false),
       verbose_logging_(false),
       is_migrating_to_single_(false) {
   // Use set_level() so that root_key_ is updated properly.

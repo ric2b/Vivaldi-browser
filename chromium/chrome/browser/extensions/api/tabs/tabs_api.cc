@@ -26,7 +26,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/api/tabs/tabs_constants.h"
 #include "chrome/browser/extensions/api/tabs/tabs_util.h"
 #include "chrome/browser/extensions/api/tabs/windows_util.h"
@@ -68,8 +67,6 @@
 #include "components/zoom/zoom_controller.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
-#include "content/public/browser/notification_details.h"
-#include "content/public/browser/notification_source.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
@@ -225,15 +222,9 @@ void AssignOptionalValue(const std::unique_ptr<T>& source,
     *destination = std::make_unique<T>(*source);
 }
 
-void ReportRequestedWindowState(windows::WindowState state) {
-  UMA_HISTOGRAM_ENUMERATION("TabsApi.RequestedWindowState", state,
-                            windows::WINDOW_STATE_LAST + 1);
-}
-
 ui::WindowShowState ConvertToWindowShowState(windows::WindowState state) {
   switch (state) {
     case windows::WINDOW_STATE_NORMAL:
-    case windows::WINDOW_STATE_DOCKED:
       return ui::SHOW_STATE_NORMAL;
     case windows::WINDOW_STATE_MINIMIZED:
       return ui::SHOW_STATE_MINIMIZED;
@@ -267,7 +258,6 @@ bool IsValidStateForWindowsCreateFunction(
       // If maximised/fullscreen, default focused state should be focused.
       return !(create_data->focused && !*create_data->focused) && !has_bound;
     case windows::WINDOW_STATE_NORMAL:
-    case windows::WINDOW_STATE_DOCKED:
     case windows::WINDOW_STATE_NONE:
       return true;
   }
@@ -569,10 +559,6 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
   std::string extension_id;
 
   if (create_data) {
-    // Report UMA stats to decide when to remove the deprecated "docked" windows
-    // state (crbug.com/703733).
-    ReportRequestedWindowState(create_data->state);
-
     // Figure out window type before figuring out bounds so that default
     // bounds can be set according to the window type.
     switch (create_data->type) {
@@ -746,10 +732,6 @@ ExtensionFunction::ResponseAction WindowsUpdateFunction::Run() {
           &browser, &error)) {
     return RespondNow(Error(error));
   }
-
-  // Report UMA stats to decide when to remove the deprecated "docked" windows
-  // state (crbug.com/703733).
-  ReportRequestedWindowState(params->update_info.state);
 
   // Don't allow locked fullscreen operations on a window without the proper
   // permission (also don't allow any operations on a locked window if the
@@ -1827,7 +1809,7 @@ void TabsCaptureVisibleTabFunction::OnCaptureSuccess(const SkBitmap& bitmap) {
     return;
   }
 
-  Respond(OneArgument(std::make_unique<base::Value>(base64_result)));
+  Respond(OneArgument(std::make_unique<base::Value>(std::move(base64_result))));
 }
 
 void TabsCaptureVisibleTabFunction::OnCaptureFailure(CaptureResult result) {
@@ -1906,7 +1888,7 @@ ExtensionFunction::ResponseAction TabsDetectLanguageFunction::Run() {
   if (!chrome_translate_client && vivaldi::IsVivaldiRunning())
     return RespondNow(Error("Translation unsupported"));
 
-  AddRef();  // Balanced in GotLanguage().
+  AddRef();  // Balanced in RespondWithLanguage().
 
   if (!chrome_translate_client->GetLanguageState()
            .original_language()
@@ -1916,45 +1898,52 @@ ExtensionFunction::ResponseAction TabsDetectLanguageFunction::Run() {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
         base::BindOnce(
-            &TabsDetectLanguageFunction::GotLanguage, this,
+            &TabsDetectLanguageFunction::RespondWithLanguage, this,
             chrome_translate_client->GetLanguageState().original_language()));
     return RespondLater();
   }
-  // The tab contents does not know its language yet.  Let's wait until it
+
+  // The tab contents does not know its language yet. Let's wait until it
   // receives it, or until the tab is closed/navigates to some other page.
-  registrar_.Add(this, chrome::NOTIFICATION_TAB_LANGUAGE_DETERMINED,
-                 content::Source<WebContents>(contents));
-  registrar_.Add(
-      this, chrome::NOTIFICATION_TAB_CLOSING,
-      content::Source<NavigationController>(&(contents->GetController())));
-  registrar_.Add(
-      this, content::NOTIFICATION_NAV_ENTRY_COMMITTED,
-      content::Source<NavigationController>(&(contents->GetController())));
+
+  // Observe the WebContents' lifetime and navigations.
+  Observe(contents);
+  // Wait until the language is determined.
+  chrome_translate_client->translate_driver().AddObserver(this);
+  is_observing_ = true;
+
   return RespondLater();
 }
 
-void TabsDetectLanguageFunction::Observe(
-    int type,
-    const content::NotificationSource& source,
-    const content::NotificationDetails& details) {
-  std::string language;
-  if (type == chrome::NOTIFICATION_TAB_LANGUAGE_DETERMINED) {
-    const translate::LanguageDetectionDetails* lang_det_details =
-        content::Details<const translate::LanguageDetectionDetails>(details)
-            .ptr();
-    language = lang_det_details->adopted_language;
-  }
-
-  registrar_.RemoveAll();
-
-  // Call GotLanguage in all cases as we want to guarantee the callback is
-  // called for every API call the extension made.
-  GotLanguage(language);
+void TabsDetectLanguageFunction::NavigationEntryCommitted(
+    const content::LoadCommittedDetails& load_details) {
+  // Call RespondWithLanguage() with an empty string as we want to guarantee the
+  // callback is called for every API call the extension made.
+  RespondWithLanguage(std::string());
 }
 
-void TabsDetectLanguageFunction::GotLanguage(const std::string& language) {
-  Respond(OneArgument(std::make_unique<base::Value>(language)));
+void TabsDetectLanguageFunction::WebContentsDestroyed() {
+  // Call RespondWithLanguage() with an empty string as we want to guarantee the
+  // callback is called for every API call the extension made.
+  RespondWithLanguage(std::string());
+}
 
+void TabsDetectLanguageFunction::OnLanguageDetermined(
+    const translate::LanguageDetectionDetails& details) {
+  RespondWithLanguage(details.adopted_language);
+}
+
+void TabsDetectLanguageFunction::RespondWithLanguage(
+    const std::string& language) {
+  // Stop observing.
+  if (is_observing_) {
+    ChromeTranslateClient::FromWebContents(web_contents())
+        ->translate_driver()
+        .RemoveObserver(this);
+    Observe(nullptr);
+  }
+
+  Respond(OneArgument(std::make_unique<base::Value>(language)));
   Release();  // Balanced in Run()
 }
 

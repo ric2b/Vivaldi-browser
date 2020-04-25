@@ -112,10 +112,8 @@ VivaldiUtilitiesAPI::VivaldiUtilitiesAPI(content::BrowserContext* context)
   event_router->RegisterObserver(
       this, vivaldi::utilities::OnDownloadManagerReady::kEventName);
 
-  base::PowerMonitor* power_monitor = base::PowerMonitor::Get();
-  if (power_monitor) {
-    power_monitor->AddObserver(this);
-  }
+  base::PowerMonitor::AddObserver(this);
+
   Profile* profile = Profile::FromBrowserContext(browser_context_);
   content::DownloadManager* manager =
       content::BrowserContext::GetDownloadManager(
@@ -141,10 +139,9 @@ void VivaldiUtilitiesAPI::Shutdown() {
     // Get rid of the allocated items
     delete it.second;
   }
-  base::PowerMonitor* power_monitor = base::PowerMonitor::Get();
-  if (power_monitor) {
-    power_monitor->RemoveObserver(this);
-  }
+
+  base::PowerMonitor::RemoveObserver(this);
+
   if (razer_chroma_handler_ && razer_chroma_handler_->IsAvailable()) {
     razer_chroma_handler_->Shutdown();
   }
@@ -489,12 +486,16 @@ void UtilitiesIsUrlValidFunction::OnDefaultProtocolClientWorkerFinished(
 
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  // If we get here, either we are not the default or we cannot work out
+  // If we get here, either Vivaldi is not the default or we cannot work out
   // what the default is, so we proceed.
   if (prompt_user_ && state == shell_integration::NOT_DEFAULT) {
     // Ask the user if they want to allow the protocol, but only
-    // if the url is a valid formatted url.
-    result_.external_handler = result_.url_valid;
+    // if the url is a valid formatted url with a registered
+    // program to handle it.
+    base::string16 application_name =
+      shell_integration::GetApplicationNameForProtocol(url_);
+
+    result_.external_handler = result_.url_valid && !application_name.empty();
   }
   Respond(ArgumentList(Results::Create(result_)));
 }
@@ -531,6 +532,7 @@ ExtensionFunction::ResponseAction UtilitiesIsUrlValidFunction::Run() {
       ExternalProtocolHandler::GetBlockState(
           url.scheme(), Profile::FromBrowserContext(browser_context()));
   prompt_user_ = block_state == ExternalProtocolHandler::UNKNOWN;
+  url_ = url;
 
   auto default_protocol_worker = base::MakeRefCounted<
       shell_integration::DefaultProtocolClientWorker>(
@@ -569,59 +571,7 @@ ExtensionFunction::ResponseAction UtilitiesGetSelectedTextFunction::Run() {
   return RespondNow(ArgumentList(Results::Create(text)));
 }
 
-ExtensionFunction::ResponseAction UtilitiesCreateUrlMappingFunction::Run() {
-  using vivaldi::utilities::CreateUrlMapping::Params;
-
-  std::unique_ptr<Params> params = Params::Create(*args_);
-  EXTENSION_FUNCTION_VALIDATE(params.get());
-
-  // PathExists() triggers IO restriction.
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
-  std::string file = params->local_path;
-  base::FilePath path = base::FilePath::FromUTF8Unsafe(file);
-  if (!base::PathExists(path)) {
-    return RespondNow(Error("File does not exists: " + file));
-  }
-  VivaldiDataSourcesAPI::AddMapping(
-      browser_context(), std::move(path),
-      base::BindOnce(&UtilitiesCreateUrlMappingFunction::OnAddMappingFinished,
-                     this, std::move(file)));
-  return RespondLater();
-}
-
-void UtilitiesCreateUrlMappingFunction::OnAddMappingFinished(std::string file,
-                                                             bool success,
-                                                             std::string url) {
-  namespace Results = vivaldi::utilities::CreateUrlMapping::Results;
-
-  if (!success) {
-    Respond(Error("Mapping for file failed: " + file));
-    return;
-  }
-  Respond(ArgumentList(Results::Create(url)));
-}
-
-ExtensionFunction::ResponseAction UtilitiesRemoveUrlMappingFunction::Run() {
-  using vivaldi::utilities::RemoveUrlMapping::Params;
-
-  std::unique_ptr<Params> params = Params::Create(*args_);
-  EXTENSION_FUNCTION_VALIDATE(params.get());
-
-  VivaldiDataSourcesAPI::RemoveMapping(
-      browser_context(), params->url,
-      base::BindOnce(
-          &UtilitiesRemoveUrlMappingFunction::OnRemoveMappingFinished, this));
-  return RespondLater();
-}
-
-void UtilitiesRemoveUrlMappingFunction::OnRemoveMappingFinished(bool success) {
-  namespace Results = vivaldi::utilities::RemoveUrlMapping::Results;
-
-  Respond(ArgumentList(Results::Create(success)));
-}
-
 namespace {
-
 
 // Helpers to simply the usage of ui::SelectFileDialog when implementing
 // extension functions.
@@ -792,6 +742,7 @@ void UtilitiesSelectLocalImageFunction::OnFileSelected(
 }
 
 void UtilitiesSelectLocalImageFunction::OnAddMappingFinished(
+    Profile* profile,
     bool success,
     std::string data_mapping_url) {
   namespace Results = vivaldi::utilities::SelectLocalImage::Results;
@@ -978,7 +929,8 @@ ExtensionFunction::ResponseAction
 UtilitiesLaunchNetworkSettingsFunction::Run() {
   namespace Results = vivaldi::utilities::LaunchNetworkSettings::Results;
 
-  settings_utils::ShowNetworkProxySettings(NULL);
+  settings_utils::ShowNetworkProxySettings(
+      dispatcher()->GetAssociatedWebContents());
   return RespondNow(ArgumentList(Results::Create("")));
 }
 

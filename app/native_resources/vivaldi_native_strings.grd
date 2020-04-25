@@ -324,6 +324,9 @@
       <message name="IDS_DEFAULT_VIVALDI_AVATAR_NAME_38" desc="The default name given to a newly created profile with the generic avatar.">
         Generic
       </message>
+      <message name="IDS_DEFAULT_CALENDAR_NAME" desc="The default calendar name given to a newly created profile.">
+        My Calendar
+      </message>
 
       <part file="vivaldi_bookmark_strings.grdp" />
       <part file="vivaldi_context_menu_strings.grdp" />

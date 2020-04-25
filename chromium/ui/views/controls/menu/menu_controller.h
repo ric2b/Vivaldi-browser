@@ -353,8 +353,9 @@ class VIEWS_EXPORT MenuController
                                  const ui::LocatedEvent* event);
   void StartDrag(SubmenuView* source, const gfx::Point& location);
 
-  // Key processing.
-  void OnKeyDown(ui::KeyboardCode key_code);
+  // Handles |key_code| as a keypress. Returns true if OnKeyPressed handled the
+  // key code.
+  bool OnKeyPressed(ui::KeyboardCode key_code);
 
   // Creates a MenuController. See |for_drop_| member for details on |for_drop|.
   MenuController(bool for_drop, internal::MenuControllerDelegate* delegate);
@@ -373,6 +374,10 @@ class VIEWS_EXPORT MenuController
   // when blocking. This schedules the loop to quit.
   void Accept(MenuItemView* item, int event_flags);
   void ReallyAccept(MenuItemView* item, int event_flags);
+
+  // Added by Vivaldi.
+  bool StepSiblingMenu(bool next);
+  bool HandleSynthesizedEvent(const ui::MouseEvent& event);
 
   bool ShowSiblingMenu(SubmenuView* source, const gfx::Point& mouse_location);
 
@@ -680,7 +685,8 @@ class VIEWS_EXPORT MenuController
 
   // Drop target.
   MenuItemView* drop_target_ = nullptr;
-  MenuDelegate::DropPosition drop_position_ = MenuDelegate::DROP_UNKNOWN;
+  MenuDelegate::DropPosition drop_position_ =
+      MenuDelegate::DropPosition::kUnknow;
 
   // Owner of child windows.
   // WARNING: this may be NULL.
@@ -704,7 +710,7 @@ class VIEWS_EXPORT MenuController
   // continually processing whether we can drop, we cache the coordinates.
   bool valid_drop_coordinates_ = false;
   gfx::Point drop_pt_;
-  int last_drop_operation_ = MenuDelegate::DROP_UNKNOWN;
+  int last_drop_operation_ = ui::DragDropTypes::DRAG_NONE;
 
   // If true, we're in the middle of invoking ShowAt on a submenu.
   bool showing_submenu_ = false;

@@ -83,6 +83,7 @@
 <translation id="2482878487686419369">Notificaciones</translation>
 <translation id="2509495747794740764">El valor de la escala debe ser un número entre 10 y 200.</translation>
 <translation id="253557089021624350">Número de keepalive (para extensiones)</translation>
+<translation id="2546283357679194313">Datos de sitios y cookies</translation>
 <translation id="2550212893339833758">Memoria en el espacio de intercambio</translation>
 <translation id="2580924999637585241">Total: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="26224892172169984">No permitir procesar protocolos a ningún sitio web</translation>
@@ -92,7 +93,6 @@
 <translation id="2785873697295365461">Descriptores de archivo</translation>
 <translation id="2809586584051668049">y <ph name="NUMBER_ADDITIONAL_DISABLED" /> más</translation>
 <translation id="2812989263793994277">No mostrar ninguna imagen</translation>
-<translation id="2847759467426165163">Transmitir a</translation>
 <translation id="2850541429955027218">Agregar tema</translation>
 <translation id="2861941300086904918">Administrador de seguridad NATIVE_CLIENT</translation>
 <translation id="2889064240420137087">Abrir el vínculo con...</translation>
@@ -130,7 +130,6 @@
 <translation id="3341703758641437857">Permitir acceder a las URLs de los archivos</translation>
 <translation id="3347086966102161372">Copiar dirección de la imagen</translation>
 <translation id="3360297538363969800">Error de impresión. Por favor, comprueba tu impresora y prueba de nuevo.</translation>
-<translation id="3378503599595235699">Conservar los datos en local sólo hasta cerrar el navegador</translation>
 <translation id="3378572629723696641">Es posible que esta extensión esté dañada.</translation>
 <translation id="3387614642886316601">Usar el corrector ortográfico mejorado</translation>
 <translation id="3432227430032737297">Quitar todo lo que se muestra</translation>
@@ -198,7 +197,6 @@
 <translation id="4613271546271159013">Una extensión cambió la página que se muestra al abrir una nueva pestaña.</translation>
 <translation id="4677772697204437347">Memoria de la GPU</translation>
 <translation id="4681930562518940301">Abrir &amp;imagen original en una pestaña nueva</translation>
-<translation id="4688541352655220763">Puede usar esta función para ver contenido de Vivaldi en su TV u otros dispositivos.</translation>
 <translation id="4711638718396952945">Restaurar configuración</translation>
 <translation id="4726710629007580002">Hubo avisos al intentar instalar esta extensión:</translation>
 <translation id="479536056609751218">Página web, sólo HTML</translation>
@@ -269,7 +267,6 @@
 <translation id="5978277834170881274">&amp;Usar el corrector ortográfico básico</translation>
 <translation id="5979421442488174909">&amp;Traducir a <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">Borrar los datos del sitio</translation>
-<translation id="6040143037577758943">Cerrar</translation>
 <translation id="6042308850641462728">Más</translation>
 <translation id="6059925163896151826">Dispositivos USB</translation>
 <translation id="6082651258230788217">Mostrar en barra de herramientas</translation>
@@ -327,10 +324,8 @@
 <translation id="7270858098575133036">Preguntarme cuando un sitio quiera utilizar los mensajes exclusivos del sistema para acceder a dispositivos MIDI</translation>
 <translation id="7287143125007575591">Acceso denegado.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> ppp</translation>
-<translation id="7293919849802650062">¡Bienvenido a la experiencia de transmisión en Vivaldi!</translation>
 <translation id="7309257895202129721">Mostrar &amp;controles</translation>
 <translation id="7311079019872751559">Complementos con acceso no restringido a la zona de aislamiento</translation>
-<translation id="7346909386216857016">Entendido, ya lo pillo</translation>
 <translation id="7385854874724088939">Algo falló al intentar imprimir. Comprueba tu impresora e inténtalo de nuevo.</translation>
 <translation id="7423098979219808738">Preguntar primero</translation>
 <translation id="7427348830195639090">Página de fondo: <ph name="BACKGROUND_PAGE_URL" /></translation>
@@ -391,7 +386,6 @@ Mantén el archivo de clave en un lugar seguro. Debes crear las nuevas versiones
 <translation id="857943718398505171">Permitido (recomendado)</translation>
 <translation id="8584280235376696778">Abrir video en una nueva pestaña</translation>
 <translation id="8615618338313291042">Aplicación de incógnito: <ph name="APP_NAME" /></translation>
-<translation id="8627151598708688654">Seleccionar el origen</translation>
 <translation id="862750493060684461">Caché CSS</translation>
 <translation id="8664389313780386848">&amp;Ver código fuente de página</translation>
 <translation id="8708000541097332489">Borrar al salir</translation>

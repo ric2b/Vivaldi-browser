@@ -88,6 +88,7 @@ RecurrenceFrequency UiOccurrenceToEventOccurrence(
 CalendarEvent GetEventItem(const calendar::EventRow& row) {
   CalendarEvent event_item;
   event_item.id = base::NumberToString(row.id());
+  event_item.calendar_id = base::NumberToString(row.calendar_id());
   event_item.description.reset(
       new std::string(base::UTF16ToUTF8(row.description())));
   event_item.title.reset(new std::string(base::UTF16ToUTF8(row.title())));

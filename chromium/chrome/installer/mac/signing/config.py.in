@@ -18,7 +18,12 @@ class CodeSignConfig(object):
     process. Derived configurations are created for internal signing artifacts
     and when using |model.Distribution| objects.
     """
-    def __init__(self, identity, keychain=None):
+    def __init__(self,
+                 identity,
+                 keychain=None,
+                 notary_user=None,
+                 notary_password=None,
+                 notary_asc_provider=None):
         """Creates a CodeSignConfig that will sign the product using the static
         properties on the class, using the code signing identity passed to the
         constructor, which is found in the specified keychain.
@@ -29,10 +34,21 @@ class CodeSignConfig(object):
                 hex-encoded SHA1 hash of the certificate. Must not be None.
             keychain: Optional path to the keychain file, in which the signing
                 |identity| will be searched for.
+            notary_user: Optional string username that will be used to
+                authenticate to Apple's notary service if notarizing.
+            notary_password: Optional string password or password reference
+                (e.g. @keychain, see `xcrun altool -h`) that will be used to
+                authenticate to Apple's notary service if notarizing.
+            notary_asc_provider: Optitonal string that will be used as the
+                `--asc-provider` argument to `xcrun altool`, to be used when
+                notary_user is associatetd with multiple Apple developer teams.
         """
         assert identity
         self._identity = identity
         self._keychain = keychain
+        self._notary_user = notary_user
+        self._notary_password = notary_password
+        self._notary_asc_provider = notary_asc_provider
 
     @property
     def identity(self):
@@ -47,6 +63,25 @@ class CodeSignConfig(object):
         searched for. May be None.
         """
         return self._keychain
+
+    @property
+    def notary_user(self):
+        """Returns the username for authenticating to Apple's notary service."""
+        return self._notary_user
+
+    @property
+    def notary_password(self):
+        """Returns the password or password reference for authenticating to
+        Apple's notary service.
+        """
+        return self._notary_password
+
+    @property
+    def notary_asc_provider(self):
+        """Returns the ASC provider for authenticating to Apple's notary service
+        when notary_user is associatetd with multiple Apple developer teams.
+        """
+        return self._notary_asc_provider
 
     @property
     def app_product(self):
@@ -132,7 +167,7 @@ class CodeSignConfig(object):
         # The base config should not run spctl because the app bundle is
         # currently signed with resource rules, which are only permitted for
         # Google Chrome as signed by Google. The internal_config returns True.
-        return False
+        return True
 
     # Computed Properties ######################################################
 
@@ -155,3 +190,7 @@ class CodeSignConfig(object):
     def packaging_dir(self):
         """Returns the path to the packaging and installer tools."""
         return '{.product}_Packaging'.format(self)
+
+    @property
+    def is_development_version(self):
+        return False

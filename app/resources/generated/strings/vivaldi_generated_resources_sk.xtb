@@ -92,7 +92,6 @@
 <translation id="2785873697295365461">Deskriptory súborov</translation>
 <translation id="2809586584051668049">a ďalšie <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
 <translation id="2812989263793994277">Nezobrazovať žiadne obrázky</translation>
-<translation id="2847759467426165163">Prenášať do</translation>
 <translation id="2850541429955027218">Pridať motív vzhľadu</translation>
 <translation id="2861941300086904918">Správca zabezpečenia natívneho klienta</translation>
 <translation id="2889064240420137087">Otvoriť odkaz pomocou...</translation>
@@ -130,7 +129,6 @@
 <translation id="3341703758641437857">Povoliť prístup ku vzdialeným súborom</translation>
 <translation id="3347086966102161372">K&amp;opírovať adresu obrázka</translation>
 <translation id="3360297538363969800">Tlač zlyhala. Skontrolujte tlačiareň a skúste to znova.</translation>
-<translation id="3378503599595235699">Uchovávať miestne údaje iba do zavretia prehliadača</translation>
 <translation id="3378572629723696641">Toto rozšírenie mohlo byť poškodené.</translation>
 <translation id="3387614642886316601">Použiť rozšírenú kontrolu pravopisu</translation>
 <translation id="3432227430032737297">Odstrániť všetky zobrazené</translation>
@@ -198,7 +196,6 @@
 <translation id="4613271546271159013">Rozšírenie zmenilo stránku, ktorá sa vám zobrazí po otvorení nového listu.</translation>
 <translation id="4677772697204437347">Pamäť grafického procesora</translation>
 <translation id="4681930562518940301">Otvoriť pôvodný &amp;obrázok v novom liste</translation>
-<translation id="4688541352655220763">Túto funkciu môžete použiť na zobrazenie obsahu z prehliadača Vivaldi na vašu TV alebo iné zariadenia.</translation>
 <translation id="4711638718396952945">Obnoviť nastavenia</translation>
 <translation id="4726710629007580002">Pri pokuse o inštaláciu tohto rozšírenia sa objavili upozornenia:</translation>
 <translation id="479536056609751218">Webová stránka, len kód HTML</translation>
@@ -269,7 +266,6 @@
 <translation id="5978277834170881274">&amp;Použiť základnú kontrolu pravopisu</translation>
 <translation id="5979421442488174909">&amp;Preložiť do jazyka <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">Vymazanie údajov stránky</translation>
-<translation id="6040143037577758943">Zatvoriť</translation>
 <translation id="6042308850641462728">Viac</translation>
 <translation id="6059925163896151826">Zariadenia USB</translation>
 <translation id="6082651258230788217">Zobraziť v paneli nástrojov</translation>
@@ -327,10 +323,8 @@
 <translation id="7270858098575133036">Opýtať sa, keď bude chcieť stránka použiť na prístup k zariadeniam MIDI správy exkluzívne pre systém</translation>
 <translation id="7287143125007575591">Prístup bol odmietnutý.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="7293919849802650062">Víta vás služba Prenášanie v prehliadači Vivaldi!</translation>
 <translation id="7309257895202129721">Zobraziť &amp;ovládacie prvky</translation>
 <translation id="7311079019872751559">Prístup k doplnku mimo karantény</translation>
-<translation id="7346909386216857016">Ok, dobre</translation>
 <translation id="7385854874724088939">Pri pokuse o tlač sa vyskytla chyba. Skontrolujte svoju tlačiareň a skúste to znova.</translation>
 <translation id="7423098979219808738">Najprv sa spýtať</translation>
 <translation id="7427348830195639090">Stránka na pozadí: <ph name="BACKGROUND_PAGE_URL" /></translation>
@@ -390,7 +384,6 @@ Súbor kľúča uložte na bezpečné miesto. Budete ho potrebovať na vytvoreni
 <translation id="857943718398505171">Povolený (odporúčané)</translation>
 <translation id="8584280235376696778">&amp;Otvoriť video v novom liste</translation>
 <translation id="8615618338313291042">Súkromná aplikácia: <ph name="APP_NAME" /></translation>
-<translation id="8627151598708688654">Výber zdroja</translation>
 <translation id="862750493060684461">Vyrovnávacia pamäť CSS</translation>
 <translation id="8664389313780386848">&amp;Zobraziť zdrojový kód stránky</translation>
 <translation id="8708000541097332489">Vymazať pri ukončení</translation>

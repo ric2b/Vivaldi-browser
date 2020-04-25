@@ -34,6 +34,9 @@
 
 #if defined(OS_LINUX)
 #include "base/linux_util.h"
+#elif defined(OS_MACOSX)
+#include "base/mac/foundation_util.h"
+#include "content/common/mac_helpers.h"
 #endif  // OS_LINUX
 
 namespace {
@@ -69,6 +72,34 @@ base::FilePath ChildProcessHost::GetChildPath(int flags) {
   // executable.
   if (child_path.empty())
     base::PathService::Get(CHILD_PROCESS_EXE, &child_path);
+
+#if defined(OS_MACOSX)
+  std::string child_base_name = child_path.BaseName().value();
+
+  if (flags != CHILD_NORMAL && base::mac::AmIBundled()) {
+    // This is a specialized helper, with the |child_path| at
+    // ../Framework.framework/Versions/X/Helpers/Chromium Helper.app/Contents/
+    // MacOS/Chromium Helper. Go back up to the "Helpers" directory to select
+    // a different variant.
+    child_path = child_path.DirName().DirName().DirName().DirName();
+
+    if (flags == CHILD_RENDERER) {
+      child_base_name += kMacHelperSuffix_renderer;
+    } else if (flags == CHILD_GPU) {
+      child_base_name += kMacHelperSuffix_gpu;
+    } else if (flags == CHILD_PLUGIN) {
+      child_base_name += kMacHelperSuffix_plugin;
+    } else {
+      NOTREACHED();
+    }
+
+    child_path = child_path.Append(child_base_name + ".app")
+                     .Append("Contents")
+                     .Append("MacOS")
+                     .Append(child_base_name);
+  }
+#endif
+
   return child_path;
 }
 
@@ -104,11 +135,11 @@ void ChildProcessHostImpl::BindInterface(
 void ChildProcessHostImpl::RunService(
     const std::string& service_name,
     mojo::PendingReceiver<service_manager::mojom::Service> receiver) {
-  child_control_->RunService(service_name, std::move(receiver));
+  child_process_->RunService(service_name, std::move(receiver));
 }
 
 void ChildProcessHostImpl::ForceShutdown() {
-  child_control_->ProcessShutdown();
+  child_process_->ProcessShutdown();
 }
 
 void ChildProcessHostImpl::CreateChannelMojo() {
@@ -137,12 +168,15 @@ bool ChildProcessHostImpl::InitChannel() {
   // may be unable to properly fulfill the BindInterface() call. Instead we bind
   // here since the |delegate_| has already been initialized and this is the
   // first potential use of the interface.
-  content::BindInterface(this, &child_control_);
+  mojo::Remote<mojom::ChildProcess> bootstrap;
+  content::BindInterface(
+      this,
+      mojom::ChildProcessRequest(child_process_.BindNewPipeAndPassReceiver()));
 
   // Make sure these messages get sent first.
 #if BUILDFLAG(IPC_MESSAGE_LOG_ENABLED)
   bool enabled = IPC::Logging::GetInstance()->Enabled();
-  child_control_->SetIPCLoggingEnabled(enabled);
+  child_process_->SetIPCLoggingEnabled(enabled);
 #endif
 
   opening_channel_ = true;

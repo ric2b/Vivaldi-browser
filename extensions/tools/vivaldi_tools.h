@@ -23,7 +23,16 @@ class ListValue;
 class Time;
 }
 
+namespace ui {
+class Accelerator;
+}
+
 namespace vivaldi {
+
+// Helper functions for menus
+ui::KeyboardCode GetFunctionKey(std::string token);
+ui::Accelerator ParseShortcut(const std::string& accelerator,
+                              bool should_parse_media_keys);
 
 // Helper class for setting and resetting a bookmark upgrade flag.
 class SetPartnerUpgrade {

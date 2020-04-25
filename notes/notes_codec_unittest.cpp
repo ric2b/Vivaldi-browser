@@ -49,9 +49,9 @@ void AssertNodesEqual(const Notes_Node* expected, const Notes_Node* actual) {
   if (expected->is_note()) {
     EXPECT_EQ(expected->GetURL(), actual->GetURL());
   } else {
-    ASSERT_EQ(expected->child_count(), actual->child_count());
-    for (int i = 0; i < expected->child_count(); ++i)
-      AssertNodesEqual(expected->GetChild(i), actual->GetChild(i));
+    ASSERT_EQ(expected->children().size(), actual->children().size());
+    for (size_t i = 0; i < expected->children().size(); ++i)
+      AssertNodesEqual(expected->children()[i].get(), actual->children()[i].get());
   }
 }
 
@@ -184,8 +184,8 @@ class NotesCodecTest : public testing::Test {
     int64_t node_id = node->id();
     EXPECT_TRUE(assigned_ids->find(node_id) == assigned_ids->end());
     assigned_ids->insert(node_id);
-    for (int i = 0; i < node->child_count(); ++i)
-      CheckIDs(node->GetChild(i), assigned_ids);
+    for (auto& it: node->children())
+      CheckIDs(it.get(), assigned_ids);
   }
 
   void ExpectIDsUnique(Notes_Model* model) {
@@ -255,7 +255,7 @@ TEST_F(NotesCodecTest, ChecksumManualEditIDsTest) {
 
   // The test depends on existence of multiple children under notes main node,
   // so make sure that's the case.
-  int notes_child_count = model_to_encode->main_node()->child_count();
+  int notes_child_count = model_to_encode->main_node()->children().size();
   ASSERT_GT(notes_child_count, 1);
 
   std::string enc_checksum;
@@ -306,11 +306,11 @@ TEST_F(NotesCodecTest, PersistIDsTest) {
   // Add a couple of more items to the decoded notes model and make sure
   // ID persistence is working properly.
   const Notes_Node* notes_node = decoded_model->main_node();
-  decoded_model->AddNote(notes_node, notes_node->child_count(),
+  decoded_model->AddNote(notes_node, notes_node->children().size(),
                          ASCIIToUTF16(kUrl3Title), GURL(kUrl3Url),
                          ASCIIToUTF16(CreateAutoIndexedContent()));
   const Notes_Node* folder2_node = decoded_model->AddFolder(
-      notes_node, notes_node->child_count(), ASCIIToUTF16(kFolder2Title));
+      notes_node, notes_node->children().size(), ASCIIToUTF16(kFolder2Title));
   decoded_model->AddNote(folder2_node, 0, ASCIIToUTF16(kUrl4Title),
                          GURL(kUrl4Url),
                          ASCIIToUTF16(CreateAutoIndexedContent()));
@@ -331,7 +331,7 @@ TEST_F(NotesCodecTest, EncodeAndDecodeSyncTransactionVersion) {
   std::unique_ptr<Notes_Model> model(CreateTestModel2());
   model->SetNodeSyncTransactionVersion(model->root_node(), 1);
   const Notes_Node* main = model->main_node();
-  model->SetNodeSyncTransactionVersion(main->GetChild(1), 42);
+  model->SetNodeSyncTransactionVersion(main->children()[1].get(), 42);
 
   std::string checksum;
   std::unique_ptr<base::Value> value(EncodeHelper(model.get(), &checksum));
@@ -341,9 +341,9 @@ TEST_F(NotesCodecTest, EncodeAndDecodeSyncTransactionVersion) {
   model.reset(DecodeHelper(*value, checksum, &checksum, false));
   EXPECT_EQ(1, model->root_node()->sync_transaction_version());
   main = model->main_node();
-  EXPECT_EQ(42, main->GetChild(1)->sync_transaction_version());
+  EXPECT_EQ(42, main->children()[1]->sync_transaction_version());
   EXPECT_EQ(Notes_Node::kInvalidSyncTransactionVersion,
-            main->GetChild(0)->sync_transaction_version());
+            main->children()[0]->sync_transaction_version());
 }
 
 }  // namespace vivaldi

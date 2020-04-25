@@ -29,7 +29,6 @@
 <translation id="3038675903128704560">Ikke tillat noen sider å bruke programtillegg for å få tilgang til din enhet</translation>
 <translation id="3127156390846601284">Dette sletter all data lagret på din enhet for alle viste nettsider. Ønsker du å fortsette?</translation>
 <translation id="3227137524299004712">Mikrofon</translation>
-<translation id="3378503599595235699">Kun behold lokal data til du avslutter nettleseren</translation>
 <translation id="3432227430032737297">Fjern alle viste</translation>
 <translation id="3440761377721825626">Spør når en side ønsker å bruke et programtillegg for å få tilgang til din enhet</translation>
 <translation id="3494769164076977169">Spør når et nettsted prøver å laste ned filer automatisk etter første fil (anbefales)</translation>
@@ -62,7 +61,6 @@
 <translation id="6295158916970320988">Alle nettsider</translation>
 <translation id="6385543213911723544">Sider kan lagre og lese informasjonskapsler</translation>
 <translation id="6398765197997659313">Gå ut av fullskjermsmodus</translation>
-<translation id="6447842834002726250">Informasjonskapsler</translation>
 <translation id="6782111308708962316">Forhindre tredjepartsnettsider fra å lagre og lese kakedata</translation>
 <translation id="6817174620439930047">Spør når en side ønsker å bruke systemeksklusive meldinger for tilgang til MIDI-enheter (anbefales)</translation>
 <translation id="6840155290835956714">Spør før sending</translation>

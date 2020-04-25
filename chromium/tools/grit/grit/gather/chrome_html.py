@@ -14,6 +14,8 @@ factors are also removed from existing image sets to support explicitly
 referencing all available images.
 """
 
+from __future__ import print_function
+
 import os
 import re
 
@@ -91,7 +93,7 @@ def GetImageList(
   if filename_expansion_function:
     filename = filename_expansion_function(filename)
   filename = util.PathSearcher.LocatePath(filename, base_path)
-  filepath = util.normpath(os.path.join(base_path, filename))
+  filepath = os.path.join(base_path, filename)
   images = [('1x', filename)]
 
   for scale_factor in scale_factors:
@@ -340,6 +342,10 @@ class ChromeHtml(interface.GathererBase):
     """Parses and inlines the represented file."""
 
     filename = self.GetInputPath()
+    # If there is a grd_node, prefer its GetInputPath(), as that may do more
+    # processing to make the call to ToRealPath() below work correctly.
+    if self.grd_node:
+      filename = self.grd_node.GetInputPath()
     if self.filename_expansion_function:
       filename = self.filename_expansion_function(filename)
     # Hack: some unit tests supply an absolute path and no root node.

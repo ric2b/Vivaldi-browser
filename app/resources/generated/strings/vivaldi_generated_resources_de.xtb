@@ -83,6 +83,7 @@
 <translation id="2482878487686419369">Benachrichtigungen</translation>
 <translation id="2509495747794740764">Der Wert für die Skalierung muss zwischen 10 und 200 liegen.</translation>
 <translation id="253557089021624350">Keepalive-Zahl</translation>
+<translation id="2546283357679194313">Cookies und Websitedaten</translation>
 <translation id="2550212893339833758">Swap-Speicher</translation>
 <translation id="2580924999637585241">Gesamt: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="26224892172169984">Verarbeitung von Protokollen für keine Website zulassen</translation>
@@ -92,7 +93,6 @@
 <translation id="2785873697295365461">Dateideskriptoren</translation>
 <translation id="2809586584051668049">und <ph name="NUMBER_ADDITIONAL_DISABLED" /> weitere</translation>
 <translation id="2812989263793994277">Keine Bilder anzeigen</translation>
-<translation id="2847759467426165163">Übertragen an</translation>
 <translation id="2850541429955027218">Design hinzufügen</translation>
 <translation id="2861941300086904918">Sicherheitsmanager für native Clients</translation>
 <translation id="2889064240420137087">Link öffnen mit…</translation>
@@ -130,7 +130,6 @@
 <translation id="3341703758641437857">Zugriff auf Datei-URLs zulassen</translation>
 <translation id="3347086966102161372">Bildadresse k&amp;opieren</translation>
 <translation id="3360297538363969800">Fehler beim Drucken. Bitte überprüfen Sie Ihren Drucker und versuchen Sie es erneut.</translation>
-<translation id="3378503599595235699">Lokale Daten nach Schließen des Browsers löschen</translation>
 <translation id="3378572629723696641">Diese Erweiterung ist möglicherweise beschädigt.</translation>
 <translation id="3387614642886316601">Vorschläge von Google</translation>
 <translation id="3432227430032737297">Alle angezeigten Cookies entfernen</translation>
@@ -198,7 +197,6 @@
 <translation id="4613271546271159013">Die Seite, die beim Öffnen eines neuen Tabs angezeigt wird, wurde durch eine Erweiterung geändert.</translation>
 <translation id="4677772697204437347">GPU-Speicher</translation>
 <translation id="4681930562518940301">Bild in neuem Tab öffnen</translation>
-<translation id="4688541352655220763">Sie können diese Funktion nutzen, um Inhalte aus Vivaldi auf Ihrem Fernseher oder auf anderen Geräten anzusehen.</translation>
 <translation id="4711638718396952945">Einstellungen wiederherstellen</translation>
 <translation id="4726710629007580002">Es gab Warnungen beim Versuch, diese Erweiterung zu installieren:</translation>
 <translation id="479536056609751218">Webseite, nur HTML</translation>
@@ -269,7 +267,6 @@
 <translation id="5978277834170881274">&amp;Rechtschreibprüfung verwenden</translation>
 <translation id="5979421442488174909">Übersetzen nach <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">Websitedaten löschen</translation>
-<translation id="6040143037577758943">Schließen</translation>
 <translation id="6042308850641462728">Mehr</translation>
 <translation id="6059925163896151826">USB-Geräte</translation>
 <translation id="6082651258230788217">In der Symbolleiste anzeigen</translation>
@@ -327,10 +324,8 @@
 <translation id="7270858098575133036">Nachfragen, wenn eine Webseite mit systemexklusiven Nachrichten auf MIDI-Geräte zugreifen möchte</translation>
 <translation id="7287143125007575591">Zugriff verweigert.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="7293919849802650062">Herzlich willkommen bei Cast in Vivaldi!</translation>
 <translation id="7309257895202129721">&amp;Steuerelemente anzeigen</translation>
 <translation id="7311079019872751559">Plug-in-Zugriff ohne Sandbox</translation>
-<translation id="7346909386216857016">OK</translation>
 <translation id="7385854874724088939">Beim Drucken ist ein Fehler aufgetreten. Bitte überprüfen Sie Ihren Drucker und versuchen Sie es erneut.</translation>
 <translation id="7423098979219808738">Nachfragen</translation>
 <translation id="7427348830195639090">Hintergrundseite: <ph name="BACKGROUND_PAGE_URL" /></translation>
@@ -390,7 +385,6 @@ Speichern Sie Ihre Schlüsseldatei an einem sicheren Ort. Sie benötigen die Dat
 <translation id="857943718398505171">Zugelassen (empfohlen)</translation>
 <translation id="8584280235376696778">&amp;Video in neuem Tab öffnen</translation>
 <translation id="8615618338313291042">Anonyme App: <ph name="APP_NAME" /></translation>
-<translation id="8627151598708688654">Quelle auswählen</translation>
 <translation id="862750493060684461">CSS-Cache</translation>
 <translation id="8664389313780386848">Seitenquelltext &amp;anzeigen</translation>
 <translation id="8708000541097332489">Beim Beenden löschen</translation>

@@ -70,12 +70,6 @@ class MEDIA_EXPORT ATAudioDecoder : public AudioDecoder {
                     size_t header_size,
                     size_t max_output_frame_count);
 
-  // On older systems, we don't know how to flush AudioConverter properly, so
-  // we fake it by generating a trailing silent buffer.  Returns true if the
-  // workaround has been applied.
-  bool ApplyEOSWorkaround(const scoped_refptr<DecoderBuffer>& input,
-                          AudioBufferList* output_buffers);
-
   void ResetTimestampState();
 
   const scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
@@ -86,7 +80,6 @@ class MEDIA_EXPORT ATAudioDecoder : public AudioDecoder {
   ScopedAudioConverterRef converter_;
   std::deque<scoped_refptr<DecoderBuffer>> queued_input_;
   std::unique_ptr<AudioDiscardHelper> discard_helper_;
-  const bool needs_eos_workaround_;
   OutputCB output_cb_;
 
   DebugBufferLogger debug_buffer_logger_;

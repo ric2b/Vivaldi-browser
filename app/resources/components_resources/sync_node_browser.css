@@ -33,7 +33,7 @@
 }
 
 /* TODO(akalin): Find a better icon to use for leaf nodes. */
-#sync-node-tree .leaf .tree-label {
+#sync-node-tree .leaf .tree-label-icon {
   background-image: url(../../other_resources/webui/star_small.png);
 }
 

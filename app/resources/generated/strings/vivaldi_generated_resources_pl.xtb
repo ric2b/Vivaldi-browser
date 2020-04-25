@@ -83,6 +83,7 @@
 <translation id="2482878487686419369">Powiadomienia</translation>
 <translation id="2509495747794740764">Współczynnik skalowania musi być liczbą z przedziału od 10 do 200.</translation>
 <translation id="253557089021624350">Liczba sygnałów utrzymania aktywności</translation>
+<translation id="2546283357679194313">Ciasteczka i dane stron</translation>
 <translation id="2550212893339833758">Pamięć stronicowana</translation>
 <translation id="2580924999637585241">Łącznie: <ph name="SHEETS_LABEL" /> – <ph name="NUMBER_OF_SHEETS" /></translation>
 <translation id="26224892172169984">Nie zezwalaj żadnej stronie na obsługę protokołów</translation>
@@ -92,7 +93,6 @@
 <translation id="2785873697295365461">Deskryptory plików</translation>
 <translation id="2809586584051668049">i <ph name="NUMBER_ADDITIONAL_DISABLED" /> więcej</translation>
 <translation id="2812989263793994277">Nie pokazuj żadnych obrazów</translation>
-<translation id="2847759467426165163">Prześlij do</translation>
 <translation id="2850541429955027218">Dodaj motyw</translation>
 <translation id="2861941300086904918">Menedżer zabezpieczeń klienta natywnego</translation>
 <translation id="2889064240420137087">Otwórz link za pomocą...</translation>
@@ -130,7 +130,6 @@
 <translation id="3341703758641437857">Zezwalaj na dostęp dla adresów plików lokalnych</translation>
 <translation id="3347086966102161372">K&amp;opiuj adres obrazu</translation>
 <translation id="3360297538363969800">Drukowanie nie powiodło się. Sprawdź drukarkę i spróbuj ponownie.</translation>
-<translation id="3378503599595235699">Zachowuj dane lokalne tylko do zamknięcia przeglądarki</translation>
 <translation id="3378572629723696641">To rozszerzenie może być uszkodzone.</translation>
 <translation id="3387614642886316601">Używaj ulepszonego sprawdzania pisowni</translation>
 <translation id="3432227430032737297">Usuń wszystkie wyświetlone</translation>
@@ -198,7 +197,6 @@
 <translation id="4613271546271159013">Rozszerzenie zmieniło stronę wyświetlaną po otwarciu nowej karty.</translation>
 <translation id="4677772697204437347">Pamięć GPU</translation>
 <translation id="4681930562518940301">Otwórz oryginalny &amp;obraz w nowej karcie</translation>
-<translation id="4688541352655220763">Za pomocą tej funkcji możesz wyświetlać treści z Vivaldi na telewizorze lub innych urządzeniach.</translation>
 <translation id="4711638718396952945">Przywróć ustawienia</translation>
 <translation id="4726710629007580002">Wystąpiły ostrzeżenia podczas próby instalacji tego rozszerzenia:</translation>
 <translation id="479536056609751218">Strona internetowa, tylko kod HTML</translation>
@@ -269,7 +267,6 @@
 <translation id="5978277834170881274">&amp;Używaj podstawowego sprawdzania pisowni</translation>
 <translation id="5979421442488174909">&amp;Przetłumacz na <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">Wyczyść dane witryny</translation>
-<translation id="6040143037577758943">Zamknij</translation>
 <translation id="6042308850641462728">Więcej</translation>
 <translation id="6059925163896151826">Urządzenia USB</translation>
 <translation id="6082651258230788217">Pokazuj na pasku narzędzi</translation>
@@ -294,7 +291,7 @@
 <translation id="6398765197997659313">Zamknij pełny ekran</translation>
 <translation id="6406303162637086258">Symuluj ponowne uruchomienie przeglądarki</translation>
 <translation id="6445450263907939268">Jeśli nie chcesz tych zmian, możesz przywrócić poprzednie ustawienia.</translation>
-<translation id="6447842834002726250">Ciasteczka</translation>
+<translation id="6447842834002726250">Pliki cookie</translation>
 <translation id="6452181791372256707">Odrzuć</translation>
 <translation id="6498249116389603658">&amp;Wszystkie twoje języki</translation>
 <translation id="6503077044568424649">Najczęstsze</translation>
@@ -327,10 +324,8 @@
 <translation id="7270858098575133036">Pytaj gdy strona chce użyć komunikatów systemowych by uzyskać dostęp do urządzeń MIDI</translation>
 <translation id="7287143125007575591">Odmowa dostępu.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="7293919849802650062">Witamy w funkcji Cast dla Vivaldi!</translation>
 <translation id="7309257895202129721">Pokaż elementy sterują&amp;ce</translation>
 <translation id="7311079019872751559">Dostęp przez wtyczkę spoza piaskownicy</translation>
-<translation id="7346909386216857016">OK, rozumiem</translation>
 <translation id="7385854874724088939">Wystąpił błąd przy próbie drukowania. Sprawdź drukarkę i spróbuj ponownie.</translation>
 <translation id="7423098979219808738">Najpierw zapytaj</translation>
 <translation id="7427348830195639090">Strona w tle: <ph name="BACKGROUND_PAGE_URL" /></translation>
@@ -390,7 +385,6 @@ Przechowuj plik klucza w bezpiecznym miejscu. Będzie on potrzebny do utworzenia
 <translation id="857943718398505171">Dozwolone (zalecane)</translation>
 <translation id="8584280235376696778">&amp;Otwórz film w nowej karcie</translation>
 <translation id="8615618338313291042">Aplikacja w trybie prywatnym: <ph name="APP_NAME" /></translation>
-<translation id="8627151598708688654">Wybierz źródło</translation>
 <translation id="862750493060684461">Pamięć podręczna CSS</translation>
 <translation id="8664389313780386848">&amp;Wyświetl źródło strony</translation>
 <translation id="8708000541097332489">Wyczyść przy zamykaniu</translation>

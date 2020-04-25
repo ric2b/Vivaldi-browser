@@ -83,6 +83,7 @@
 <translation id="2482878487686419369">Сповіщення</translation>
 <translation id="2509495747794740764">Вкажіть значення від 10 до 200.</translation>
 <translation id="253557089021624350">Кількість з'єднань keepalive</translation>
+<translation id="2546283357679194313">Файли cookie та дані із сайтів</translation>
 <translation id="2550212893339833758">Змінна пам’ять</translation>
 <translation id="2580924999637585241">Всього: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="26224892172169984">Заборонити всім сайтам обробляти протоколи</translation>
@@ -92,7 +93,6 @@
 <translation id="2785873697295365461">Опис файлу</translation>
 <translation id="2809586584051668049">і ще <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
 <translation id="2812989263793994277">Не показувати зображення</translation>
-<translation id="2847759467426165163">Транслювати на</translation>
 <translation id="2850541429955027218">Додати тему</translation>
 <translation id="2861941300086904918">Менеджер безпеки Native Client</translation>
 <translation id="2889064240420137087">Відкрити посилання за допомогою...</translation>
@@ -130,7 +130,6 @@
 <translation id="3341703758641437857">Дозволити для локальних файлів</translation>
 <translation id="3347086966102161372">Копіювати адресу зображення</translation>
 <translation id="3360297538363969800">Помилка друку. Перевірте принтер і повторіть спробу.</translation>
-<translation id="3378503599595235699">Зберігати локальні дані лише до виходу з веб-переглядача</translation>
 <translation id="3378572629723696641">Це розширення могло бути пошкоджено.</translation>
 <translation id="3387614642886316601">Використовувати покращену перевірку орфографії</translation>
 <translation id="3432227430032737297">Вилучити всі показані</translation>
@@ -198,7 +197,6 @@
 <translation id="4613271546271159013">Розширення змінило сторінку, яка з’являється, коли ви відкриваєте нову вкладку.</translation>
 <translation id="4677772697204437347">Пам’ять GPU</translation>
 <translation id="4681930562518940301">Відкрити оригінальне зображення в новій вкладці</translation>
-<translation id="4688541352655220763">З цією функцією ви можете транслювати вміст із Vivaldi на телевізор чи інші пристрої.</translation>
 <translation id="4711638718396952945">Відновити налаштування</translation>
 <translation id="4726710629007580002">При встановленні розширення були такі попередження:</translation>
 <translation id="479536056609751218">Веб-сторінка, тільки HTML</translation>
@@ -269,7 +267,6 @@
 <translation id="5978277834170881274">&amp;Використовувати базову перевірку орфографії</translation>
 <translation id="5979421442488174909">Перекласти на <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">Очистити дані сайту</translation>
-<translation id="6040143037577758943">Закрити</translation>
 <translation id="6042308850641462728">Більше</translation>
 <translation id="6059925163896151826">Пристрої USB</translation>
 <translation id="6082651258230788217">Показати на панелі</translation>
@@ -327,10 +324,8 @@
 <translation id="7270858098575133036">Запитувати, коли сайт хоче використовувати виключні повідомлення системи, щоб отримувати доступ до пристроїв MIDI</translation>
 <translation id="7287143125007575591">У доступі відмовлено.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="7293919849802650062">Ласкаво просимо в Cast для Vivaldi!</translation>
 <translation id="7309257895202129721">Показати &amp;елементи керування</translation>
 <translation id="7311079019872751559">Доступ плагіна з неізольованим програмним середовищем</translation>
-<translation id="7346909386216857016">OK</translation>
 <translation id="7385854874724088939">Під час друку виникла помилка. Перевірте свій принтер і спробуйте ще раз.</translation>
 <translation id="7423098979219808738">Спершу запитувати</translation>
 <translation id="7427348830195639090">Фонова сторінка: <ph name="BACKGROUND_PAGE_URL" /></translation>
@@ -390,7 +385,6 @@
 <translation id="857943718398505171">Дозволено (рекомендовано)</translation>
 <translation id="8584280235376696778">&amp;Відкрити відео в новій вкладці</translation>
 <translation id="8615618338313291042">Програма в режимі анонімного перегляду: <ph name="APP_NAME" /></translation>
-<translation id="8627151598708688654">Вибір джерела</translation>
 <translation id="862750493060684461">Кеш CSS</translation>
 <translation id="8664389313780386848">&amp;Переглянути джерело сторінки</translation>
 <translation id="8708000541097332489">Очищати при виході</translation>

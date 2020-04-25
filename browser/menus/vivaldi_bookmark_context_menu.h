@@ -25,13 +25,15 @@ class MenuItemView;
 }
 
 namespace vivaldi {
-struct BookmarkMenuParams;
+struct BookmarkMenuContainer;
 }
 
 class Browser;
 class Profile;
 
 namespace vivaldi {
+void SetBookmarkContainer(const BookmarkMenuContainer* container,
+                          int current_index);
 void BuildBookmarkContextMenu(ui::SimpleMenuModel* menu_model);
 void ExecuteBookmarkContextMenuCommand(Browser* browser,
                                        bookmarks::BookmarkModel* model,
@@ -44,7 +46,10 @@ void HandleOpenMenu(Browser* browser, int64_t id);
 const bookmarks::BookmarkNode* GetNodeByPosition(
     bookmarks::BookmarkModel* model, const gfx::Point& screen_point,
     int* start_index, gfx::Rect* rect);
-void SetBookmarkMenuProperties(const BookmarkMenuParams* params);
+const bookmarks::BookmarkNode* GetNextNode(bookmarks::BookmarkModel* model,
+                                           bool next,
+                                           int* start_index,
+                                           gfx::Rect* rect);
 void SortBookmarkNodes(const bookmarks::BookmarkNode* parent,
                        std::vector<bookmarks::BookmarkNode*>& nodes);
 void AddVivaldiBookmarkMenuItems(Profile* profile_, views::MenuItemView* menu,

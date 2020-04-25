@@ -104,7 +104,7 @@ AvatarImageSource::AvatarImageSource(gfx::ImageSkia avatar,
                                      AvatarPosition position,
                                      AvatarBorder border,
                                      profiles::AvatarShape shape)
-    : gfx::CanvasImageSource(canvas_size, false),
+    : gfx::CanvasImageSource(canvas_size),
       canvas_size_(canvas_size),
       width_(width),
       height_(GetScaledAvatarHeightForWidth(width, avatar)),
@@ -267,17 +267,27 @@ constexpr char kGAIAPictureFileName[] = "Google Profile Picture.png";
 constexpr char kHighResAvatarFolderName[] = "Avatars";
 
 // The size of the function-static kDefaultAvatarIconResources array below.
-#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
+#if defined(OS_ANDROID)
 constexpr size_t kDefaultAvatarIconsCount = 38;
-#else
+#elif defined(OS_CHROMEOS)
 constexpr size_t kDefaultAvatarIconsCount = 27;
+#else
+constexpr size_t kDefaultAvatarIconsCount = 38;
 #endif
 
+#if !defined(OS_ANDROID)
 // The first 8 icons are generic.
 constexpr size_t kGenericAvatarIconsCount = 8;
+#else
+constexpr size_t kGenericAvatarIconsCount = 0;
+#endif
 
-// The avatar used as a placeholder (grey silhouette).
+#if !defined(OS_ANDROID)
+// The avatar used as a placeholder.
 constexpr size_t kPlaceholderAvatarIndex = 26;
+#else
+constexpr size_t kPlaceholderAvatarIndex = 0;
+#endif
 
 gfx::Image GetSizedAvatarIcon(const gfx::Image& image,
                               bool is_rectangle,
@@ -484,7 +494,8 @@ const IconResourceInfo* GetDefaultAvatarIconResourceInfo(size_t index) {
   };
 #else
   static const IconResourceInfo resource_info[kDefaultAvatarIconsCount] = {
-    // Old avatar icons:
+  // Old avatar icons:
+#if !defined(OS_ANDROID)
     {IDR_PROFILE_AVATAR_0, "avatar_generic.png", IDS_DEFAULT_AVATAR_LABEL_0},
     {IDR_PROFILE_AVATAR_1, "avatar_generic_aqua.png",
      IDS_DEFAULT_AVATAR_LABEL_1},
@@ -523,7 +534,7 @@ const IconResourceInfo* GetDefaultAvatarIconResourceInfo(size_t index) {
     {IDR_PROFILE_AVATAR_24, "avatar_note.png", IDS_DEFAULT_AVATAR_LABEL_24},
     {IDR_PROFILE_AVATAR_25, "avatar_sun_cloud.png",
      IDS_DEFAULT_AVATAR_LABEL_25},
-
+#endif
     // Placeholder avatar icon:
     {IDR_PROFILE_AVATAR_26, NULL, -1},
 
@@ -611,7 +622,9 @@ base::FilePath GetPathOfHighResAvatarAtIndex(size_t index) {
 }
 
 std::string GetDefaultAvatarIconUrl(size_t index) {
+#if !defined(OS_ANDROID)
   CHECK(IsDefaultAvatarIconIndex(index));
+#endif
   return base::StringPrintf("%s%" PRIuS, kDefaultUrlPrefix, index);
 }
 

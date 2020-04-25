@@ -47,7 +47,6 @@
 <translation id="2721037002783622288">&amp;Kërkoj për imazhin në <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2785873697295365461">Përshkruesit e skedarëve</translation>
 <translation id="2809586584051668049">dhe <ph name="NUMBER_ADDITIONAL_DISABLED" /> të tjera</translation>
-<translation id="2847759467426165163">Transmetoj në</translation>
 <translation id="2850541429955027218">Shtoj motivin</translation>
 <translation id="2861941300086904918">Përgjegjësi i sigurisë së Native Client</translation>
 <translation id="2904456025988372123">Pyet kur një faqe provon të transferojë automatikisht skedarët në radhë</translation>
@@ -131,7 +130,6 @@
 <translation id="5838456317242088717">Seancën private aktuale</translation>
 <translation id="5956585768868398362">A është kjo faqja e kërkimit që po prisnit?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (piku: <ph name="NUM_KILOBYTES_LIVE" />)</translation>
-<translation id="6040143037577758943">Mbyll</translation>
 <translation id="6086846494333236931">E instaluar nga administratori juaj</translation>
 <translation id="6101226222197207147">U shtua një aplikacion i ri (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Linja juaj e internetit po kontrollohet</translation>
@@ -161,7 +159,6 @@
 <translation id="7175353351958621980">E hapur nga:</translation>
 <translation id="7287143125007575591">U refuzua aksesi.</translation>
 <translation id="7309257895202129721">Tregoj &amp;butonat interaktivë</translation>
-<translation id="7346909386216857016">Ok, e kuptova</translation>
 <translation id="7427348830195639090">Faqja në sfond: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7564847347806291057">Përfundoj procesin</translation>
 <translation id="7629827748548208700">Skeda: <ph name="TAB_NAME" /></translation>
@@ -195,7 +192,6 @@ Ruajeni çelësin në vend të sigurt. Do ju duhet kur të krijoni versione të 
 <translation id="8546306075665861288">Cache i imazheve</translation>
 <translation id="8584280235376696778">&amp;Hap videon në skedë të re</translation>
 <translation id="8615618338313291042">Aplikacioni privat: <ph name="APP_NAME" /></translation>
-<translation id="8627151598708688654">Përzgjedhja e burimit</translation>
 <translation id="862750493060684461">Cache CSS</translation>
 <translation id="8664389313780386848">&amp;Shoh burimin e faqes</translation>
 <translation id="8808478386290700967">Web Store</translation>

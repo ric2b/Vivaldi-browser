@@ -49,7 +49,6 @@ jumbo_static_library("browser") {
   } else if (is_mac) {
     deps += [
       #"//vivaldi/third_party:copy_sparkle_framework",
-      "//vivaldi/app/nibs:vivaldi_xibs",
     ]
   }
   sources = [
@@ -73,6 +72,8 @@ jumbo_static_library("browser") {
       "menus/vivaldi_menus.h",
       "menus/vivaldi_bookmark_context_menu.cpp",
       "menus/vivaldi_bookmark_context_menu.h",
+      "menus/vivaldi_menubar.cc",
+      "menus/vivaldi_menubar.h",
       "vivaldi_browser_finder.cc",
       "vivaldi_browser_finder.h",
       "vivaldi_webcontents_util.cc",
@@ -139,7 +140,5 @@ source_set("init_sparkle") {
 
   if (is_win) {
     deps += [ "//vivaldi/third_party:sparkle" ]
-  } else if (is_mac) {
-    deps += [ "//vivaldi/app/nibs:vivaldi_xibs" ]
   }
 }

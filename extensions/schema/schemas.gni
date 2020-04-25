@@ -20,6 +20,7 @@ schema_sources = [
   "infobars.json",
   "mail_private.json",
   "menubar.json",
+  "menubar_menu.json",
   "mousegestures.json",
   "notes.json",
   "prefs.json",

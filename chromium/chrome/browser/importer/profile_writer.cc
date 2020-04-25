@@ -59,8 +59,7 @@ base::string16 GenerateUniqueFolderName(BookmarkModel* model,
   // Build a set containing the bookmark bar folder names.
   std::set<base::string16> existing_folder_names;
   const BookmarkNode* bookmark_bar = model->bookmark_bar_node();
-  for (int i = 0; i < bookmark_bar->child_count(); ++i) {
-    const BookmarkNode* node = bookmark_bar->GetChild(i);
+  for (const auto& node : bookmark_bar->children()) {
     if (node->is_folder())
       existing_folder_names.insert(node->GetTitle());
   }
@@ -182,9 +181,8 @@ void ProfileWriter::AddBookmarks(
       if (!top_level_folder) {
         base::string16 name =
             GenerateUniqueFolderName(model,top_level_folder_name);
-        top_level_folder = model->AddFolder(bookmark_bar,
-                                            bookmark_bar->child_count(),
-                                            name);
+        top_level_folder = model->AddFolder(
+            bookmark_bar, bookmark_bar->children().size(), name);
       }
       parent = top_level_folder;
     }
@@ -201,40 +199,31 @@ void ProfileWriter::AddBookmarks(
         continue;
       }
 
-      const BookmarkNode* child = NULL;
-      for (int index = 0; index < parent->child_count(); ++index) {
-        const BookmarkNode* node = parent->GetChild(index);
-        if (node->is_folder() && node->GetTitle() == *folder_name) {
-          child = node;
-          break;
-        }
-      }
-      if (!child) {
-        BookmarkNode::MetaInfoMap meta_info;
-        meta_info["Speeddial"] = "true";
-        child = model->AddFolderWithMetaInfo(
-            parent, parent->child_count(), *folder_name,
-            (bookmark->speeddial) ? &meta_info : NULL);
-      }
-      parent = child;
+      const auto it = std::find_if(
+          parent->children().cbegin(), parent->children().cend(),
+          [folder_name](const auto& node) {
+            return node->is_folder() && node->GetTitle() == *folder_name;
+          });
+      BookmarkNode::MetaInfoMap meta_info;
+      meta_info["Speeddial"] = "true";
+      parent = (it == parent->children().cend())
+                   ? model->AddFolderWithMetaInfo(parent,
+                                      parent->children().size(),
+                                      *folder_name,
+                                 (bookmark->speeddial) ? &meta_info : NULL)
+                   : it->get();
     }
 
     folders_added_to.insert(parent);
     if (bookmark->is_folder) {
-      model->AddFolder(parent, parent->child_count(), bookmark->title);
+      model->AddFolder(parent, parent->children().size(), bookmark->title);
     } else {
-      model->AddURLWithCreationTimeAndMetaInfo(parent,
-                                               parent->child_count(),
-                                               bookmark->title,
-                                               bookmark->url,
-                                               bookmark->creation_time,
-                                               NULL,
-                                               bookmark->nickname,
-                                               bookmark->description,
-                                               bookmark->thumbnail,
-                                               base::string16(), // partner
-                                               bookmark->speeddial,
-                                               &bookmark->visited_time);
+      model->AddURLWithCreationTimeAndMetaInfo(
+          parent, parent->children().size(), bookmark->title, bookmark->url,
+          bookmark->creation_time, NULL,
+          bookmark->nickname, bookmark->description, bookmark->thumbnail,
+          base::string16(), // partner
+          bookmark->speeddial, &bookmark->visited_time);
     }
   }
 
@@ -382,10 +371,10 @@ void ProfileWriter::AddSpeedDial(
   BookmarkNode::MetaInfoMap meta_info;
   meta_info["Speeddial"] = "true";
   top_level_folder = model->AddFolderWithMetaInfo(
-      bookmark_bar, bookmark_bar->child_count(), name, &meta_info);
+      bookmark_bar, bookmark_bar->children().size(), name, &meta_info);
 
   for (auto& item : speeddial) {
-    if (!model->AddURL(top_level_folder, top_level_folder->child_count(),
+    if (!model->AddURL(top_level_folder, top_level_folder->children().size(),
                        item.title, item.url))
       break;
   }
@@ -413,7 +402,7 @@ void ProfileWriter::AddNotes(const std::vector<ImportedNotesEntry> &notes,
       name = l10n_util::GetStringUTF16(IDS_NOTES_GROUP_FROM_OPERA);
       top_level_folder = model->AddFolder(
           model->main_node(),
-          model->main_node()->child_count(),
+          model->main_node()->children().size(),
           name);
     }
     parent = top_level_folder;
@@ -426,21 +415,21 @@ void ProfileWriter::AddNotes(const std::vector<ImportedNotesEntry> &notes,
          folder_name != note->path.end(); ++folder_name) {
 
       const Notes_Node *child = NULL;
-      for (int index = 0; index < parent->child_count(); ++index) {
-        const Notes_Node *node = parent->GetChild(index);
+      for (size_t index = 0; index < parent->children().size(); ++index) {
+        const Notes_Node *node = parent->children()[index].get();
         if (node->is_folder() && node->GetTitle() == *folder_name) {
           child = node;
           break;
         }
       }
       if (!child) {
-        child = model->AddFolder(parent, parent->child_count(), *folder_name);
+        child = model->AddFolder(parent, parent->children().size(), *folder_name);
       }
       parent = child;
     }
 
     folders_added_to.insert(parent);
-    model->AddNote(parent, parent->child_count(), note->is_folder, *note);
+    model->AddNote(parent, parent->children().size(), note->is_folder, *note);
   }
   model->EndExtensiveChanges();
 }

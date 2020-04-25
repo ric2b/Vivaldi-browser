@@ -289,12 +289,6 @@ hooks = [
     ],
   },
   {
-    'name': 'Fetch Android AFDO profile',
-    'pattern': '.',
-    'condition': 'checkout_android or checkout_linux',
-    'action': ['python', "-u", 'chromium/chrome/android/profiles/update_afdo_profile.py'],
-  },
-  {
     'name': 'gvr_static_shim_android_arm_1',
     'pattern': '\\.sha1',
     'condition': 'checkout_android',

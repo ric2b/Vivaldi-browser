@@ -261,8 +261,12 @@
     },
     "calendar": {
       "date_format": {
-        "type": "string",
-        "default": "",
+        "type": "enum",
+        "enum_values": {
+          "language": 0,
+          "system": 1
+        },
+        "default": "language",
         "syncable": false
       },
       "display_mode": {
@@ -281,6 +285,11 @@
       "show_day_sidebar": {
         "type": "boolean",
         "default": false,
+        "syncable": true
+      },
+      "default_calendar_id": {
+        "type": "string",
+        "default": "",
         "syncable": true
       }
     },
@@ -528,6 +537,24 @@
         "type": "string",
         "default": "",
         "syncable": false
+      },
+      "notifications": {
+        "description": "Should show mail notifications",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "notifications_sound_on": {
+        "description": "Have silent notifications",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "notifications_on_successfully_sent": {
+        "description": "Show a mail notification when a message is successfully sent",
+        "type": "boolean",
+        "default": false,
+        "syncable": true
       },
       "read_headers_hidden": {
         "description": "What header fields are hidden in mail message header when reading",
@@ -955,7 +982,8 @@
       "check_is_default": {
         "description": "Check if vivaldi is default on startup (not synced to allow people to have different default browser on different computers)",
         "type": "boolean",
-        "default": false,
+        "default": true,
+        "default_linux": false,
         "syncable": false
       },
       "last_seen_version": {
@@ -1324,6 +1352,13 @@
         "description": "CSS modifications directory where *.css files will be injected from.",
         "default": "",
         "syncable": false
+      },
+      "column_widths": {
+        "entries": {
+          "type": "dictionary",
+          "default": {},
+          "syncable": false
+        }
       }
     },
     "theme": {

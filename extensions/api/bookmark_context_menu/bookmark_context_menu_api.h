@@ -26,17 +26,8 @@ class BookmarkContextMenuAPI : public BrowserContextKeyedAPI {
         GetFactoryInstance();
 
   // Functions that will send events to JS.
-  static void SendActivated(content::BrowserContext* browser_context,
-                            int id,
-                            int event_state);
-  static void SendAction(content::BrowserContext* browser_context,
-                         int id,
-                         int index,
-                         int action);
   static void SendOpen(content::BrowserContext* browser_context, int64_t id);
   static void SendClose(content::BrowserContext* browser_context);
-  static void SendHover(content::BrowserContext* browser_context,
-                        const std::string& url);
 
  private:
   friend class BrowserContextKeyedAPIFactory<BookmarkContextMenuAPI>;
@@ -45,15 +36,12 @@ class BookmarkContextMenuAPI : public BrowserContextKeyedAPI {
   static const char* service_name() { return "BookmarkContextMenuAPI"; }
   static const bool kServiceIsNULLWhileTesting = true;
   static const bool kServiceRedirectedInIncognito = true;
-
-  // Hover url as reported by menu code. Cached here to avoid repeated events
-  // with same value
-  std::string hover_url_;
 };
 
 // Opens a bookmark context menu
 class BookmarkContextMenuShowFunction :
     public UIThreadExtensionFunction,
+    public ::vivaldi::BookmarkMenuContainer::Delegate,
     public ::vivaldi::VivaldiBookmarkMenuObserver {
  public:
   DECLARE_EXTENSION_FUNCTION(
@@ -69,9 +57,15 @@ class BookmarkContextMenuShowFunction :
   // vivaldi::VivaldiBookmarkMenuObserver
   void BookmarkMenuClosed(::vivaldi::VivaldiBookmarkMenu* menu) override;
 
+  // vivaldi::BookmarkMenuContainer::Delegate
+  void OnHover(const std::string& url) override;
+  void OnOpenBookmark(int64_t bookmark_id, int event_state) override;
+  void OnBookmarkAction(int64_t bookmark_id, int command) override;
+  void OnOpenMenu(int64_t bookmark_id) override;
+
   std::string Open(const std::string& id);
 
-  ::vivaldi::BookmarkMenuParams menuParams_;
+  std::unique_ptr<::vivaldi::BookmarkMenuContainer> bookmark_menu_container_;
 
   DISALLOW_COPY_AND_ASSIGN(BookmarkContextMenuShowFunction);
 };

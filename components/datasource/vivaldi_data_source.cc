@@ -12,15 +12,20 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/message_loop/message_loop.h"
-#if defined(OS_WIN)
-#include "components/datasource/desktop_data_source_win.h"
-#endif  // defined(OS_WIN)
+#include "base/task/post_task.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/common/url_constants.h"
 #include "components/datasource/css_mods_data_source.h"
 #include "components/datasource/local_image_data_source.h"
-#include "chrome/common/url_constants.h"
+#include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 #include "net/url_request/url_request.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia.h"
+
+#if defined(OS_WIN)
+#include "components/datasource/desktop_data_source_win.h"
+#endif  // defined(OS_WIN)
 
 namespace {
 const char kDesktopImageType[] = "desktop-image";
@@ -63,7 +68,7 @@ VivaldiDataSource::~VivaldiDataSource() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 }
 
-std::string VivaldiDataSource::GetSource() const {
+std::string VivaldiDataSource::GetSource() {
   return vivaldi::kVivaldiUIDataHost;
 }
 
@@ -82,7 +87,7 @@ bool VivaldiDataSource::IsCSSRequest(const std::string& path) const {
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>
-VivaldiDataSource::TaskRunnerForRequestPath(const std::string& path) const {
+VivaldiDataSource::TaskRunnerForRequestPath(const std::string& path) {
   if (IsCSSRequest(path)) {
     // Use UI thread to load CSS since its construction touches non-thread-safe
     // gfx::Font names in ui::ResourceBundle.
@@ -151,7 +156,7 @@ void VivaldiDataSource::ExtractRequestTypeAndData(const std::string& path,
   }
 }
 
-std::string VivaldiDataSource::GetMimeType(const std::string& path) const {
+std::string VivaldiDataSource::GetMimeType(const std::string& path) {
   // We need to explicitly return a mime type, otherwise if the user tries to
   // drag the image they get no extension.
   if (IsCSSRequest(path)) {
@@ -160,14 +165,14 @@ std::string VivaldiDataSource::GetMimeType(const std::string& path) const {
   return "image/png";
 }
 
-bool VivaldiDataSource::AllowCaching() const {
+bool VivaldiDataSource::AllowCaching() {
   return false;
 }
 
 bool VivaldiDataSource::ShouldServiceRequest(
     const GURL& url,
     content::ResourceContext* resource_context,
-    int render_process_id) const {
+    int render_process_id) {
   return URLDataSource::ShouldServiceRequest(url, resource_context,
                                              render_process_id);
 }
@@ -182,6 +187,6 @@ VivaldiThumbDataSource::VivaldiThumbDataSource(Profile* profile)
 VivaldiThumbDataSource::~VivaldiThumbDataSource() {
 }
 
-std::string VivaldiThumbDataSource::GetSource() const {
+std::string VivaldiThumbDataSource::GetSource() {
   return vivaldi::kVivaldiThumbDataHost;
 }

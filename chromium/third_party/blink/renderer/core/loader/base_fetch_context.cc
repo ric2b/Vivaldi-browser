@@ -134,18 +134,18 @@ BaseFetchContext::CanRequestInternal(
   scoped_refptr<const SecurityOrigin> origin =
       resource_request.RequestorOrigin();
 
-  const auto request_mode = resource_request.GetFetchRequestMode();
+  const auto request_mode = resource_request.GetMode();
   // On navigation cases, Context().GetSecurityOrigin() may return nullptr, so
   // the request's origin may be nullptr.
   // TODO(yhirano): Figure out if it's actually fine.
-  DCHECK(request_mode == network::mojom::FetchRequestMode::kNavigate || origin);
+  DCHECK(request_mode == network::mojom::RequestMode::kNavigate || origin);
 #if !defined(OFFICIAL_BUILD)
   // VB-24745 VB-44251 Render Mail in Webview: Allow HTML messages to request
   // inline attachments as blob-URL. TODO: remove this when the webview will be
   // "self-contained" and the blobs will be created within the webview.
   if (!url.GetString().StartsWith("blob:chrome-extension://" VIVALDI_APP_ID "/"))
 #endif
-  if (request_mode != network::mojom::FetchRequestMode::kNavigate &&
+  if (request_mode != network::mojom::RequestMode::kNavigate &&
       !origin->CanDisplay(url)) {
     if (reporting_policy == SecurityViolationReportingPolicy::kReport) {
       AddConsoleMessage(ConsoleMessage::Create(
@@ -158,7 +158,7 @@ BaseFetchContext::CanRequestInternal(
     return ResourceRequestBlockedReason::kOther;
   }
 
-  if (request_mode == network::mojom::FetchRequestMode::kSameOrigin &&
+  if (request_mode == network::mojom::RequestMode::kSameOrigin &&
       cors::CalculateCorsFlag(url, origin.get(), request_mode)) {
     PrintAccessDeniedMessage(url);
     return ResourceRequestBlockedReason::kOrigin;

@@ -92,7 +92,6 @@
 <translation id="2785873697295365461">Filskildrarar</translation>
 <translation id="2809586584051668049">og <ph name="NUMBER_ADDITIONAL_DISABLED" /> fleire</translation>
 <translation id="2812989263793994277">Vis ikkje bilete</translation>
-<translation id="2847759467426165163">Del med</translation>
 <translation id="2850541429955027218">Legg til drakt</translation>
 <translation id="2861941300086904918">Tryggleiksstyrar lokalklient</translation>
 <translation id="2889064240420137087">Åpne lenkja med …</translation>
@@ -130,7 +129,6 @@
 <translation id="3341703758641437857">Tillatt tilgang til filadresser</translation>
 <translation id="3347086966102161372">Kopier &amp;bildeadressa</translation>
 <translation id="3360297538363969800">Utskrifta feila. Sjå over skrivaren din og prøv på nytt.</translation>
-<translation id="3378503599595235699">Berre ta vare på lokale data fram til du avsluttar nettlesaren</translation>
 <translation id="3378572629723696641">Denne utvidinga kan ha vorten øydelagd.</translation>
 <translation id="3387614642886316601">Bruk utvida stavekontroll</translation>
 <translation id="3432227430032737297">Fjern alt synleg</translation>
@@ -198,7 +196,6 @@
 <translation id="4613271546271159013">Ei utviding har endra kva side som vert vist når du opnar ei ny fane.</translation>
 <translation id="4677772697204437347">GPU-minne</translation>
 <translation id="4681930562518940301">Opna &amp;originalbildet i ei ny fane</translation>
-<translation id="4688541352655220763">Du kan bruka denne eigenskapen til å syna innhald frå Vivaldi på fjernsynet ditt eller andre einingar.</translation>
 <translation id="4711638718396952945">Før attende innstillingane</translation>
 <translation id="4726710629007580002">Det kom åtvaringar under installasjonen av denne utvidinga:</translation>
 <translation id="479536056609751218">Nettside, berre HTML</translation>
@@ -269,7 +266,6 @@
 <translation id="5978277834170881274">Bruk &amp;grunnleggjande stavekontroll</translation>
 <translation id="5979421442488174909">&amp;Omset til <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">Tøm nettstaddataa</translation>
-<translation id="6040143037577758943">Lukk</translation>
 <translation id="6042308850641462728">Meir</translation>
 <translation id="6059925163896151826">USB-einingar</translation>
 <translation id="6082651258230788217">Syn på verktøylinja</translation>
@@ -327,10 +323,8 @@
 <translation id="7270858098575133036">Spør om ein nettstad ønskjer å bruka systemeksklusive meldingar for å nå MIDI-einingar</translation>
 <translation id="7287143125007575591">Tilgang avvist.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="7293919849802650062">Velkomen til Vivaldi si mediedeling.</translation>
 <translation id="7309257895202129721">Syn &amp;kontrollar</translation>
 <translation id="7311079019872751559">Ikkje-isolert programtilleggstilgang</translation>
-<translation id="7346909386216857016">Den er grei</translation>
 <translation id="7385854874724088939">Utskrifta feila. Sjå over skrivaren din og prøv på nytt.</translation>
 <translation id="7423098979219808738">Spør først</translation>
 <translation id="7427348830195639090">Bakgrunnsside: <ph name="BACKGROUND_PAGE_URL" /></translation>
@@ -391,7 +385,6 @@ Ta godt vare på nøkkelfila. Du treng ho for å kunna laga nye utgåver av utvi
 <translation id="857943718398505171">Tillate (tilrådd)</translation>
 <translation id="8584280235376696778">Opna vi&amp;deoen i ei ny fane</translation>
 <translation id="8615618338313291042">Privat-app: <ph name="APP_NAME" /></translation>
-<translation id="8627151598708688654">Vel kjelde</translation>
 <translation id="862750493060684461">CSS-mellomlager</translation>
 <translation id="8664389313780386848">S&amp;yn kjeldekoden</translation>
 <translation id="8708000541097332489">Tøm ved avslutning</translation>

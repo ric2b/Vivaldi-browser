@@ -400,19 +400,21 @@ aura::Window* GetHostWindow(aura::Window* window) {
   return window->parent();
 }
 
-// Helpers to direct the tab drag to Vivaldi UI
-
-bool IsVivaldiDrag(const ui::DropTargetEvent& event, gfx::PointF* pt) {
-  if (!vivaldi::IsVivaldiRunning() || !vivaldi::IsTabDragInProgress())
-    return false;
-  *pt = event.location_f();
-  return true;
-}
-
-RenderWidgetHostImpl* VivaldiUIHost(WebContents* web_contents) {
+// Helper to direct the tab drag to Vivaldi UI
+void VivaldiGetDragTarget(
+    WebContentsImpl* web_contents,
+    const gfx::PointF& point,
+    RenderWidgetTargeter::RenderWidgetHostAtPointCallback callback) {
   DCHECK(!web_contents->GetOuterWebContents());
-  return RenderWidgetHostImpl::From(
-      web_contents->GetRenderViewHost()->GetWidget());
+  RenderWidgetHostViewBase* root_view =
+      web_contents->GetRenderViewHost()->GetWidget()->GetView();
+  if (vivaldi::IsVivaldiRunning() && vivaldi::IsTabDragInProgress()) {
+    std::move(callback).Run(root_view->GetWeakPtr(), point);
+  } else {
+    web_contents->GetInputEventRouter()
+        ->GetRenderWidgetHostAtPointAsynchronously(root_view, point,
+                                                   std::move(callback));
+  }
 }
 
 }  // namespace
@@ -693,6 +695,7 @@ WebContentsViewAura::WebContentsViewAura(WebContentsImpl* web_contents,
                             MSG_ROUTING_NONE),
       drag_start_process_id_(ChildProcessHost::kInvalidUniqueID),
       drag_start_view_id_(ChildProcessHost::kInvalidUniqueID, MSG_ROUTING_NONE),
+      drag_in_progress_(false),
       init_rwhv_with_null_parent_for_testing_(false) {}
 
 void WebContentsViewAura::SetDelegateForTesting(
@@ -1090,11 +1093,11 @@ void WebContentsViewAura::StartDragging(
       ui::OSExchangeDataProviderFactory::CreateProvider();
   PrepareDragData(drop_data, provider.get(), web_contents_);
 
-  ui::OSExchangeData data(
-      std::move(provider));  // takes ownership of |provider|.
+  auto data(std::make_unique<ui::OSExchangeData>(
+      std::move(provider)));  // takes ownership of |provider|.
 
   if (!image.isNull())
-    data.provider().SetDragImage(image, image_offset);
+    data->provider().SetDragImage(image, image_offset);
 
   std::unique_ptr<WebDragSourceAura> drag_source(
       new WebDragSourceAura(GetNativeView(), web_contents_));
@@ -1106,12 +1109,10 @@ void WebContentsViewAura::StartDragging(
     gfx::NativeView content_native_view = GetContentNativeView();
     base::MessageLoopCurrent::ScopedNestableTaskAllower allow;
     result_op = aura::client::GetDragDropClient(root_window)
-        ->StartDragAndDrop(data,
-                           root_window,
-                           content_native_view,
-                           event_info.event_location,
-                           ConvertFromWeb(operations),
-                           event_info.event_source);
+                    ->StartDragAndDrop(
+                        std::move(data), root_window, content_native_view,
+                        event_info.event_location, ConvertFromWeb(operations),
+                        event_info.event_source);
   }
 
   // Bail out immediately if the contents view window is gone. Note that it is
@@ -1279,26 +1280,23 @@ void WebContentsViewAura::OnMouseEvent(ui::MouseEvent* event) {
 ////////////////////////////////////////////////////////////////////////////////
 // WebContentsViewAura, aura::client::DragDropDelegate implementation:
 
-void WebContentsViewAura::OnDragEntered(const ui::DropTargetEvent& event) {
-#if defined(OS_WIN)
-  async_drop_navigation_observer_.reset();
-#endif
-
-  gfx::PointF transformed_pt;
+void WebContentsViewAura::DragEnteredCallback(
+    ui::DropTargetEvent event,
+    std::unique_ptr<DropData> drop_data,
+    base::WeakPtr<RenderWidgetHostViewBase> target,
+    base::Optional<gfx::PointF> transformed_pt) {
+  drag_in_progress_ = true;
+  if (!target)
+    return;
   RenderWidgetHostImpl* target_rwh =
-      IsVivaldiDrag(event, &transformed_pt) ? VivaldiUIHost(web_contents_) :
-      web_contents_->GetInputEventRouter()->GetRenderWidgetHostAtPoint(
-          web_contents_->GetRenderViewHost()->GetWidget()->GetView(),
-          event.location_f(), &transformed_pt);
-
+      RenderWidgetHostImpl::From(target->GetRenderWidgetHost());
   if (!IsValidDragTarget(target_rwh))
     return;
 
   current_rwh_for_drag_ = target_rwh->GetWeakPtr();
   current_rvh_for_drag_ =
       GetRenderViewHostID(web_contents_->GetRenderViewHost());
-  current_drop_data_.reset(new DropData());
-  PrepareDropData(current_drop_data_.get(), event.data());
+  current_drop_data_.reset(drop_data.release());
   current_rwh_for_drag_->FilterDropData(current_drop_data_.get());
 
   blink::WebDragOperationsMask op = ConvertToWeb(event.source_operations());
@@ -1311,30 +1309,56 @@ void WebContentsViewAura::OnDragEntered(const ui::DropTargetEvent& event) {
     return;
   }
 
-  if (drag_dest_delegate_)
-    drag_dest_delegate_->DragInitialize(web_contents_);
-
+  DCHECK(transformed_pt.has_value());
   gfx::PointF screen_pt(display::Screen::GetScreen()->GetCursorScreenPoint());
   current_rwh_for_drag_->DragTargetDragEnter(
-      *current_drop_data_, transformed_pt, screen_pt, op,
+      *current_drop_data_, transformed_pt.value(), screen_pt, op,
       ui::EventFlagsToWebEventModifiers(event.flags()));
 
   if (drag_dest_delegate_) {
-    drag_dest_delegate_->OnReceiveDragData(event.data());
     drag_dest_delegate_->OnDragEnter();
   }
 }
 
-int WebContentsViewAura::OnDragUpdated(const ui::DropTargetEvent& event) {
-  gfx::PointF transformed_pt;
-  RenderWidgetHostImpl* target_rwh =
-      IsVivaldiDrag(event, &transformed_pt) ? VivaldiUIHost(web_contents_) :
-      web_contents_->GetInputEventRouter()->GetRenderWidgetHostAtPoint(
-          web_contents_->GetRenderViewHost()->GetWidget()->GetView(),
-          event.location_f(), &transformed_pt);
+void WebContentsViewAura::OnDragEntered(const ui::DropTargetEvent& event) {
+#if defined(OS_WIN)
+  async_drop_navigation_observer_.reset();
+#endif
 
+  std::unique_ptr<DropData> drop_data = std::make_unique<DropData>();
+  // Calling this here as event.data might become invalid inside the callback.
+  PrepareDropData(drop_data.get(), event.data());
+
+  if (drag_dest_delegate_) {
+    drag_dest_delegate_->DragInitialize(web_contents_);
+    drag_dest_delegate_->OnReceiveDragData(event.data());
+  }
+
+  VivaldiGetDragTarget(web_contents_,
+          event.location_f(),
+          base::BindOnce(&WebContentsViewAura::DragEnteredCallback,
+                         weak_ptr_factory_.GetWeakPtr(), event,
+                         std::move(drop_data)));
+}
+
+void WebContentsViewAura::DragUpdatedCallback(
+    ui::DropTargetEvent event,
+    std::unique_ptr<DropData> drop_data,
+    base::WeakPtr<RenderWidgetHostViewBase> target,
+    base::Optional<gfx::PointF> transformed_pt) {
+  // If drag is not in progress it means drag has already finished and we get
+  // this callback after that already. This happens for example when drag leaves
+  // out window and we get the exit signal while still waiting for this
+  // targeting callback to be called for the previous drag update signal. In
+  // this case we just ignore this operation.
+  if (!drag_in_progress_)
+    return;
+  if (!target)
+    return;
+  RenderWidgetHostImpl* target_rwh =
+      RenderWidgetHostImpl::From(target->GetRenderWidgetHost());
   if (!IsValidDragTarget(target_rwh))
-    return ui::DragDropTypes::DRAG_NONE;
+    return;
 
   aura::Window* root_window = GetNativeView()->GetRootWindow();
   aura::client::ScreenPositionClient* screen_position_client =
@@ -1356,24 +1380,39 @@ int WebContentsViewAura::OnDragUpdated(const ui::DropTargetEvent& event) {
       current_rwh_for_drag_->DragTargetDragLeave(transformed_leave_point,
                                                  screen_pt);
     }
-    OnDragEntered(event);
+    DragEnteredCallback(event, std::move(drop_data), target, transformed_pt);
   }
 
-  if (!current_drop_data_)
-    return ui::DragDropTypes::DRAG_NONE;
+  if (!current_drop_data_) {
+    return;
+  }
 
+  DCHECK(transformed_pt.has_value());
   blink::WebDragOperationsMask op = ConvertToWeb(event.source_operations());
   target_rwh->DragTargetDragOver(
-      transformed_pt, screen_pt, op,
+      transformed_pt.value(), screen_pt, op,
       ui::EventFlagsToWebEventModifiers(event.flags()));
 
   if (drag_dest_delegate_)
     drag_dest_delegate_->OnDragOver();
+}
 
+int WebContentsViewAura::OnDragUpdated(const ui::DropTargetEvent& event) {
+  std::unique_ptr<DropData> drop_data = std::make_unique<DropData>();
+  // Calling this here as event.data might become invalid inside the callback.
+  PrepareDropData(drop_data.get(), event.data());
+
+  VivaldiGetDragTarget(web_contents_,
+          event.location_f(),
+          base::BindOnce(&WebContentsViewAura::DragUpdatedCallback,
+                         weak_ptr_factory_.GetWeakPtr(), event,
+                         std::move(drop_data)));
   return ConvertFromWeb(current_drag_op_);
 }
 
 void WebContentsViewAura::OnDragExited() {
+  drag_in_progress_ = false;
+
   if (current_rvh_for_drag_ !=
       GetRenderViewHostID(web_contents_->GetRenderViewHost()) ||
       !current_drop_data_) {
@@ -1391,31 +1430,40 @@ void WebContentsViewAura::OnDragExited() {
   current_drop_data_.reset();
 }
 
-int WebContentsViewAura::OnPerformDrop(const ui::DropTargetEvent& event) {
-  gfx::PointF transformed_pt;
+void WebContentsViewAura::PerformDropCallback(
+    ui::DropTargetEvent event,
+    std::unique_ptr<ui::OSExchangeData> data,
+    base::WeakPtr<RenderWidgetHostViewBase> target,
+    base::Optional<gfx::PointF> transformed_pt) {
+  drag_in_progress_ = false;
+  if (!target)
+    return;
   RenderWidgetHostImpl* target_rwh =
-      IsVivaldiDrag(event, &transformed_pt) ? VivaldiUIHost(web_contents_) :
-      web_contents_->GetInputEventRouter()->GetRenderWidgetHostAtPoint(
-          web_contents_->GetRenderViewHost()->GetWidget()->GetView(),
-          event.location_f(), &transformed_pt);
-
+      RenderWidgetHostImpl::From(target->GetRenderWidgetHost());
   if (!IsValidDragTarget(target_rwh))
-    return ui::DragDropTypes::DRAG_NONE;
+    return;
+
+  DCHECK(transformed_pt.has_value());
 
   gfx::PointF screen_pt(display::Screen::GetScreen()->GetCursorScreenPoint());
   if (target_rwh != current_rwh_for_drag_.get()) {
     if (current_rwh_for_drag_)
-      current_rwh_for_drag_->DragTargetDragLeave(transformed_pt, screen_pt);
-    OnDragEntered(event);
+      current_rwh_for_drag_->DragTargetDragLeave(transformed_pt.value(),
+                                                 screen_pt);
+
+    std::unique_ptr<DropData> drop_data = std::make_unique<DropData>();
+    PrepareDropData(drop_data.get(), *data.get());
+    DragEnteredCallback(event, std::move(drop_data), target, transformed_pt);
   }
 
-  if (!current_drop_data_)
-    return ui::DragDropTypes::DRAG_NONE;
+  if (!current_drop_data_) {
+    return;
+  }
 
   const int key_modifiers = ui::EventFlagsToWebEventModifiers(event.flags());
 #if defined(OS_WIN)
   if (ShouldIncludeVirtualFiles(*current_drop_data_) &&
-      event.data().HasVirtualFilenames()) {
+      data->HasVirtualFilenames()) {
     // Asynchronously retrieve the actual content of any virtual files now (this
     // step is not needed for "real" files already on the file system, e.g.
     // those dropped on Chromium from the desktop). When all content has been
@@ -1429,23 +1477,32 @@ int WebContentsViewAura::OnPerformDrop(const ui::DropTargetEvent& event) {
     // GetVirtualFilesAsTempFiles will immediately return false if there are no
     // virtual files to retrieve (all items are folders e.g.) and no callback
     // will be received.
-    if (event.data().GetVirtualFilesAsTempFiles(std::move(callback))) {
+    if (data->GetVirtualFilesAsTempFiles(std::move(callback))) {
       // Cache the parameters as they were at the time of the drop. This is
       // needed for checking that the drop target is still valid when the async
       // operation completes.
       async_drop_navigation_observer_ =
           std::make_unique<AsyncDropNavigationObserver>(
               web_contents_, std::move(current_drop_data_), target_rwh,
-              transformed_pt, screen_pt, key_modifiers);
-
-      return ConvertFromWeb(current_drag_op_);
+              transformed_pt.value(), screen_pt, key_modifiers);
+      return;
     }
   }
 
 #endif
-  CompleteDrop(target_rwh, *current_drop_data_, transformed_pt, screen_pt,
-               key_modifiers);
+  CompleteDrop(target_rwh, *current_drop_data_, transformed_pt.value(),
+               screen_pt, key_modifiers);
   current_drop_data_.reset();
+}
+
+int WebContentsViewAura::OnPerformDrop(
+    const ui::DropTargetEvent& event,
+    std::unique_ptr<ui::OSExchangeData> data) {
+  VivaldiGetDragTarget(web_contents_,
+          event.location_f(),
+          base::BindOnce(&WebContentsViewAura::PerformDropCallback,
+                         weak_ptr_factory_.GetWeakPtr(), event,
+                         std::move(data)));
   return ConvertFromWeb(current_drag_op_);
 }
 

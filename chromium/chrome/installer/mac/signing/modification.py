@@ -69,17 +69,12 @@ def _modify_plists(paths, dist, config):
 
         # See build/mac/tweak_info_plist.py and
         # chrome/browser/mac/keystone_glue.mm.
-        keys_to_remove = set()
         for key in app_plist.keys():
             if not key.startswith(_KS_CHANNEL_ID + '-'):
                 continue
-            if dist.channel:
-                orig_channel, tag = key.split('-')
-                app_plist[key] = '{}-{}'.format(dist.channel, tag)
-            else:
-                keys_to_remove.add(key)
-        for key in keys_to_remove:
-            del app_plist[key]
+            orig_channel, tag = key.split('-')
+            channel_str = dist.channel if dist.channel else ''
+            app_plist[key] = '{}-{}'.format(channel_str, tag)
 
 
 def _replace_icons(paths, dist, config):
@@ -161,9 +156,11 @@ def _process_entitlements(paths, dist, config):
         if dist.channel_customize:
             with commands.PlistContext(
                     entitlements_file, rewrite=True) as entitlements:
-                app_id = entitlements[_ENT_APP_ID]
-                entitlements[_ENT_APP_ID] = app_id.replace(
-                    config.base_config.base_bundle_id, config.base_bundle_id)
+                if _ENT_APP_ID in entitlements:
+                    app_id = entitlements[_ENT_APP_ID]
+                    entitlements[_ENT_APP_ID] = app_id.replace(
+                        config.base_config.base_bundle_id,
+                        config.base_bundle_id)
 
 
 def customize_distribution(paths, dist, config):

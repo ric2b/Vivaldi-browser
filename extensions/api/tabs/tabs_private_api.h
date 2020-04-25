@@ -159,7 +159,7 @@ private:
   bool enable_plugins_ = true;
 
   // Vivaldi tab zoom level
-  double tab_zoom_level_ = 0;
+  double tab_zoom_level_ = -1;
 
   // Mimetype of displayed document.
   std::string contents_mime_type_;

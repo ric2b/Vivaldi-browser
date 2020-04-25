@@ -8,9 +8,14 @@
 #include <string>
 #include <vector>
 
+#include "base/optional.h"
 #include "components/sessions/core/session_id.h"
 #include "components/sessions/core/sessions_export.h"
 #include "ui/base/ui_base_types.h"
+
+namespace base {
+class Token;
+}
 
 namespace gfx {
 class Rect;
@@ -40,6 +45,7 @@ class SESSIONS_EXPORT LiveTabContext {
   virtual LiveTab* GetLiveTabAt(int index) const = 0;
   virtual LiveTab* GetActiveLiveTab() const = 0;
   virtual bool IsTabPinned(int index) const = 0;
+  virtual base::Optional<base::Token> GetTabGroupForTab(int index) const = 0;
   virtual const gfx::Rect GetRestoredBounds() const = 0;
   virtual ui::WindowShowState GetRestoredState() const = 0;
   virtual std::string GetWorkspace() const = 0;
@@ -52,6 +58,7 @@ class SESSIONS_EXPORT LiveTabContext {
       int tab_index,
       int selected_navigation,
       const std::string& extension_app_id,
+      base::Optional<base::Token> group,
       bool select,
       bool pin,
       bool from_last_session,
@@ -62,6 +69,7 @@ class SESSIONS_EXPORT LiveTabContext {
     int tab_index,
     int selected_navigation,
     const std::string& extension_app_id,
+    base::Optional<base::Token> group,
     bool select,
     bool pin,
     bool from_last_session,
@@ -74,6 +82,7 @@ class SESSIONS_EXPORT LiveTabContext {
   // platform-specific data).
   virtual LiveTab* ReplaceRestoredTab(
       const std::vector<SerializedNavigationEntry>& navigations,
+      base::Optional<base::Token> group,
       int selected_navigation,
       bool from_last_session,
       const std::string& extension_app_id,
@@ -81,6 +90,7 @@ class SESSIONS_EXPORT LiveTabContext {
       const std::string& user_agent_override);
   virtual LiveTab* ReplaceRestoredTab(
     const std::vector<SerializedNavigationEntry>& navigations,
+    base::Optional<base::Token> group,
     int selected_navigation,
     bool from_last_session,
     const std::string& extension_app_id,

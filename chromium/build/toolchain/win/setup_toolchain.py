@@ -30,15 +30,21 @@ def _ExtractImportantEnvironment(output_of_set):
   envvars_to_save = (
       'clcache_.*',
       'depot_tools_win_toolchain',
+      'cipd_cache_dir', # needed by vpython
+      'homedrive', # needed by vpython
+      'homepath', # needed by vpython
       'goma_.*', # TODO(scottmg): This is ugly, but needed for goma.
       'include',
       'lib',
       'libpath',
+      'luci_context', # needed by vpython
       'path',
       'pathext',
       'systemroot',
       'temp',
       'tmp',
+      'userprofile', # needed by vpython
+      'vpython_virtualenv_root' # needed by vpython
       )
   env = {}
   # This occasionally happens and leads to misleading SYSTEMROOT error messages

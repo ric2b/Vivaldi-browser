@@ -20,6 +20,7 @@ class CapturePage : private content::WebContentsObserver {
 
   struct CaptureParams {
     gfx::Rect rect;
+    gfx::Size target_size;
 
     bool full_page = false;
 
@@ -36,18 +37,15 @@ class CapturePage : private content::WebContentsObserver {
     Result& operator=(Result&& other);
 
     // This is a heavy operation and should be called from a worker thread.
-    // Return false if unsuccessful. This can only be called once per Result
+    // Return false if unsuccessful. This should only be called once per Result
     // instance.
     bool MovePixelsToBitmap(SkBitmap* bitmap);
 
    private:
     friend class CapturePage;
 
-    // TODO(igor@vivaldi.com): switch to ReadOnlySharedMemoryRegion as Chromium
-    // deprectaed SharedMemoryHandle.
-    base::SharedMemoryHandle handle_;
-    gfx::Rect rect_;
-    bool success_ = false;
+    SkImageInfo image_info_;
+    base::ReadOnlySharedMemoryRegion region_;
 
     DISALLOW_COPY_AND_ASSIGN(Result);
   };
@@ -79,16 +77,15 @@ class CapturePage : private content::WebContentsObserver {
 
   bool OnMessageReceived(const IPC::Message& message) override;
 
-  void OnRequestThumbnailForFrameResponse(base::SharedMemoryHandle handle,
-                                          gfx::Rect image_rect,
-                                          int callback_id,
-                                          bool success);
+  void OnRequestThumbnailForFrameResponse(
+      int callback_id,
+      gfx::Size image_size,
+      base::ReadOnlySharedMemoryRegion region);
 
   DoneCallback capture_callback_;
-
   int callback_id_ = 0;
-
   bool once_per_contents_ = false;
+  gfx::Size target_size_;
 
   // Incrementing callback id counter
   static int s_callback_id;

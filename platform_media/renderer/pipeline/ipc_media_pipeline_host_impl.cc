@@ -179,7 +179,7 @@ void IPCMediaPipelineHostImpl::OnRequestBufferForRawData(
     channel_->Send(new MediaPipelineMsg_BufferForRawDataReady(
         routing_id_,
         pipeline_data_.MappedSizeRaw(),
-        channel_->ShareToGpuProcess(pipeline_data_.HandleRaw())));
+        pipeline_data_.HandleRaw().Duplicate()));
   } else {
     channel_->Send(new MediaPipelineMsg_BufferForRawDataReady(
         routing_id_, 0, base::SharedMemoryHandle()));
@@ -202,7 +202,7 @@ void IPCMediaPipelineHostImpl::OnRequestBufferForDecodedData(
         routing_id_,
         type,
         pipeline_data_.MappedSizeDecoded(type),
-        channel_->ShareToGpuProcess(pipeline_data_.HandleDecoded(type))));
+        pipeline_data_.HandleDecoded(type).Duplicate()));
   } else {
     channel_->Send(new MediaPipelineMsg_BufferForDecodedDataReady(
         routing_id_, type, 0, base::SharedMemoryHandle()));

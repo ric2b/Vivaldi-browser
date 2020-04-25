@@ -92,7 +92,6 @@
 <translation id="2785873697295365461">Ֆայլի դեսկրիպտորներ</translation>
 <translation id="2809586584051668049">ու ևս <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
 <translation id="2812989263793994277">Ցույց չտալ որևէ պատկեր</translation>
-<translation id="2847759467426165163">Հեռարձակել դեպի</translation>
 <translation id="2850541429955027218">Ավելացնել ոճը</translation>
 <translation id="2861941300086904918">Native Client-ի անվտանգության մենեջեր</translation>
 <translation id="2889064240420137087">Բացել հղումը հետևյալով…</translation>
@@ -130,7 +129,6 @@
 <translation id="3341703758641437857">Թույլատրել մուտք դեպի ֆայլերի URL-ներ</translation>
 <translation id="3347086966102161372">Պատճենե&amp;լ պատկերի հասցեն</translation>
 <translation id="3360297538363969800">Տպումը ձախողվեց։ Խնդրում ենք ստուգեք Ձեր տպիչն ու փորձեք նորից։</translation>
-<translation id="3378503599595235699">Բրաուզերը փակելիս ջնջել լոկալ տվյալները</translation>
 <translation id="3378572629723696641">Այս ընդլայնումը կարող է վնասված լինել։</translation>
 <translation id="3387614642886316601">Ուղղագրության կատարելագործված ստուգում</translation>
 <translation id="3432227430032737297">Հեռացնել բոլոր ցուցադրվողները</translation>
@@ -198,7 +196,6 @@
 <translation id="4613271546271159013">Էջը, որը երևում է նոր ներդիր բացելիս՝ փոխվել է ընդլայնման կողմից։</translation>
 <translation id="4677772697204437347">GPU-ի հիշողություն</translation>
 <translation id="4681930562518940301">Բացել օրիգինալ պատկերը նոր ներդիրում</translation>
-<translation id="4688541352655220763">Այս ֆունկցիայի օգնությամբ Դուք կարող եք Vivaldi-ի բովանդակությունը ցուցադրել Ձեր հեռուստացույցի կամ այլ սարքի վրա։</translation>
 <translation id="4711638718396952945">Վերականգնել կարգավորումները</translation>
 <translation id="4726710629007580002">Այս ընդլայնումը տեղակայելիս եղել են հետևյալ զգուշացումները.</translation>
 <translation id="479536056609751218">Վեբ էջ, միայն HTML</translation>
@@ -269,7 +266,6 @@
 <translation id="5978277834170881274">Ուղղագրության հիմնական ստուգում</translation>
 <translation id="5979421442488174909">Թարգմանել <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">Կայքի տվյալների մաքրում</translation>
-<translation id="6040143037577758943">Փակել</translation>
 <translation id="6042308850641462728">Ավելին</translation>
 <translation id="6059925163896151826">USB սարքեր</translation>
 <translation id="6082651258230788217">Ցույց տալ գործիքների երիզում</translation>
@@ -327,10 +323,8 @@
 <translation id="7270858098575133036">Հարցնել, երբ կայքն ուզում է համակարգային ուղերձներ (SysEx) օգտագործել MIDI սարքերից օգտվելու համար</translation>
 <translation id="7287143125007575591">Մուտքն արգելված է։</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="7293919849802650062">Բարի գալուստ Vivaldi-ի Cast։</translation>
 <translation id="7309257895202129721">Ցույց տալ կա&amp;ռավարման տարրերը</translation>
 <translation id="7311079019872751559">Փլագինի աշխատանք փորձնական միջավայրից դուրս</translation>
-<translation id="7346909386216857016">Լավ, հասկանալի է</translation>
 <translation id="7385854874724088939">Փորձելիս տպել ինչ-որ սխալ տեղի ունեցավ։ Խնդրում ենք ստուգեք Ձեր տպիչն ու փորձեք նորից։</translation>
 <translation id="7423098979219808738">Նախ հարցնել</translation>
 <translation id="7427348830195639090">Հետին էջ. <ph name="BACKGROUND_PAGE_URL" /></translation>
@@ -391,7 +385,6 @@
 <translation id="857943718398505171">Թույլատրված է (խորհուրդ է տրվում)</translation>
 <translation id="8584280235376696778">&amp;Բացել տեսանյութը նոր ներդիրում</translation>
 <translation id="8615618338313291042">Հավելված՝ գաղտնի ռեժիմում. <ph name="APP_NAME" /></translation>
-<translation id="8627151598708688654">Ընտրել աղբյուրը</translation>
 <translation id="862750493060684461">CSS-ի քեշ</translation>
 <translation id="8664389313780386848">Տեսնել էջի &amp;կոդը</translation>
 <translation id="8708000541097332489">Մաքրել ելնելիս</translation>

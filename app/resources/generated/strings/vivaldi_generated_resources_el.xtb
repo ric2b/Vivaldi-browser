@@ -92,7 +92,6 @@
 <translation id="2785873697295365461">Περιγραφές αρχείων</translation>
 <translation id="2809586584051668049">και ακόμη <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
 <translation id="2812989263793994277">Να μην γίνεται εμφάνιση εικόνων</translation>
-<translation id="2847759467426165163">Μετάδοση σε</translation>
 <translation id="2850541429955027218">Προσθήκη θέματος</translation>
 <translation id="2861941300086904918">Πρόγραμμα διαχείρισης ασφαλείας Native Client</translation>
 <translation id="2889064240420137087">Άνοιγμα συνδέσμου με...</translation>
@@ -130,7 +129,6 @@
 <translation id="3341703758641437857">Να επιτρέπεται η πρόσβαση σε διευθύνσεις URL αρχείων</translation>
 <translation id="3347086966102161372">Α&amp;ντιγραφή της διεύθυνσης εικόνας</translation>
 <translation id="3360297538363969800">Η εκτύπωση απέτυχε. Ελέγξτε τον εκτυπωτή σας και δοκιμάστε ξανά.</translation>
-<translation id="3378503599595235699">Διατήρηση τοπικών δεδομένων μόνο μέχρι να κλείσετε το πρόγραμμα περιήγησής σας</translation>
 <translation id="3378572629723696641">Αυτή η επέκταση ενδεχομένως να είναι κατεστραμμένη.</translation>
 <translation id="3387614642886316601">Χρήση βελτιωμένου ορθογραφικού ελέγχου</translation>
 <translation id="3432227430032737297">Κατάργηση όλων όσων εμφανίζονται</translation>
@@ -198,7 +196,6 @@
 <translation id="4613271546271159013">Κάποια επέκταση άλλαξε το περιεχόμενο της σελίδας όταν ανοίγετε μια νέα καρτέλα.</translation>
 <translation id="4677772697204437347">Μνήμη GPU</translation>
 <translation id="4681930562518940301">Άνοιγμα αρχικής εικόνας σε νέα καρτέλα</translation>
-<translation id="4688541352655220763">Μπορείτε να χρησιμοποιήσετε αυτήν τη λειτουργία για την προβολή περιεχομένου από το Vivaldi στην τηλεόραση ή σε άλλες συσκευές σας.</translation>
 <translation id="4711638718396952945">Επαναφορά ρυθμίσεων</translation>
 <translation id="4726710629007580002">Παρουσιάστηκαν προειδοποιήσεις κατά την απόπειρα εγκατάστασης αυτής της επέκτασης:</translation>
 <translation id="479536056609751218">Ιστοσελίδα, Μόνο HTML</translation>
@@ -269,7 +266,6 @@
 <translation id="5978277834170881274">&amp;Χρήση βασικού ορθογραφικού ελέγχου</translation>
 <translation id="5979421442488174909">&amp;Μετάφραση σε <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">Εκκαθάριση δεδομένων ιστότοπου</translation>
-<translation id="6040143037577758943">Κλείσιμο</translation>
 <translation id="6042308850641462728">Περισσότερα</translation>
 <translation id="6059925163896151826">Συσκευές USB</translation>
 <translation id="6082651258230788217">Εμφάνιση στη γραμμή εργαλείων</translation>
@@ -327,10 +323,8 @@
 <translation id="7270858098575133036">Να γίνεται ερώτηση όταν ένας ιστότοπος θέλει να χρησιμοποιήσει αποκλειστικά μηνύματα συστήματος για την πρόσβαση σε συσκευές MIDI</translation>
 <translation id="7287143125007575591">Δεν επιτρέπεται η πρόσβαση.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="7293919849802650062">Καλώς ήρθατε στην εμπειρία Μετάδοσης στο Vivaldi!</translation>
 <translation id="7309257895202129721">Εμφάνιση &amp;στοιχείων ελέγχου</translation>
 <translation id="7311079019872751559">Πρόσβαση σε προσθήκη εκτός περιβάλλοντος δοκιμών</translation>
-<translation id="7346909386216857016">Εντάξει, το κατάλαβα</translation>
 <translation id="7385854874724088939">Παρουσιάστηκε σφάλμα κατά την προσπάθεια εκτύπωσης.  Ελέγξτε τον εκτυπωτή σας και προσπαθήστε ξανά.</translation>
 <translation id="7423098979219808738">Να γίνεται ερώτηση πρώτα</translation>
 <translation id="7427348830195639090">Σελίδα παρασκηνίου: <ph name="BACKGROUND_PAGE_URL" /></translation>
@@ -390,7 +384,6 @@
 <translation id="857943718398505171">Επιτρέπεται (συνιστάται)</translation>
 <translation id="8584280235376696778">&amp;Άνοιγμα βίντεο σε νέα καρτέλα</translation>
 <translation id="8615618338313291042">Εφαρμογή ανώνυμης περιήγησης: <ph name="APP_NAME" /></translation>
-<translation id="8627151598708688654">Επιλογή πηγής</translation>
 <translation id="862750493060684461">Προσωρινή μνήμη CSS</translation>
 <translation id="8664389313780386848">&amp;Προβολή κώδικα σελίδας</translation>
 <translation id="8708000541097332489">Διαγραφή κατά την έξοδο</translation>

@@ -92,7 +92,6 @@
 <translation id="2785873697295365461">Filbeskrivelser</translation>
 <translation id="2809586584051668049">og <ph name="NUMBER_ADDITIONAL_DISABLED" /> mere</translation>
 <translation id="2812989263793994277">Vis ikke billeder</translation>
-<translation id="2847759467426165163">Cast til</translation>
 <translation id="2850541429955027218">Tilføj tema</translation>
 <translation id="2861941300086904918">Sikkerhedsadministrator for Native Client</translation>
 <translation id="2889064240420137087">Åbn link med...</translation>
@@ -130,7 +129,6 @@
 <translation id="3341703758641437857">Tillad adgang til fil-URL'er</translation>
 <translation id="3347086966102161372">K&amp;opiér webadressen til billedet</translation>
 <translation id="3360297538363969800">Udskrift mislykkedes. Kontrollér din printer, og prøv igen.</translation>
-<translation id="3378503599595235699">Gem kun lokale data, indtil du lukker browseren</translation>
 <translation id="3378572629723696641">Denne udvidelse kan være blevet beskadiget.</translation>
 <translation id="3387614642886316601">Brug forbedret stavekontrol</translation>
 <translation id="3432227430032737297">Fjern alle viste</translation>
@@ -198,7 +196,6 @@
 <translation id="4613271546271159013">En udvidelse har ændret, hvilken side der vises, når du åbner en ny fane.</translation>
 <translation id="4677772697204437347">GPU-hukommelse</translation>
 <translation id="4681930562518940301">Åbn originalbillede på ny fane</translation>
-<translation id="4688541352655220763">Du kan bruge denne funktion til at vise indhold fra Vivaldi på dit fjernsyn eller andre enheder.</translation>
 <translation id="4711638718396952945">Gendan indstillinger</translation>
 <translation id="4726710629007580002">Der opstod advarsler under forsøget på at installere udvidelsen:</translation>
 <translation id="479536056609751218">Webside, kun HTML</translation>
@@ -269,7 +266,6 @@
 <translation id="5978277834170881274">&amp;Brug grundlæggende stavekontrol</translation>
 <translation id="5979421442488174909">&amp;Oversæt til <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">Ryd websitedata</translation>
-<translation id="6040143037577758943">Luk</translation>
 <translation id="6042308850641462728">Mere</translation>
 <translation id="6059925163896151826">USB-enheder</translation>
 <translation id="6082651258230788217">Vis i værktøjslinje</translation>
@@ -327,10 +323,8 @@
 <translation id="7270858098575133036">Spørg mig, når et website vil anvende interne systemmeddelelser til at få adgang til MIDI-enheder</translation>
 <translation id="7287143125007575591">Adgang nægtet.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="7293919849802650062">Velkommen til Cast-oplevelsen i Vivaldi!</translation>
 <translation id="7309257895202129721">Vis &amp;knapper</translation>
 <translation id="7311079019872751559">Adgang til plugin, der ikke er gemt i sandbox</translation>
-<translation id="7346909386216857016">OK, forstået</translation>
 <translation id="7385854874724088939">Der gik noget galt, da du prøvede at udskrive. Tjek din printer, og prøv igen.</translation>
 <translation id="7423098979219808738">Spørg først</translation>
 <translation id="7427348830195639090">Baggrundsside: <ph name="BACKGROUND_PAGE_URL" /></translation>
@@ -391,7 +385,6 @@ Opbevar din nøglefil på et sikkert sted. Du skal bruge den til at oprette nye 
 <translation id="857943718398505171">Tilladt (anbefales)</translation>
 <translation id="8584280235376696778">&amp;Åbn video på ny fane</translation>
 <translation id="8615618338313291042">Inkognitoprogram: <ph name="APP_NAME" /></translation>
-<translation id="8627151598708688654">Vælg kilde</translation>
 <translation id="862750493060684461">CSS-cache</translation>
 <translation id="8664389313780386848">&amp;Vis kildetekst</translation>
 <translation id="8708000541097332489">Ryd ved lukning</translation>

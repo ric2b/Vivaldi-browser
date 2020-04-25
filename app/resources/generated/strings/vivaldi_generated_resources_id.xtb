@@ -76,7 +76,6 @@
 <translation id="2785873697295365461">Semua Deskriptor File</translation>
 <translation id="2809586584051668049">dan <ph name="NUMBER_ADDITIONAL_DISABLED" /> lainnya</translation>
 <translation id="2812989263793994277">Jangan tampilkan gambar apapun</translation>
-<translation id="2847759467426165163">Cast ke</translation>
 <translation id="2850541429955027218">Tambah tema</translation>
 <translation id="2861941300086904918">Pengelola Asli Keamanan Klien</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> tidak dapat berkomunikasi dengan pencetak ini. Pastikan pencetak terpasang dan coba lagi.</translation>
@@ -156,7 +155,6 @@
 <translation id="4595560905247879544">Semua aplikasi dan ekstensi hanya dapat di ubah oleh pengelola (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Ekstensi telah mengubah apa yang ditampilkan halaman saat anda membuka tab baru.</translation>
 <translation id="4677772697204437347">Memori GPU</translation>
-<translation id="4688541352655220763">Anda dapat menggunakan fitur ini untuk menampilkan konten dari Vivaldi di TV atau perangkat lainnya.</translation>
 <translation id="4711638718396952945">Pulihkan Semua Pengaturan</translation>
 <translation id="4726710629007580002">Ada beberapa peringatan ketika mencoba memasang ekstensi ini:</translation>
 <translation id="4816492930507672669">Paskan dengan halaman</translation>
@@ -207,7 +205,6 @@
 <translation id="5956585768868398362">Apakah ini halaman penelusuran yang anda harapkan?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> maksimal)</translation>
 <translation id="5965661248935608907">Juga mengontrol apa yang di tampilkan halaman saat anda meng-klik tombol Beranda atau menelusuri dari Omnibox.</translation>
-<translation id="6040143037577758943">Tutup</translation>
 <translation id="6059925163896151826">Perangkat USB</translation>
 <translation id="6082651258230788217">Tampilkan di batang alat</translation>
 <translation id="6086846494333236931">Dipasang oleh admin anda</translation>
@@ -229,7 +226,7 @@
 <translation id="6398765197997659313">Keluar dari tampilan layar penuh</translation>
 <translation id="6406303162637086258">Simulasikan mulai ulang browser</translation>
 <translation id="6445450263907939268">Jika anda tidak menginginkan semua perubahan ini, pulihkan semua pengaturan sebelumnya.</translation>
-<translation id="6447842834002726250">Kuki</translation>
+<translation id="6447842834002726250">Reremah</translation>
 <translation id="6452181791372256707">Tolak</translation>
 <translation id="6498249116389603658">&amp;Semua bahasa anda</translation>
 <translation id="6503077044568424649">Sering dibuka</translation>
@@ -257,10 +254,8 @@
 <translation id="7270858098575133036">Tanyakan saat situs ingin menggunakan pesan eksklusif sistem untuk mengakses perangkat MIDI</translation>
 <translation id="7287143125007575591">Akses di tolak.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="7293919849802650062">Selamat datang ke pengalaman Cast di Vivaldi!</translation>
 <translation id="7309257895202129721">Tampilkan &amp;kontrol</translation>
 <translation id="7311079019872751559">Akses plugin yang tidak masuk uji coba</translation>
-<translation id="7346909386216857016">Oke, paham</translation>
 <translation id="7385854874724088939">Ada yang salah saat mencetak. Periksa pencetak anda dan coba kembali.</translation>
 <translation id="7423098979219808738">Tanyakan dahulu</translation>
 <translation id="7427348830195639090">Halaman Latar Belakang: <ph name="BACKGROUND_PAGE_URL" /></translation>
@@ -312,7 +307,6 @@ Simpan berkas kunci anda di tempat yang aman. Anda akan membutuhkannya untuk mem
 <translation id="8569682776816196752">Tidak ada tujuan yang di temukan</translation>
 <translation id="8584280235376696778">Buka vide&amp;o di tab baru</translation>
 <translation id="8615618338313291042">Aplikasi Penyamaran: <ph name="APP_NAME" /></translation>
-<translation id="8627151598708688654">Pilih sumber</translation>
 <translation id="862750493060684461">Tembolok CSS</translation>
 <translation id="8664389313780386848">&amp;Lihat sumber halaman</translation>
 <translation id="8714838604780058252">Grafis latar belakang</translation>

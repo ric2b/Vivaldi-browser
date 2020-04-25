@@ -122,13 +122,6 @@ foreach(
         },
       ],
       [
-        "//chrome/browser:resources",
-        "//vivaldi/app/resources/browser/vivaldi_browser_resources.grd",
-        {
-          have_strings_flag = false
-        },
-      ],
-      [
         "//chrome/renderer:resources",
         "//vivaldi/app/resources/renderer/vivaldi_renderer_resources.grd",
         {

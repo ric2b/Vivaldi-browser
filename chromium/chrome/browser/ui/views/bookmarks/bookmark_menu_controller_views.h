@@ -51,7 +51,7 @@ class BookmarkMenuController : public bookmarks::BaseBookmarkModelObserver,
                          content::PageNavigator* page_navigator,
                          views::Widget* parent,
                          const bookmarks::BookmarkNode* node,
-                         int start_child_index,
+                         size_t start_child_index,
                          bool for_drop);
 
   void RunMenuAt(BookmarkBarView* bookmark_bar);
@@ -117,6 +117,8 @@ class BookmarkMenuController : public bookmarks::BaseBookmarkModelObserver,
   views::MenuItemView* GetVivaldiSiblingMenu(views::MenuItemView* menu,
                                              const gfx::Point& screen_point,
                                              gfx::Rect* rect) override;
+  views::MenuItemView* GetNextSiblingMenu(bool next, bool* has_mnemonics,
+                                          gfx::Rect* rect) override;
   int GetMaxWidthForMenu(views::MenuItemView* view) override;
   void WillShowMenu(views::MenuItemView* menu) override;
   bool ShouldTryPositioningBesideAnchor() const override;

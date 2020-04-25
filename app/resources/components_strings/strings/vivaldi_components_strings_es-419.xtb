@@ -10,7 +10,6 @@
 <translation id="129863573139666797"><ph name="BEGIN_LINK" />Intenta borrar tus cookies<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">Acerca de la versión</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> no envió ningún dato.</translation>
-<translation id="14171126816530869">La identidad de <ph name="ORGANIZATION" /> en <ph name="LOCALITY" /> ha sido verificada por <ph name="ISSUER" />.</translation>
 <translation id="1559528461873125649">El archivo o directorio no existe</translation>
 <translation id="1620510694547887537">Cámara</translation>
 <translation id="1640244768702815859">Intenta <ph name="BEGIN_LINK" />visitar la página principal del sitio<ph name="END_LINK" />.</translation>
@@ -27,6 +26,7 @@
 <translation id="2030481566774242610">¿Quisiste decir: <ph name="LINK" />?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Comprobar el proxy y el firewall<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">Sonido</translation>
+<translation id="2119505898009119320">Emitida para: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2147827593068025794">Sincronización en segundo plano</translation>
 <translation id="2166378884831602661">Este sitio no puede proporcionar una conexión segura</translation>
 <translation id="2187317261103489799">Detectar (predeterminado)</translation>

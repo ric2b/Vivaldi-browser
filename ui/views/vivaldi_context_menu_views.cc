@@ -20,6 +20,7 @@
 #include "ui/aura/window.h"
 #include "ui/views/controls/menu/menu_controller.h"
 #include "ui/views/vivaldi_bookmark_menu_views.h"
+#include "ui/views/vivaldi_menubar_menu_views.h"
 #include "ui/views/widget/widget.h"
 
 namespace vivaldi {
@@ -30,9 +31,10 @@ VivaldiContextMenu* CreateVivaldiContextMenu(
   return new VivaldiContextMenuViews(web_contents, menu_model, params);
 }
 
-void ConvertBookmarkButtonRectToScreen(
+// TODO - combine this with ConvertBookmarkButtonRectToScreen
+void ConvertMenubarButtonRectToScreen(
     content::WebContents* web_contents,
-    vivaldi::BookmarkMenuParams& params) {
+    vivaldi::MenubarMenuParams& params) {
   aura::Window* target_window =
     VivaldiBookmarkMenuViews::GetActiveNativeViewFromWebContents(
         web_contents);
@@ -40,21 +42,50 @@ void ConvertBookmarkButtonRectToScreen(
   aura::client::ScreenPositionClient* screen_position_client =
       aura::client::GetScreenPositionClient(root_window);
   if (screen_position_client) {
-    for (::vivaldi::FolderEntry& e: params.siblings) {
-      gfx::Point point(e.x, e.y);
+    for (::vivaldi::MenubarMenuEntry& e: params.siblings) {
+      gfx::Point point(e.rect.origin());
       screen_position_client->ConvertPointToScreen(target_window, &point);
-      e.x = point.x();
-      e.y = point.y();
+      e.rect.set_origin(point);
+    }
+  }
+}
+
+// TODO - combine this with ConvertBookmarkButtonRectToScreen
+void ConvertContainerRectToScreen(
+    content::WebContents* web_contents,
+    vivaldi::BookmarkMenuContainer& container) {
+  aura::Window* target_window =
+    VivaldiBookmarkMenuViews::GetActiveNativeViewFromWebContents(
+        web_contents);
+  aura::Window* root_window = target_window->GetRootWindow();
+  aura::client::ScreenPositionClient* screen_position_client =
+      aura::client::GetScreenPositionClient(root_window);
+  if (screen_position_client) {
+    for (::vivaldi::BookmarkMenuContainerEntry& e: container.siblings) {
+      gfx::Point point(e.rect.origin());
+      screen_position_client->ConvertPointToScreen(target_window, &point);
+      e.rect.set_origin(point);
     }
   }
 }
 
 VivaldiBookmarkMenu* CreateVivaldiBookmarkMenu(
     content::WebContents* web_contents,
-    const vivaldi::BookmarkMenuParams& params,
+    const BookmarkMenuContainer* container,
+    const bookmarks::BookmarkNode* node,
+    int offset,
     const gfx::Rect& button_rect) {
-  return new VivaldiBookmarkMenuViews(web_contents, params, button_rect);
+  return new VivaldiBookmarkMenuViews(web_contents, container, node, offset,
+                                      button_rect);
 }
+
+VivaldiMenubarMenu* CreateVivaldiMenubarMenu(
+    content::WebContents* web_contents,
+    vivaldi::MenubarMenuParams& params,
+    int id) {
+  return new VivaldiMenubarMenuViews(web_contents, params, id);
+}
+
 }  // vivialdi
 
 VivaldiContextMenuViews::VivaldiContextMenuViews(

@@ -44,7 +44,7 @@
             "items": {"$ref": "MenuItem"},
             "description": "Child menu items."
           },
-           "selected": {
+          "selected": {
             "type": "boolean",
             "optional": true,
             "description": "Whether this menu item is initially selected."
@@ -58,6 +58,11 @@
             "type": "string",
             "optional": true,
             "description": "'normal' or 'checkbox'. Defaults to 'normal'."
+          },
+          "radiogroup": {
+            "type": "integer",
+            "optional": true,
+            "description": "The radiobutton group this item belongs to."
           },
           "checked": {
             "type": "boolean",

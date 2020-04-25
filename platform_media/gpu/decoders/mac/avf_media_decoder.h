@@ -22,7 +22,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_piece.h"
-#include "base/synchronization/cancellation_flag.h"
+#include "base/synchronization/atomic_flag.h"
 #include "base/threading/thread_checker.h"
 #include "media/base/data_source.h"
 #include "ui/gfx/geometry/size.h"
@@ -68,7 +68,7 @@ class AVFMediaDecoderClient {
 class AVFMediaDecoder {
  public:
   typedef base::Callback<void(bool success)> ResultCB;
-  typedef base::RefCountedData<base::CancellationFlag> SharedCancellationFlag;
+  typedef base::RefCountedData<base::AtomicFlag> SharedCancellationFlag;
 
   // |client| must outlive AVFMediaDecoder.
   explicit AVFMediaDecoder(AVFMediaDecoderClient* client);

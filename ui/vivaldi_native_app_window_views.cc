@@ -183,7 +183,6 @@ void VivaldiNativeAppWindowViews::InitializeDefaultWindow(
     if (IsFrameless())
       init_params.shadow_type = views::Widget::InitParams::SHADOW_TYPE_NONE;
   }
-  init_params.keep_on_top = create_params.always_on_top;
   init_params.visible_on_all_workspaces =
     create_params.visible_on_all_workspaces;
 
@@ -458,14 +457,6 @@ void VivaldiNativeAppWindowViews::SetBounds(const gfx::Rect& bounds) {
 
 void VivaldiNativeAppWindowViews::FlashFrame(bool flash) {
   widget_->FlashFrame(flash);
-}
-
-bool VivaldiNativeAppWindowViews::IsAlwaysOnTop() const {
-  return widget_->IsAlwaysOnTop();
-}
-
-void VivaldiNativeAppWindowViews::SetAlwaysOnTop(bool always_on_top) {
-  widget_->SetAlwaysOnTop(always_on_top);
 }
 
 gfx::NativeView VivaldiNativeAppWindowViews::GetHostView() const {
@@ -957,6 +948,13 @@ void VivaldiNativeAppWindowViews::Close() {
 
 void VivaldiNativeAppWindowViews::ShowEmojiPanel() {
   GetWidget()->ShowEmojiPanel();
+}
+
+ui::ZOrderLevel VivaldiNativeAppWindowViews::GetZOrderLevel() const {
+  return GetWidget()->GetZOrderLevel();
+}
+void VivaldiNativeAppWindowViews::SetZOrderLevel(ui::ZOrderLevel order) {
+  GetWidget()->SetZOrderLevel(order);
 }
 
 void VivaldiAppWindowClientView::ContinueQuit(bool close) {

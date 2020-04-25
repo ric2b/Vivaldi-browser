@@ -56,19 +56,19 @@ class NotesChangeProcessor : public NotesModelObserver,
   void NotesModelBeingDeleted(Notes_Model* model) override;
   void NotesNodeMoved(Notes_Model* model,
                       const Notes_Node* old_parent,
-                      int old_index,
+                      size_t old_index,
                       const Notes_Node* new_parent,
-                      int new_index) override;
+                      size_t new_index) override;
   void NotesNodeAdded(Notes_Model* model,
                       const Notes_Node* parent,
-                      int index) override;
+                      size_t index) override;
   void OnWillRemoveNotes(Notes_Model* model,
                          const Notes_Node* parent,
-                         int old_index,
+                         size_t old_index,
                          const Notes_Node* node) override;
   void NotesNodeRemoved(Notes_Model* model,
                         const Notes_Node* parent,
-                        int index,
+                        size_t index,
                         const Notes_Node* node) override;
   void NotesAllNodesRemoved(Notes_Model* model) override;
   void NotesNodeChanged(Notes_Model* model, const Notes_Node* node) override;
@@ -103,7 +103,7 @@ class NotesChangeProcessor : public NotesModelObserver,
                                             const Notes_Node* parent,
                                             Notes_Model* model,
                                             syncer::SyncClient* sync_client,
-                                            int index);
+                                            size_t index);
 
   static const Notes_Node* CreateNotesEntry(const base::string16& title,
                                             const GURL& url,
@@ -111,7 +111,7 @@ class NotesChangeProcessor : public NotesModelObserver,
                                             const Notes_Node* parent,
                                             Notes_Model* model,
                                             syncer::SyncClient* sync_client,
-                                            int index);
+                                            size_t index);
 
   // Sets the favicon of the given notes node from the given sync node.
   // Returns whether the favicon was set in the notes node.
@@ -129,7 +129,7 @@ class NotesChangeProcessor : public NotesModelObserver,
   // the ID of the just-created node, or if creation fails, kInvalidID.
   static int64_t CreateSyncNode(const Notes_Node* parent,
                                 Notes_Model* model,
-                                int index,
+                                size_t index,
                                 syncer::WriteTransaction* trans,
                                 NotesModelAssociator* associator,
                                 syncer::DataTypeErrorHandler* error_handler);
@@ -173,7 +173,7 @@ class NotesChangeProcessor : public NotesModelObserver,
   // false on failure.
   static bool PlaceSyncNode(MoveOrCreate operation,
                             const Notes_Node* parent,
-                            int index,
+                            size_t index,
                             syncer::WriteTransaction* trans,
                             syncer::WriteNode* dst,
                             NotesModelAssociator* associator);

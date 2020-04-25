@@ -436,7 +436,7 @@ TEST(ChromeContentBrowserClientTest, GetMetricSuffixForURL) {
                     GURL("https://www.google.com/search?notaquery=nope")));
 }
 
-TEST(ChromeContentBrowserClient, UserAgentStringFrozen) {
+TEST(ChromeContentBrowserClientTest, UserAgentStringFrozen) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndEnableFeature(blink::features::kFreezeUserAgent);
 
@@ -475,7 +475,7 @@ TEST(ChromeContentBrowserClient, UserAgentStringFrozen) {
 #endif
 }
 
-TEST(ChromeContentBrowserClient, UserAgentStringOrdering) {
+TEST(ChromeContentBrowserClientTest, UserAgentStringOrdering) {
 #if defined(OS_ANDROID)
   const char* const kArguments[] = {"chrome"};
   base::test::ScopedCommandLine scoped_command_line;
@@ -495,7 +495,7 @@ TEST(ChromeContentBrowserClient, UserAgentStringOrdering) {
 #endif
 }
 
-TEST(ChromeContentBrowserClient, UserAgentMetadata) {
+TEST(ChromeContentBrowserClientTest, UserAgentMetadata) {
   ChromeContentBrowserClient content_browser_client;
   auto metadata = content_browser_client.GetUserAgentMetadata();
 

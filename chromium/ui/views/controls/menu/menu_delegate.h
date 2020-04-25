@@ -45,20 +45,20 @@ class VIEWS_EXPORT MenuDelegate {
  public:
   // Used during drag and drop to indicate where the drop indicator should
   // be rendered.
-  enum DropPosition {
-    DROP_UNKNOWN = -1,
+  enum class DropPosition {
+    kUnknow = -1,
 
     // Indicates a drop is not allowed here.
-    DROP_NONE,
+    kNone,
 
     // Indicates the drop should occur before the item.
-    DROP_BEFORE,
+    kBefore,
 
     // Indicates the drop should occur after the item.
-    DROP_AFTER,
+    kAfter,
 
     // Indicates the drop should occur on the item.
-    DROP_ON
+    kOn
   };
 
   // Used when indicating the style for a given label.
@@ -213,6 +213,8 @@ class VIEWS_EXPORT MenuDelegate {
   virtual MenuItemView* GetVivaldiSiblingMenu(views::MenuItemView* menu,
                                               const gfx::Point& screen_point,
                                               gfx::Rect* rect);
+  virtual MenuItemView* GetNextSiblingMenu(bool next, bool* has_mnemonics,
+                                           gfx::Rect* rect);
   // Returns the max width menus can grow to be.
   virtual int GetMaxWidthForMenu(MenuItemView* menu);
 

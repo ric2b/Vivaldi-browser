@@ -250,7 +250,7 @@ Notes_Node* Notes_Model::AddNode(Notes_Node* parent,
 }
 
 Notes_Node* Notes_Model::AddNote(const Notes_Node* parent,
-                                 int index,
+                                 size_t index,
                                  const base::string16& subject,
                                  const GURL& url,
                                  const base::string16& content) {
@@ -274,7 +274,7 @@ Notes_Node* Notes_Model::AddNote(const Notes_Node* parent,
 }
 
 Notes_Node* Notes_Model::AddNote(const Notes_Node* parent,
-                                 int index,
+                                 size_t index,
                                  bool is_folder,
                                  const ImportedNotesEntry& note) {
   if (!loaded_)
@@ -296,7 +296,7 @@ Notes_Node* Notes_Model::AddNote(const Notes_Node* parent,
 }
 
 Notes_Node* Notes_Model::AddFolder(const Notes_Node* parent,
-                                   int index,
+                                   size_t index,
                                    const base::string16& name) {
   DCHECK(loaded_);
   if (!loaded_)
@@ -470,11 +470,11 @@ void Notes_Model::SetDateAdded(const Notes_Node* node, base::Time date_added) {
 }
 
 bool Notes_Model::IsValidIndex(const Notes_Node* parent,
-                               int index,
+                               size_t index,
                                bool allow_end) {
   return (parent && parent->is_folder() &&
-          (index >= 0 && (index < parent->child_count() ||
-                          (allow_end && index == parent->child_count()))));
+          (index >= 0 && (index < parent->children().size() ||
+                          (allow_end && index == parent->children().size()))));
 }
 
 void Notes_Model::GetNodesByURL(const GURL& url,
@@ -502,8 +502,6 @@ void Notes_Model::Remove(const Notes_Node* node) {
 }
 
 void Notes_Model::RemoveAllUserNotes() {
-  std::vector<std::unique_ptr<Notes_Node>> removed_nodes;
-
   for (auto& observer : observers_)
     observer.OnWillRemoveAllNotes(this);
 
@@ -513,13 +511,10 @@ void Notes_Model::RemoveAllUserNotes() {
   // all children of non-root permanent nodes.
   {
     base::AutoLock url_lock(url_lock_);
-    Notes_Node* permanent_node = main_node_;
-
-    for (int j = permanent_node->child_count() - 1; j >= 0; --j) {
-      removed_nodes.push_back(
-          permanent_node->Remove(permanent_node->GetChild(j)));
-    }
+    nodes_ordered_by_url_set_.clear();
+    main_node_->DeleteAll();
   }
+
   EndExtensiveChanges();
   if (store_.get())
     store_->ScheduleSave();
@@ -547,8 +542,9 @@ void Notes_Model::RemoveNodeTreeFromURLSet(Notes_Node* node) {
   }
 
   // Recurse through children.
-  for (int i = node->child_count() - 1; i >= 0; --i)
-    RemoveNodeTreeFromURLSet(node->GetChild(i));
+  for (auto child_it = node->children().rbegin();
+       child_it != node->children().rend(); ++child_it)
+    RemoveNodeTreeFromURLSet((*child_it).get());
 }
 
 void Notes_Model::RemoveNodeFromURLSet(Notes_Node* node) {
@@ -564,16 +560,16 @@ void Notes_Model::RemoveNodeFromURLSet(Notes_Node* node) {
     nodes_ordered_by_url_set_.erase(i);
 }
 
-bool Notes_Model::Remove(Notes_Node* parent, int index) {
+bool Notes_Model::Remove(Notes_Node* parent, size_t index) {
   if (!parent)
     return false;
-  Notes_Node* node = parent->GetChild(index);
+  Notes_Node* node = parent->children()[index].get();
   RemoveAndDeleteNode(parent, index, node);
   return true;
 }
 
 void Notes_Model::RemoveAndDeleteNode(Notes_Node* parent,
-                                      int index,
+                                      size_t index,
                                       Notes_Node* node_ptr) {
   std::unique_ptr<Notes_Node> node;
 
@@ -583,7 +579,7 @@ void Notes_Model::RemoveAndDeleteNode(Notes_Node* parent,
   {
     base::AutoLock url_lock(url_lock_);
     RemoveNodeTreeFromURLSet(node_ptr);
-    node = parent->Remove(node_ptr);
+    node = parent->Remove(index);
   }
 
   if (store_.get())
@@ -623,8 +619,8 @@ const Notes_Node* GetNodeByID(const Notes_Node* node, int64_t id) {
   if (node->id() == id)
     return node;
 
-  for (int i = 0, child_count = node->child_count(); i < child_count; ++i) {
-    const Notes_Node* result = GetNodeByID(node->GetChild(i), id);
+  for (auto& it: node->children()) {
+    const Notes_Node* result = GetNodeByID(it.get(), id);
     if (result)
       return result;
   }
@@ -633,7 +629,7 @@ const Notes_Node* GetNodeByID(const Notes_Node* node, int64_t id) {
 
 bool Notes_Model::Move(const Notes_Node* node,
                        const Notes_Node* new_parent,
-                       int index) {
+                       size_t index) {
   if (!loaded_ || !node || !IsValidIndex(new_parent, index, true) ||
       is_root_node(new_parent) || is_permanent_node(node)) {
     NOTREACHED();
@@ -648,7 +644,7 @@ bool Notes_Model::Move(const Notes_Node* node,
   }
 
   const Notes_Node* old_parent = node->parent();
-  int old_index = old_parent->GetIndexOf(node);
+  size_t old_index = old_parent->GetIndexOf(node);
 
   if (old_parent == new_parent &&
       (index == old_index || index == old_index + 1)) {
@@ -663,7 +659,7 @@ bool Notes_Model::Move(const Notes_Node* node,
 
   Notes_Node* mutable_old_parent = AsMutable(old_parent);
   std::unique_ptr<Notes_Node> owned_node =
-      mutable_old_parent->Remove(AsMutable(node));
+      mutable_old_parent->Remove(old_index);
   Notes_Node* mutable_new_parent = AsMutable(new_parent);
   mutable_new_parent->Add(std::move(owned_node), index);
 
@@ -678,12 +674,12 @@ bool Notes_Model::Move(const Notes_Node* node,
 
 Notes_Node* Notes_Model::GetOrCreateTrashNode() {
   Notes_Node* root_node_p = root_node();
-  for (int i = 0; i < root_node_p->child_count(); ++i) {
-    Notes_Node* child = root_node_p->GetChild(i);
+  for (size_t i = 0; i < root_node_p->children().size(); ++i) {
+    Notes_Node* child = root_node_p->children()[i].get();
     if (child->is_trash()) {
       // Move it to the end of the list.
-      std::unique_ptr<Notes_Node> move_child = root_node_p->Remove(child);
-      AddNode(root_node_p, root_node_p->child_count(), std::move(move_child));
+      std::unique_ptr<Notes_Node> move_child = root_node_p->Remove(i);
+      AddNode(root_node_p, root_node_p->children().size(), std::move(move_child));
       return child;
     }
   }
@@ -693,14 +689,14 @@ Notes_Node* Notes_Model::GetOrCreateTrashNode() {
   if (trash) {
     trash->SetType(Notes_Node::TRASH);
     trash->SetTitle(l10n_util::GetStringUTF16(IDS_NOTES_TRASH_FOLDER_NAME));
-    AddNode(root_node_p, root_node_p->child_count(), std::move(trash));
+    AddNode(root_node_p, root_node_p->children().size(), std::move(trash));
   }
   return trash_p;
 }
 
 void Notes_Model::SortChildren(const Notes_Node* parent) {
   if (!parent || !parent->is_folder() || is_root_node(parent) ||
-      parent->child_count() <= 1) {
+      parent->children().size() <= 1) {
     return;
   }
 
@@ -726,7 +722,7 @@ void Notes_Model::ReorderChildren(
     const Notes_Node* parent,
     const std::vector<const Notes_Node*>& ordered_nodes) {
   // Ensure that all children in |parent| are in |ordered_nodes|.
-  DCHECK_EQ(static_cast<size_t>(parent->child_count()), ordered_nodes.size());
+  DCHECK_EQ(parent->children().size(), ordered_nodes.size());
   for (size_t i = 0; i < ordered_nodes.size(); ++i)
     DCHECK_EQ(parent, ordered_nodes[i]->parent());
 

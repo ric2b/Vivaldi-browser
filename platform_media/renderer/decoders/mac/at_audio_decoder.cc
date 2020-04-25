@@ -206,8 +206,7 @@ AudioConverterRef ATAudioDecoder::ScopedAudioConverterRefTraits::InvalidValue() 
 
 ATAudioDecoder::ATAudioDecoder(
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner)
-    : task_runner_(task_runner),
-      needs_eos_workaround_(base::mac::IsOS10_9()) {}
+    : task_runner_(task_runner) {}
 
 ATAudioDecoder::~ATAudioDecoder() = default;
 
@@ -445,16 +444,9 @@ bool ATAudioDecoder::ConvertAudio(const scoped_refptr<DecoderBuffer>& input,
   AudioStreamPacketDescription
       output_packet_descriptions[max_output_frame_count];
 
-  OSStatus status = noErr;
-  if (ApplyEOSWorkaround(input, &output_buffers)) {
-    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-            << " Couldn't flush AudioConverter properly on this system."
-            << " Faking it";
-  } else {
-    status = AudioConverterFillComplexBuffer(
+  OSStatus status = AudioConverterFillComplexBuffer(
         converter_, &ProvideData, &input_data, &output_frame_count,
         &output_buffers, output_packet_descriptions);
-  }
 
   if (status != noErr && status != kDataConsumed) {
     OSSTATUS_VLOG(1, status) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
@@ -491,22 +483,6 @@ bool ATAudioDecoder::ConvertAudio(const scoped_refptr<DecoderBuffer>& input,
     if (discard_helper_->ProcessBuffers(*dequeued_input, output.get()))
       task_runner_->PostTask(FROM_HERE, base::Bind(output_cb_, output));
   }
-
-  return true;
-}
-
-bool ATAudioDecoder::ApplyEOSWorkaround(
-    const scoped_refptr<DecoderBuffer>& input,
-    AudioBufferList* output_buffers) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
-
-  if (!needs_eos_workaround_ || !input->end_of_stream())
-    return false;
-
-  uint8_t* const data =
-      reinterpret_cast<uint8_t*>(output_buffers->mBuffers[0].mData);
-  const size_t data_size = output_buffers->mBuffers[0].mDataByteSize;
-  std::fill(data, data + data_size, 0);
 
   return true;
 }

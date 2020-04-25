@@ -488,7 +488,7 @@ bool OperaImporter::ImportWand_ReadEntryHTML(
   for (uint32_t i = 0; i < field_count; i++) {
     if (static_cast<int>(i) != first_field &&
         static_cast<int>(i) != first_pass && !fields[first_pass].is_password)
-      password.other_possible_usernames.push_back(
+      password.all_possible_usernames.push_back(
           autofill::ValueElementPair(fields[first_pass].fieldvalue,
                                          submit_button));
   }
@@ -584,7 +584,7 @@ bool OperaImporter::ImportWand_ReadEntryAuth(
   for (uint32_t i = 0; i < field_count; i++) {
     if (static_cast<int>(i) != first_field &&
         static_cast<int>(i) != first_pass && !fields[first_pass].is_password) {
-      password.other_possible_usernames.push_back(
+      password.all_possible_usernames.push_back(
         autofill::ValueElementPair(fields[first_pass].fieldvalue,
                                        base::string16()));
     }

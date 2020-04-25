@@ -247,6 +247,9 @@ class CONTENT_EXPORT InterstitialPageImpl : public InterstitialPage,
   // Creates the RenderViewHost containing the interstitial content.
   RenderViewHostImpl* CreateRenderViewHost();
 
+  // Returns the focused frame's input handler.
+  mojom::FrameInputHandler* GetFocusedFrameInputHandler();
+
   // Watches the underlying WebContents for reasons to cancel the interstitial.
   UnderlyingContentObserver underlying_content_observer_;
 
@@ -325,7 +328,7 @@ class CONTENT_EXPORT InterstitialPageImpl : public InterstitialPage,
 
   ScopedObserver<RenderWidgetHost, RenderWidgetHostObserver> widget_observer_;
 
-  base::WeakPtrFactory<InterstitialPageImpl> weak_ptr_factory_;
+  base::WeakPtrFactory<InterstitialPageImpl> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(InterstitialPageImpl);
 };

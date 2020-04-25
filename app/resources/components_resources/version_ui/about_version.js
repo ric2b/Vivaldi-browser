@@ -78,6 +78,9 @@ function returnCustomizationId(response) {
 /* All the work we do onload. */
 function onLoadWork() {
   chrome.send('requestVersionInfo');
+  if ($('sanitizer').textContent != '') {
+    $('sanitizer-section').hidden = false;
+  }
 }
 
 document.addEventListener('DOMContentLoaded', onLoadWork);

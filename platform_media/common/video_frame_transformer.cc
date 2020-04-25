@@ -60,9 +60,10 @@ scoped_refptr<VideoFrame> GetVideoFrameFromMemory(
   // For this reason we pass it as an argument to |no_longer_needed_cb|, this
   // way, thanks to base::Bind, we keep reference to the buffer.
   scoped_refptr<VideoFrame> frame = VideoFrame::WrapExternalYuvData(
-      config.format(), config.coded_size(), config.visible_rect(),
-      config.natural_size(), planes[VideoFrame::kYPlane].stride,
-      planes[VideoFrame::kUPlane].stride, planes[VideoFrame::kVPlane].stride,
+      VideoPixelFormat::PIXEL_FORMAT_YV12, config.coded_size(),
+      config.visible_rect(), config.natural_size(),
+      planes[VideoFrame::kYPlane].stride, planes[VideoFrame::kUPlane].stride,
+      planes[VideoFrame::kVPlane].stride,
       const_cast<uint8_t*>(buffer->data() + planes[VideoFrame::kYPlane].offset),
       const_cast<uint8_t*>(buffer->data() + planes[VideoFrame::kUPlane].offset),
       const_cast<uint8_t*>(buffer->data() + planes[VideoFrame::kVPlane].offset),

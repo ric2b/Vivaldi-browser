@@ -33,7 +33,6 @@ enum IPCMessageStart {
   PrintMsgStart,
   ExtensionMsgStart,
   TextInputClientMsgStart,
-  JavaBridgeMsgStart,
   BlinkTestMsgStart,
   AccessibilityMsgStart,
   PrerenderMsgStart,
@@ -54,7 +53,6 @@ enum IPCMessageStart {
   ChromeExtensionMsgStart,
   GinJavaBridgeMsgStart,
   ChromeUtilityPrintingMsgStart,
-  AecDumpMsgStart,
   OzoneGpuMsgStart,
   WebTestMsgStart,
   NetworkHintsMsgStart,
@@ -72,6 +70,7 @@ enum IPCMessageStart {
   ExtensionWorkerMsgStart,
   SubresourceFilterMsgStart,
   ChromeAppsMsgStart,
+  UnfreezableFrameMsgStart,
   VivaldiMsgStart,
   LastIPCMsgStart  // Must come last.
 };

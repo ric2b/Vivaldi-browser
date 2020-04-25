@@ -71,6 +71,7 @@
     "management",
     "mailPrivate",
     "menubar",
+    "menubarMenu",
     "notes",
     "notifications",
     "prefs",

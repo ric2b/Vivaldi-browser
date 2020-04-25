@@ -32,6 +32,7 @@ constexpr APIPermissionInfo::InitInfo permissions_to_register[] = {
     {APIPermission::kInfobars, "infobars"},
     {APIPermission::kMailPrivate, "mailPrivate"},
     {APIPermission::kMenubar, "menubar"},
+    {APIPermission::kMenubarMenu, "menubarMenu"},
     {APIPermission::kNotes, "notes"},
     {APIPermission::kPrefs, "prefs"},
     {APIPermission::kRuntimePrivate, "runtimePrivate"},

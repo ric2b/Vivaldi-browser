@@ -77,7 +77,7 @@ void WebViewImpl::SetAllowAccessKeys(const bool allow_access_keys) {
 
 void WebViewImpl::LoadImageAt(const gfx::Point& point) {
   HitTestResult result =
-      HitTestResultForRootFramePos(LayoutPoint(point.x(), point.y()));
+      HitTestResultForRootFramePos(PhysicalOffset(IntPoint(point.x(), point.y())));
   Node* node = result.InnerNode();
   DCHECK(node);
   if (!node || !IsHTMLImageElement(*node))

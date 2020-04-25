@@ -91,7 +91,6 @@
 <translation id="2785873697295365461">Popisovače souborů</translation>
 <translation id="2809586584051668049">a další (<ph name="NUMBER_ADDITIONAL_DISABLED" />)</translation>
 <translation id="2812989263793994277">Nezobrazovat žádné obrázky</translation>
-<translation id="2847759467426165163">Odesílat do</translation>
 <translation id="2850541429955027218">Přidat motiv</translation>
 <translation id="2861941300086904918">Správce zabezpečení nativního klienta</translation>
 <translation id="2889064240420137087">Otevřít odkaz pomocí…</translation>
@@ -129,7 +128,6 @@
 <translation id="3341703758641437857">Povolit přístup ke vzdáleným souborům</translation>
 <translation id="3347086966102161372">K&amp;opírovat adresu obrázku</translation>
 <translation id="3360297538363969800">Tisk se nezdařil. Zkontrolujte tiskárnu a zkuste to znovu.</translation>
-<translation id="3378503599595235699">Uchovávat místní údaje jen do zavření prohlížeče</translation>
 <translation id="3378572629723696641">Toto rozšíření mohlo být poškozeno.</translation>
 <translation id="3387614642886316601">Použít vylepšenou kontrolu pravopisu</translation>
 <translation id="3432227430032737297">Odstranit všechny zobrazené</translation>
@@ -196,7 +194,6 @@
 <translation id="4613271546271159013">Rozšíření změnilo stránku, která se zobrazí při otevření nového listu.</translation>
 <translation id="4677772697204437347">Paměť GPU</translation>
 <translation id="4681930562518940301">Otevřít původní &amp;obrázek v novém listu</translation>
-<translation id="4688541352655220763">Tuto funkci můžete použít k zobrazení obsahu z prohlížeče Vivaldi v televizi či jiných zařízeních.</translation>
 <translation id="4711638718396952945">Obnovit nastavení</translation>
 <translation id="4726710629007580002">Na tomto rozšíření závisejí následující rozšíření:</translation>
 <translation id="479536056609751218">Webová stránka, prosté HTML</translation>
@@ -267,7 +264,6 @@
 <translation id="5978277834170881274">&amp;Používat základní kontrolu pravopisu</translation>
 <translation id="5979421442488174909">&amp;Přeložit do jazyka <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">Vymazání údajů stránek</translation>
-<translation id="6040143037577758943">Zavřít</translation>
 <translation id="6042308850641462728">Více</translation>
 <translation id="6059925163896151826">Zařízení USB</translation>
 <translation id="6082651258230788217">Zobrazit &amp;ovládací prvky</translation>
@@ -292,7 +288,7 @@
 <translation id="6398765197997659313">Ukončit režim celé obrazovky</translation>
 <translation id="6406303162637086258">Simulovat restart prohlížeče</translation>
 <translation id="6445450263907939268">Pokud jste tyto změny provádět nechtěli, můžete obnovit svá předchozí nastavení.</translation>
-<translation id="6447842834002726250">Položky cookies</translation>
+<translation id="6447842834002726250">Soubory cookie</translation>
 <translation id="6452181791372256707">Odmítnout</translation>
 <translation id="6498249116389603658">&amp;Všechny vaše jazyky</translation>
 <translation id="6503077044568424649">Nejnavštěvovanější</translation>
@@ -325,10 +321,8 @@
 <translation id="7270858098575133036">Zeptat se, bude-li stránka vyžadovat přímý přístup k zařízením MIDI</translation>
 <translation id="7287143125007575591">Přístup byl odepřen.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="7293919849802650062">Vítá vás služba Cast v prohlížeči Vivaldi!</translation>
 <translation id="7309257895202129721">Zobrazit &amp;ovládací prvky</translation>
 <translation id="7311079019872751559">Přístup doplňku mimo vyhrazený prostor</translation>
-<translation id="7346909386216857016">OK, rozumím</translation>
 <translation id="7385854874724088939">Při pokusu o tisk došlo k chybě. Zkontrolujte tiskárnu a zkuste to znovu.</translation>
 <translation id="7423098979219808738">Nejprve se dotázat</translation>
 <translation id="7427348830195639090">Stránka na pozadí: <ph name="BACKGROUND_PAGE_URL" /></translation>
@@ -387,7 +381,6 @@ Svůj soubor klíče uchovávejte na bezpečném místě. Budete jej potřebovat
 <translation id="857943718398505171">Povoleno (doporučeno)</translation>
 <translation id="8584280235376696778">&amp;Otevřít video v novém listu</translation>
 <translation id="8615618338313291042">Soukromá aplikace: <ph name="APP_NAME" /></translation>
-<translation id="8627151598708688654">Výběr zdroje</translation>
 <translation id="862750493060684461">Mezipaměť CSS</translation>
 <translation id="8664389313780386848">&amp;Zobrazit zdrojový kód stránky</translation>
 <translation id="8708000541097332489">Smazat při ukončení</translation>

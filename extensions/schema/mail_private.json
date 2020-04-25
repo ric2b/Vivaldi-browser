@@ -11,7 +11,7 @@
       {
         "name": "getPaths",
         "type": "function",
-        "description": "Returns array of mail paths (.eml) under a given directory. The root folder location is the profile directory of the current running instance. / Mail",
+        "description": "Returns array of mail paths under a given directory. The root folder location is the profile directory of the current running instance. / Mail",
         "parameters": [
           {
             "name": "paths",
@@ -113,7 +113,7 @@
       {
         "name": "delete",
         "type": "function",
-        "description": "Deletes a mail (.eml). The root folder location is the profile directory of the current running instance /Mail",
+        "description": "Deletes a file. The root folder location is the profile directory of the current running instance /Mail",
         "parameters": [
           {
             "name": "paths",
@@ -126,7 +126,7 @@
           {
             "name": "fileName",
             "type": "string",
-            "description": "The file name to be deleted. Do not specicy file endings. The function automatically adds .eml"
+            "description": "The file name to be deleted. With ending."
           },
           {
             "type": "function",

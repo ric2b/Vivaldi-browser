@@ -26,6 +26,7 @@
 #include "content/public/browser/gpu_data_manager.h"
 #include "gpu/command_buffer/common/activity_flags.h"
 #include "gpu/command_buffer/common/constants.h"
+#include "gpu/config/gpu_extra_info.h"
 #include "gpu/config/gpu_feature_info.h"
 #include "gpu/config/gpu_info.h"
 #include "gpu/config/gpu_mode.h"
@@ -141,7 +142,8 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
       const gpu::GpuFeatureInfo& gpu_feature_info,
       const base::Optional<gpu::GPUInfo>& gpu_info_for_hardware_gpu,
       const base::Optional<gpu::GpuFeatureInfo>&
-          gpu_feature_info_for_hardware_gpu) override;
+          gpu_feature_info_for_hardware_gpu,
+      const gpu::GpuExtraInfo& gpu_extra_info) override;
   void DidFailInitialize() override;
   void DidCreateContextSuccessfully() override;
   void BlockDomainFrom3DAPIs(const GURL& url, gpu::DomainGuilt guilt) override;
@@ -176,7 +178,7 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
   // Update GPU crash counters.  Disable GPU if crash limit is reached.
   void RecordProcessCrash();
 
-  // The serial number of the GpuProcessHost / GpuProcessHostUIShim pair.
+  // The serial number of the GpuProcessHost.
   int host_id_;
 
   // GPU process id in case GPU is not in-process.
@@ -246,7 +248,7 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
 
   SEQUENCE_CHECKER(sequence_checker_);
 
-  base::WeakPtrFactory<GpuProcessHost> weak_ptr_factory_;
+  base::WeakPtrFactory<GpuProcessHost> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(GpuProcessHost);
 };

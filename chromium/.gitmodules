@@ -91,6 +91,9 @@
 [submodule "third_party/pefile"]
 	path = third_party/pefile
 	url = ../../external/pefile.git
+[submodule "third_party/webdriver/pylib"]
+	path = third_party/webdriver/pylib
+	url = ../../external/github.com/SeleniumHQ/selenium/py.git
 [submodule "third_party/spirv-cross/spirv-cross"]
 	path = third_party/spirv-cross/spirv-cross
 	url = ../../external/github.com/KhronosGroup/SPIRV-Cross.git
@@ -150,7 +153,7 @@
 	url = ../deps/hunspell_dictionaries.git
 [submodule "third_party/sfntly/src"]
 	path = third_party/sfntly/src
-	url = ../../external/github.com/googlei18n/sfntly.git
+	url = ../../external/github.com/googlefonts/sfntly.git
 [submodule "third_party/libvpx/source/libvpx"]
 	path = third_party/libvpx/source/libvpx
 	url = ../../webm/libvpx.git
@@ -228,7 +231,7 @@
 	url = ../deps/libjpeg_turbo.git
 [submodule "third_party/emoji-segmenter/src"]
 	path = third_party/emoji-segmenter/src
-	url = ../../external/github.com/googlei18n/emoji-segmenter.git
+	url = ../../external/github.com/google/emoji-segmenter.git
 [submodule "third_party/minizip/src"]
 	path = third_party/minizip/src
 	url = ../../external/github.com/nmoinvaz/minizip.git

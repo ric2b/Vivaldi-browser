@@ -83,6 +83,7 @@
 <translation id="2482878487686419369">Notificações</translation>
 <translation id="2509495747794740764">O valor de dimensionamento tem de ser um número entre 10 e 200.</translation>
 <translation id="253557089021624350">Manutenção de atividade</translation>
+<translation id="2546283357679194313">Cookies e dados do web site</translation>
 <translation id="2550212893339833758">Memória trocada</translation>
 <translation id="2580924999637585241">Total: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="26224892172169984">Não permitir que os sites processem protocolos</translation>
@@ -92,7 +93,6 @@
 <translation id="2785873697295365461">Descritores de ficheiros</translation>
 <translation id="2809586584051668049">e mais <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
 <translation id="2812989263793994277">Não mostrar imagens</translation>
-<translation id="2847759467426165163">Transmitir para</translation>
 <translation id="2850541429955027218">Adicionar tema</translation>
 <translation id="2861941300086904918">Gestor de segurança Native Client</translation>
 <translation id="2889064240420137087">Abrir ligação com...</translation>
@@ -130,7 +130,6 @@
 <translation id="3341703758641437857">Permitir acesso a URL de ficheiro</translation>
 <translation id="3347086966102161372">C&amp;opiar endereço da imagem</translation>
 <translation id="3360297538363969800">Falha ao imprimir. Verifique a impressora e tente novamente.</translation>
-<translation id="3378503599595235699">Manter os dados locais apenas até sair do seu navegador</translation>
 <translation id="3378572629723696641">Esta extensão pode ter sido danificada.</translation>
 <translation id="3387614642886316601">Utilizar a verificação ortográfica avançada</translation>
 <translation id="3432227430032737297">Remover tudo o que é mostrado</translation>
@@ -198,7 +197,6 @@
 <translation id="4613271546271159013">Uma extensão alterou a página que é apresentada quando abre um novo separador.</translation>
 <translation id="4677772697204437347">Memória de GPU</translation>
 <translation id="4681930562518940301">Abrir &amp;imagem original num novo separador</translation>
-<translation id="4688541352655220763">Pode utilizar esta funcionalidade para apresentar conteúdo do Vivaldi na sua TV ou noutros dispositivos.</translation>
 <translation id="4711638718396952945">Restaurar definições</translation>
 <translation id="4726710629007580002">Há mensagens de aviso após a instalação desta extensão:</translation>
 <translation id="479536056609751218">Página Web, apenas HTML</translation>
@@ -269,7 +267,6 @@
 <translation id="5978277834170881274">&amp;Utilizar a verificação ortográfica básica</translation>
 <translation id="5979421442488174909">&amp;Traduzir para <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">Limpar dados de sites</translation>
-<translation id="6040143037577758943">Fechar</translation>
 <translation id="6042308850641462728">Mais</translation>
 <translation id="6059925163896151826">Dispositivos USB</translation>
 <translation id="6082651258230788217">Mostrar na barra de ferramentas</translation>
@@ -327,10 +324,8 @@
 <translation id="7270858098575133036">Perguntar quando um site pretender utilizar mensagens exclusivas do sistema para aceder a dispositivos MIDI</translation>
 <translation id="7287143125007575591">Acesso negado.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> ppp</translation>
-<translation id="7293919849802650062">Bem-vindo à experiência de Transmissão no Vivaldi!</translation>
 <translation id="7309257895202129721">Mostrar &amp;controlos</translation>
 <translation id="7311079019872751559">Acesso de plug-in sem isolamento de processos</translation>
-<translation id="7346909386216857016">Ok, compreendi</translation>
 <translation id="7385854874724088939">Ocorreu um erro ao tentar imprimir. Verifique a impressora e tente novamente.</translation>
 <translation id="7423098979219808738">Perguntar primeiro</translation>
 <translation id="7427348830195639090">Página de fundo: <ph name="BACKGROUND_PAGE_URL" /></translation>
@@ -391,7 +386,6 @@ Mantenha o seu ficheiro de chave num local seguro, pois irá precisar dele para 
 <translation id="857943718398505171">Permitido (recomendado)</translation>
 <translation id="8584280235376696778">&amp;Abrir vídeo num novo separador</translation>
 <translation id="8615618338313291042">Aplicação em navegação anónima: <ph name="APP_NAME" /></translation>
-<translation id="8627151598708688654">Selecionar fonte</translation>
 <translation id="862750493060684461">Cache CSS</translation>
 <translation id="8664389313780386848">&amp;Ver fonte da página</translation>
 <translation id="8708000541097332489">Limpar à saída</translation>

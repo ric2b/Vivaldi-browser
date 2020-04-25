@@ -240,6 +240,7 @@ class UtilitiesIsUrlValidFunction : public UIThreadExtensionFunction {
 
  private:
   bool prompt_user_ = false;
+  GURL url_;
   vivaldi::utilities::UrlValidResults result_;
 
   DISALLOW_COPY_AND_ASSIGN(UtilitiesIsUrlValidFunction);
@@ -259,40 +260,6 @@ class UtilitiesGetSelectedTextFunction : public UIThreadExtensionFunction {
 
  private:
   DISALLOW_COPY_AND_ASSIGN(UtilitiesGetSelectedTextFunction);
-};
-
-class UtilitiesCreateUrlMappingFunction : public UIThreadExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("utilities.createUrlMapping",
-                             UTILITIES_CREATEURLMAPPING)
-  UtilitiesCreateUrlMappingFunction() = default;
-
- private:
-  ~UtilitiesCreateUrlMappingFunction() override = default;
-
-  // ExtensionFunction:
-  ResponseAction Run() override;
-
-  void OnAddMappingFinished(std::string file, bool success, std::string url);
-
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesCreateUrlMappingFunction);
-};
-
-class UtilitiesRemoveUrlMappingFunction : public UIThreadExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("utilities.removeUrlMapping",
-                             UTILITIES_REMOVEURLMAPPING)
-  UtilitiesRemoveUrlMappingFunction() = default;
-
- private:
-  ~UtilitiesRemoveUrlMappingFunction() override = default;
-
-  // ExtensionFunction:
-  ResponseAction Run() override;
-
-  void OnRemoveMappingFinished(bool success);
-
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesRemoveUrlMappingFunction);
 };
 
 class UtilitiesSelectFileFunction : public UIThreadExtensionFunction {
@@ -325,7 +292,9 @@ class UtilitiesSelectLocalImageFunction : public UIThreadExtensionFunction {
 
   void OnFileSelected(base::FilePath path);
 
-  void OnAddMappingFinished(bool success, std::string data_mapping_url);
+  void OnAddMappingFinished(Profile* profile,
+                            bool success,
+                            std::string data_mapping_url);
 
   DISALLOW_COPY_AND_ASSIGN(UtilitiesSelectLocalImageFunction);
 };

@@ -33,7 +33,9 @@ class VivaldiBookmarkMenuViews : public vivaldi::VivaldiBookmarkMenu,
  public:
   ~VivaldiBookmarkMenuViews() override;
   VivaldiBookmarkMenuViews(content::WebContents* web_contents,
-                           const vivaldi::BookmarkMenuParams& params,
+                           const vivaldi::BookmarkMenuContainer* container,
+                           const bookmarks::BookmarkNode* node,
+                           int offset,
                            const gfx::Rect& button_rect);
   bool CanShow() override;
   void Show() override;

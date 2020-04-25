@@ -10,6 +10,7 @@
   <release seq="1" allow_pseudo="false">
     <includes>
       <include name="VIVALDI_MAINFEST_JS" file="../../vivapp/src/manifest.json" type="BINDATA" />
+      <include name="IDR_VIVALDI_USER_MANAGER_SHARED_STYLES_HTML" file="../resources/browser/user_manager/shared_styles.html" flattenhtml="true" type="BINDATA" />
     </includes>
     </release>
 </grit>

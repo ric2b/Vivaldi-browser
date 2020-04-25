@@ -83,6 +83,7 @@
 <translation id="2482878487686419369">Értesítések</translation>
 <translation id="2509495747794740764">Az átméretezési értéknek 10 és 200 közötti számnak kell lennie.</translation>
 <translation id="253557089021624350">Életben tartási számláló</translation>
+<translation id="2546283357679194313">Sütik és webhelyadatok</translation>
 <translation id="2550212893339833758">Swap memória</translation>
 <translation id="2580924999637585241">Összesen: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="26224892172169984">A webhelyek nem kezelhetnek protokollokat</translation>
@@ -92,7 +93,6 @@
 <translation id="2785873697295365461">Fájlleírók</translation>
 <translation id="2809586584051668049">és <ph name="NUMBER_ADDITIONAL_DISABLED" /> további</translation>
 <translation id="2812989263793994277">Ne mutassa a képeket</translation>
-<translation id="2847759467426165163">Átküldés a következőre</translation>
 <translation id="2850541429955027218">Téma hozzáadása</translation>
 <translation id="2861941300086904918">Natív kliens biztonságkezelő</translation>
 <translation id="2889064240420137087">Hivatkozás megnyitása...</translation>
@@ -130,7 +130,6 @@
 <translation id="3341703758641437857">Hozzáférés engedélyezése a fájl URL-hez</translation>
 <translation id="3347086966102161372">Képcím más&amp;olása</translation>
 <translation id="3360297538363969800">A nyomtatás sikertelen. Ellenőrizd a nyomtatót, majd próbáld újra.</translation>
-<translation id="3378503599595235699">Helyi adatok megőrzése kizárólag a böngészőből való kilépésig</translation>
 <translation id="3378572629723696641">Lehet, hogy ez a bővítmény sérült.</translation>
 <translation id="3387614642886316601">Továbbfejlesztett helyesírás-ellenőrzés használata</translation>
 <translation id="3432227430032737297">Az összes megjelenített eltávolítása</translation>
@@ -198,7 +197,6 @@
 <translation id="4613271546271159013">Egy bővítmény módosította az új lap megnyitásakor megjelenített oldalt.</translation>
 <translation id="4677772697204437347">GPU memóriája</translation>
 <translation id="4681930562518940301">Az eredet&amp;i kép megnyitása új lapon</translation>
-<translation id="4688541352655220763">E funkcióval a Vivaldiban megjelenő tartalmakat megjelenítheted tévén vagy más készüléken.</translation>
 <translation id="4711638718396952945">A beállítások visszaállítása</translation>
 <translation id="4726710629007580002">Figyelmeztetések jelentkeztek a bővítmény telepítési kísérletekor:</translation>
 <translation id="479536056609751218">Weboldal, csak HTML</translation>
@@ -269,7 +267,6 @@
 <translation id="5978277834170881274">&amp;Alap helyesírás-ellenőrzés használata</translation>
 <translation id="5979421442488174909">Fordí&amp;tás <ph name="LANGUAGE" /> nyelvre</translation>
 <translation id="6011449291337289699">Webhelyadatok törlése</translation>
-<translation id="6040143037577758943">Bezárás</translation>
 <translation id="6042308850641462728">Több</translation>
 <translation id="6059925163896151826">USB-eszközök</translation>
 <translation id="6082651258230788217">Megjelenítés az eszköztárban</translation>
@@ -327,10 +324,8 @@
 <translation id="7270858098575133036">Kérdezzen meg, amikor egy webhely exkluzív rendszerüzenetekkel szeretné elérni a MIDI-eszközöket</translation>
 <translation id="7287143125007575591">Hozzáférés megtagadva.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> × <ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="7293919849802650062">Üdvözöl a Vivaldi megosztó szolgáltatása!</translation>
 <translation id="7309257895202129721">&amp;Vezérlők megjelenítése</translation>
 <translation id="7311079019872751559">Sandbox-technológiát nem alkalmazó beépülő modul hozzáférése</translation>
-<translation id="7346909386216857016">Rendben, értem</translation>
 <translation id="7385854874724088939">Valami nem sikerült a nyomtatás során. Ellenőrizd a nyomtatót, és próbáld újra.</translation>
 <translation id="7423098979219808738">Kérdezzen rá</translation>
 <translation id="7427348830195639090">Háttéroldal: <ph name="BACKGROUND_PAGE_URL" /></translation>
@@ -390,7 +385,6 @@ A kulcsfájlt tartsa biztonságos helyen. Szüksége lesz rá ahhoz, hogy új ve
 <translation id="857943718398505171">Engedélyezve (ajánlott)</translation>
 <translation id="8584280235376696778">&amp;Videó megnyitása új lapon</translation>
 <translation id="8615618338313291042">Inkognitómódú alkalmazás: <ph name="APP_NAME" /></translation>
-<translation id="8627151598708688654">Forrás kiválasztása</translation>
 <translation id="862750493060684461">CSS gyorsítótár</translation>
 <translation id="8664389313780386848">&amp;Oldal forrásának megtekintése</translation>
 <translation id="8708000541097332489">Törlés kilépéskor</translation>

@@ -23,6 +23,7 @@
 #include "chrome/common/extensions/api/bookmarks.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/datasource/vivaldi_data_source_api.h"
+#include "components/datasource/vivaldi_data_source_api.h"
 #include "components/history/core/browser/top_sites.h"
 #include "extensions/schema/bookmarks_private.h"
 #include "extensions/tools/vivaldi_tools.h"
@@ -48,8 +49,8 @@ static void GetPartnerIds(const bookmarks::BookmarkNode* node,
     ids->push_back(partner);
   }
   if (include_children) {
-    for (int i = 0; i < node->child_count(); i++) {
-      GetPartnerIds(node->GetChild(i), ids, true);
+    for (auto& it: node->children()) {
+      GetPartnerIds(it.get(), ids, true);
     }
   }
 }
@@ -62,8 +63,8 @@ static void ResetParterId(BookmarkModel* model,
     model->SetNodeMetaInfo(node, "Partner", "");
   }
   if (include_children) {
-    for (int i = 0; i < node->child_count(); i++) {
-      ResetParterId(model, node->GetChild(i), true);
+    for (auto& it: node->children()) {
+      ResetParterId(model, it.get(), true);
     }
   }
 }
@@ -91,6 +92,38 @@ static void ClearPartnerId(BookmarkModel* model, const BookmarkNode* node,
       ResetParterId(model, node, include_children);
     }
   }
+}
+
+// To determine meta data changes for which we should clear the partner id
+class MetaInfoChangeFilter {
+ public:
+  MetaInfoChangeFilter(const BookmarkNode* node);
+  bool HasChanged(const BookmarkNode* node);
+ private:
+  int64_t id_;
+  bool speeddial_;
+  bool bookmarkbar_;
+  base::string16 description_;
+  base::string16 nickname_;
+};
+
+MetaInfoChangeFilter::MetaInfoChangeFilter(const BookmarkNode* node)
+  :id_(node->id()),
+   speeddial_(node->GetSpeeddial()),
+   bookmarkbar_(node->GetBookmarkbar()),
+   description_(node->GetDescription()),
+   nickname_(node->GetNickName()) {
+}
+
+bool MetaInfoChangeFilter::HasChanged(const BookmarkNode* node) {
+  if (id_ == node->id() &&
+      speeddial_ == node->GetSpeeddial() &&
+      bookmarkbar_ == node->GetBookmarkbar() &&
+      description_ == node->GetDescription() &&
+      nickname_ == node->GetNickName()) {
+    return false;
+  }
+  return true;
 }
 
 VivaldiBookmarksAPI::VivaldiBookmarksAPI(content::BrowserContext* context)
@@ -130,53 +163,29 @@ std::string VivaldiBookmarksAPI::GetThumbnailUrl(
   return thumbnail_url;
 }
 
-namespace {
-#if 0
-void RemoveThumbnailForBookmarkNode(content::BrowserContext* browser_context,
-                                    const bookmarks::BookmarkNode* node) {
-  scoped_refptr<history::TopSites> top_sites(TopSitesFactory::GetForProfile(
-      Profile::FromBrowserContext(browser_context)));
-  std::string url = base::StringPrintf("http://bookmark_thumbnail/%d",
-                                       static_cast<int>(node->id()));
-  top_sites->RemoveThumbnailForUrl(GURL(url));
-}
-#endif
-}  // namespace
-
 void VivaldiBookmarksAPI::BookmarkNodeMoved(
     bookmarks::BookmarkModel* model,
     const bookmarks::BookmarkNode* old_parent,
-    int old_index,
+    size_t old_index,
     const bookmarks::BookmarkNode* new_parent,
-    int new_index) {
-  if (new_parent->type() == BookmarkNode::TRASH) {
-    // If it's moved to trash, remove the thumbnail immediately
-    const BookmarkNode* node = new_parent->GetChild(new_index);
-    DCHECK(node);
-#if 0  // Re-enable with new code
-    RemoveThumbnailForBookmarkNode(browser_context_, node);
-#endif
-  }
-}
+    size_t new_index) {}
 
 void VivaldiBookmarksAPI::BookmarkNodeRemoved(
     bookmarks::BookmarkModel* model,
     const bookmarks::BookmarkNode* parent,
-    int old_index,
+    size_t old_index,
     const bookmarks::BookmarkNode* node,
     const std::set<GURL>& no_longer_bookmarked) {
-
+  // We're removing the bookmark (emptying the trash most likely),
+  // remove the thumbnail.
+  VivaldiDataSourcesAPI::OnUrlChange(browser_context_, GetThumbnailUrl(node),
+                                     std::string());
   // Register deleted partner node.
   if (!partner_upgrade_active_) {
     ClearPartnerId(model, node, browser_context_, false, true);
   }
-
-  // We're removing the bookmark (emptying the trash most likely),
-  // remove the thumbnail.
-#if 0  // Re-enable with new code
-  RemoveThumbnailForBookmarkNode(browser_context_, node);
-#endif
 }
+
 void VivaldiBookmarksAPI::BookmarkNodeChanged(BookmarkModel* model,
                            const BookmarkNode* node) {
   // Register modified partner node.
@@ -185,18 +194,40 @@ void VivaldiBookmarksAPI::BookmarkNodeChanged(BookmarkModel* model,
   }
 }
 
+void VivaldiBookmarksAPI::OnWillChangeBookmarkMetaInfo(
+    BookmarkModel* model,
+    const BookmarkNode* node) {
+  saved_thumbnail_url_ = GetThumbnailUrl(node);
+  // No need to filter on upgrade
+  if (!partner_upgrade_active_) {
+    change_filter_.reset(new MetaInfoChangeFilter(node));
+  }
+}
+
 void VivaldiBookmarksAPI::BookmarkMetaInfoChanged(BookmarkModel* model,
                                                   const BookmarkNode* node) {
+  std::string thumbnail_url = GetThumbnailUrl(node);
+  if (thumbnail_url != saved_thumbnail_url_) {
+    VivaldiDataSourcesAPI::OnUrlChange(
+        browser_context_, saved_thumbnail_url_, thumbnail_url);
+  }
+  saved_thumbnail_url_.clear();
+
   bookmarks_private::OnMetaInfoChanged::ChangeInfo change_info;
   change_info.speeddial.reset(new bool(node->GetSpeeddial()));
   change_info.bookmarkbar.reset(new bool(node->GetBookmarkbar()));
   change_info.description.reset(
       new std::string(base::UTF16ToUTF8(node->GetDescription())));
-  change_info.thumbnail.reset(
-      new std::string(base::UTF16ToUTF8(node->GetThumbnail())));
+  change_info.thumbnail.reset(new std::string(std::move(thumbnail_url)));
   change_info.nickname.reset(
       new std::string(base::UTF16ToUTF8(node->GetNickName())));
   // We can add visited time here if we want. Currently not used in UI.
+
+  if (change_filter_ && change_filter_->HasChanged(node)) {
+    ClearPartnerId(model, node, browser_context_, true, false);
+  }
+  change_filter_.reset();
+
 
   ::vivaldi::BroadcastEvent(bookmarks_private::OnMetaInfoChanged::kEventName,
                             bookmarks_private::OnMetaInfoChanged::Create(
@@ -238,10 +269,12 @@ bool BookmarksPrivateEmptyTrashFunction::RunOnReady() {
   BookmarkModel* model = GetBookmarkModel();
   const BookmarkNode* trash_node = model->trash_node();
   if (trash_node) {
-    while (trash_node->child_count()) {
-      const BookmarkNode* remove_node = trash_node->GetChild(0);
+    VivaldiDataSourcesAPI::SetBulkChangesMode(browser_context(), true);
+    while (!trash_node->children().empty()) {
+      const BookmarkNode* remove_node = trash_node->children()[0].get();
       model->Remove(remove_node);
     }
+    VivaldiDataSourcesAPI::SetBulkChangesMode(browser_context(), false);
     success = true;
   }
   results_ = Results::Create(success);

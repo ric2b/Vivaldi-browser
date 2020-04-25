@@ -950,6 +950,7 @@ def DoMain(argv):
   argparser.add_argument("-D", action="append", dest="defines")
   argparser.add_argument("-E", action="append", dest="build_env")
   argparser.add_argument("-p", action="append", dest="profile_name")
+  argparser.add_argument("-I", action="append", dest="search_paths")
   argparser.add_argument("-t", default=None, dest="target_platform")
   argparser.add_argument("-f",  default="GRIT_DIR/../gritsettings/resource_ids",
                          dest="idsfile")
@@ -987,6 +988,9 @@ def DoMain(argv):
     target_platform= options.target_platform,
     first_ids_file=None, #options.idsfile,
   )
+
+  if (options.search_paths):
+    util.PathSearcher.Configure(options.search_paths)
 
   if options.action in [WRITE_GRD_FILES, PRINT_ALL, SETUP_RESOURCES]:
     output = merge_resource(options.main_resource, options.secondary_resource,

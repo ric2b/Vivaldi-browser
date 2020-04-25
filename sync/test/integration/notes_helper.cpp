@@ -107,7 +107,7 @@ void FindNodeInVerifier(Notes_Model* foreign_model,
                         const Notes_Node* foreign_node,
                         const Notes_Node** result) {
   // Climb the tree.
-  std::stack<int> path;
+  std::stack<size_t> path;
   const Notes_Node* walker = foreign_node;
   while (walker != foreign_model->root_node()) {
     path.push(walker->parent()->GetIndexOf(walker));
@@ -120,8 +120,8 @@ void FindNodeInVerifier(Notes_Model* foreign_model,
   // Climb down.
   while (!path.empty()) {
     ASSERT_TRUE(walker->is_folder());
-    ASSERT_LT(path.top(), walker->child_count());
-    walker = walker->GetChild(path.top());
+    ASSERT_LT(path.top(), walker->children().size());
+    walker = walker->children()[path.top()].get();
     path.pop();
   }
 
@@ -308,19 +308,18 @@ void Remove(int profile, const Notes_Node* parent, int index) {
   if (sync_datatype_helper::test()->use_verifier()) {
     const Notes_Node* v_parent = NULL;
     FindNodeInVerifier(model, parent, &v_parent);
-    ASSERT_TRUE(NodesMatch(parent->GetChild(index), v_parent->GetChild(index)));
-    GetVerifierNotesModel()->Remove(v_parent->GetChild(index));
+    ASSERT_TRUE(NodesMatch(parent->children()[index].get(), v_parent->children()[index].get()));
+    GetVerifierNotesModel()->Remove(v_parent->children()[index].get());
   }
-  model->Remove(parent->GetChild(index));
+  model->Remove(parent->children()[index].get());
 }
 
 void RemoveAll(int profile) {
   if (sync_datatype_helper::test()->use_verifier()) {
     const Notes_Node* root_node = GetVerifierNotesModel()->root_node();
-    for (int i = 0; i < root_node->child_count(); ++i) {
-      const Notes_Node* permanent_node = root_node->GetChild(i);
-      for (int j = permanent_node->child_count() - 1; j >= 0; --j) {
-        GetVerifierNotesModel()->Remove(permanent_node->GetChild(j));
+    for (auto& it_root: root_node->children()) {
+      for (int j = it_root->children().size() - 1; j >= 0; --j) {
+        GetVerifierNotesModel()->Remove(it_root->children()[j].get());
       }
     }
   }
@@ -344,11 +343,11 @@ void ReverseChildOrder(int profile, const Notes_Node* parent) {
   ASSERT_EQ(GetNotesNodeByID(GetNotesModel(profile), parent->id()), parent)
       << "Node " << parent->GetTitle() << " does not belong to "
       << "Profile " << profile;
-  int child_count = parent->child_count();
-  if (child_count <= 0)
+  size_t child_count = parent->children().size();
+  if (child_count == 0)
     return;
-  for (int index = 0; index < child_count; ++index) {
-    Move(profile, parent->GetChild(index), parent, child_count - index);
+  for (size_t index = 0; index < child_count; ++index) {
+    Move(profile, parent->children()[index].get(), parent, child_count - index);
   }
 }
 

@@ -34,9 +34,10 @@ namespace vivaldi {
 void ThumbnailCaptureContents::Start(content::BrowserContext* browser_context,
                                      const GURL& start_url,
                                      gfx::Size initial_size,
+                                     gfx::Size target_size,
                                      CapturePage::DoneCallback callback) {
   ThumbnailCaptureContents* capture = new ThumbnailCaptureContents();
-  capture->StartImpl(browser_context, start_url, initial_size,
+  capture->StartImpl(browser_context, start_url, initial_size, target_size,
                      std::move(callback));
 }
 
@@ -53,8 +54,12 @@ void ThumbnailCaptureContents::StartImpl(
     content::BrowserContext* browser_context,
     const GURL& start_url,
     gfx::Size initial_size,
+    gfx::Size target_size,
     CapturePage::DoneCallback callback) {
+  DCHECK(!initial_size.IsEmpty());
+  DCHECK(!target_size.IsEmpty());
   start_url_ = start_url;
+  target_size_ = target_size;
   callback_ = std::move(callback);
   DVLOG(1) << "Starting ThumbnailCaptureContents with initial size of "
            << initial_size.ToString() << " for start_url=" << start_url_.spec();
@@ -193,7 +198,7 @@ bool ThumbnailCaptureContents::ShouldCreateWebContents(
   return false;
 }
 
-bool ThumbnailCaptureContents::EmbedsFullscreenWidget() const {
+bool ThumbnailCaptureContents::EmbedsFullscreenWidget() {
   return false;
 }
 
@@ -204,17 +209,17 @@ void ThumbnailCaptureContents::RequestMediaAccessPermission(
   DCHECK_EQ(offscreen_tab_web_contents_.get(), contents);
   blink::MediaStreamDevices devices;
 
-  std::move(callback).Run(devices, blink::MEDIA_DEVICE_INVALID_STATE, nullptr);
+  std::move(callback).Run(devices, blink::mojom::MediaStreamRequestResult::INVALID_STATE, nullptr);
 }
 
 bool ThumbnailCaptureContents::CheckMediaAccessPermission(
     content::RenderFrameHost* render_frame_host,
     const GURL& security_origin,
-    blink::MediaStreamType type) {
+    blink::mojom::MediaStreamType type) {
   DCHECK_EQ(offscreen_tab_web_contents_.get(),
             content::WebContents::FromRenderFrameHost(render_frame_host));
-  return type == blink::MEDIA_GUM_TAB_AUDIO_CAPTURE ||
-         type == blink::MEDIA_GUM_TAB_VIDEO_CAPTURE;
+  return type == blink::mojom::MediaStreamType::GUM_TAB_AUDIO_CAPTURE ||
+         type == blink::mojom::MediaStreamType::GUM_TAB_VIDEO_CAPTURE;
 }
 
 void ThumbnailCaptureContents::DidStartLoading() {
@@ -283,6 +288,7 @@ void ThumbnailCaptureContents::TryCapture(bool last_try) {
   CapturePage::CaptureParams params;
   params.full_page = false;
   params.once_per_contents = true;
+  params.target_size = target_size_;
 
   CapturePage::Capture(offscreen_tab_web_contents_.get(), params,
                        base::Bind(&ThumbnailCaptureContents::RespondAndDelete,

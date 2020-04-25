@@ -10,7 +10,6 @@
 <translation id="129863573139666797"><ph name="BEGIN_LINK" />Покушајте да обришете колачиће<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">Основни подаци</translation>
 <translation id="139305205187523129">Хост <ph name="HOST_NAME" /> није послао никакве податке.</translation>
-<translation id="14171126816530869">Идентитет организације <ph name="ORGANIZATION" /> на локалитету <ph name="LOCALITY" /> је верификовао издавач <ph name="ISSUER" />.</translation>
 <translation id="1559528461873125649">Нема такве датотеке или директоријума</translation>
 <translation id="1620510694547887537">Камера</translation>
 <translation id="1640244768702815859">Покушајте да <ph name="BEGIN_LINK" />посетите почетну страницу сајта<ph name="END_LINK" />.</translation>
@@ -27,6 +26,7 @@
 <translation id="2030481566774242610">Да ли сте мислили <ph name="LINK" />?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />да проверите прокси и заштитни зид<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">Звук</translation>
+<translation id="2119505898009119320">Издато за: <ph name="ORGANIZATION" /> <ph name="JURISDICTION" /></translation>
 <translation id="2147827593068025794">Синхронизација у позадини</translation>
 <translation id="2166378884831602661">Овај сајт не може да пружи безбедну везу</translation>
 <translation id="2187317261103489799">Откриј (подразумевано)</translation>

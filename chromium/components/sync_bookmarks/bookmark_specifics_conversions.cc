@@ -47,6 +47,11 @@ void UpdateBookmarkSpecificsMetaInfo(
     const bookmarks::BookmarkNode::MetaInfoMap* metainfo_map,
     sync_pb::BookmarkSpecifics* bm_specifics) {
   for (const std::pair<std::string, std::string>& pair : *metainfo_map) {
+    if (pair.first == "Thumbnail") {
+      // Never sync the Thumbnail key as it's not relevant in the receiving
+      // end.
+      continue;
+    }
     sync_pb::MetaInfo* meta_info = bm_specifics->add_meta_info();
     meta_info->set_key(pair.first);
     meta_info->set_value(pair.second);
@@ -160,7 +165,7 @@ sync_pb::EntitySpecifics CreateSpecificsFromBookmarkNode(
 const bookmarks::BookmarkNode* CreateBookmarkNodeFromSpecifics(
     const sync_pb::BookmarkSpecifics& specifics,
     const bookmarks::BookmarkNode* parent,
-    int index,
+    size_t index,
     bool is_folder,
     bookmarks::BookmarkModel* model,
     favicon::FaviconService* favicon_service) {
@@ -205,7 +210,23 @@ void UpdateBookmarkNodeFromSpecifics(
   }
 
   model->SetTitle(node, NodeTitleFromSpecificsTitle(specifics.title()));
-  model->SetNodeMetaInfoMap(node, GetBookmarkMetaInfo(specifics));
+
+  bookmarks::BookmarkNode::MetaInfoMap map = GetBookmarkMetaInfo(specifics);
+
+  // NOTE(igor@vivaldi.com): We do not sync thumbnails. So preserve the old
+  // value of the thumbnail. Make sure the model listeners never see that its
+  // value was updated or removed even temporarly to prevent removing of
+  // thumbnail data mappings, see VB-56930.
+  const std::string thumbnail_key = "Thumbnail";
+  std::string thumbnail_value;
+  bool has_thumbnail = node->GetMetaInfo(thumbnail_key, &thumbnail_value);
+  if (has_thumbnail) {
+    map[thumbnail_key] = thumbnail_value;
+  } else {
+    map.erase(thumbnail_key);
+  }
+
+  model->SetNodeMetaInfoMap(node, map);
   SetBookmarkFaviconFromSpecifics(specifics, node, favicon_service);
 }
 

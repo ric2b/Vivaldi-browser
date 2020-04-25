@@ -6,7 +6,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0,
                                  maximum-scale=1.0, user-scalable=no">
   <title>$i18n{title}</title>
-  <title i18n-content="title"></title>
   <link rel="stylesheet" href="../../../chromium/components/security_interstitials/core/common/resources/interstitial_core.css">
   <link rel="stylesheet" href="../../../chromium/components/security_interstitials/core/common/resources/interstitial_common.css">
   <link rel="stylesheet" href="neterror.css">
@@ -63,6 +62,15 @@
             </div>
           </div>
         </div>
+        <div id="save-page-for-later-button" class="hidden">
+          <a class="link-button" onclick="savePageLaterClick()"
+            jsselect="savePageLater" jscontent="savePageMsg">
+          </a>
+        </div>
+        <div id="cancel-save-page-button" class="hidden"
+          onclick="cancelSavePageClick()" jsselect="savePageLater"
+          jsvalues=".innerHTML:cancelMsg">
+        </div>
         <div id="offline-content-list" class="list-hidden" hidden>
           <div id="offline-content-list-visibility-card"
               onclick="toggleOfflineContentListVisibility(true)">
@@ -102,17 +110,6 @@
             jsselect="downloadButton"
             jscontent="msg" jsvalues=".disabledText:disabledMsg">
         </button>
-        <div id="save-page-for-later-button" class="hidden">
-          <a class="link-button" onclick="savePageLaterClick()"
-            jsselect="savePageLater"
-            jscontent="savePageMsg">
-          </a>
-        </div>
-        <div id="cancel-save-page-button" class="hidden"
-          onclick="cancelSavePageClick()"
-          jsselect="savePageLater"
-          jsvalues=".innerHTML:cancelMsg">
-        </div>
       </div>
       <button id="details-button" class="secondary-button text-button small-link"
          onclick="detailsButtonClick(); toggleHelpBox()" jscontent="details"

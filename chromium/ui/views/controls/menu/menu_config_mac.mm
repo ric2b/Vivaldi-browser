@@ -8,6 +8,9 @@
 
 #include "base/mac/mac_util.h"
 
+#include "app/vivaldi_apptools.h"
+#include "ui/views/vivaldi_menu_config.h"
+
 namespace {
 
 void InitMaterialMenuConfig(views::MenuConfig* config) {
@@ -33,6 +36,8 @@ void InitMaterialMenuConfig(views::MenuConfig* config) {
   config->icons_in_label = true;
   config->corner_radius = 8;
   config->auxiliary_corner_radius = 4;
+  config->item_top_margin = 4;
+  config->item_bottom_margin = 4;
 }
 
 }  // namespace
@@ -47,6 +52,10 @@ void MenuConfig::Init() {
   show_context_menu_accelerators = false;
   all_menus_use_prefix_selection = true;
   InitMaterialMenuConfig(this);
+
+  if (vivaldi::IsVivaldiRunning()) {
+    vivaldi::OverrideMenuConfig(this);
+  }
 }
 
 }  // namespace views

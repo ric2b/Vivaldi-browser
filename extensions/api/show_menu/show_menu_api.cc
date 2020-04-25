@@ -22,7 +22,6 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/values.h"
 #include "browser/menus/bookmark_sorter.h"
 #include "browser/menus/bookmark_support.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -47,7 +46,6 @@
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_system.h"
-#include "extensions/common/manifest_constants.h"
 #include "extensions/schema/show_menu.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "ui/base/accelerators/accelerator.h"
@@ -68,23 +66,10 @@ class Rect;
 
 namespace extensions {
 
-// These symbols do not not exist in chrome or the definition differs
-// from vivaldi.
-const char* kVivaldiKeyEsc = "Esc";
-const char* kVivaldiKeyDel = "Del";
-const char* kVivaldiKeyIns = "Ins";
-const char* kVivaldiKeyPgUp = "Pageup";
-const char* kVivaldiKeyPgDn = "Pagedown";
-const char* kVivaldiKeyMultiply = "*";
-const char* kVivaldiKeyDivide = "/";
-const char* kVivaldiKeySubtract = "-";
-const char* kVivaldiKeyPeriod = ".";
-const char* kVivaldiKeyComma = ",";
-
 using content::BrowserContext;
 
 namespace show_menu = vivaldi::show_menu;
-namespace values = manifest_values;
+//namespace values = manifest_values;
 
 namespace {
 int TranslateCommandIdToMenuId(int command_id) {
@@ -108,126 +93,6 @@ const show_menu::MenuItem* GetMenuItemById(
     }
   }
   return nullptr;
-}
-
-ui::KeyboardCode GetFunctionKey(std::string token) {
-  int size = token.size();
-  if (size >= 2 && token[0] == 'F') {
-    if (size == 2 && token[1] >= '1' && token[1] <= '9')
-      return static_cast<ui::KeyboardCode>(ui::VKEY_F1 + (token[1] - '1'));
-    if (size == 3 && token[1] == '1' && token[2] >= '0' && token[2] <= '9')
-      return static_cast<ui::KeyboardCode>(ui::VKEY_F10 + (token[2] - '0'));
-    if (size == 3 && token[1] == '2' && token[2] >= '0' && token[2] <= '4')
-      return static_cast<ui::KeyboardCode>(ui::VKEY_F20 + (token[2] - '0'));
-  }
-  return ui::VKEY_UNKNOWN;
-}
-
-// Based on extensions/command.cc
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
-ui::Accelerator ParseShortcut(const std::string& accelerator,
-                              bool should_parse_media_keys) {
-  std::vector<std::string> tokens = base::SplitString(
-      accelerator, "+", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
-  if (tokens.size() == 0) {
-    return ui::Accelerator();
-  }
-
-  int modifiers = ui::EF_NONE;
-  ui::KeyboardCode key = ui::VKEY_UNKNOWN;
-  for (size_t i = 0; i < tokens.size(); i++) {
-    if (tokens[i] == values::kKeyCtrl) {
-      modifiers |= ui::EF_CONTROL_DOWN;
-    } else if (tokens[i] == values::kKeyAlt) {
-      modifiers |= ui::EF_ALT_DOWN;
-    } else if (tokens[i] == values::kKeyShift) {
-      modifiers |= ui::EF_SHIFT_DOWN;
-    } else if (tokens[i] == values::kKeyCommand) {
-      modifiers |= ui::EF_COMMAND_DOWN;
-    } else if (key == ui::VKEY_UNKNOWN) {
-      if (tokens[i] == values::kKeyUp) {
-        key = ui::VKEY_UP;
-      } else if (tokens[i] == values::kKeyDown) {
-        key = ui::VKEY_DOWN;
-      } else if (tokens[i] == values::kKeyLeft) {
-        key = ui::VKEY_LEFT;
-      } else if (tokens[i] == values::kKeyRight) {
-        key = ui::VKEY_RIGHT;
-      } else if (tokens[i] == values::kKeyIns) {
-        key = ui::VKEY_INSERT;
-      } else if (tokens[i] == values::kKeyDel) {
-        key = ui::VKEY_DELETE;
-      } else if (tokens[i] == values::kKeyHome) {
-        key = ui::VKEY_HOME;
-      } else if (tokens[i] == values::kKeyEnd) {
-        key = ui::VKEY_END;
-      } else if (tokens[i] == values::kKeyPgUp) {
-        key = ui::VKEY_PRIOR;
-      } else if (tokens[i] == values::kKeyPgDwn) {
-        key = ui::VKEY_NEXT;
-      } else if (tokens[i] == values::kKeySpace) {
-        key = ui::VKEY_SPACE;
-      } else if (tokens[i] == values::kKeyTab) {
-        key = ui::VKEY_TAB;
-      } else if (tokens[i] == kVivaldiKeyPeriod) {
-        key = ui::VKEY_OEM_PERIOD;
-      } else if (tokens[i] == kVivaldiKeyComma) {
-        key = ui::VKEY_OEM_COMMA;
-      } else if (tokens[i] == kVivaldiKeyEsc) {
-        key = ui::VKEY_ESCAPE;
-      } else if (tokens[i] == kVivaldiKeyDel) {
-        key = ui::VKEY_DELETE;
-      } else if (tokens[i] == kVivaldiKeyIns) {
-        key = ui::VKEY_ESCAPE;
-      } else if (tokens[i] == kVivaldiKeyPgUp) {
-        key = ui::VKEY_PRIOR;
-      } else if (tokens[i] == kVivaldiKeyPgDn) {
-        key = ui::VKEY_NEXT;
-      } else if (tokens[i] == kVivaldiKeyMultiply) {
-        key = ui::VKEY_MULTIPLY;
-      } else if (tokens[i] == kVivaldiKeyDivide) {
-        key = ui::VKEY_DIVIDE;
-      } else if (tokens[i] == kVivaldiKeySubtract) {
-        key = ui::VKEY_SUBTRACT;
-      } else if (tokens[i].size() == 0) {
-        // Nasty workaround. The parser does not handle "++"
-        key = ui::VKEY_ADD;
-      } else if (tokens[i] == values::kKeyMediaNextTrack &&
-                 should_parse_media_keys) {
-        key = ui::VKEY_MEDIA_NEXT_TRACK;
-      } else if (tokens[i] == values::kKeyMediaPlayPause &&
-                 should_parse_media_keys) {
-        key = ui::VKEY_MEDIA_PLAY_PAUSE;
-      } else if (tokens[i] == values::kKeyMediaPrevTrack &&
-                 should_parse_media_keys) {
-        key = ui::VKEY_MEDIA_PREV_TRACK;
-      } else if (tokens[i] == values::kKeyMediaStop &&
-                 should_parse_media_keys) {
-        key = ui::VKEY_MEDIA_STOP;
-      } else if (tokens[i].size() == 1 && tokens[i][0] >= 'A' &&
-                 tokens[i][0] <= 'Z') {
-        key = static_cast<ui::KeyboardCode>(ui::VKEY_A + (tokens[i][0] - 'A'));
-      } else if (tokens[i].size() == 1 && tokens[i][0] >= '0' &&
-                 tokens[i][0] <= '9') {
-        key = static_cast<ui::KeyboardCode>(ui::VKEY_0 + (tokens[i][0] - '0'));
-      } else if ((key = GetFunctionKey(tokens[i])) != ui::VKEY_UNKNOWN) {
-      } else {
-        // Keep this for now.
-        // printf("unknown key length=%lu, string=%s\n", tokens[i].size(),
-        // tokens[i].c_str()); for(int j=0; j<(int)tokens[i].size(); j++) {
-        //  printf("%02x ", tokens[i][j]);
-        //}
-        // printf("\n");
-      }
-    }
-  }
-  if (key == ui::VKEY_UNKNOWN) {
-    return ui::Accelerator();
-  } else {
-    return ui::Accelerator(key, modifiers);
-  }
 }
 
 }  // namespace
@@ -313,16 +178,16 @@ class VivaldiMenuController : public ui::SimpleMenuModel::Delegate,
                            bool ids_reassigned) override {}
   void BookmarkNodeMoved(bookmarks::BookmarkModel* model,
                                  const bookmarks::BookmarkNode* old_parent,
-                                 int old_index,
+                                 size_t old_index,
                                  const bookmarks::BookmarkNode* new_parent,
-                                 int new_index) override {}
+                                 size_t new_index) override {}
   void BookmarkNodeAdded(bookmarks::BookmarkModel* model,
                                  const bookmarks::BookmarkNode* parent,
-                                 int index) override {}
+                                 size_t index) override {}
   void BookmarkNodeRemoved(
       bookmarks::BookmarkModel* model,
       const bookmarks::BookmarkNode* parent,
-      int old_index,
+      size_t old_index,
       const bookmarks::BookmarkNode* node,
       const std::set<GURL>& no_longer_bookmarked) override {}
   void BookmarkNodeChanged(bookmarks::BookmarkModel* model,
@@ -683,8 +548,8 @@ void VivaldiMenuController::PopulateModel(const show_menu::MenuItem* item,
       id = *item->container_id;
     } else {
       const bookmarks::BookmarkNode* root = model->root_node();
-      if (root && root->child_count() > 0) {
-        const bookmarks::BookmarkNode* vivaldi_root = root->GetChild(0);
+      if (root && !root->children().empty()) {
+        const bookmarks::BookmarkNode* vivaldi_root = root->children()[0].get();
         id = vivaldi_root->id();
       }
     }
@@ -721,6 +586,9 @@ void VivaldiMenuController::PopulateModel(const show_menu::MenuItem* item,
       } else {
         if (item->type.get() && item->type->compare("checkbox") == 0) {
           menu_model->AddCheckItem(id, label);
+        } else if (item->type.get() &&
+                   item->type->compare("radiobutton") == 0) {
+          menu_model->AddRadioItem(id, label, *item->radiogroup.get());
         } else {
           if (index >= 0 && index <= menu_model->GetItemCount()) {
             menu_model->InsertItemAt(index, id, label);
@@ -823,9 +691,9 @@ void VivaldiMenuController::PopulateBookmarkFolder(
 
     // Call AddAddTabToBookmarksMenuItem() here for in front of bookmarks.
     std::vector<bookmarks::BookmarkNode*> nodes;
-    nodes.reserve(node->child_count());
-    for (int i = 0; i < node->child_count(); ++i) {
-      nodes.push_back(const_cast<bookmarks::BookmarkNode*>(node->GetChild(i)));
+    nodes.reserve(node->children().size());
+    for (auto& it: node->children()) {
+      nodes.push_back(const_cast<bookmarks::BookmarkNode*>(it.get()));
     }
     bookmark_sorter_->sort(nodes);
     bookmark_sorter_->setGroupFolders(true); // Always grouping in sub menus.
@@ -982,8 +850,7 @@ bool VivaldiMenuController::GetAcceleratorForCommandId(
     ui::Accelerator* accelerator) const {
   const show_menu::MenuItem* item = getItemByCommandId(command_id);
   if (item && item->shortcut) {
-    // printf("shortcut: %s\n", item->shortcut->c_str());
-    *accelerator = ParseShortcut(*item->shortcut, true);
+    *accelerator = ::vivaldi::ParseShortcut(*item->shortcut, true);
     return true;
   } else if (IsDeveloperTools(command_id)) {
     switch (command_id) {

@@ -46,3 +46,13 @@ jumbo_static_library("ui") {
     ]
   }
 }
+
+static_library("skia_utils") {
+  deps = [
+    "//skia:skia",
+  ]
+  sources = [
+    "vivaldi_skia_utils.cc",
+    "vivaldi_skia_utils.h",
+  ]
+}

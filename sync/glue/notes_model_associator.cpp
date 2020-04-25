@@ -11,6 +11,7 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/containers/adapters.h"
 #include "base/format_macros.h"
 #include "base/location.h"
 #include "base/macros.h"
@@ -125,12 +126,10 @@ class ScopedAssociationUpdater {
 
 NotesNodeFinder::NotesNodeFinder(const Notes_Node* parent_node)
     : parent_node_(parent_node) {
-  for (int i = 0; i < parent_node_->child_count(); ++i) {
-    const Notes_Node* child_node = parent_node_->GetChild(i);
+  for (auto& it: parent_node_->children()) {
+    std::string title = base::UTF16ToUTF8(it->GetTitle());
 
-    std::string title = base::UTF16ToUTF8(child_node->GetTitle());
-
-    child_nodes_.insert(std::make_pair(title, child_node));
+    child_nodes_.insert(std::make_pair(title, it.get()));
   }
 }
 
@@ -195,10 +194,6 @@ bool NotesNodeFinder::NodeMatches(const Notes_Node* notes_node,
   }
 
   std::string note_title = base::UTF16ToUTF8(notes_node->GetTitle());
-
-  // We used to skip converting the title upon saving encrypted notes,
-  // this is a fix to support that.
-  if (title.empty() && note_title.empty())
 
   // The title passed to this method comes from a sync directory entry.
   // The following line is needed to make the native note title comparable.
@@ -536,8 +531,8 @@ int NotesModelAssociator::GetTotalNotesCountAndRecordDuplicates(
                                   node->GetURL());
   }
 
-  for (int i = 0; i < node->child_count(); ++i) {
-    count += GetTotalNotesCountAndRecordDuplicates(node->GetChild(i), context);
+  for (auto& it: node->children()) {
+    count += GetTotalNotesCountAndRecordDuplicates(it.get(), context);
   }
 
   return count;
@@ -656,7 +651,7 @@ syncer::SyncError NotesModelAssociator::BuildAssociations(
     Context* context) {
   NotesNodeFinder node_finder(parent_node);
 
-  int index = 0;
+  size_t index = 0;
   for (std::vector<int64_t>::const_iterator it = sync_ids.begin();
        it != sync_ids.end(); ++it) {
     int64_t sync_child_id = *it;
@@ -679,8 +674,8 @@ syncer::SyncError NotesModelAssociator::BuildAssociations(
       // the node is already associated and in the right position.
       bool is_in_sync = (context->native_model_sync_state() == IN_SYNC) &&
                         (child_node->id() == external_id) &&
-                        (index < parent_node->child_count()) &&
-                        (parent_node->GetChild(index) == child_node);
+                        (index < parent_node->children().size()) &&
+                        (parent_node->children()[index].get() == child_node);
       if (!is_in_sync) {
         NotesChangeProcessor::UpdateNoteWithSyncData(
             sync_child_node, notes_model_, child_node, sync_client_);
@@ -716,7 +711,7 @@ syncer::SyncError NotesModelAssociator::BuildAssociations(
   // the right positions: from 0 to index - 1.
   // So the children starting from index in the parent notes node are the
   // ones that are not present in the parent sync node. So create them.
-  for (int i = index; i < parent_node->child_count(); ++i) {
+  for (size_t i = index; i < parent_node->children().size(); ++i) {
     int64_t sync_child_id = NotesChangeProcessor::CreateSyncNode(
         parent_node, notes_model_, i, trans, this,
         unrecoverable_error_handler_.get());
@@ -726,7 +721,7 @@ syncer::SyncError NotesModelAssociator::BuildAssociations(
     }
 
     context->IncrementSyncItemsAdded();
-    const Notes_Node* child_node = parent_node->GetChild(i);
+    const Notes_Node* child_node = parent_node->children()[i].get();
     context->MarkForVersionUpdate(child_node);
     if (child_node->is_folder())
       context->PushNode(sync_child_id);
@@ -737,12 +732,12 @@ syncer::SyncError NotesModelAssociator::BuildAssociations(
 
 const Notes_Node* NotesModelAssociator::CreateNotesNode(
     const Notes_Node* parent_node,
-    int notes_index,
+    size_t notes_index,
     const syncer::BaseNode* sync_child_node,
     const GURL& url,
     Context* context,
     syncer::SyncError* error) {
-  DCHECK_LE(notes_index, parent_node->child_count());
+  DCHECK_LE(notes_index, parent_node->children().size());
 
   const std::string& sync_title = sync_child_node->GetTitle();
 
@@ -838,11 +833,11 @@ void NotesModelAssociator::ApplyDeletesFromSyncJournal(
 
     // Enumerate folder children in reverse order to make it easier to remove
     // notes matching entries in the delete journal.
-    for (int child_index = parent->child_count() - 1;
-         child_index >= 0 && num_journals_unmatched > 0; --child_index) {
-      const Notes_Node* child = parent->GetChild(child_index);
+    for (const auto& child : base::Reversed(parent->children())) {
+      if (num_journals_unmatched == 0)
+        break;
       if (child->is_folder())
-        dfs_stack.push(child);
+        dfs_stack.push(child.get());
 
       if (journaled_external_ids.find(child->id()) ==
           journaled_external_ids.end()) {
@@ -860,7 +855,7 @@ void NotesModelAssociator::ApplyDeletesFromSyncJournal(
             bk_delete_journals[journal_index];
         if (child->id() == delete_entry.external_id &&
             NotesNodeFinder::NodeMatches(
-                child, GURL(delete_entry.specifics.notes().url()),
+                child.get(), GURL(delete_entry.specifics.notes().url()),
                 delete_entry.specifics.notes().subject(),
                 delete_entry.specifics.notes().content(),
                 delete_entry.is_folder)) {
@@ -868,9 +863,9 @@ void NotesModelAssociator::ApplyDeletesFromSyncJournal(
             // Remember matched folder without removing and delete only empty
             // ones later.
             folders_matched.push_back(
-                FolderInfo(child, parent, delete_entry.id));
+                FolderInfo(child.get(), parent, delete_entry.id));
           } else {
-            notes_model_->Remove(child);
+            notes_model_->Remove(child.get());
             context->IncrementLocalItemsDeleted();
           }
           // Move unmatched journal here and decrement counter.
@@ -889,7 +884,7 @@ void NotesModelAssociator::ApplyDeletesFromSyncJournal(
   // Remove empty folders from bottom to top.
   for (FolderInfoList::reverse_iterator it = folders_matched.rbegin();
        it != folders_matched.rend(); ++it) {
-    if (it->folder->child_count() == 0) {
+    if (it->folder->children().empty()) {
       notes_model_->Remove(it->folder);
       context->IncrementLocalItemsDeleted();
     } else {

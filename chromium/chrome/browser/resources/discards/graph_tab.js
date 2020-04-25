@@ -72,7 +72,7 @@ Polymer({
   /**
    * The Mojo graph data source.
    *
-   * @private {performanceManager.mojom.WebUIGraphDumpProxy}
+   * @private {performanceManager.mojom.WebUIGraphDumpRemote}
    */
   graphDump_: null,
 
@@ -90,7 +90,7 @@ Polymer({
 
   /** @override */
   ready: function() {
-    this.graphDump_ = performanceManager.mojom.WebUIGraphDump.getProxy();
+    this.graphDump_ = performanceManager.mojom.WebUIGraphDump.getRemote();
   },
 
   /** @override */
@@ -110,10 +110,12 @@ Polymer({
 
     this.changeListener_ =
         new graph_tab.WebUIGraphChangeStreamImpl(this.$.webView.contentWindow);
-    const client = new performanceManager.mojom
-                       .WebUIGraphChangeStream(this.changeListener_)
-                       .createProxy();
+    this.client_ = new performanceManager.mojom.WebUIGraphChangeStreamReceiver(
+        this.changeListener_);
+    // Save helper to work around closure compiler bug: https://crbug.com/969212
+    const helper = this.client_.$;
+
     // Subscribe for graph updates.
-    this.graphDump_.subscribeToChanges(client);
+    this.graphDump_.subscribeToChanges(helper.bindNewPipeAndPassRemote());
   },
 });

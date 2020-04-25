@@ -103,7 +103,7 @@ void BookmarkMenuBridge::BuildRootMenu() {
   if (!folder_image_) {
     ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
     folder_image_.reset(
-        [rb.GetNativeImageNamed(IDR_BOOKMARK_BAR_FOLDER).ToNSImage() retain]);
+        [rb.GetNativeImageNamed(IDR_FOLDER_CLOSED).ToNSImage() retain]);
     [folder_image_ setTemplate:YES];
   }
 
@@ -158,22 +158,22 @@ void BookmarkMenuBridge::BookmarkModelBeingDeleted(BookmarkModel* model) {
 
 void BookmarkMenuBridge::BookmarkNodeMoved(BookmarkModel* model,
                                            const BookmarkNode* old_parent,
-                                           int old_index,
+                                           size_t old_index,
                                            const BookmarkNode* new_parent,
-                                           int new_index) {
+                                           size_t new_index) {
   InvalidateMenu();
 }
 
 void BookmarkMenuBridge::BookmarkNodeAdded(BookmarkModel* model,
                                            const BookmarkNode* parent,
-                                           int index) {
+                                           size_t index) {
   InvalidateMenu();
 }
 
 void BookmarkMenuBridge::BookmarkNodeRemoved(
     BookmarkModel* model,
     const BookmarkNode* parent,
-    int old_index,
+    size_t old_index,
     const BookmarkNode* node,
     const std::set<GURL>& removed_urls) {
   InvalidateMenu();
@@ -302,8 +302,7 @@ void BookmarkMenuBridge::AddNodeToMenu(const BookmarkNode* node, NSMenu* menu) {
     return;
   } // vivaldi specific section
 
-  int child_count = node->child_count();
-  if (child_count == 0) {
+  if (node->children().empty()) {
     NSString* empty_string = l10n_util::GetNSString(IDS_MENU_EMPTY_SUBMENU);
     base::scoped_nsobject<NSMenuItem> item([[NSMenuItem alloc]
         initWithTitle:empty_string
@@ -313,17 +312,16 @@ void BookmarkMenuBridge::AddNodeToMenu(const BookmarkNode* node, NSMenu* menu) {
     return;
   }
 
-  for (int i = 0; i < child_count; i++) {
-    const BookmarkNode* child = node->GetChild(i);
+  for (const auto& child : node->children()) {
     if (child->is_folder()) {
-      AddNodeAsSubmenu(menu, child, folder_image_);
+      AddNodeAsSubmenu(menu, child.get(), folder_image_);
     } else {
       base::scoped_nsobject<NSMenuItem> item([[NSMenuItem alloc]
-          initWithTitle:MenuTitleForNode(child)
+          initWithTitle:MenuTitleForNode(child.get())
                  action:nil
           keyEquivalent:@""]);
-      bookmark_nodes_[child] = item;
-      ConfigureMenuItem(child, item, false);
+      bookmark_nodes_[child.get()] = item;
+      ConfigureMenuItem(child.get(), item, false);
       [menu addItem:item];
     }
   }
